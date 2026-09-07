@@ -1,0 +1,3 @@
+# Public Streamlit Cloud runtime. NiMARE (decoding functionality) is intentionally excluded.
+
+-e .[app]

@@ -1,3 +1,0 @@
-# Public Streamlit Cloud runtime.
-# NiMARE is intentionally excluded; the app keeps decoding visible as offline-only.
--e .[app]
