@@ -1,16 +1,54 @@
-name: Publish to PyPI
+# ─────────────────────────────────────────────────────────────────────────────
+# Publish to PyPI
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# What this does
+# --------------
+# The full release pipeline, kicked off by pushing a `v*` tag:
+#
+#   build          → sdist + wheel via `python -m build`, then twine-check
+#   test           → run the test suite on the tagged commit (3.12–3.14, pytest)
+#   publish-testpypi → only for `-rcN` tags (e.g. v2.0.1-rc1) — dry run
+#   publish-pypi   → only for bare `vX.Y.Z` tags — the real release
+#
+# The two publish jobs are mutually exclusive (`contains(github.ref, '-rc')`
+# vs its negation), so exactly one of them runs per tag; the other is
+# skipped, not failed.
+#
+# Authentication: PyPI Trusted Publishing (OIDC)
+# ----------------------------------------------
+# No API tokens and no stored secrets. Each publish job requests a short-
+# lived OIDC token that PyPI verifies against the Trusted Publisher
+# configuration registered for this repo/workflow (one-time setup on the
+# PyPI side, already done — see CONTRIBUTE.md). That's what
+# `permissions: id-token: write` below is for; without it the token
+# minting silently fails and the publish step errors out.
+#
+# Approval gates
+# --------------
+# The `pypi` and `testpypi` GitHub *environments* (repo Settings →
+# Environments) control who may deploy. `pypi` is configured to require
+# manual review, so a real release pauses until a maintainer clicks
+# approve; `testpypi` deploys automatically for cheap `-rc` dry runs.
+# Keep in mind PyPI does not allow re-uploading the same version — a botched
+# release means bumping to e.g. `-post1`. That's exactly why the approval
+# gate exists.
+#
+# Job isolation note: the `test` job checks out and tests the *repo* at the
+# tag, not the built artefacts — the two are identical by construction
+# since the tag is immutable.
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Builds the package and tests it on every tag push.
-# Tags ending in "-rcN" go to TestPyPI; bare "vX.Y.Z" tags go to real PyPI.
-# Uses PyPI Trusted Publishing (OIDC) — no API tokens, no secrets-in-CI.
-# The `pypi` environment in repo Settings should require manual approval for
-# real-PyPI publishes; `testpypi` runs automatically.
+name: Publish to PyPI
 
 on:
   push:
     tags:
+      # Any tag starting with "v": v2.0.1, v2.0.1-rc1, v2.0.1-rc2 ...
       - 'v*'
 
+# Read-only by default; the publish jobs opt INTO id-token: write
+# explicitly, so the build/test jobs can't mint OIDC tokens at all.
 permissions:
   contents: read
 
@@ -20,6 +58,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Any Python that `build` supports works here — it only packages,
+      # never imports the project. 3.11 is just our pinned choice.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -30,6 +70,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade build
 
+      # Produces dist/conninfpy-<version>.tar.gz (sdist)
+      #      and dist/conninfpy-<version>-py3-none-any.whl (pure wheel)
       - name: Build sdist + wheel
         run: python -m build
 
@@ -40,6 +82,9 @@ jobs:
           pip install twine
           twine check dist/*
 
+      # Hand the exact same artefacts to the downstream jobs — we publish
+      # what we built and checked, never a rebuild (rebuilding could pick
+      # up changed metadata between jobs).
       - name: Upload artefacts
         uses: actions/upload-artifact@v4
         with:
@@ -47,11 +92,16 @@ jobs:
           path: dist/
 
   test:
+    # Gate on build so we never test while packaging failed; failures here
+    # stop both publish jobs via `needs`. Matrix mirrors tests.yml and the
+    # Pythons declared in pyproject.toml / classifiers (3.12–3.14) so a
+    # release never ships for an untested interpreter.
     needs: build
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,11 +111,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev,app]"
-      - name: Run unit tests
-        run: python -m unittest discover tests
+      # pytest, not `unittest discover`: the suite contains function-style
+      # tests that unittest cannot collect (see CONTRIBUTE.md), and the
+      # release gate should be at least as strong as tests.yml. pytest is
+      # already pulled in by the [dev] extra above.
+      - name: Run tests
+        run: python -m pytest tests --disable-warnings -q
 
   publish-testpypi:
     needs: [build, test]
+    # Release-candidate tag (v2.0.1-rc1) → dry run on TestPyPI only.
     if: contains(github.ref, '-rc')
     runs-on: ubuntu-latest
     environment:
@@ -86,6 +141,8 @@ jobs:
 
   publish-pypi:
     needs: [build, test]
+    # Bare version tag (v2.0.1) → the real thing. Pauses for manual
+    # approval of the `pypi` environment before uploading.
     if: ${{ !contains(github.ref, '-rc') }}
     runs-on: ubuntu-latest
     environment:

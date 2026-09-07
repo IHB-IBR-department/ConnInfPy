@@ -37,7 +37,7 @@ What you get out of one `pip install`:
   ComBat (Johnson 2007; Fortin 2017/2018) reimplemented in NumPy, with
   separate `combat_fit`/`combat_apply` for cross-site ML transfer and a
   `design_diagnostics` layer (VIF + condition number + plain-English flags).
-- **19-scenario topology benchmark library** — controlled effect topologies
+- **20-scenario topology benchmark library** — controlled effect topologies
   (hub, rich-club, chain, scattered, gradient, fragmented within-module,
   …) used in the paper's no-method-dominates-across-topologies finding.
 
@@ -71,21 +71,27 @@ What you get out of one `pip install`:
 
 ## Installation
 
-ConnInfPy supports **Python 3.12–3.14**.
+ConnInfPy supports **Python 3.12, 3.13, and 3.14** — enforced by the
+package metadata (`Requires-Python >=3.12,<3.15`), so `pip` refuses to
+install on anything else instead of failing later inside `numba`. The
+upper bound tracks `numba` wheel availability and is lifted in a new
+release once `numba` supports the next Python.
 
 ```bash
 # Create the conda env (Python 3.13)
 conda create -n conninfpy python=3.13 -y
 conda activate conninfpy
 
-# Default installation from PyPI (includes JIT speedup)
-python -m pip install conninfpy # not published yet > use requirements installation method from CONTRIBUTE.md
+# Default installation from PyPI (includes JIT speedup).
+# Not published yet — until the first release, install from a source
+# checkout as shown in CONTRIBUTE.md.
+python -m pip install conninfpy
 ```
 
 > **Installation Troubleshooting:** If the default installation fails (usually due to `numba` or `llvmlite` compilation issues on legacy systems), you can perform a **Safe Install** without JIT acceleration:
 > ```bash
 > python -m pip install . --no-deps
-> python -m pip install numpy scipy statsmodels pandas matplotlib
+> python -m pip install numpy scipy statsmodels pandas matplotlib pyyaml
 > ```
 > The library will automatically detect the missing `numba` and fall back to the SciPy backend.
 
@@ -119,12 +125,13 @@ Both profiles use the same `apps/streamlit_nimare.py` entry point.
 ### LLM-assisted interpretation (optional)
 
 `conninfpy.interpret` turns decoding output into narrative text:
-`build_decoding_evidence()` scores term tables into structured evidence,
-and `LLMNarrator` renders it as a cautious methods-style summary via
-OpenAI, Google Gemini, or OpenRouter (provider credentials read from a
-local `.env`; without a key it falls back to a deterministic template, so
-nothing breaks offline). The Streamlit app exposes this as its
-"Interpretation" step.
+`build_decoding_evidence()` (from `conninfpy.interpret.evidence`) scores
+term tables into structured evidence, and `LLMNarrator` (from
+`conninfpy.interpret.llm_narrative`) renders it as a cautious
+methods-style summary via OpenAI, Google Gemini, or OpenRouter (provider
+credentials read from a local `.env`; without a key it falls back to a
+deterministic template, so nothing breaks offline). The Streamlit app
+exposes this as its "Interpretation" step.
 
 ---
 
@@ -192,7 +199,7 @@ features.
 |---|---|
 | `generate_fc_matrices` | Modular network with controlled effect size |
 | `ModularDatasetGenerator` | Class-based generator for modular network structures |
-| `TopologyDatasetGenerator`, `get_scenario`, `list_scenarios` | 19+ canonical scenarios (hub, chain, rich_club, within/between-module, gradient, core-periphery, …) for methods benchmarking |
+| `TopologyDatasetGenerator`, `get_scenario`, `list_scenarios` | 20 canonical scenarios (hub, chain, rich_club, within/between-module, gradient, core-periphery, …) for methods benchmarking |
 
 ### Core primitives & utilities
 
