@@ -6,6 +6,7 @@ import numpy as np
 from conninfpy.atlas import AtlasInfo
 from conninfpy.interpret.evidence import build_decoding_evidence, validate_evidence
 from conninfpy.interpret.llm_narrative import LLMNarrator, check_narrative_terms, load_dotenv_manually
+from pathlib import Path
 
 @pytest.fixture
 def sample_atlas():
@@ -158,6 +159,12 @@ def test_llm_narrator_openrouter_setup():
         assert narrator.model == "meta-llama/test"
 
 def test_load_dotenv_manually():
+    has_env = any(
+        d.joinpath(".env").exists()
+        for d in [Path.cwd(), Path.cwd().parent, Path(__file__).resolve().parents[1]]
+    )
+    if not has_env:  # e.g. fork PRs / fresh clones without a local .env
+        pytest.skip("no local .env with OPENROUTER_API_KEY")
     with patch.dict(os.environ, {}, clear=True):
         load_dotenv_manually()
         assert "OPENROUTER_API_KEY" in os.environ
