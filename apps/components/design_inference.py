@@ -15,7 +15,9 @@ from apps.utils.helpers import (
 )
 
 class InferenceTask:
+    """Background inference job with progress reporting."""
     def __init__(self):
+        """Initialize an idle task with empty result slots."""
         self.status = "idle"  # idle, running, success, failed
         self.progress_message = ""
         self.result = None
@@ -47,6 +49,7 @@ NON_COVARIATE_NAMES = {
 
 
 def _numeric_covariate_candidates(pheno_df, exclude=()):
+    """Numeric pheno columns usable as covariates, minus excluded names."""
     excluded = {str(c).lower() for c in exclude if c is not None}
     candidates = []
     for col in pheno_df.columns:
@@ -59,6 +62,7 @@ def _numeric_covariate_candidates(pheno_df, exclude=()):
 
 
 def _default_abide_confound_vars(candidates):
+    """ABIDE default confound columns that exist among ``candidates``."""
     return [col for col in ABIDE_DEFAULT_CONFOUNDS if col in candidates]
 
 
@@ -107,6 +111,7 @@ def _resolve_site_strategy(recipe_choice, test_type, confound_vars):
 
 
 def _format_runtime(seconds):
+    """Human-readable wall-clock string (sec / min / h)."""
     seconds = max(1.0, float(seconds))
     if seconds < 90.0:
         return f"{int(round(seconds))} sec"
@@ -140,6 +145,7 @@ def _method_plan_parameters(method, method_kwargs):
 
 
 def _format_method_plan_parameters(method, method_kwargs):
+    """One-line ``label=value`` summary of method parameters."""
     params = _method_plan_parameters(method, method_kwargs)
     return ", ".join(f"{label}={value}" for label, value in params.items()) or "Default settings"
 
@@ -204,6 +210,7 @@ def _run_inference_background(
     subject_col, condition_col, baseline_val, target_val, confound_vars, site_col,
     active_atlas_signature, data_kind
 ):
+    """Worker thread body: run the inference and record status."""
     try:
         task.progress_message = f"Executing primary method ({operator_choice.upper()}) permutation loops..."
         from conninfpy import analyze
@@ -308,6 +315,7 @@ def _run_inference_background(
 
 
 def render_design_inference_view(base_atlas, tabs_list):
+    """Render the design & inference step (model spec, run, live status)."""
     col_t, col_h = st.columns([0.8, 0.2])
     with col_t:
         st.markdown("### Design & Inference")
@@ -1033,14 +1041,9 @@ def render_design_inference_view(base_atlas, tabs_list):
                         *   This status checks automatically every 2 seconds.
                         """)
 
-                    if hasattr(st, "fragment"):
-                        # Fragment reruns are scoped to this status area, so
-                        # they do not re-create the background worker thread.
-                        st.fragment(run_every=2.0)(render_running_status)()
-                    else:  # pragma: no cover - compatibility with Streamlit < 1.37
-                        render_running_status()
-                        if st.button("Refresh Status", key="refresh_inf_status_btn"):
-                            st.rerun()
+                    # Fragment reruns are scoped to this status area, so
+                    # they do not re-create the background worker thread.
+                    st.fragment(run_every=2.0)(render_running_status)()
                 else:
                     # success or failed
                     st.info(f"Inference run complete. Current status: **{task.status.upper()}**")

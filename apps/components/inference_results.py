@@ -17,6 +17,7 @@ from apps.utils.helpers import (
 )
 
 def _render_one_sentence_summary(res, edges_df, method_name, direction_labels):
+    """Render the single-sentence plain-language result summary."""
     pos_count = 0
     neg_count = 0
     if edges_df is not None and not edges_df.empty:
@@ -30,6 +31,7 @@ def _render_one_sentence_summary(res, edges_df, method_name, direction_labels):
     )
 
 def _render_summary_metrics(res, edges_df, method_name, direction_labels):
+    """Render the headline metric row for one result."""
     st.markdown(f"##### 📊 {method_name} Summary")
     nsig = res.n_significant(0.05)
     col1, col2, col3 = st.columns(3)
@@ -41,6 +43,7 @@ def _render_summary_metrics(res, edges_df, method_name, direction_labels):
         st.metric("Permutations Completed", res.n_permutations)
 
 def _render_ground_truth_metrics(edges_df, effect_mask, method_name):
+    """Render precision/recall against the planted effect mask, if any."""
     if effect_mask is not None:
         st.markdown(f"##### 🎯 Ground Truth Comparison ({method_name})")
         true_mask = (effect_mask > 0)
@@ -87,6 +90,7 @@ def _render_ground_truth_metrics(edges_df, effect_mask, method_name):
             st.markdown(f"**False Discovery Rate (FDR):** `{fdr*100:.1f}%` (proportion of false positives among all detected edges)")
 
 def _render_heatmaps(res, base_atlas, method_name):
+    """Render the positive/negative p-value heatmaps."""
     st.markdown(f"##### 🗺️ Connectivity Maps ({method_name})")
     
     stat_map = res.stat_signed
@@ -114,11 +118,13 @@ def _render_heatmaps(res, base_atlas, method_name):
         plt.close(fig)
 
 def _active_atlas(base_atlas):
+    """Atlas to annotate results with, honoring any workspace override."""
     return active_analysis_atlas(base_atlas)
 
 
 
 def _filter_edges_for_tail(edges_df, atlas, tail, alpha, top_n, rank_by, selected_networks, network_filter_mode):
+    """Filter the edge table to one tail / network / top-N selection."""
     if edges_df is None or edges_df.empty:
         return edges_df.copy() if edges_df is not None else pd.DataFrame()
 
@@ -149,6 +155,7 @@ def _filter_edges_for_tail(edges_df, atlas, tail, alpha, top_n, rank_by, selecte
     return df.head(int(top_n)).drop(columns=[c for c in ["_rank_value"] if c in df.columns])
 
 def _download_figure_button(fig, label, filename, key):
+    """Render a figure download button with a unique widget key."""
     buffer = BytesIO()
     fig.savefig(buffer, format="png", dpi=220, bbox_inches="tight", facecolor="white")
     st.download_button(
@@ -160,6 +167,7 @@ def _download_figure_button(fig, label, filename, key):
     )
 
 def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction_labels):
+    """Render glass-brain connectome graphs of the significant edges."""
     atlas = _active_atlas(base_atlas)
     st.markdown(f"##### 🧠 Brain-Space Effect Graphs ({method_name})")
 
@@ -220,7 +228,7 @@ def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction
                 network_filter_mode=network_filter_mode,
                 title=direction_labels["positive_title"]
             )
-            st.pyplot(fig_pos, use_container_width=True)
+            st.pyplot(fig_pos, width="stretch")
             _download_figure_button(fig_pos, f"Download {direction_labels['positive']} graph PNG", f"{safe_filename_part(direction_labels['positive'])}_connectome_{safe_filename_part(method_name)}.png", f"{method_name}_pos_graph_download")
             plt.close(fig_pos)
 
@@ -244,13 +252,14 @@ def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction
                 network_filter_mode=network_filter_mode,
                 title=direction_labels["negative_title"]
             )
-            st.pyplot(fig_neg, use_container_width=True)
+            st.pyplot(fig_neg, width="stretch")
             _download_figure_button(fig_neg, f"Download {direction_labels['negative']} graph PNG", f"{safe_filename_part(direction_labels['negative'])}_connectome_{safe_filename_part(method_name)}.png", f"{method_name}_neg_graph_download")
             plt.close(fig_neg)
 
 def _render_table_and_download(edges_df, contrast_name, file_suffix):
+    """Render the edge table with a CSV download button."""
     st.markdown("##### 📋 Significant Edges Table")
-    st.dataframe(edges_df, use_container_width=True)
+    st.dataframe(edges_df, width="stretch")
     
     csv_data = edges_df.to_csv(index=False).encode('utf-8')
     st.download_button(
@@ -261,6 +270,7 @@ def _render_table_and_download(edges_df, contrast_name, file_suffix):
     )
 
 def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, primary_name, comp_name, base_atlas, effect_mask, direction_labels):
+    """Render the side-by-side two-method comparison view."""
     st.markdown("#### 🔄 Side-by-Side Comparison")
     
     # 1. Compare summary metrics in two columns
@@ -292,6 +302,7 @@ def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, p
         
         # Helper to compute TPR, FPR, FNR, FDR
         def _get_metrics(edges_df):
+            """True-positive / detected-edge metrics vs the planted mask."""
             detected = set()
             if edges_df is not None and not edges_df.empty:
                 for _, row in edges_df.iterrows():
@@ -350,6 +361,7 @@ def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, p
     plt.close(fig)
 
 def render_inference_results_view(base_atlas):
+    """Render the results step (summaries, heatmaps, tables, exports)."""
     col_t, col_h = st.columns([0.8, 0.2])
     with col_t:
         st.markdown("### Inference Results")

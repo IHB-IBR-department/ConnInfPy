@@ -8,7 +8,9 @@ from conninfpy.interpret.evidence import build_decoding_evidence
 from apps.utils.helpers import active_analysis_atlas, atlas_has_coords, current_contrast_name, render_help, result_is_stale
 
 class DecodingTask:
+    """Background decoding job with progress reporting."""
     def __init__(self):
+        """Initialize an idle decoding task with empty result slots."""
         self.status = "idle"  # idle, running, success, failed
         self.progress_message = ""  # e.g., "Downloading database..."
         self.result = None
@@ -20,6 +22,7 @@ class DecodingTask:
 def _run_decoding_background(
     task, atlas, roi_ids, dec_database, dec_strategy, dec_radius, dec_top_n, dec_scoring, edges_df, contrast_name
 ):
+    """Worker thread body: run the decoding and record status."""
     try:
         # Check cache existence to set appropriate progress message
         import os
@@ -61,6 +64,7 @@ def _run_decoding_background(
             "stimulus", "response", "subjects", "patients", "healthy", "group", "studies"
         }
         def term_filter(t):
+            """True when a decoding term survives the stop-word filter."""
             t_clean = t.lower().strip()
             for stop in method_stop_words:
                 if stop == t_clean or stop in t_clean.split():
@@ -130,6 +134,7 @@ def _run_decoding_background(
         task.progress_message = "❌ Failed"
 
 def render_meta_decoding_view(base_atlas, *, decoding_enabled: bool = True):
+    """Render the meta-analytic decoding step (ROI terms, tables)."""
     if "decoding_task" not in st.session_state:
         st.session_state.decoding_task = DecodingTask()
         
@@ -229,12 +234,7 @@ def render_meta_decoding_view(base_atlas, *, decoding_enabled: bool = True):
                         st.caption("First-time cache builds can take several minutes. Cached runs are much faster.")
                         st.caption("This status checks automatically every 2 seconds; decoding continues in the background.")
 
-                    if hasattr(st, "fragment"):
-                        st.fragment(run_every=2.0)(render_running_status)()
-                    else:  # pragma: no cover - compatibility with Streamlit < 1.37
-                        render_running_status()
-                        if st.button("Refresh Status", key="refresh_dec_status"):
-                            st.rerun()
+                    st.fragment(run_every=2.0)(render_running_status)()
                 else:
                     if st.button("🚀 Run New Decoding", key="run_dec_new_button"):
                         task.status = "idle"
@@ -292,7 +292,7 @@ def render_meta_decoding_view(base_atlas, *, decoding_enabled: bool = True):
                     # High-burden ROIs
                     st.markdown("#### 🎯 High-Burden Endpoint ROIs")
                     top_rois_df = pd.DataFrame(summary["top_endpoint_rois"])
-                    st.dataframe(top_rois_df, use_container_width=True)
+                    st.dataframe(top_rois_df, width="stretch")
                     
                     # Filtered Term Summary
                     st.markdown("#### 🔍 Filtered Term Summary")
@@ -309,14 +309,14 @@ def render_meta_decoding_view(base_atlas, *, decoding_enabled: bool = True):
                                 "Max Score": t["max_score"]
                             })
                         agg_df = pd.DataFrame(table_data)
-                        st.dataframe(agg_df, use_container_width=True)
+                        st.dataframe(agg_df, width="stretch")
                     else:
                         st.info("No terms remained after stop-word filtering.")
                         table_data = []
                         
                     # Raw expander
                     with st.expander("📋 Raw Decoded Terms (Audit)", expanded=False):
-                        st.dataframe(st.session_state.decoded_df, use_container_width=True)
+                        st.dataframe(st.session_state.decoded_df, width="stretch")
                         
                     # Downloads
                     st.markdown("#### 💾 Downloads")
@@ -346,6 +346,7 @@ def render_meta_decoding_view(base_atlas, *, decoding_enabled: bool = True):
                     evidence_json = json.dumps(st.session_state.evidence_packet, indent=2).encode('utf-8')
                     
                     def _to_markdown_simple(df: pd.DataFrame) -> str:
+                        """DataFrame to a plain markdown table string."""
                         if df.empty:
                             return ""
                         headers = [str(col) for col in df.columns]

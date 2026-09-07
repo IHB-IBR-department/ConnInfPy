@@ -5,6 +5,7 @@ from conninfpy.interpret.llm_narrative import LLMNarrator, check_narrative_terms
 from apps.utils.helpers import current_contrast_name, safe_filename_part, render_help, result_is_stale
 
 def render_narrative_report_view():
+    """Render the LLM narrative-report step."""
     col_t, col_h = st.columns([0.8, 0.2])
     with col_t:
         st.markdown("### Narrative Generator")
