@@ -32,7 +32,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
-requires-python = ">=3.12"
+# Supported Pythons: 3.12, 3.13, 3.14 — exactly what the classifiers
+# advertise and what CI (tests.yml / publish.yml) tests. The upper bound
+# tracks numba wheel availability: numba 0.67 supports up to 3.14, and an
+# uncapped ">=3.12" would let a future 3.15 resolve a numba with no wheels
+# for it (source-build failure) or no numba at all. Lift the cap in a new
+# release once numba ships wheels for the next Python.
+requires-python = ">=3.12,<3.15"
 dependencies = [
     "numpy",
     "scipy",
@@ -40,6 +46,10 @@ dependencies = [
     "pandas",
     "matplotlib",
     "numba",
+    # conninfpy.loaders.manifest imports yaml at module level, and the
+    # loaders subpackage is pulled in by the top-level __init__, so a
+    # core install is unusable without it. Keep in core, not an extra.
+    "pyyaml",
 ]
 
 [project.urls]

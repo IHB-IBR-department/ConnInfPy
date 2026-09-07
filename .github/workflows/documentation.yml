@@ -1,3 +1,46 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Documentation
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# What this does
+# --------------
+# Builds the Sphinx docs from docs/source and (on pushes to main) deploys
+# the result to GitHub Pages. On PRs and non-main pushes it builds without
+# deploying — a free "do the docs still compile" check on every change.
+# `workflow_dispatch` lets you trigger a build by hand from the Actions tab,
+# handy when debugging the docs themselves.
+#
+# The `pip install -e .` trap
+# ---------------------------
+# Sphinx's autodoc works by *importing* the modules it documents. If the
+# package isn't installed on the CI runner, every `.. automodule::`
+# directive fails — and Sphinx treats that as a warning, not an error, so
+# the build "succeeds" and silently deploys empty pages for all submodules.
+# That's why the install step below is not optional: we install conninfpy
+# itself (editable, so the docs reflect the checked-out code) before
+# building.
+#
+# Warnings are (temporarily) not errors
+# -------------------------------------
+# We deliberately do NOT pass `-W` (warnings-as-errors). There's a known
+# crop of NumPy-style docstring formatting complaints in
+# synth_datasets / utils / acceleration / pairwise_stats that would block
+# every doc deployment until cleaned up. `--keep-going` makes Sphinx
+# soldier through all of them and report the full list at the end, so a
+# local run shows everything worth fixing in one pass. Flip to `-W` once
+# that backlog is cleared — tracked separately.
+#
+# Deployment details
+# ------------------
+# peaceiris/actions-gh-pages force-pushes `_build/` to the `gh-pages`
+# branch with `force_orphan: true` (no merge commits, no history — the
+# branch holds exactly one commit mirroring the latest build). GitHub Pages
+# serves from that branch. The deploy step is guarded so it only fires on
+# pushes to main; PR builds stop after the Sphinx step.
+#
+# Why `contents: write`: the deploy step needs it to push to `gh-pages`.
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: documentation
 
 on: [push, pull_request, workflow_dispatch]

@@ -1,4 +1,4 @@
-from unittest import TestCase
+from unittest import TestCase, skipUnless
 import numpy as np
 import conninfpy.eeg_utils as eeg_utils
 from conninfpy.eeg_utils import Electrodes, PairsElectrodes1020, Bands
@@ -8,6 +8,12 @@ import pickle
 # Get path to datasets directory relative to this file
 DATASETS_DIR = Path(__file__).parent.parent / 'datasets'
 
+# The EEG dataframe is local-only data (gitignored); skip the tests that
+# need it on machines without the file (e.g. fresh clones / CI runners).
+EEG_DF = DATASETS_DIR / 'eeg_dataframe_nansfilled.csv'
+HAS_EEG_DF = EEG_DF.exists()
+
+@skipUnless(HAS_EEG_DF, f"local-only dataset missing: {EEG_DF}")
 class TesteegUtils(TestCase):
 
     def setUp(self) -> None:

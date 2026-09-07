@@ -1,9 +1,37 @@
-name: Tests
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# What this does
+# --------------
+# Runs the full pytest suite against a matrix of supported Python versions
+# on every push to `main` and on every pull_request (regardless of target
+# branch), so nothing lands on main — or gets merged anywhere — without
+# passing tests.
+#
+# How the API-key test is handled
+# -------------------------------
+# One of the tests exercises dotenv loading and needs a real `.env` file at
+# the repo root to find the OPENROUTER_API_KEY. We don't commit such a file
+# (it would leak a secret), so CI materializes one from the repository
+# secret of the same name. Fork PRs are the wrinkle: GitHub never exposes
+# secrets to workflows running from a fork, so on those PRs no `.env` ever
+# appears — and the dotenv test is written to skip itself gracefully when
+# the file is missing. Result: fork PRs still get a meaningful test run,
+# they just don't exercise the one secret-dependent code path.
+#
+# Why `fail-fast: false`
+# ----------------------
+# With the default (fail-fast: true), the first matrix leg to fail cancels
+# the still-running ones. That's faster, but it hides whether a failure is
+# version-specific (e.g. "only 3.14 is broken") or universal. We prefer the
+# full picture from a single run over a few minutes of saved CI time.
+#
+# Permissions are scoped to `contents: read` — this workflow only needs to
+# check out code and never writes anything back to the repo.
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Runs the test suite on every push to main and on all PRs.
-# The dotenv test needs a .env file; it is materialized from the
-# OPENROUTER_API_KEY repo secret. Fork PRs have no access to secrets,
-# so the test skips itself when no .env is present.
+name: Tests
 
 on:
   push:
@@ -19,22 +47,35 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Keep in sync with `requires-python` in pyproject.toml and with
+        # the versions claimed in the README.
         python-version: ["3.12", "3.13", "3.14"]
     steps:
+      # Plain checkout of the ref under test — no special options needed
+      # since the tests run against the working tree as-is.
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
+      # `-e .` (editable install) so tests exercise the repo's code
+      # directly; `[dev,app]` pulls in pytest plus the optional runtime
+      # extras some tests/app code imports.
       - name: Install package + dev/app extras
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev,app]"
 
+      # Only runs when the secret is actually available — i.e. not on fork
+      # PRs. The `if` guard matters: writing an empty .env would make the
+      # dotenv test *fail* instead of *skip*.
       - name: Materialize .env from secret (if available)
         if: ${{ secrets.OPENROUTER_API_KEY != '' }}
         run: echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" > .env
 
+      # `-q` keeps the log readable on a 3-leg matrix; warnings are
+      # disabled because third-party deps currently emit a fair amount of
+      # noise we can't act on from here.
       - name: Run tests
         run: python -m pytest tests --disable-warnings -q

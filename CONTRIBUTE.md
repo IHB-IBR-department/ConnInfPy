@@ -8,7 +8,9 @@ For developers information.
 git clone https://github.com/IHB-IBR-department/ConnInfPy.git
 cd ConnInfPy
 
-# Create the conda env (Python 3.13)
+# Supported Pythons: 3.12, 3.13, 3.14 (same range pyproject.toml enforces;
+# the upper bound follows numba wheel availability). Any of the three works.
+# Create the conda env (Python 3.13):
 conda create -n conninfpy python=3.13 -y
 conda activate conninfpy
 python -m pip install -r requirements/dev.txt
@@ -36,11 +38,11 @@ python -m pytest tests/test_glm_stats.py -k fstat   # single file / pattern
 python -m pytest --doctest-modules conninfpy   # docstring examples
 ```
 
-> **Note:** `tests/test_interpret.py::test_load_dotenv_manually` expects a
-> local `.env` file with an `OPENROUTER_API_KEY` (gitignored). On a machine
-> without it, that one test fails under pytest — everything else should be
-> green. (unittest also skips a test needing
-> `datasets/eeg_dataframe_nansfilled.csv`, which is likewise local-only.)
+> **Note:** two tests depend on local-only files (both gitignored):
+> `tests/test_interpret.py::test_load_dotenv_manually` needs a local `.env`
+> with an `OPENROUTER_API_KEY`, and `tests/test_eeg_utils.py` needs
+> `datasets/eeg_dataframe_nansfilled.csv`. On a machine without them the
+> affected tests **skip** themselves — everything else should be green.
 
 If pytest is unavailable (e.g. a bare environment), the suite also runs with
 the standard library:
