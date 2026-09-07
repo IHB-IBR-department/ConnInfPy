@@ -599,6 +599,7 @@ def _is_worker_process() -> bool:
 
 
 def get_available_cores():
+    """Number of CPU cores usable for worker pools."""
     try:
         # Linux
         affinity = os.sched_getaffinity(0)
@@ -618,7 +619,8 @@ def compute_null_dist(
     func: Optional[Callable[..., Any]] = None,
     n_permutations: int = DEFAULT_N_PERMUTATIONS,
     test_type: Union[str, TestType] = TestType.PAIRED,
-    random_state: Optional[int] = None,
+    rng: RngLike = None,
+    random_state: Optional[int] = None,  # deprecated alias for `rng`
     n_processes: Optional[int] = None,
     use_mp: bool = True,
     verbose: bool = False,
@@ -646,8 +648,8 @@ def compute_null_dist(
         Number of permutations.
     test_type : {'paired', 'one-sample', 'two-sample'} or TestType
         Type of statistical test.
-    random_state : int, optional
-        Seed for reproducibility.
+    rng : int, numpy.random.Generator, or None
+        Seed for reproducibility. ``random_state`` is a deprecated alias.
     n_processes : int, optional
         Number of parallel processes. Defaults to CPU count.
     use_mp : bool, default=True
@@ -694,6 +696,7 @@ def compute_null_dist(
 
     # Prepare data for permutation
     if test_type_str == TestType.PAIRED.value:
+        assert group2 is not None  # validated above: required for 'paired'
         if use_fast_tstat:
             diffs = group2 - group1
             X, sumsq_all = _precompute_edge_sums(diffs)
@@ -749,8 +752,10 @@ def compute_null_dist(
         )
 
     # Generate seeds for reproducibility
-    rng = np.random.RandomState(random_state)
-    seeds = rng.randint(0, 2**32 - 1, size=n_permutations, dtype=np.int64)
+    if random_state is not None:
+        warn_legacy_random_state("random_state")
+    seed_rng = np.random.RandomState(resolve_seed(rng, legacy_random_state=random_state))
+    seeds = seed_rng.randint(0, 2**32 - 1, size=n_permutations, dtype=np.int64)
 
     _use_mp = use_mp and not _is_worker_process()
     if _use_mp and n_processes is None:
@@ -949,7 +954,6 @@ def _compute_bh_fdr_perm_p_values(
         # +1 correction: prevents p = 0 with finite permutations
         per_edge_p = (count_ge + 1.0) / (n_permutations + 1.0)
 
-        # Apply BH-FDR correction
         corrected_p = _bh_fdr_correction(per_edge_p)
 
         # Reconstruct full symmetric matrix
@@ -1268,8 +1272,9 @@ def compute_p_val(
     use_mp : bool, default=True
         Use multiprocessing for permutation testing. Automatically disabled
         when called from inside a multiprocessing worker to prevent deadlocks.
-    random_state : int, optional
-        Random seed for reproducibility.
+    rng : int, numpy.random.Generator, or None, optional
+        Random seed for reproducibility. ``random_state`` is a deprecated
+        alias that will be removed in v2.1.
     n_processes : int, optional
         Number of CPU cores for parallel computing.
     net_labels : ndarray of shape (N,), optional
@@ -1335,16 +1340,16 @@ def compute_p_val(
     >>> # Standard t-test
     >>> p_vals = compute_p_val(group1, group2, n_permutations=10,
     ...                        test_type='two-sample', method='tstat',
-    ...                        use_mp=False, random_state=0)
+    ...                        use_mp=False, rng=0)
     >>> # TFNBS
     >>> p_vals = compute_p_val(group1, group2, n_permutations=10,
     ...                        test_type='two-sample', method='tfnbs',
-    ...                        use_mp=False, random_state=0)
+    ...                        use_mp=False, rng=0)
     >>> # cNBS with network labels
     >>> labels = np.array([0, 0, 1])
     >>> p_vals = compute_p_val(group1, group2, n_permutations=10,
     ...                        test_type='two-sample', method='cnbs',
-    ...                        net_labels=labels, use_mp=False, random_state=0)
+    ...                        net_labels=labels, use_mp=False, rng=0)
     """
     # Normalize inputs
     test_type_str = test_type.value if isinstance(test_type, TestType) else test_type
@@ -1461,7 +1466,7 @@ def compute_p_val(
             n_permutations=n_permutations,
             test_type=test_type,
             use_mp=use_mp,
-            random_state=random_state,
+            rng=random_state,
             n_processes=n_processes,
             verbose=verbose,
             strata=strata,
