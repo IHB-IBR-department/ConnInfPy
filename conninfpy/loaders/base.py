@@ -74,7 +74,7 @@ class DataValidationReport:
 
 
 class BaseDataLoader(ABC):
-    """Abstract Base Class defining the contract for all dataset loaders.
+    """Abstract base class every dataset loader implements.
     
     All custom user or built-in data loaders should subclass this.
     """
