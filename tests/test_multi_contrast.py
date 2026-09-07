@@ -14,6 +14,7 @@ from conninfpy import (
     generate_fc_matrices,
 )
 
+import time
 
 def _make_inputs(seed: int = 0):
     g1, g2, _ = generate_fc_matrices(
@@ -121,7 +122,6 @@ class TestMultiContrast(unittest.TestCase):
         # don't assert a strict speedup factor (it depends on hardware) but
         # we sanity-check the wall-time monotonicity.
         Y, X, contrasts = _make_inputs()
-        import time
 
         t0 = time.perf_counter()
         for c in contrasts.values():

@@ -12,6 +12,7 @@ from conninfpy import (
     InferenceResult,
     OmnibusInferenceResult,
 )
+from conninfpy._analyze import AnalyzeResult
 
 
 def _make_tailed_result(N: int = 6) -> InferenceResult:
@@ -271,7 +272,6 @@ class TestToCsvRoundTrip(unittest.TestCase):
 class TestAnalyzeResultDelegation(unittest.TestCase):
 
     def test_significant_edges_delegates(self):
-        from conninfpy._analyze import AnalyzeResult
 
         res = _make_tailed_result(N=6)
         ar = AnalyzeResult(inference=res)
@@ -279,7 +279,6 @@ class TestAnalyzeResultDelegation(unittest.TestCase):
         self.assertEqual(len(df), 2)
 
     def test_to_csv_delegates(self):
-        from conninfpy._analyze import AnalyzeResult
 
         res = _make_tailed_result(N=6)
         atlas = _toy_atlas(6)

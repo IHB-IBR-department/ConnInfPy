@@ -1,4 +1,5 @@
 import os
+import warnings
 from unittest import TestCase
 from conninfpy.utils import get_components, create_prior_weights, fisher_r_to_z
 from conninfpy.pairwise_stats import compute_t_stat
@@ -21,7 +22,7 @@ class Test(TestCase):
                          "cov1": cov1.copy(), "cov2": cov2.copy()}
 
     def test_get_components(self):
-        t_stats = self.fc_sim_30["t_stat"]['g2>g1']
+        t_stats = self.fc_sim_30["t_stat"]['positive']
 
         adj = t_stats >= 2.47
         adj_mod = adj.copy()
@@ -46,6 +47,23 @@ class Test(TestCase):
             plt.show()
 
         self.assertTrue(True)
+
+
+class TestFisherRToZ(TestCase):
+    def test_typical_values_no_warning(self):
+        r = np.array([[0.0, 0.5], [-0.5, 0.9999]])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # any warning fails the test
+            z = fisher_r_to_z(r)
+        self.assertTrue(np.all(np.isfinite(z)))
+
+    def test_perfect_correlation_warns_and_caps(self):
+        r = np.array([[0.0, 1.0], [-1.0, 0.0]])
+        with self.assertWarnsRegex(UserWarning, r"±1"):
+            z = fisher_r_to_z(r)
+        # infinite z capped at ±5
+        self.assertEqual(z[0, 1], 5.0)
+        self.assertEqual(z[1, 0], -5.0)
 
 
 class TestCreatePriorWeights(TestCase):

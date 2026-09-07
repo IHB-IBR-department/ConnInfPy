@@ -3,6 +3,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 import pytest
+from conninfpy.atlas import AtlasInfo
+from conninfpy.decode import decode_rois, annotate_edge_table
+from conninfpy._result import InferenceResult
 
 # Mock nimare before importing decode module
 mock_nimare = MagicMock()
@@ -34,9 +37,6 @@ sys.modules['nimare.decode.discrete'] = mock_decode_discrete
 sys.modules['nimare.extract'] = mock_extract
 sys.modules['nimare.io'] = mock_io
 
-from conninfpy.atlas import AtlasInfo
-from conninfpy.decode import decode_rois, annotate_edge_table
-from conninfpy._result import InferenceResult
 
 @pytest.fixture
 def sample_atlas():
