@@ -1,6 +1,7 @@
 # ConnInfPy — Connectivity Inference in Python
 
-[![CI - tests](https://img.shields.io/github/actions/workflow/status/IHB-IBR-department/ConnInfPy/documentation.yml?label=docs)](https://ihb-ibr-department.github.io/ConnInfPy/)
+[![tests](https://img.shields.io/github/actions/workflow-status/IHB-IBR-department/ConnInfPy/tests.yml?label=tests)](https://github.com/IHB-IBR-department/ConnInfPy/actions/workflows/tests.yml)
+[![docs](https://img.shields.io/github/actions/workflow/status/IHB-IBR-department/ConnInfPy/documentation.yml?label=docs)](https://ihb-ibr-department.github.io/ConnInfPy/)
 ![license](https://img.shields.io/github/license/IHB-IBR-department/ConnInfPy)
 ![release](https://img.shields.io/github/v/release/IHB-IBR-department/ConnInfPy)
 ![last-commit](https://img.shields.io/github/last-commit/IHB-IBR-department/ConnInfPy)
@@ -70,9 +71,11 @@ What you get out of one `pip install`:
 
 ## Installation
 
+ConnInfPy supports **Python 3.12–3.14**.
+
 ```bash
-# Create the conda env (Python 3.11)
-conda create -n conninfpy python=3.11 -y
+# Create the conda env (Python 3.13)
+conda create -n conninfpy python=3.13 -y
 conda activate conninfpy
 
 # Default installation from PyPI (includes JIT speedup)
@@ -95,23 +98,33 @@ design binding, background inference, directional result plots, atlas-aware
 edge exports, and NiMARE decoding.
 
 ```bash
-python -m pip install -r gui-requirements.txt
+python -m pip install -r requirements/gui.txt
 streamlit run apps/streamlit_nimare.py
 ```
 
 ### Streamlit Cloud profiles
 
-`gui-requirements.txt` is the public Streamlit Cloud profile.
+`requirements/gui.txt` is the public Streamlit Cloud profile.
 It intentionally excludes NiMARE, so Cloud discovers the lightweight runtime
 automatically and labels decoding as available in the offline version.
 
 To run the complete local/offline version, install:
 
 ```bash
-python -m pip install -r gui-requirements-offline.txt
+python -m pip install -r requirements/gui-full.txt
 ```
 
 Both profiles use the same `apps/streamlit_nimare.py` entry point.
+
+### LLM-assisted interpretation (optional)
+
+`conninfpy.interpret` turns decoding output into narrative text:
+`build_decoding_evidence()` scores term tables into structured evidence,
+and `LLMNarrator` renders it as a cautious methods-style summary via
+OpenAI, Google Gemini, or OpenRouter (provider credentials read from a
+local `.env`; without a key it falls back to a deterministic template, so
+nothing breaks offline). The Streamlit app exposes this as its
+"Interpretation" step.
 
 ---
 
@@ -192,6 +205,63 @@ features.
 
 ## Minimal usage
 
+### One-call analysis
+
+`analyze()` runs the whole recipe — Fisher-z, optional ComBat
+harmonization, GLM or two-sample inference, acceleration — and returns a
+single result bundle:
+
+```python
+import numpy as np
+from conninfpy import analyze
+
+idx = np.arange(Y.shape[-1]); Y[:, idx, idx] = 0.0   # zero diagonal (self-connections)
+out = analyze(Y, interest=age, confounds=motion,
+              method="tfnbs", acceleration="gpd", rng=42)
+
+out["positive"]              # FWER-corrected p-values, (N, N)
+out.inference                # full InferenceResult (repr, n_significant, exports)
+out.combat_diagnostics       # set when multi-site harmonization fired, else None
+out.flags                    # plain-English warnings (design rank, variance floors, …)
+```
+
+Passing several predictors runs them under one shared nuisance model in a
+single permutation pass: `analyze(Y, interest={"age": age, "sex": sex})`
+returns `{"age": AnalyzeResult, "sex": AnalyzeResult}`. With `sites=`
+and `harmonize="auto"` the same call handles multi-site data (see
+`analyze` docstring for the full decision table).
+
+### Loading real data (manifests)
+
+Real datasets are described by a small YAML manifest; the loader layer
+validates shapes, ROI counts and subject alignment on load:
+
+```yaml
+# datasets/my_study.yaml
+schema_version: 1
+name: "My study, Schaefer-200"
+loader: "NumpyLoader"
+paths:
+  data_path: "my_study_conn.npy"      # (n_subjects, N, N)
+  pheno_path: "participants.csv"      # loader kwarg names differ per loader
+checks:
+  expected_rois: 200
+  min_subjects: 20
+```
+
+```python
+from conninfpy.loaders import ManifestLoader
+
+dataset = ManifestLoader("datasets/my_study.yaml").load()
+Y = dataset.data                  # (n_subjects, N, N) connectivity tensor
+pheno = dataset.pheno             # per-subject DataFrame (age, sex, motion, site, …)
+```
+
+Bundled loader classes cover ABIDE, fMRIPrep derivatives, NIfTI and
+timeseries directories, EEG-style condition arrays, and the Open-Close /
+Zerssen / Stress datasets (`conninfpy.loaders.builtins`); the two demo
+manifests in `datasets/` show the full schema.
+
 ### Two-sample permutation (t-test pipeline)
 
 ```python
@@ -234,6 +304,9 @@ p_vals = compute_p_val_glm(
 from conninfpy import compute_p_val_paired_glm
 
 # Y_A, Y_B: aligned (n_subjects, N, N); fd_A, fd_B: per-condition motion
+idx = np.arange(Y_A.shape[-1])
+Y_A[:, idx, idx] = 0.0   # zero diagonal (self-connections) — required
+Y_B[:, idx, idx] = 0.0   # by the permutation pipelines
 p_vals = compute_p_val_paired_glm(
     Y_A, Y_B,
     confounds_A=fd_A, confounds_B=fd_B,  # None to skip → delegates to paired t-test
@@ -266,7 +339,7 @@ results = compute_p_val_glm_multi(
 )
 # → {'age': InferenceResult, 'sex': InferenceResult, 'motion': InferenceResult}
 
-print(results["age"])           # InferenceResult repr w/ wall_time, n_sig
+print(results["age"])           # InferenceResult repr w/ wall_time_s, n_significant()
 results["motion"].n_significant(0.05)
 ```
 
@@ -316,6 +389,24 @@ report = design_diagnostics(X, names=["intercept", "age", "fd", "site_1", "site_
 for flag in report["flags"]:
     print("⚠️ ", flag)
 ```
+
+### Exporting and interpreting results
+
+Every pipeline returns a rich `InferenceResult`; significant edges come
+out as a sorted, atlas-annotated table:
+
+```python
+result = out.inference                     # from analyze() or the pipelines above
+
+edges = result.significant_edges(atlas, alpha=0.05, tail="both")
+edges[["roi_i_name", "roi_j_name", "network_pair", "p_positive", "tail"]].head()
+
+result.to_csv("results.csv")               # same table to disk
+result.n_significant(0.05)                 # {'positive': 12, 'negative': 3}
+```
+
+With the `decode` extra installed, `result.decoded_edges(atlas)` appends
+Neurosynth/Neuroquery term associations to the same table.
 
 ### Acceleration (fewer permutations, same FWER)
 
