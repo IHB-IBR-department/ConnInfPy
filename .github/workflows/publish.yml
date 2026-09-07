@@ -59,11 +59,11 @@ jobs:
       - uses: actions/checkout@v4
 
       # Any Python that `build` supports works here — it only packages,
-      # never imports the project. 3.11 is just our pinned choice.
+      # never imports the project. 3.13 = the dev/CI baseline.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Install build tooling
         run: |
