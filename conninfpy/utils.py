@@ -8,11 +8,12 @@ Includes:
 - :func:`create_prior_weights` — block-density priors used by NI-TFNBS.
 """
 
+import warnings
 from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
-import warnings
+from scipy.sparse import csgraph
 
 
 __all__ = [
@@ -72,18 +73,14 @@ def fisher_r_to_z(r: npt.NDArray[np.float64],
     array([ 4., -4.])
 
     """
-    # Convert input to numpy array and ensure float type
     r = np.asarray(r, dtype=np.float64)
 
-    # Check that all values are in [-1, 1]
     if np.any((r < -1) | (r > 1)):
         raise ValueError("Correlation coefficients must be in the range [-1, 1].")
 
-    # Apply Fisher transformation
-    with np.errstate(invalid='ignore'):  # Suppress warnings for arctanh at ±1
+    with np.errstate(invalid='ignore'):  # arctanh(±1) = ±inf, handled below
         z = np.arctanh(r)
 
-    # Check for boundary values (r = ±1)
     bounds_mask = np.isclose(r, 1.0) | np.isclose(r, -1.0)
     if np.any(bounds_mask):
         warnings.warn(
@@ -92,93 +89,77 @@ def fisher_r_to_z(r: npt.NDArray[np.float64],
             UserWarning
         )
         if handle_bounds:
-            # Replace inf with finite values
             z = np.where(bounds_mask, np.sign(r) * max_z, z)
 
     return z
 
 
-# Inverse function (z to r) for completeness
 def fisher_z_to_r(z: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-    """
-    Convert Fisher z-scores back to correlation coefficients.
+    """Convert Fisher z-scores back to correlation coefficients.
 
-    Parameters:
-        z (np.ndarray): Array of Fisher z-scores (any shape).
+    Parameters
+    ----------
+    z : np.ndarray
+        Fisher z-scores, any shape.
 
-    Returns:
-        (np.ndarray): Array of correlation coefficients in (-1, 1) with the same shape as 'z' input.
+    Returns
+    -------
+    np.ndarray
+        Correlation coefficients in (-1, 1), same shape as ``z``.
 
+    Examples
+    --------
     >>> z_vals = np.array([0.0, 1.0, -1.0, 2.0])
-    >>> fisher_z_to_r(z_vals)
-    array([ 0.        ,  0.76159416, -0.76159416,  0.96402758])
-    
+    >>> fisher_z_to_r(z_vals).round(3)
+    array([ 0.   ,  0.762, -0.762,  0.964])
     """
     z = np.asarray(z, dtype=np.float64)
     return np.tanh(z)
 
 
 def get_components(A, no_depend=False):
-    '''
-    Returns the components of an undirected graph specified by the binary and
-    undirected adjacency matrix adj. Components and their constitutent nodes
-    are assigned the same index and stored in the vector, comps. The vector,
-    comp_sizes, contains the number of nodes beloning to each component.
+    """Connected components of an undirected binary graph.
 
     Parameters
     ----------
-        A (np.ndarray): A binary undirected adjacency matrix of dimension (N, N)
-        no_depend (bool, optional): Does nothing, included for backwards compatibility
+    A : np.ndarray of shape (N, N)
+        Binary undirected adjacency matrix.
+    no_depend : bool, optional
+        Does nothing; kept for backwards compatibility.
 
     Returns
     -------
-        comps (np.ndarray): Vector of component assignments for each node with dimension (N, 1)
-        comp_sizes (np.ndarray): Vector of component sizes with dimension (M ,1)
-        
+    comps : np.ndarray of shape (N,)
+        Component index (1-based) assigned to each node.
+    comp_sizes : np.ndarray of shape (M,)
+        Number of nodes in each component.
+
     Notes
     -----
-    Note: disconnected nodes will appear as components with a component
-    size of 1
+    Isolated nodes form components of size 1. Component numbering is not
+    guaranteed to match the BCT Matlab implementation, although the
+    component topology is. Thanks to Nick Cullen for the original
+    implementation.
 
-    Note: The identity of each component (i.e. its numerical value in the
-    result) is not guaranteed to be identical the value returned in BCT,
-    matlab code, although the component topology is.
-
-    Many thanks to Nick Cullen for providing this implementation
-
+    Examples
+    --------
     >>> A = np.eye(3)
     >>> comps, sizes = get_components(A)
     >>> comps
     array([1, 2, 3])
     >>> sizes
     array([1, 1, 1])
-    '''
-
-    if not np.all(A == A.T):  # ensure matrix is undirected
+    """
+    if not np.all(A == A.T):
         raise AssertionError('get_components can only be computed for undirected'
                              ' matrices.  If your matrix is noisy, correct it with np.around')
 
     A = binarize(A, copy=True)
-    n = len(A)
     np.fill_diagonal(A, 1)
 
-    edge_map = [{u, v} for u in range(n) for v in range(n) if A[u, v] == 1]
-    union_sets = []
-    for item in edge_map:
-        temp = []
-        for s in union_sets:
-
-            if not s.isdisjoint(item):
-                item = s.union(item)
-            else:
-                temp.append(s)
-        temp.append(item)
-        union_sets = temp
-
-    comps = np.array([i + 1 for v in range(n) for i in
-                      range(len(union_sets)) if v in union_sets[i]])
-    comp_sizes = np.array([len(s) for s in union_sets])
-
+    n_comp, comps = csgraph.connected_components(A, directed=False)
+    comps = comps.astype(np.int64) + 1
+    comp_sizes = np.bincount(comps)[1:]
     return comps, comp_sizes
 
 
@@ -254,21 +235,16 @@ def create_prior_weights(node_labels: npt.NDArray[np.int_],
         raise ValueError("`node_labels` must be a 1D array of integer labels")
 
     N = labels.shape[0]
-    # Start with background weight 1.0
     weights = np.ones((N, N), dtype=np.float64)
 
-    # Build mask of same-network pairs
     same_network = labels[:, None] == labels[None, :]
 
     if target_network_id is not None:
-        # Only boost pairs where both belong to the target network
         target_mask = labels == target_network_id
         same_network = np.logical_and(same_network, target_mask[:, None] & target_mask[None, :])
 
-    # Exclude diagonal (self-connections) from boosting
     np.fill_diagonal(same_network, False)
 
-    # Apply boost
     weights[same_network] = float(boost_factor)
 
     return weights
