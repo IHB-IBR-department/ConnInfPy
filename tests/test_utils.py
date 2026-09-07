@@ -151,6 +151,21 @@ class TestBinarize(TestCase):
                       [1, 0, 1]]),
         ))
 
+    def test_nan_becomes_absent_edge(self):
+        """Check: NaN counts as absent data, not as a present edge.
+
+        Input:    [nan, 0.0, 2.0] — one missing value, one zero,
+                  one real edge.
+        Expected: [0, 0, 1] — NaN maps to 0.
+        Failure:  NaN maps to 1 (the old behavior: NaN != 0 is True);
+                  corrupted matrices would gain phantom edges exactly
+                  where data is missing.
+        """
+        self.assertTrue(np.array_equal(
+            binarize(np.array([np.nan, 0.0, 2.0])),
+            np.array([0.0, 0.0, 1.0]),
+        ))
+
     def test_copy_vs_in_place(self):
         """Check: copy=True preserves the input; copy=False mutates it.
 
