@@ -89,19 +89,6 @@ def medium_two_sample(
     )
 
 
-def null_two_sample(
-    seed: int = 42,
-) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], Tuple[npt.NDArray, npt.NDArray]]:
-    """N=30, effect_size=0.0, n_g1=30, n_g2=20.
-
-    No planted effect — for type-I / null-control checks and benchmarks
-    that care only about timing, not detectability.
-    """
-    return generate_fc_matrices(
-        30, effect_size=0.0,
-        n_samples_group1=30, n_samples_group2=20, seed=seed,
-    )
-
 
 def tiny_two_sample(
     seed: int = 42,
