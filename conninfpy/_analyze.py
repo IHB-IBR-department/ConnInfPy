@@ -53,6 +53,7 @@ class AnalyzeResult:
 
     @property
     def positive(self) -> npt.NDArray[np.float64]:
+        """FWER-corrected p-values, positive tail."""
         if isinstance(self.inference, OmnibusInferenceResult):
             raise AttributeError(
                 "AnalyzeResult.positive is undefined for the F-stat omnibus "
@@ -62,6 +63,7 @@ class AnalyzeResult:
 
     @property
     def negative(self) -> npt.NDArray[np.float64]:
+        """FWER-corrected p-values, negative tail."""
         if isinstance(self.inference, OmnibusInferenceResult):
             raise AttributeError(
                 "AnalyzeResult.negative is undefined for the F-stat omnibus "
@@ -71,6 +73,7 @@ class AnalyzeResult:
 
     @property
     def omnibus(self) -> npt.NDArray[np.float64]:
+        """FWER-corrected p-values of the omnibus test."""
         if not isinstance(self.inference, OmnibusInferenceResult):
             raise AttributeError(
                 "AnalyzeResult.omnibus is only defined for the F-stat path; "

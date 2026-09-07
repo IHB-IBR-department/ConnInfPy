@@ -260,9 +260,9 @@ def decode_combined_rois(
         roi_study_ids = dataset.coordinates.loc[dists <= radius_mm, 'id'].unique().tolist()
         active_ids.update(roi_study_ids)
 
-    active_ids = list(active_ids)
+    active_id_list = list(active_ids)
 
-    if not active_ids:
+    if not active_id_list:
         return pd.DataFrame([{
             "rank": 1,
             "term": "inconclusive",
@@ -272,7 +272,7 @@ def decode_combined_rois(
     # 2. Fit and run NeurosynthDecoder
     decoder = NeurosynthDecoder(frequency_threshold=0.001, prior=0.5)
     decoder.fit(dataset)
-    decoded_df = decoder.transform(active_ids)
+    decoded_df = decoder.transform(active_id_list)
 
     z_col = None
     for candidate in ['z_assoc', 'z', 'z_association', 'est']:

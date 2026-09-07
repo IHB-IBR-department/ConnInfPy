@@ -1,7 +1,7 @@
 """EEG-specific data structures and reshape helpers."""
 import numpy as np
 from enum import Enum
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Type, Union, Optional
 from itertools import combinations
 import pandas as pd
 
@@ -66,10 +66,12 @@ class Bands(Enum):
 
     @staticmethod
     def get_name_by_id(id):
+        """Electrode name for a 1-based electrode id."""
         return Bands(id).name
 
     @staticmethod
     def get_values():
+        """List of member names for this enum."""
         return [el.value for el in Bands]
     
 
@@ -93,7 +95,7 @@ class PairsElectrodes1020:
     >>> ('Fp1', 'Fp2') in pairs_dict
     True
     """
-    def __init__(self, electrodes: Electrodes):
+    def __init__(self, electrodes: Type[Electrodes]):
         self.electrodes = electrodes
         self.nearest = [('Fp1', 'Fp2'),
                         ('Fp1', 'Fz'),
@@ -141,17 +143,24 @@ class PairsElectrodes1020:
         return list(combinations(els, 2))
 
     def create_pairs_dict(self, pairs_list, filter_by=None):
-        """
-        Creates a dictionary mapping electrode pairs to pairs_list. 
+        """Map electrode pairs to the matching entries of ``pairs_list``.
 
-        Parameters: 
-            pairs_list (list): List of electrode pairs (tuple) to be mapped.
-            filter_by (list, optional): List of electrodes to be filtered by name (Default = None).
+        Parameters
+        ----------
+        pairs_list : list of tuple
+            Electrode-pair column names to be mapped.
+        filter_by : list of str, optional
+            Keep only pair names containing at least one of these
+            substrings.
 
-        Returns: 
-            pairs_dict (dict) = Dictionary with electrode pairs as keys (from self.electrode) mapped to 
-                                electrodes from pairs_list. 
-        
+        Returns
+        -------
+        dict
+            Keys are electrode-pair tuples (from ``self.electrodes``),
+            values are the matching entries of ``pairs_list``.
+
+        Examples
+        --------
         >>> electrodes = [Electrodes.Fp1, Electrodes.Fp2, Electrodes.Fz]
         >>> pairs_obj = PairsElectrodes1020(electrodes)
         >>> pairs_obj.electrode_pairs
@@ -171,15 +180,20 @@ class PairsElectrodes1020:
 
 
 class EEGData:
-    """
-    Class function for reading EEG data
+    """Container for band-resolved EEG connectivity data.
 
-    Parameters: 
-        data (np.ndarray): EEG data of shape (n_subjects, n_channels, num_freqs).
-        subj_list (List[str]): List of subject identifiers corresponding to the first axis of 'data'.
-        electrodes (Enum): Enum represents electrodes.
-        el_pairs_list (List[Tuple[str, str]]): List of electrode pairs.
-        bands (List[str]): List of EEG frequency bands.
+    Attributes
+    ----------
+    data : np.ndarray of shape (n_subjects, n_chan_pairs, n_freqs)
+        Connectivity values per subject, electrode pair, and band.
+    subj_list : list of str
+        Subject identifiers for the first axis of ``data``.
+    electrodes : type[Electrodes]
+        Electrode enum used to build the pairs.
+    el_pairs_list : iterable of tuple
+        Electrode pairs indexing the second axis of ``data``.
+    bands : list
+        Frequency-band labels for the third axis of ``data``.
     """
 
     def __init__(self, data, subj_list, electrodes, el_pairs_list, bands):
@@ -194,26 +208,32 @@ def read_from_eeg_dataframe(path_to_df,
                             cond_prefix='fo',
                             band_list=None):
     
-    """ 
-    Function to read EEG data from (.csv) format & load into (n_subjects, n_channels, num_freqs) format. 
+    """Read EEG connectivity data from a wide CSV into an :class:`EEGData`.
 
-    Parameters: 
-        path_to_df (str): Path to csv file with EEG data.
-        cond_prefix (str, optional): String prefix for identification of condition w.r.t columns (default = 'fo').
-        band_list (list[int], optional) : List of frequency bands (default = None). 
+    The CSV has one row per subject and one column per
+    ``<cond_prefix>_<band>_<pair>`` entry; the 10-20 electrode pairs are
+    reconstructed from the column names.
 
-    Returns: 
-        EEGData object with attributes: 
-            data (np.ndarray): EEG data array of shape (n_subjects, n_channels, n_freqs)
-            subj_list (List[str]): List of subject identifiers corresponding to the first axis of 'data'.
-            Electrodes (Enum): Returned as electrode class for channels with labels.
-            (pairs_dict.keys()) (tuple): Electrode pairs as a tuple. 
-            bands (Enum): Returned as Bands class of frequency bands.
+    Parameters
+    ----------
+    path_to_df : str
+        Path to the CSV file.
+    cond_prefix : str, optional
+        Condition prefix identifying the relevant columns (default
+        ``'fo'``).
+    band_list : list of int, optional
+        Frequency bands to keep; defaults to all seven ``Bands``.
 
-    >>> eeg_data = read_from_eeg_dataframe('datasets\eeg_dataframe_nansfilled.csv', cond_prefix='fo')
+    Returns
+    -------
+    EEGData
+        With ``data`` of shape (n_subjects, n_chan_pairs, n_bands).
+
+    Examples
+    --------
+    >>> eeg_data = read_from_eeg_dataframe('datasets/eeg_dataframe_nansfilled.csv', cond_prefix='fo')
     >>> eeg_data.data.shape
     (177, 171, 7)
-
     """
     if band_list is None:
         band_list = [1, 2, 3, 4, 5, 6, 7]        
@@ -227,42 +247,50 @@ def read_from_eeg_dataframe(path_to_df,
         pairs_dict = pairs.create_pairs_dict(pairs_list, filter_by=[cond_prefix, f'_{b}_'])
         columns = [col[0] for col in list(pairs_dict.values())]
         data.append(df[columns].values)
-    data = np.array(data).swapaxes(0, 1).swapaxes(1, 2)
-    return EEGData(data, subj_list, Electrodes, (pairs_dict.keys()), bands)
+    data_arr = np.array(data).swapaxes(0, 1).swapaxes(1, 2)
+    return EEGData(data_arr, subj_list, Electrodes, (pairs_dict.keys()), bands)
 
 
 def reshape_eeg_data(data: np.ndarray,
                      reshape_bands: bool = True
                     ) -> np.ndarray:
-    """
-    Reshape EEG data from (n_subjects, chan_pairs, num_freqs) or (chan_pairs, chan_pairs) to
-    (n_subjects, n_chans, n_chans, n_freq) or to (n_subjects, n_chans*n_freq, n_chans*n_freq,) if reshape_bands is True,
-    where each chansxchans block corresponds to a specific frequency. The number of electrode pairs is considered as 19, 
-    for this instance of implementation.
+    """Unfold pair-indexed EEG data into per-band (n_chans, n_chans) matrices.
 
-    Parameters:
-        data (np.ndarray): Array of shape (n_subjects, chan_pairs, num_freqs)
-        reshape_bands (bool): Option to return a block diagonal matrix where each block returned as per individual frequency bands (default = True)
+    Parameters
+    ----------
+    data : np.ndarray of shape (n_subjects, n_chan_pairs, n_bands)
+        Pair-indexed data (a single subject may be passed as 2D).
+    reshape_bands : bool, optional
+        If True, return block-diagonal matrices of shape
+        (n_subjects, n_chans * n_bands, n_chans * n_bands) where each
+        diagonal block is one band. If False, return
+        (n_subjects, n_chans, n_chans, n_bands). Default True.
 
-    Returns:
-        reshaped_data (np.ndarray): Array of shape (n_subjects,  chan_pairs, num_freqs) or  (n_subjects, n_chans*n_freq, n_chans*n_freq,)
-        For single subjects = reshaped_data: [np.ndarray] of shape (chan_pairs, chan_pairs, num_freqs) or (chan_pairs*num_freqs, chan_pairs*num_freqs)        
+    Returns
+    -------
+    np.ndarray
+        Shape (n_chans, n_chans, n_bands) or
+        (n_chans * n_bands, n_chans * n_bands) for single-subject input;
+        batched shapes otherwise.
 
-    >>> n_pairs = np.random.rand(2, len(PairsElectrodes1020(Electrodes).electrode_pairs), 3)  # 1 subject, all pairs, 2 freqs/len(PairsElectrodes1020(Electrodes).electrode_pairs)
+    Notes
+    -----
+    Assumes the 19-electrode 10-20 system (``Electrodes``).
+
+    Examples
+    --------
+    >>> n_pairs = np.random.rand(2, len(PairsElectrodes1020(Electrodes).electrode_pairs), 3)
     >>> reshape_eeg_data(n_pairs, reshape_bands=False).shape
     (2, 19, 19, 3)
     >>> reshape_eeg_data(n_pairs, reshape_bands=True).shape
     (2, 57, 57)
-
     """
+    num_els = len(Electrodes)  # 19 electrodes
+    el_pairs_list = PairsElectrodes1020(Electrodes).electrode_pairs
 
-    num_els = len(Electrodes) # Default 19 electrodes 
-    el_pairs_list = PairsElectrodes1020(Electrodes).electrode_pairs 
-
-    # Input with single subject: 
-    dtype = data.ndim == 2
-    if dtype == True:
-        data = data[np.newaxis,...]
+    single_subject = data.ndim == 2
+    if single_subject:
+        data = data[np.newaxis, ...]
         
     n_subjects, _, n_frequencies = data.shape
     reshaped_data = np.zeros((n_subjects, num_els, num_els, n_frequencies))
@@ -274,66 +302,64 @@ def reshape_eeg_data(data: np.ndarray,
         reshaped_data[:, j, i, :] = data[:, pair_idx, :]  
 
     if reshape_bands:
-        #Create block-diagonal form
+        # block-diagonal form: one n_chans × n_chans block per band
         to_reshape = reshaped_data.copy()
         reshaped_data = np.zeros((n_subjects, num_els * n_frequencies, num_els * n_frequencies))
         for k in range(n_frequencies):
-            reshaped_data[:, k * num_els:(k + 1) * num_els, k * num_els:(k + 1) * num_els] = to_reshape[..., k] 
+            reshaped_data[:, k * num_els:(k + 1) * num_els, k * num_els:(k + 1) * num_els] = to_reshape[..., k]
 
-    return  reshaped_data[0] if dtype else reshaped_data
+    return reshaped_data[0] if single_subject else reshaped_data
 
 
+def inverse_reshape_eeg_data(reshaped_data: np.ndarray,
+                             reshape_bands: bool = True) -> np.ndarray:
+    """Inverse of :func:`reshape_eeg_data`.
 
-def inverse_reshape_eeg_data(
-            reshaped_data: np.ndarray,
-            reshape_bands: bool = True
-            ) -> np.ndarray:
-        
-        """
-        Function to perform Inverse reshape of EEG data back to (n_subjects, chan_pairs, num_freqs) format.
+    Parameters
+    ----------
+    reshaped_data : np.ndarray
+        Shape (n_subjects, n_chans, n_chans, n_bands), or
+        (n_subjects, n_chans * n_bands, n_chans * n_bands) when
+        ``reshape_bands=True`` (a single subject may be passed as 2D).
+    reshape_bands : bool, optional
+        Whether the input is in band-flattened (block-diagonal) form.
 
-        Parameters:
-            reshaped_data (np.ndarray): EEG data of shape (n_subjects, num_els, num_els, num_freqs).
-            or (n_subjects, num_els*n_freqs, num_els*n_freqs) if reshape_bands=True.
-            reshape_bands (bool): To indicate if input is in band-flattened form.
+    Returns
+    -------
+    np.ndarray
+        Pair-indexed data of shape (n_subjects, n_chan_pairs, n_bands),
+        or (n_chan_pairs, n_bands) for single-subject input.
 
-        Returns:
-            original_data (np.ndarray): Original EEG data of shape (n_subjects, chan_pairs, num_freqs) or (chan_pairs, num_freq)
+    Examples
+    --------
+    >>> n_pairs = np.random.rand(2, len(PairsElectrodes1020(Electrodes).electrode_pairs), 3)
+    >>> reshaped = reshape_eeg_data(n_pairs, reshape_bands=True)
+    >>> reshaped.shape
+    (2, 57, 57)
+    >>> inverse_reshape_eeg_data(reshaped, reshape_bands=True).shape
+    (2, 171, 3)
+    """
+    num_els = len(Electrodes)  # 19 electrodes
+    el_pairs_list = PairsElectrodes1020(Electrodes).electrode_pairs
 
-        >>> n_pairs = np.random.rand(2, len(PairsElectrodes1020(Electrodes).electrode_pairs), 3)
-        >>> reshaped_data = reshape_eeg_data(n_pairs, reshape_bands=True)
-        >>> reshaped_data.shape 
-        (2, 57, 57)
-        >>> inverse_data = inverse_reshape_eeg_data(reshaped_data, reshape_bands=True)
-        >>> inverse_data.shape
-        (2, 171, 3)
-        """
+    single_subject = reshaped_data.ndim == 2
+    if single_subject:
+        reshaped_data = reshaped_data[np.newaxis, ...]
 
-        num_els = len(Electrodes) # Default 19 electrodes 
-        el_pairs_list = PairsElectrodes1020(Electrodes).electrode_pairs 
+    n_subjects = reshaped_data.shape[0]
 
-        # Input with single subject
-        dtype = reshaped_data.ndim == 2
-        if dtype == True:
-            reshaped_data = reshaped_data[np.newaxis,...]
+    if reshape_bands:
+        n_frequencies = reshaped_data.shape[1] // num_els
+        extracted = np.zeros((n_subjects, num_els, num_els, n_frequencies))
+        for k in range(n_frequencies):
+            extracted[..., k] = reshaped_data[:, k * num_els:(k + 1) * num_els,
+                                               k * num_els:(k + 1) * num_els]
+        reshaped_data = extracted
 
-        n_subjects = reshaped_data.shape[0]
+    n_frequencies = reshaped_data.shape[-1]
+    original_data = np.zeros((n_subjects, len(el_pairs_list), n_frequencies))
+    for pair_idx, (el1, el2) in enumerate(el_pairs_list):
+        i, j = Electrodes[el1].value - 1, Electrodes[el2].value - 1
+        original_data[:, pair_idx, :] = reshaped_data[:, i, j, :]
 
-        if reshape_bands:
-            # Extract frequency-specific blocks
-            n_frequencies = reshaped_data.shape[1] // num_els
-            extracted_data = np.zeros((n_subjects, num_els, num_els, n_frequencies))
-            for k in range(n_frequencies):
-                extracted_data[..., k] = reshaped_data[:, k * num_els:(k + 1) * num_els, k * num_els:(k + 1) * num_els]
-
-            reshaped_data = extracted_data  # Convert back to (n_subjects, num_els, num_els, num_freqs)
-
-        # Reconstruct the (n_subjects, chan_pairs, num_freqs) array
-        n_frequencies = reshaped_data.shape[-1]
-        original_data = np.zeros((n_subjects, len(el_pairs_list), n_frequencies))
-
-        for pair_idx, (el1, el2) in enumerate(el_pairs_list):
-            i, j = Electrodes[el1].value - 1, Electrodes[el2].value - 1
-            original_data[:, pair_idx, :] = reshaped_data[:, i, j, :]
-
-        return original_data[0] if dtype else original_data
+    return original_data[0] if single_subject else original_data

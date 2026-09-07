@@ -31,6 +31,7 @@ except ImportError:
     def njit(*args, **kwargs):
         """Fallback decorator when numba is not installed."""
         def decorator(func):
+            """No-op stand-in for numba's njit when numba is absent."""
             return func
         if len(args) == 1 and callable(args[0]):
             return args[0]
@@ -268,7 +269,6 @@ def get_tfnbs_score(
     if threshs is None:
         return tfnbs
 
-    # Check if matrix is symmetric for optimization
     is_symm = _is_symmetric(t_stats)
     edge_rows, edge_cols, edge_weights = _get_edges(t_stats, start_thres, symmetric=is_symm)
 

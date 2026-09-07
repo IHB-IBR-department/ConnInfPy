@@ -22,6 +22,7 @@ from typing import Dict, Optional
 
 import numpy as np
 import numpy.typing as npt
+from scipy import stats
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +264,6 @@ def fit_gamma_tail(
         empirical p-values with the Phipson-Smyth +1 correction when
         gamma fitting is not possible.
     """
-    from scipy import stats
 
     J = len(null_dist)
 

@@ -27,6 +27,8 @@ import numpy as np
 import numpy.typing as npt
 
 from ._compat import TailResult, make_tail_result
+from ._export import build_tailed_dataframe, build_omnibus_dataframe
+from .decode import annotate_edge_table
 
 
 class InferenceResult(TailResult):
@@ -142,10 +144,12 @@ class InferenceResult(TailResult):
 
     @property
     def positive(self) -> npt.NDArray[np.float64]:
+        """FWER-corrected p-values, positive tail."""
         return self["positive"]
 
     @property
     def negative(self) -> npt.NDArray[np.float64]:
+        """FWER-corrected p-values, negative tail."""
         return self["negative"]
 
     @property
@@ -328,8 +332,6 @@ class InferenceResult(TailResult):
             pickled pre-v2.1 results), or if ``sort='network_pair'``
             without an atlas.
         """
-        from ._export import build_tailed_dataframe
-
         return build_tailed_dataframe(
             self._project_2d(self["positive"], param_idx),
             self._project_2d(self["negative"], param_idx),
@@ -379,8 +381,6 @@ class InferenceResult(TailResult):
         Convenience wrapper that calls ``significant_edges`` first, and then annotates
         it with decoded terms using ``annotate_edge_table``.
         """
-        from .decode import annotate_edge_table
-        
         # Split kwargs between significant_edges and annotate_edge_table
         sig_keys = {'alpha', 'tail', 'sort', 'include_nonsig', 'top_k', 'param_idx'}
         sig_kwargs = {k: v for k, v in kwargs.items() if k in sig_keys}
@@ -474,9 +474,11 @@ class OmnibusInferenceResult(TailResult):
 
     @property
     def omnibus(self) -> npt.NDArray[np.float64]:
+        """FWER-corrected p-values of the omnibus test."""
         return self["omnibus"]
 
     def n_significant(self, alpha: float = 0.05) -> Dict[str, int]:
+        """Edge counts below ``alpha`` per tail."""
         arr = self["omnibus"]
         if arr.ndim == 2 and arr.shape[0] == arr.shape[1]:
             iu = np.triu_indices_from(arr, k=1)
@@ -505,8 +507,6 @@ class OmnibusInferenceResult(TailResult):
         null rejection; it does not by itself establish that an edge
         corresponds to a specific cognitive or biological mechanism.
         """
-        from ._export import build_omnibus_dataframe
-
         return build_omnibus_dataframe(
             self["omnibus"],
             stat_omnibus=self.stat_omnibus,
