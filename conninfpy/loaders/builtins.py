@@ -13,6 +13,7 @@ from pathlib import Path
 from conninfpy.atlas import AtlasInfo
 from conninfpy.loaders.base import BaseDataLoader, LoadedDataset, DatasetPreview
 from conninfpy.loaders.validation import validate_loaded_dataset
+import json
 
 def compute_dir_hash(files: list[str], extra_params: dict) -> str:
     """Compute a deterministic hash for a list of files and parameters to check cache validity."""
@@ -28,6 +29,26 @@ def compute_dir_hash(files: list[str], extra_params: dict) -> str:
     return h.hexdigest()
 
 
+def _load_atlas_if_present(path: "str | None") -> "AtlasInfo | None":
+    """Load an :class:`AtlasInfo` from ``path``; None if absent or unreadable."""
+    if path and os.path.exists(path):
+        try:
+            return AtlasInfo.from_csv(path)
+        except Exception:
+            return None
+    return None
+
+
+def _load_atlas_if_present(path: "str | None") -> "AtlasInfo | None":
+    """Load an :class:`AtlasInfo` from ``path``; None if absent or unreadable."""
+    if path and os.path.exists(path):
+        try:
+            return AtlasInfo.from_csv(path)
+        except Exception:
+            return None
+    return None
+
+
 class NumpyLoader(BaseDataLoader):
     """Loader for standard numpy files (.npy or .npz) containing 3D arrays."""
     name = "NumpyLoader"
@@ -38,6 +59,7 @@ class NumpyLoader(BaseDataLoader):
         self.data_kind = data_kind
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         warnings = []
         if not os.path.exists(self.data_path):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], None, None, [f"File not found: {self.data_path}"])
@@ -75,6 +97,7 @@ class NumpyLoader(BaseDataLoader):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 1, None, [f"Error reading file: {e}"])
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         if not os.path.exists(self.data_path):
             raise FileNotFoundError(f"File not found: {self.data_path}")
             
@@ -113,12 +136,14 @@ class CSVDirectoryLoader(BaseDataLoader):
         self.sep = sep
 
     def _get_files(self) -> list[str]:
+        """Sorted list of data files in the loader's directory."""
         if not os.path.exists(self.dir_path):
             return []
         files = glob.glob(os.path.join(self.dir_path, "*.csv")) + glob.glob(os.path.join(self.dir_path, "*.tsv"))
         return sorted(files)
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         files = self._get_files()
         if not files:
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["No CSV or TSV files found in directory."])
@@ -161,6 +186,7 @@ class CSVDirectoryLoader(BaseDataLoader):
             return DatasetPreview(len(files), len(files), None, None, "timeseries", None, None, [], len(files), total_size, [f"Error previewing sample file: {e}"])
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         files = self._get_files()
         if not files:
             raise FileNotFoundError(f"No CSV/TSV files found in {self.dir_path}")
@@ -237,6 +263,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
         self.atlas_lut = atlas_lut
 
     def _get_files(self) -> list[str]:
+        """Sorted list of data files in the loader's directory."""
         if not self.dir_path or not os.path.exists(self.dir_path):
             return []
         if self.file_pattern:
@@ -251,6 +278,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
         return sorted([f for f in files if os.path.exists(f)])
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         if self.subjects:
             total_files = 0
             total_size = 0.0
@@ -339,6 +367,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
         )
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         import nibabel as nib
         from nilearn.maskers import NiftiLabelsMasker, NiftiMasker
 
@@ -388,13 +417,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
                     pheno["subject_id"] = pheno["subject_id"].astype(str)
                     pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
             
-            from conninfpy.atlas import AtlasInfo
-            atlas = None
-            if self.atlas_metadata and os.path.exists(self.atlas_metadata):
-                try:
-                    atlas = AtlasInfo.from_csv(self.atlas_metadata)
-                except Exception:
-                    pass
+            atlas = _load_atlas_if_present(self.atlas_metadata)
             
             return LoadedDataset(
                 data=data,
@@ -501,13 +524,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
                 pheno["subject_id"] = pheno["subject_id"].astype(str)
                 pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
 
-        from conninfpy.atlas import AtlasInfo
-        atlas = None
-        if self.atlas_metadata and os.path.exists(self.atlas_metadata):
-            try:
-                atlas = AtlasInfo.from_csv(self.atlas_metadata)
-            except Exception:
-                pass
+        atlas = _load_atlas_if_present(self.atlas_metadata)
 
         result = LoadedDataset(
             data=data,
@@ -538,6 +555,7 @@ class AbideSchaeferLoader(BaseDataLoader):
         self.pheno_csv_path = pheno_csv_path
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         if not os.path.exists(self.data_path):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["File not found."])
             
@@ -565,6 +583,7 @@ class AbideSchaeferLoader(BaseDataLoader):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 1, None, [f"Error reading ABIDE dict: {e}"])
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         d = np.load(self.data_path, allow_pickle=True).item()
         
         subject_ids = list(d.keys())
@@ -664,6 +683,7 @@ class OpenCloseLoader(BaseDataLoader):
         self.drop_missing_rois = drop_missing_rois
 
     def _get_kept_indices(self) -> np.ndarray | None:
+        """ROI indices surviving the missing-ROI drop."""
         if self.drop_missing_rois and self.atlas and os.path.exists(self.atlas):
             try:
                 df = pd.read_csv(self.atlas)
@@ -674,6 +694,7 @@ class OpenCloseLoader(BaseDataLoader):
         return None
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         if not os.path.exists(self.open_path) or not os.path.exists(self.close_path):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["Open or close file path not found."])
             
@@ -709,6 +730,7 @@ class OpenCloseLoader(BaseDataLoader):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 2, None, [f"Error previewing open_close: {e}"])
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         open_data = np.load(self.open_path)
         close_data = np.load(self.close_path)
         
@@ -747,13 +769,7 @@ class OpenCloseLoader(BaseDataLoader):
         })
         
         # Load atlas
-        atlas = None
-        if self.atlas and os.path.exists(self.atlas):
-            from conninfpy.atlas import AtlasInfo
-            try:
-                atlas = AtlasInfo.from_csv(self.atlas)
-            except Exception:
-                pass
+        atlas = _load_atlas_if_present(self.atlas)
         
         return LoadedDataset(
             data=data,
@@ -789,6 +805,7 @@ class MultiSiteOpenCloseLoader(BaseDataLoader):
         self.drop_missing_rois = drop_missing_rois
 
     def _site_loaders(self) -> list[tuple[str, OpenCloseLoader]]:
+        """One OpenCloseLoader per site, with site labels."""
         loaders = []
         for site, config in self.site_configs.items():
             loaders.append((
@@ -804,6 +821,7 @@ class MultiSiteOpenCloseLoader(BaseDataLoader):
         return loaders
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         previews = [(site, loader.preview()) for site, loader in self._site_loaders()]
         warnings = [
             f"{site}: {warning}"
@@ -844,6 +862,7 @@ class MultiSiteOpenCloseLoader(BaseDataLoader):
         )
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         datasets = [(site, loader.load()) for site, loader in self._site_loaders()]
         roi_counts = {dataset.data.shape[1] for _, dataset in datasets}
         if len(roi_counts) != 1:
@@ -886,6 +905,7 @@ class StressTimeseriesLoader(BaseDataLoader):
 
     def preview(self) -> DatasetPreview:
         # Thin wrapper over CSVDirectoryLoader, customized for Brainnetome-246
+        """Cheap preview of the dataset without a full load."""
         loader = CSVDirectoryLoader(self.dir_path, header=None)
         prev = loader.preview()
         prev.atlas_guess = "Brainnetome-246"
@@ -893,11 +913,11 @@ class StressTimeseriesLoader(BaseDataLoader):
 
     def load(self) -> LoadedDataset:
         # Load timeseries using standard CSV loader
+        """Load the dataset into a :class:`LoadedDataset`."""
         loader = CSVDirectoryLoader(self.dir_path, header=None)
         ds = loader.load()
         
         # Infer Brainnetome atlas
-        from conninfpy.atlas import AtlasInfo
         try:
             ds.atlas = AtlasInfo.bna_246()
             ds.roi_labels = ds.atlas.labels
@@ -917,6 +937,7 @@ class ZerssenNiftiLoader(BaseDataLoader):
         self.cache_dir = cache_dir
 
     def _get_folders_and_files(self) -> tuple[list[str], list[str]]:
+        """Subject folders and their file paths."""
         hc_dir = os.path.join(self.subjects_dir, "HC")
         pat_dir = os.path.join(self.subjects_dir, "Patients")
         
@@ -925,6 +946,7 @@ class ZerssenNiftiLoader(BaseDataLoader):
         return hc_files, pat_files
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         hc_files, pat_files = self._get_folders_and_files()
         all_files = hc_files + pat_files
         
@@ -953,6 +975,7 @@ class ZerssenNiftiLoader(BaseDataLoader):
         )
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         hc_files, pat_files = self._get_folders_and_files()
         
         # Load HC group using NiftiDirectoryLoader
@@ -974,7 +997,6 @@ class ZerssenNiftiLoader(BaseDataLoader):
             "subject_id": subject_ids,
             "group": groups
         })
-        from conninfpy.atlas import AtlasInfo
         atlas = None
         try:
             atlas = AtlasInfo.bna_246()
@@ -992,6 +1014,7 @@ class ZerssenNiftiLoader(BaseDataLoader):
 
 
 def build_fmriprep_confounds(img_path: str, strategy: int, n_compcor: int | None = 10, use_GSR: bool = False) -> tuple[pd.DataFrame, np.ndarray]:
+    """Build an fMRIPrep confound regressor matrix for one image."""
     from nilearn.interfaces.fmriprep import load_confounds
     
     assert strategy in [1, 2, 3, 4, 5, 6], "Strategy must be 1-6"
@@ -1043,6 +1066,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
         self.cache_dir = cache_dir or os.path.expanduser("~/.conninfpy/loaders")
 
     def _get_files(self, base_dir: str) -> list[tuple[str, str]]:
+        """Sorted list of data files in the loader's directory."""
         if not os.path.exists(base_dir):
             return []
         
@@ -1067,6 +1091,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
         return results
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         dirs_to_scan = {}
         if self.derivatives:
             dirs_to_scan = self.derivatives
@@ -1103,6 +1128,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
         )
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         import nibabel as nib
         from nilearn.maskers import NiftiLabelsMasker, NiftiMasker
 
@@ -1199,13 +1225,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                 pheno["subject_id"] = pheno["subject_id"].astype(str)
                 pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
                 
-        from conninfpy.atlas import AtlasInfo
-        atlas = None
-        if self.atlas_metadata and os.path.exists(self.atlas_metadata):
-            try:
-                atlas = AtlasInfo.from_csv(self.atlas_metadata)
-            except Exception:
-                pass
+        atlas = _load_atlas_if_present(self.atlas_metadata)
                 
         return LoadedDataset(
             data=data,
@@ -1248,6 +1268,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
         self.run_regex = run_regex
 
     def _get_files_from_dir(self, directory: str) -> list[str]:
+        """Sorted data files inside one directory."""
         if not os.path.exists(directory):
             return []
         files = glob.glob(os.path.join(directory, self.pattern))
@@ -1256,6 +1277,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
         return sorted(files)
 
     def _get_all_files(self) -> dict[str, list[str]]:
+        """Condition → file list mapping for all conditions."""
         if self.dir_paths:
             return {grp: self._get_files_from_dir(d) for grp, d in self.dir_paths.items()}
         elif self.dir_path:
@@ -1263,6 +1285,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
         return {}
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         all_groups_files = self._get_all_files()
         total_files = sum(len(f) for f in all_groups_files.values())
         if total_files == 0:
@@ -1309,6 +1332,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
         )
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         all_groups_files = self._get_all_files()
         total_files = sum(len(f) for f in all_groups_files.values())
         if total_files == 0:
@@ -1365,13 +1389,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
                 pheno["subject_id"] = pheno["subject_id"].astype(str)
                 pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
                 
-        from conninfpy.atlas import AtlasInfo
-        atlas = None
-        if self.atlas and os.path.exists(self.atlas):
-            try:
-                atlas = AtlasInfo.from_csv(self.atlas)
-            except Exception:
-                pass
+        atlas = _load_atlas_if_present(self.atlas)
                 
         return LoadedDataset(
             data=data,
@@ -1418,12 +1436,14 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
         self.close_session_policy = close_session_policy
 
     def _get_subject_order(self) -> list[str]:
+        """Subject order reconstructed from the listing file."""
         if os.path.exists(self.subject_order_path):
             with open(self.subject_order_path, "r") as f:
                 return [line.strip() for line in f if line.strip()]
         return []
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         sub_list = self._get_subject_order()
         if not sub_list:
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["Subject order list empty or missing."])
@@ -1459,6 +1479,7 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, [f"Error: {e}"])
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         sub_list = self._get_subject_order()
         if not sub_list:
             raise FileNotFoundError(f"Subject list not found: {self.subject_order_path}")
@@ -1498,13 +1519,7 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
             "condition": all_conditions
         })
         
-        from conninfpy.atlas import AtlasInfo
-        atlas = None
-        if self.atlas and os.path.exists(self.atlas):
-            try:
-                atlas = AtlasInfo.from_csv(self.atlas)
-            except Exception:
-                pass
+        atlas = _load_atlas_if_present(self.atlas)
                 
         return LoadedDataset(
             data=data,
@@ -1537,6 +1552,7 @@ class ConnectivityMatrixLoader(BaseDataLoader):
         self.data_kind = data_kind
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         if self.data_paths:
             first_grp = list(self.data_paths.keys())[0]
             nl = NumpyLoader(data_path=self.data_paths[first_grp], pheno_path=self.pheno_path, data_kind=self.data_kind)
@@ -1566,6 +1582,7 @@ class ConnectivityMatrixLoader(BaseDataLoader):
             return prev
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         if self.data_paths:
             all_data = []
             all_groups = []
@@ -1583,13 +1600,7 @@ class ConnectivityMatrixLoader(BaseDataLoader):
                 "group": all_groups
             })
             
-            from conninfpy.atlas import AtlasInfo
-            atlas = None
-            if self.atlas and os.path.exists(self.atlas):
-                try:
-                    atlas = AtlasInfo.from_csv(self.atlas)
-                except Exception:
-                    pass
+            atlas = _load_atlas_if_present(self.atlas)
                     
             return LoadedDataset(
                 data=data,
@@ -1603,7 +1614,6 @@ class ConnectivityMatrixLoader(BaseDataLoader):
             nl = NumpyLoader(data_path=self.data_path, pheno_path=self.pheno_path, data_kind=self.data_kind)
             dataset = nl.load()
             
-            from conninfpy.atlas import AtlasInfo
             if self.atlas and os.path.exists(self.atlas):
                 try:
                     dataset.atlas = AtlasInfo.from_csv(self.atlas)
@@ -1641,6 +1651,7 @@ class CustomPreparedZerssenLoader(BaseDataLoader):
         ]
 
     def _selected_matrix(self, archive) -> tuple[str, np.ndarray]:
+        """The subject's connectivity matrix for the chosen condition."""
         available = self._available_connectivity_keys(archive)
         if self.matrix_key not in available:
             raise ValueError(
@@ -1686,7 +1697,6 @@ class CustomPreparedZerssenLoader(BaseDataLoader):
         if not os.path.exists(self.set84_bnt_ids):
             return []
         try:
-            import json
             with open(self.set84_bnt_ids, "r") as file_handle:
                 metadata = json.load(file_handle)
             values = metadata.get("bnt_ids", []) if isinstance(metadata, dict) else metadata
@@ -1695,6 +1705,7 @@ class CustomPreparedZerssenLoader(BaseDataLoader):
             return []
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         if not os.path.exists(self.prepared_npz):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["Prepared NPZ not found."])
         try:
@@ -1727,6 +1738,7 @@ class CustomPreparedZerssenLoader(BaseDataLoader):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, [f"Error: {e}"])
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         if not os.path.exists(self.prepared_npz):
             raise FileNotFoundError(f"Prepared NPZ not found: {self.prepared_npz}")
             
@@ -1751,7 +1763,6 @@ class CustomPreparedZerssenLoader(BaseDataLoader):
             if values.ndim == 1 and len(values) == len(data):
                 pheno[column] = pd.to_numeric(values, errors="coerce")
         
-        from conninfpy.atlas import AtlasInfo
         atlas = None
         if os.path.exists(self.atlas_metadata):
             try:
@@ -1821,6 +1832,7 @@ class ChinaCloseCloseLoader(BaseDataLoader):
         self.drop_missing_rois = drop_missing_rois
         
     def _get_kept_indices(self) -> np.ndarray | None:
+        """ROI indices surviving the missing-ROI drop."""
         if self.drop_missing_rois and self.atlas and os.path.exists(self.atlas):
             try:
                 df = pd.read_csv(self.atlas)
@@ -1831,6 +1843,7 @@ class ChinaCloseCloseLoader(BaseDataLoader):
         return None
 
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         if not os.path.exists(self.close_path):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["Close file path not found."])
         try:
@@ -1866,6 +1879,7 @@ class ChinaCloseCloseLoader(BaseDataLoader):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 1, None, [f"Error previewing close_close: {e}"])
 
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         close_raw = np.load(self.close_path)
         if close_raw.ndim != 4 or close_raw.shape[-1] != 2:
             raise ValueError(f"Expected 4D array with 2 runs; got shape {close_raw.shape}")
@@ -1910,13 +1924,7 @@ class ChinaCloseCloseLoader(BaseDataLoader):
             "condition": ["close_run1"] * n_sub + ["close_run2"] * n_sub
         })
         
-        atlas = None
-        if self.atlas and os.path.exists(self.atlas):
-            from conninfpy.atlas import AtlasInfo
-            try:
-                atlas = AtlasInfo.from_csv(self.atlas)
-            except Exception:
-                pass
+        atlas = _load_atlas_if_present(self.atlas)
                 
         return LoadedDataset(
             data=data,
