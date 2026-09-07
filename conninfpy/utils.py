@@ -164,23 +164,27 @@ def get_components(A, no_depend=False):
 
 
 def binarize(W, copy=True):
-    '''
-    Binarizes an input weighted connection matrix.  If copy is not set, this
-    function will *modify W in place.*
+    """Binarize a weighted connectivity matrix: nonzero → 1, zero → 0.
+
+    NaN counts as absent data and becomes 0 — missing values must not
+    turn into present edges. With ``copy=False`` the input array is
+    modified in place.
 
     Parameters
     ----------
-    W : NxN np.ndarray
-        weighted connectivity matrix
-    copy : bool
-        if True, returns a copy of the matrix. Otherwise, modifies the matrix
-        in place. Default value=True.
+    W : np.ndarray of shape (N, N)
+        Weighted connectivity matrix.
+    copy : bool, optional
+        If True (default), return a new array; otherwise modify ``W``
+        in place.
 
     Returns
     -------
-    W : NxN np.ndarray
-        binary connectivity matrix
+    np.ndarray of shape (N, N)
+        Binary adjacency matrix (0/1, same dtype behavior as input copy).
 
+    Examples
+    --------
     >>> W = np.array([
     ...     [0.0, 2.5, 0.0],
     ...     [1.1, 0.0, 0.3],
@@ -190,9 +194,12 @@ def binarize(W, copy=True):
     array([[0., 1., 0.],
            [1., 0., 1.],
            [0., 0., 0.]])
-    '''
+    >>> binarize(np.array([np.nan, 0.0, 2.0]))
+    array([0., 0., 1.])
+    """
     if copy:
         W = W.copy()
+    W[np.isnan(W)] = 0  # missing data is not an edge
     W[W != 0] = 1
     return W
 
