@@ -52,6 +52,9 @@ from .pairwise_stats import (
     _collect_results_to_arrays,
     _compute_p_values_from_null,
     _is_worker_process,
+    _stratified_perm,
+    _encode_strata,
+    _grid_from_kwargs,
     compute_p_val,
     get_available_cores,
     StatMethod,
@@ -484,7 +487,6 @@ def _freedman_lane_permutation_task(
     if strata_codes is None:
         perm_idx = rng.permutation(residuals_reduced.shape[0])
     else:
-        from .pairwise_stats import _stratified_perm
         perm_idx = _stratified_perm(strata_codes, rng)
     residuals_perm = residuals_reduced[perm_idx]
     Y_perm = Y_hat_reduced + residuals_perm
@@ -763,7 +765,6 @@ def compute_p_val_glm(
     # ---- Encode strata for within-block exchangeability (PALM -eb) ----
     strata_codes = None
     if strata is not None:
-        from .pairwise_stats import _encode_strata
         strata_codes = _encode_strata(strata)
         if strata_codes.shape[0] != n_subjects:
             raise ValueError(
@@ -891,7 +892,6 @@ def _multi_contrast_perm_task(
     if strata_codes is None:
         perm_idx = rng.permutation(residuals_reduced.shape[0])
     else:
-        from .pairwise_stats import _stratified_perm
         perm_idx = _stratified_perm(strata_codes, rng)
     Y_perm = Y_hat_reduced + residuals_reduced[perm_idx]
 
@@ -1106,7 +1106,6 @@ def compute_p_val_glm_multi(
     # ---- Encode strata for within-block exchangeability (PALM -eb) ----
     strata_codes = None
     if strata is not None:
-        from .pairwise_stats import _encode_strata
         strata_codes = _encode_strata(strata)
         if strata_codes.shape[0] != n_subjects:
             raise ValueError(

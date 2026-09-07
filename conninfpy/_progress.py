@@ -10,14 +10,14 @@ sites collapse from ten lines to one.
 """
 from __future__ import annotations
 
+import multiprocessing
 import sys
-from multiprocessing import Pool
 from typing import Callable, List, Optional, Sequence, TypeVar
 
 T = TypeVar("T")
 
 try:
-    from tqdm.auto import tqdm  # type: ignore[import-not-found]
+    from tqdm.auto import tqdm
 
     _HAS_TQDM = True
 except ImportError:  # pragma: no cover (env-specific)
@@ -72,23 +72,32 @@ def run_permutations(
                 _print_progress(i, n, desc)
         return out
 
-    # Multiprocessing path
-    pool_kwargs = {}
+    # Multiprocessing path. Use forkserver (spawn on platforms without it)
+    # instead of the default fork start method: the parent process may be
+    # multi-threaded (numba JIT threads), and forking a threaded process
+    # can deadlock the child (DeprecationWarning since Python 3.12).
+    ctx: multiprocessing.context.BaseContext
+    try:
+        ctx = multiprocessing.get_context("forkserver")
+    except ValueError:  # pragma: no cover (platform-specific)
+        ctx = multiprocessing.get_context("spawn")
     if n_processes is not None:
-        pool_kwargs["processes"] = n_processes
-    with Pool(**pool_kwargs) as pool:
+        pool = ctx.Pool(processes=n_processes)
+    else:
+        pool = ctx.Pool()
+    with pool as p:
         if not verbose:
-            return list(pool.map(task_func, seeds))
+            return list(p.map(task_func, seeds))
         if _HAS_TQDM:
             out2: List[T] = []
             for r in tqdm(
-                pool.imap(task_func, seeds),
+                p.imap(task_func, seeds),
                 total=n, desc=desc, leave=False,
             ):
                 out2.append(r)
             return out2
         out3: List[T] = []
-        for i, r in enumerate(pool.imap(task_func, seeds), start=1):
+        for i, r in enumerate(p.imap(task_func, seeds), start=1):
             out3.append(r)
             if i % log_every == 0 or i == n:
                 _print_progress(i, n, desc)
@@ -96,6 +105,7 @@ def run_permutations(
 
 
 def _print_progress(i: int, n: int, desc: str) -> None:
+    """Print an inline ``i/n`` progress line."""
     sys.stdout.write(f"\r{desc} {i}/{n} ({100 * i / n:.0f}%)")
     sys.stdout.flush()
     if i == n:

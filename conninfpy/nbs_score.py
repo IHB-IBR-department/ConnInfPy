@@ -41,6 +41,7 @@ ArrayF = npt.NDArray[np.float64]
 
 
 def _is_symmetric(matrix: npt.NDArray[np.floating], rtol: float = 1e-10) -> bool:
+    """True when the matrix equals its transpose."""
     return np.allclose(matrix, matrix.T, rtol=rtol, atol=0)
 
 
@@ -49,6 +50,7 @@ def _get_edges(
     min_threshold: float,
     symmetric: bool,
 ) -> Tuple[npt.NDArray[np.intp], npt.NDArray[np.intp], npt.NDArray[np.floating]]:
+    """Upper-triangle edge indices of a square matrix."""
     if symmetric:
         rows, cols = np.triu_indices_from(t_stats, k=1)
     else:
@@ -61,6 +63,7 @@ def _get_edges(
 
 
 def _check_square(t_stat: npt.NDArray[np.floating]) -> None:
+    """Raise ValueError unless ``arr`` is a square (N, N) matrix."""
     if t_stat.ndim != 2 or t_stat.shape[0] != t_stat.shape[1]:
         raise ValueError("t_stat must be a square (N, N) matrix.")
     if not np.allclose(np.diag(t_stat), 0.0):
@@ -71,6 +74,7 @@ def _validate_net_labels(
     net_labels: npt.NDArray[np.integer],
     n_nodes: int,
 ) -> npt.NDArray[np.integer]:
+    """Validate network labels against the node count."""
     if net_labels.shape[0] != n_nodes:
         raise ValueError(
             f"net_labels shape {net_labels.shape} does not match number of nodes {n_nodes}."
@@ -85,6 +89,7 @@ def _compute_canonical_block_ids(
     node_labels: npt.NDArray[np.integer],
     n_networks: int,
 ) -> npt.NDArray[np.intp]:
+    """Canonical (sorted) network-pair id per edge."""
     labels_i = node_labels[edge_rows]
     labels_j = node_labels[edge_cols]
     min_labels = np.minimum(labels_i, labels_j)
@@ -227,6 +232,7 @@ def _score_nbs_from_diffs(
     threshold: float,
     stat_type: str,
 ) -> Dict[str, npt.NDArray[np.float64]]:
+    """NBS component scores from per-edge statistics."""
     from ._compat import make_tail_result
     from .pairwise_stats import compute_t_stat_diff
 
@@ -244,6 +250,7 @@ def _score_nbs_two_sample(
     threshold: float,
     stat_type: str,
 ) -> Dict[str, npt.NDArray[np.float64]]:
+    """Two-sample NBS component scores."""
     from ._compat import make_tail_result
     from .pairwise_stats import compute_t_stat
 
@@ -283,6 +290,9 @@ def nbs_bct(
     if random_state is not None and rng is None:
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
+
+    if test_type in ("paired", "two-sample") and group2 is None:
+        raise ValueError(f"group2 is required for test_type='{test_type}'.")
 
     if test_type == "paired":
         diffs = group2 - group1
@@ -329,7 +339,7 @@ def nbs_bct(
         n_permutations=n_permutations,
         test_type=test_type,
         use_mp=use_mp,
-        random_state=random_state,
+        rng=random_state,
         n_processes=n_processes,
         threshold=threshold,
         stat_type=stat_type,
