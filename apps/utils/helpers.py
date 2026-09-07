@@ -52,6 +52,7 @@ def local_dataset_templates_enabled():
 
 
 def load_custom_datasets():
+    """Load user-defined dataset manifests from the workspace."""
     if not local_dataset_templates_enabled():
         return {}
     path = os.path.expanduser("~/.conninfpy/custom_datasets.json")
@@ -238,6 +239,7 @@ def atlas_has_coords(atlas):
     return coords.ndim == 2 and coords.shape[1] == 3 and np.isfinite(coords).all()
 
 def atlas_label(atlas, fallback="No atlas metadata"):
+    """Display label for an ROI index under an atlas."""
     if atlas is None:
         return fallback
     return getattr(atlas, "source", None) or f"Custom atlas ({len(atlas)} ROIs)"
@@ -298,6 +300,7 @@ def atlas_from_dataframe(df, *, source="Custom atlas"):
     )
 
 def load_custom_atlas_csv(path_or_buffer, *, source="Custom atlas"):
+    """Load a user-supplied atlas CSV from the workspace."""
     df = pd.read_csv(path_or_buffer)
     if df.empty:
         raise ValueError("Custom atlas CSV has no rows.")
@@ -436,8 +439,9 @@ Connects the coordinates of your significant functional subnetwork to public cog
 
 
 def render_help(key: str):
+    """Render the collapsible help popover for a UI section."""
     if key in HELP_TEXT:
-        with st.popover("ℹ️ Help Info", use_container_width=False):
+        with st.popover("ℹ️ Help Info", width="content"):
             st.markdown(HELP_TEXT[key])
 
 

@@ -2,6 +2,7 @@ import streamlit as st
 from apps.utils.helpers import render_help
 
 def render_workspace_docs_view():
+    """Render the workspace documentation viewer."""
     col_t, col_h = st.columns([0.8, 0.2])
     with col_t:
         st.markdown("### Help & Documentation")

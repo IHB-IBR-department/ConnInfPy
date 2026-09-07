@@ -1,13 +1,18 @@
 import os
+import sys
 from importlib.util import find_spec
+from pathlib import Path
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-from pathlib import Path
 
 from conninfpy.atlas import AtlasInfo
 from conninfpy.interpret.llm_narrative import load_dotenv_manually
+
+# Repo root on sys.path so `apps.*` imports work regardless of CWD or
+# how conninfpy itself is installed.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Import modular view components
 from apps.components.data_ingestion import render_data_ingestion_view
@@ -86,6 +91,7 @@ st.sidebar.markdown("## Global Settings")
 # Instantiate default atlas based on selection
 @st.cache_resource
 def get_atlas(name):
+    """Resolve the currently selected atlas info from session state."""
     if name == "Schaefer-100 Yeo-7":
         return AtlasInfo.schaefer_100_yeo7()
     elif name == "Schaefer-200 Yeo-7":
@@ -120,13 +126,13 @@ if atlas_mode == "Bundled atlas":
         }[atlas_choice]
         st.sidebar.image(
             schaefer_palette,
-            use_container_width=True
+            width="stretch"
         )
         st.sidebar.caption("Yeo-7 network palette mapping")
     elif atlas_choice == "BNA-246":
         st.sidebar.image(
             "apps/assets/bna246_sidebar_palette.png",
-            use_container_width=True
+            width="stretch"
         )
         st.sidebar.caption("Brainnetome lobe palette mapping")
 elif atlas_mode == "Custom atlas CSV":
@@ -259,7 +265,7 @@ with status_cols[0]:
         label = "1. Data Ingestion (Loaded)"
     else:
         label = "1. Data Ingestion (Empty)"
-    if st.button(label, key="nav_step_1", type="primary" if is_active else "secondary", use_container_width=True):
+    if st.button(label, key="nav_step_1", type="primary" if is_active else "secondary", width="stretch"):
         st.session_state.next_tab = DATA_TAB
         st.rerun()
         
@@ -274,7 +280,7 @@ with status_cols[1]:
         label = "2. Inference (Ready)"
     else:
         label = "2. Inference (Awaiting Data)"
-    if st.button(label, key="nav_step_2", type="primary" if is_active else "secondary", use_container_width=True):
+    if st.button(label, key="nav_step_2", type="primary" if is_active else "secondary", width="stretch"):
         st.session_state.next_tab = DESIGN_TAB
         st.rerun()
         
@@ -285,7 +291,7 @@ with status_cols[2]:
         label = "3. Results (Significant Edges)"
     else:
         label = "3. Results (Awaiting Inference)"
-    if st.button(label, key="nav_step_3", type="primary" if is_active else "secondary", use_container_width=True):
+    if st.button(label, key="nav_step_3", type="primary" if is_active else "secondary", width="stretch"):
         st.session_state.next_tab = RESULTS_TAB
         st.rerun()
         
@@ -302,7 +308,7 @@ with status_cols[3]:
         label = "4. Decoding (Ready)"
     else:
         label = "4. Decoding (Awaiting Results)"
-    if st.button(label, key="nav_step_4", type="primary" if is_active else "secondary", use_container_width=True):
+    if st.button(label, key="nav_step_4", type="primary" if is_active else "secondary", width="stretch"):
         st.session_state.next_tab = DECODING_TAB
         st.rerun()
 
@@ -319,7 +325,7 @@ with status_cols[4]:
         label = "5. Narrative (Ready)"
     else:
         label = "5. Narrative (Awaiting Decoding)"
-    if st.button(label, key="nav_step_5", type="primary" if is_active else "secondary", use_container_width=True):
+    if st.button(label, key="nav_step_5", type="primary" if is_active else "secondary", width="stretch"):
         st.session_state.next_tab = NARRATIVE_TAB
         st.rerun()
 
@@ -332,7 +338,7 @@ if st.sidebar.button(
     "📖 Workspace Documentation",
     key="nav_docs_btn",
     type="primary" if doc_active else "secondary",
-    use_container_width=True
+    width="stretch"
 ):
     st.session_state.active_tab = DOCS_TAB
     st.rerun()

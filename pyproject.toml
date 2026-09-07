@@ -49,7 +49,7 @@ Source = "https://github.com/IHB-IBR-department/ConnInfPy"
 
 [project.optional-dependencies]
 app = [
-    "streamlit>=1.37",
+    "streamlit>=1.47",
     "scikit-learn",
     "pyyaml",
     "networkx",

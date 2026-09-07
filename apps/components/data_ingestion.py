@@ -35,6 +35,7 @@ from apps.utils.helpers import (
 )
 
 def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
+    """Render the data-ingestion step (manifest upload, preview, validation)."""
     col_t, col_h = st.columns([0.8, 0.2])
     with col_t:
         st.markdown("### Preprocessing & Data Ingestion")
@@ -151,6 +152,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 
                             rng = np.random.default_rng(42)
                             def _zscore(x):
+                                """Population z-score with a tiny std floor to avoid division by zero."""
                                 return (x - x.mean()) / max(x.std(ddof=0), 1e-12)
                             
                             z_group = _zscore(group_interest)
@@ -200,6 +202,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             rng = np.random.default_rng(42)
                             
                             def _zscore(x):
+                                """Population z-score with a tiny std floor to avoid division by zero."""
                                 return (x - x.mean()) / max(x.std(ddof=0), 1e-12)
                                 
                             interest = _zscore(rng.standard_normal(n_subjects))
@@ -270,7 +273,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     st.success("✅ Dataset in-session, verified, and ready for inference.")
                     
                     # Next action button
-                    if st.button("Continue to Design & Inference ➡️", key="btn_continue_to_design", type="primary", use_container_width=True):
+                    if st.button("Continue to Design & Inference ➡️", key="btn_continue_to_design", type="primary", width="stretch"):
                         st.session_state.next_tab = tabs_list[1]
                         st.rerun()
                     
@@ -692,7 +695,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             "Continue to Design & Inference",
                             key="btn_continue_to_design_loaded",
                             type="primary",
-                            use_container_width=True,
+                            width="stretch",
                         ):
                             st.session_state.next_tab = tabs_list[1]
                             st.rerun()
@@ -834,7 +837,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                 except Exception:
                     pass
 
-            if st.button("Load, Preprocess & Validate Data", type="primary", use_container_width=True):
+            if st.button("Load, Preprocess & Validate Data", type="primary", width="stretch"):
                 spinner_msg = "Loading dataset from cache..." if is_cached else "Executing loader & validation pipeline (extracting and caching)..."
                 with st.spinner(spinner_msg):
                     try:
@@ -1045,7 +1048,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
         
     if st.session_state.pheno_df is not None:
         st.markdown("**Phenotypic Data Preview**")
-        st.dataframe(st.session_state.pheno_df.head(), use_container_width=True)
+        st.dataframe(st.session_state.pheno_df.head(), width="stretch")
 
     # Compute settings hash at the end of Tab 1 to track all modifications (atlas, source, preprocessing, subnetworks)
     settings_parts = [st.session_state.get("active_atlas_signature", atlas_choice), ingest_mode]
