@@ -6,8 +6,26 @@ import pandas as pd
 from pathlib import Path
 from typing import Any, Dict, List, Union
 from conninfpy.loaders.base import BaseDataLoader, LoadedDataset, DatasetPreview
+from conninfpy.loaders.builtins import (
+    NumpyLoader,
+    CSVDirectoryLoader,
+    NiftiDirectoryLoader,
+    AbideSchaeferLoader,
+    OpenCloseLoader,
+    StressTimeseriesLoader,
+    ZerssenNiftiLoader,
+    FmriprepDerivativesLoader,
+    TimeseriesDirectoryLoader,
+    ConnectivityMatrixLoader,
+    ConditionTimeseriesArrayLoader,
+    CustomPreparedZerssenLoader,
+    ChinaCloseCloseLoader
+)
+import inspect
+from conninfpy.atlas import AtlasInfo
 
 class DatasetManifest:
+    """Parsed dataset manifest: loader name, resolved paths, checks."""
     def __init__(self, data: Dict[str, Any], manifest_path: str):
         self.data = data
         self.manifest_path = manifest_path
@@ -21,6 +39,7 @@ class DatasetManifest:
         self.checks = data.get("checks", {})
 
 def resolve_path(p: Any, manifest_dir: Path) -> Any:
+    """Resolve a manifest path relative to its directory."""
     if isinstance(p, dict):
         return {k: resolve_path(v, manifest_dir) for k, v in p.items()}
     if isinstance(p, list):
@@ -61,6 +80,7 @@ def resolve_path(p: Any, manifest_dir: Path) -> Any:
     return p
 
 def load_manifest(path: str) -> DatasetManifest:
+    """Parse a dataset manifest YAML into a ``DatasetManifest``."""
     if not os.path.exists(path):
         raise FileNotFoundError(f"Manifest file not found: {path}")
     with open(path, "r") as f:
@@ -78,21 +98,6 @@ class ManifestLoader(BaseDataLoader):
         manifest_dir = Path(manifest_path).resolve().parent
         self.resolved_paths = resolve_path(self.manifest.paths, manifest_dir)
         
-        from conninfpy.loaders.builtins import (
-            NumpyLoader,
-            CSVDirectoryLoader,
-            NiftiDirectoryLoader,
-            AbideSchaeferLoader,
-            OpenCloseLoader,
-            StressTimeseriesLoader,
-            ZerssenNiftiLoader,
-            FmriprepDerivativesLoader,
-            TimeseriesDirectoryLoader,
-            ConnectivityMatrixLoader,
-            ConditionTimeseriesArrayLoader,
-            CustomPreparedZerssenLoader,
-            ChinaCloseCloseLoader
-        )
         
         loader_map = {
             "NumpyLoader": NumpyLoader,
@@ -124,7 +129,6 @@ class ManifestLoader(BaseDataLoader):
         kwargs.update(self.manifest.params)
         
         # Filter kwargs to match constructor signature
-        import inspect
         sig = inspect.signature(loader_class.__init__)
         valid_args = list(sig.parameters.keys())
         
@@ -148,6 +152,7 @@ class ManifestLoader(BaseDataLoader):
         return selected
         
     def preview(self) -> DatasetPreview:
+        """Cheap preview of the dataset without a full load."""
         preview = self.target_loader.preview()
         keep_rois = self.resolved_paths.get("keep_rois") or self.manifest.params.get("keep_rois")
         if keep_rois is not None:
@@ -170,13 +175,13 @@ class ManifestLoader(BaseDataLoader):
         return preview
         
     def load(self) -> LoadedDataset:
+        """Load the dataset into a :class:`LoadedDataset`."""
         dataset = self.target_loader.load()
         
         # Atlas Auto-Loading
         if not dataset.atlas:
             atlas_path = self.resolved_paths.get("atlas") or self.resolved_paths.get("atlas_metadata") or self.resolved_paths.get("atlas_image_path")
             if atlas_path and os.path.exists(atlas_path) and atlas_path.endswith(".csv"):
-                from conninfpy.atlas import AtlasInfo
                 try:
                     dataset.atlas = AtlasInfo.from_csv(atlas_path)
                     dataset.roi_labels = dataset.atlas.labels
@@ -238,7 +243,6 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
             
     # Filter atlas metadata
     if dataset.atlas is not None:
-        from conninfpy.atlas import AtlasInfo
         labels = [dataset.atlas.labels[i] for i in keep_idx if i < len(dataset.atlas.labels)]
         networks = [dataset.atlas.networks[i] for i in keep_idx if i < len(dataset.atlas.networks)]
         coords = dataset.atlas.coords[keep_idx] if dataset.atlas.coords is not None else None
@@ -258,6 +262,7 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
     return dataset
 
 def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest):
+    """Check a loaded dataset against its manifest's ``checks``."""
     checks = manifest.checks
     if not checks:
         return
