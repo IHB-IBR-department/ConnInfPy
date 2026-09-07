@@ -7,11 +7,18 @@ acceleration.
 
 Public quick-start
 ------------------
+>>> import numpy as np
 >>> from conninfpy import compute_p_val, fisher_r_to_z
->>> z = fisher_r_to_z(corr_matrices)
->>> p = compute_p_val(g1_z, g2_z, test_type='two-sample',
-...                   method='tfnbs', e=0.3, h=3.0, n=10)
->>> p['positive']  # significant edges where group2 > group1
+>>> rng = np.random.default_rng(0)
+>>> corr = np.clip(rng.uniform(-0.5, 0.5, (16, 8, 8)), -0.99, 0.99)
+>>> corr = (corr + corr.transpose(0, 2, 1)) / 2
+>>> idx = np.arange(8); corr[:, idx, idx] = 0.0
+>>> z = fisher_r_to_z(corr)
+>>> p = compute_p_val(z[:8], z[8:], test_type='two-sample',
+...                   method='tstat', n_permutations=50, rng=0,
+...                   use_mp=False)
+>>> p['positive'].shape
+(8, 8)
 
 Returns a :class:`~conninfpy._compat.TailResult` with canonical keys
 ``'positive'`` and ``'negative'``. The legacy keys ``'g2>g1'`` and

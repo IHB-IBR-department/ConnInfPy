@@ -44,9 +44,11 @@ except ImportError as exc:  # pragma: no cover (env-specific)
     ) from exc
 
 from .harmonize import block_mass as _block_mass
+import pandas as pd
+
+from ._result import InferenceResult, OmnibusInferenceResult
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from ._result import InferenceResult, OmnibusInferenceResult
     from .atlas import AtlasInfo
 
 
@@ -256,8 +258,6 @@ def _effect_and_pmin_from_result(
     Returns ``(effect, p_min, label)`` where ``label`` is the colorbar
     label (``"t"``, ``"β"``, or ``"F"`` for the omnibus path).
     """
-    from ._result import InferenceResult, OmnibusInferenceResult
-
     if isinstance(result, OmnibusInferenceResult):
         if result.stat_omnibus is None:
             raise ValueError(
@@ -461,8 +461,6 @@ def plot_network_summary(
     title : str, optional
         Axis title.
     """
-    from ._result import InferenceResult, OmnibusInferenceResult
-
     if not isinstance(result, (InferenceResult, OmnibusInferenceResult)):
         raise TypeError(
             f"Unsupported result type {type(result).__name__}; expected "
@@ -592,8 +590,6 @@ def summary_figure(
     figsize : tuple of float, default ``(12, 9)``
         Inches.
     """
-    from ._result import InferenceResult, OmnibusInferenceResult
-
     if not isinstance(result, (InferenceResult, OmnibusInferenceResult)):
         raise TypeError(
             f"Unsupported result type {type(result).__name__}; expected "
@@ -702,7 +698,6 @@ def plot_connectome_graph(
 
     Requires `nilearn` and `pandas` packages to be installed.
     """
-    import pandas as pd
     try:
         from nilearn import plotting
     except ImportError as exc:

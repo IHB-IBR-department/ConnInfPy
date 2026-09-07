@@ -43,6 +43,7 @@ class TailResult(dict):
         return super().__getitem__(key)
 
     def get(self, key: str, default: Any = None) -> Any:
+        """Dict-style get; legacy keys warn and map to canonical."""
         if key in LEGACY_TO_CANONICAL:
             return self[key]  # triggers warning + returns canonical
         return super().get(key, default)

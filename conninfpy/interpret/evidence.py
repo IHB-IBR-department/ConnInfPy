@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Any, Optional
 from ..atlas import AtlasInfo
+import re
 
 DEFAULT_CAVEATS = [
     "Decoding is an association with the neuroimaging literature, not a mechanistic claim.",
@@ -203,7 +204,6 @@ def validate_evidence(evidence: Dict[str, Any]) -> None:
 
 def clean_term_name(term: str) -> str:
     """Clean Neurosynth/NiMARE term name by stripping prefixes and converting underscores to spaces."""
-    import re
     # Strip prefixes like terms_abstract_tfidf__ or terms_abstract_tfidf_
     # Strip prefixes like LDA100_abstract_weight__82_
     term = re.sub(r'^(terms_abstract_tfidf__|terms_abstract_tfidf_|LDA\d+_abstract_weight__\d+_|LDA\d+_abstract_weight__)', '', term)
@@ -225,6 +225,7 @@ DEFAULT_STOP_WORDS = {
 }
 
 def default_term_filter(term: str) -> bool:
+    """Default stop-word filter for decoding terms."""
     t_clean = term.lower().strip()
     for stop in DEFAULT_STOP_WORDS:
         if stop == t_clean or stop in t_clean.split():

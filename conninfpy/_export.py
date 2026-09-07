@@ -34,6 +34,7 @@ _VALID_SORTS = ("p", "effect_size", "network_pair")
 
 
 def _check_square(arr: npt.NDArray, name: str) -> None:
+    """Raise ValueError unless ``arr`` is a square (N, N) matrix."""
     if arr.ndim != 2 or arr.shape[0] != arr.shape[1]:
         raise ValueError(
             f"{name} must be a square (N, N) matrix; got shape {arr.shape}."
@@ -100,6 +101,7 @@ def _annotate_with_atlas(
 
 
 def _column_order_tailed(with_atlas: bool) -> list:
+    """Preferred column order for the tailed edge table."""
     if with_atlas:
         cols = [
             "edge_id",
@@ -133,6 +135,7 @@ def _column_order_tailed(with_atlas: bool) -> list:
 
 
 def _column_order_omnibus(with_atlas: bool) -> list:
+    """Preferred column order for the omnibus edge table."""
     if with_atlas:
         return [
             "edge_id",
@@ -227,7 +230,7 @@ def build_tailed_dataframe(
     )
 
     with_atlas = atlas is not None
-    if with_atlas:
+    if atlas is not None:
         df = _annotate_with_atlas(df, atlas, n_nodes=N)
 
     df = _sort_dataframe(df, sort, by="p_min")
@@ -287,7 +290,7 @@ def build_omnibus_dataframe(
     )
 
     with_atlas = atlas is not None
-    if with_atlas:
+    if atlas is not None:
         df = _annotate_with_atlas(df, atlas, n_nodes=N)
 
     df = _sort_dataframe(df, sort, by="p_omnibus", effect_col="F")
@@ -306,6 +309,7 @@ def _sort_dataframe(
     by: str,
     effect_col: str = "t_signed",
 ) -> pd.DataFrame:
+    """Sort an edge table by p, effect size, or network pair."""
     if df.empty:
         return df
     if sort == "p":

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from .evidence import validate_evidence
+from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 
 COGNITIVE_TERMS_TO_GUARD = {
     "memory", "attention", "executive", "motor", "visual", "auditory", "pain", "language",
@@ -156,7 +157,6 @@ class LLMNarrator:
         """Generate cautious interpretation text from the evidence packet."""
         validate_evidence(evidence)
         
-        from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
         user_content = USER_PROMPT_TEMPLATE.format(evidence_json=json.dumps(evidence, indent=2))
         
         if self.provider == "mock":
@@ -257,6 +257,7 @@ class LLMNarrator:
             
     def estimate_cost(self, model_name: str, prompt_tokens: int, completion_tokens: int) -> float:
         # Default rates per 1,000 tokens (fallback: approximate at $0.0015 / 1K input, $0.002 / 1K output)
+        """Rough token-cost estimate for one narrative request."""
         input_rate = 0.0015 / 1000
         output_rate = 0.002 / 1000
         

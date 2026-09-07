@@ -66,6 +66,7 @@ def _stable_seed(*parts: object) -> int:
 
 
 def _params_token(params: Mapping[str, object]) -> str:
+    """Hashable token of scenario mask parameters."""
     items = sorted(params.items(), key=lambda kv: kv[0])
     return ",".join(f"{k}={v}" for k, v in items)
 
@@ -89,6 +90,7 @@ class TopologyScenario:
     )
 
     def with_mask_params(self, **overrides: object) -> "TopologyScenario":
+        """Copy of this scenario with ``mask_params`` overridden."""
         merged = dict(self.mask_params)
         merged.update(overrides)
         return replace(self, mask_params=merged)
@@ -113,6 +115,7 @@ class TopologyDataset:
     meta: Dict[str, object] = field(default_factory=dict)
 
     def fisher_z(self) -> Tuple[ArrayF, ArrayF]:
+        """Element-wise Fisher r-to-z transform (upper triangle helper)."""
         return fisher_r_to_z(self.group1), fisher_r_to_z(self.group2)
 
 
@@ -158,6 +161,7 @@ class TopologyDatasetGenerator:
         scenario_params: Optional[Dict[str, object]] = None,
         zero_diagonal: bool = True,
     ) -> TopologyDataset:
+        """Generate the scenario's effect mask on an (N, N) grid."""
         scenario_obj = get_scenario(scenario) if isinstance(scenario, str) else scenario
         if scenario_params:
             scenario_obj = scenario_obj.with_mask_params(**scenario_params)
@@ -232,6 +236,7 @@ class TopologyDatasetGenerator:
 
 
 def _ensure_symmetric_zero_diag(matrix: ArrayF) -> ArrayF:
+    """Symmetrize a matrix and zero its diagonal."""
     matrix = np.asarray(matrix, dtype=np.float64)
     matrix = (matrix + matrix.T) / 2.0
     np.fill_diagonal(matrix, 0.0)
@@ -266,10 +271,12 @@ def _imbalanced_module_labels(n_nodes: int, n_modules: int) -> np.ndarray:
 
 
 def _module_nodes(labels: np.ndarray, module_idx: int) -> np.ndarray:
+    """Node indices belonging to one network label."""
     return np.where(labels == module_idx)[0]
 
 
 def _mask_within_module(labels: np.ndarray, module_idx: int) -> ArrayF:
+    """Edge mask for within module."""
     n_nodes = labels.shape[0]
     mask = np.zeros((n_nodes, n_nodes), dtype=np.float64)
     nodes = _module_nodes(labels, module_idx)
@@ -281,6 +288,7 @@ def _mask_within_module(labels: np.ndarray, module_idx: int) -> ArrayF:
 
 
 def _mask_between_modules(labels: np.ndarray, module_a: int, module_b: int) -> ArrayF:
+    """Edge mask for between modules."""
     n_nodes = labels.shape[0]
     mask = np.zeros((n_nodes, n_nodes), dtype=np.float64)
     nodes_a = _module_nodes(labels, module_a)
@@ -292,6 +300,7 @@ def _mask_between_modules(labels: np.ndarray, module_a: int, module_b: int) -> A
 
 
 def _mask_hub(n_nodes: int, hub_node: int, n_spokes: int, rng: np.random.Generator) -> ArrayF:
+    """Edge mask for hub."""
     mask = np.zeros((n_nodes, n_nodes), dtype=np.float64)
     candidates = [i for i in range(n_nodes) if i != hub_node]
     n_spokes = min(n_spokes, len(candidates))
@@ -694,18 +703,21 @@ def _summarize_masked_effect(
 def _scenario_mask_within_module(
     labels: np.ndarray, *, rng: np.random.Generator, module_idx: int = 0
 ) -> ArrayF:
+    """Effect mask: within module."""
     return _mask_within_module(labels, module_idx=module_idx)
 
 
 def _scenario_mask_between_modules(
     labels: np.ndarray, *, rng: np.random.Generator, module_a: int = 1, module_b: int = 2
 ) -> ArrayF:
+    """Effect mask: between modules."""
     return _mask_between_modules(labels, module_a=module_a, module_b=module_b)
 
 
 def _scenario_mask_hub(
     labels: np.ndarray, *, rng: np.random.Generator, hub_node: Optional[int] = None, n_spokes: int = 40
 ) -> ArrayF:
+    """Effect mask: hub."""
     n_nodes = labels.shape[0]
     if hub_node is None:
         hub_node = n_nodes // 2
@@ -715,12 +727,14 @@ def _scenario_mask_hub(
 def _scenario_mask_chain(
     labels: np.ndarray, *, rng: np.random.Generator, length: int = 30
 ) -> ArrayF:
+    """Effect mask: chain."""
     return _mask_chain(labels.shape[0], length=int(length), rng=rng)
 
 
 def _scenario_mask_fragmented_within_module(
     labels: np.ndarray, *, rng: np.random.Generator, module_idx: int = 0, sparsity: float = 0.3
 ) -> ArrayF:
+    """Effect mask: fragmented within module."""
     return _mask_fragmented_within_module(labels, module_idx=int(module_idx), sparsity=float(sparsity), rng=rng)
 
 
@@ -732,6 +746,7 @@ def _scenario_mask_multi_clique_within_module(
     n_clusters: int = 3,
     nodes_per_cluster: int = 4,
 ) -> ArrayF:
+    """Effect mask: multi clique within module."""
     return _mask_multi_clique_within_module(
         labels,
         module_idx=int(module_idx),
@@ -744,6 +759,7 @@ def _scenario_mask_multi_clique_within_module(
 def _scenario_mask_checkerboard_within_module(
     labels: np.ndarray, *, rng: np.random.Generator, module_idx: int = 0
 ) -> ArrayF:
+    """Effect mask: checkerboard within module."""
     _ = rng
     return _mask_checkerboard_within_module(labels, module_idx=int(module_idx))
 
@@ -751,6 +767,7 @@ def _scenario_mask_checkerboard_within_module(
 def _scenario_mask_scattered_cross_block(
     labels: np.ndarray, *, rng: np.random.Generator, n_edges_per_block: int = 6
 ) -> ArrayF:
+    """Effect mask: scattered cross block."""
     return _mask_scattered_cross_block(labels, n_edges_per_block=int(n_edges_per_block), rng=rng)
 
 
@@ -762,6 +779,7 @@ def _scenario_mask_within_plus_between(
     between_module_a: int = 1,
     between_module_b: int = 2,
 ) -> ArrayF:
+    """Effect mask: within plus between."""
     _ = rng
     return _ensure_symmetric_zero_diag(
         _mask_within_module(labels, module_idx=int(within_module_idx))
@@ -772,18 +790,21 @@ def _scenario_mask_within_plus_between(
 def _scenario_mask_perfect_matching_within_module(
     labels: np.ndarray, *, rng: np.random.Generator, module_idx: int = 0
 ) -> ArrayF:
+    """Effect mask: perfect matching within module."""
     return _mask_perfect_matching_within_module(labels, module_idx=int(module_idx), rng=rng)
 
 
 def _scenario_mask_cross_block_connected_chain(
     labels: np.ndarray, *, rng: np.random.Generator, length: int = 30
 ) -> ArrayF:
+    """Effect mask: cross block connected chain."""
     return _mask_cross_block_connected_chain(labels, length=int(length), rng=rng)
 
 
 def _scenario_mask_rich_club(
     labels: np.ndarray, *, rng: np.random.Generator, n_hubs: int = 10, n_spokes_per_hub: int = 0
 ) -> ArrayF:
+    """Effect mask: rich club."""
     return _mask_rich_club(
         labels.shape[0], n_hubs=int(n_hubs), rng=rng, n_spokes_per_hub=int(n_spokes_per_hub)
     )
@@ -792,12 +813,14 @@ def _scenario_mask_rich_club(
 def _scenario_mask_two_disconnected_cliques(
     labels: np.ndarray, *, rng: np.random.Generator, module_idx: int = 0, clique_size: int = 6
 ) -> ArrayF:
+    """Effect mask: two disconnected cliques."""
     return _mask_two_disconnected_cliques(labels, module_idx=int(module_idx), clique_size=int(clique_size), rng=rng)
 
 
 def _scenario_mask_focal_clique_inside_module(
     labels: np.ndarray, *, rng: np.random.Generator, module_idx: int = 0, clique_size: int = 5
 ) -> ArrayF:
+    """Effect mask: focal clique inside module."""
     return _mask_multi_clique_within_module(
         labels,
         module_idx=int(module_idx),
@@ -816,6 +839,7 @@ def _scenario_mask_partial_bipartite_between_modules(
     n_a: int = 6,
     n_b: int = 6,
 ) -> ArrayF:
+    """Effect mask: partial bipartite between modules."""
     return _mask_partial_bipartite_between_modules(
         labels, module_a=int(module_a), module_b=int(module_b), n_a=int(n_a), n_b=int(n_b), rng=rng
     )
@@ -824,6 +848,7 @@ def _scenario_mask_partial_bipartite_between_modules(
 def _scenario_mask_gradient_effect_chain(
     labels: np.ndarray, *, rng: np.random.Generator, length: int = 30, min_weight: float = 0.2
 ) -> ArrayF:
+    """Effect mask: gradient effect chain."""
     return _weighted_mask_gradient_chain(labels.shape[0], length=int(length), rng=rng, min_weight=float(min_weight))
 
 
@@ -837,6 +862,7 @@ def _scenario_mask_gradient_core_periphery_within_module(
     core_to_periphery_weight: float = 0.4,
     periphery_weight: float = 0.1,
 ) -> ArrayF:
+    """Effect mask: gradient core periphery within module."""
     _ = rng
     return _weighted_mask_core_periphery_within_module(
         labels,
@@ -851,6 +877,7 @@ def _scenario_mask_global_uniform(
     *,
     rng: np.random.Generator,
 ) -> ArrayF:
+    """Effect mask: global uniform."""
     _ = rng
     N = len(labels)
     mask = np.ones((N, N), dtype=np.float64)
@@ -1010,14 +1037,17 @@ _SCENARIO_BY_NAME: Dict[str, TopologyScenario] = {s.name: s for s in _SCENARIOS}
 
 
 def list_scenarios() -> List[str]:
+    """Names of all built-in topology scenarios."""
     return [s.name for s in _SCENARIOS]
 
 
 def get_scenarios() -> List[TopologyScenario]:
+    """All built-in :class:`TopologyScenario` instances."""
     return list(_SCENARIOS)
 
 
 def get_scenario(scenario: Union[str, TopologyScenario]) -> TopologyScenario:
+    """One built-in scenario by name."""
     if isinstance(scenario, TopologyScenario):
         return scenario
     if not isinstance(scenario, str):

@@ -14,9 +14,7 @@ covariates to preserve (age, sex, diagnosis). The parameterization follows
 Fortin 2017 / neuroCombat: site dummies are encoded one-hot (no reference
 site dropped); ``α`` is the sample-size-weighted grand mean of per-site
 intercepts; ``σ²`` uses the biased ``var.pooled`` denominator (divide by
-``n``, not ``n − p``). This matches the canonical neuroCombat reference
-implementation to machine precision under EB and without — validated in
-``tests/test_combat_equivalence.py``.
+``n``, not ``n − p``).
 
 Estimation:
 
@@ -36,10 +34,20 @@ biological covariates you care about. Fortin 2018 discusses the limits.
 
 Typical use
 -----------
+>>> import numpy as np
 >>> from conninfpy import combat_harmonize
->>> result = combat_harmonize(Y, sites=site_labels, preserve=covariates)
->>> Y_adj = result.Y_adjusted   # same shape as Y
->>> result.diagnostics           # ratio of between-site variance before/after
+>>> rng = np.random.default_rng(0)
+>>> Y = rng.normal(size=(30, 20))
+>>> Y[:10] += 0.5                      # site A shifted vs site B
+>>> sites = ['A'] * 10 + ['B'] * 20
+>>> result = combat_harmonize(Y, sites=sites)
+>>> result.Y_adjusted.shape            # same shape as Y
+(30, 20)
+>>> sorted(result.diagnostics)         # doctest: +NORMALIZE_WHITESPACE
+['between_site_variance_ratio_after',
+ 'between_site_variance_ratio_after_over_before',
+ 'between_site_variance_ratio_before', 'per_site_n',
+ 'ratio_reduction', 'site_labels']
 
 References
 ----------
@@ -285,7 +293,7 @@ def _eb_update(
 def _prepare_inputs(
     Y: npt.NDArray[np.float64],
     preserve: Optional[npt.NDArray[np.float64]],
-) -> Tuple[npt.NDArray[np.float64], Optional[npt.NDArray[np.float64]], Tuple[int, ...], Optional[Tuple]]:
+) -> Tuple[npt.NDArray[np.float64], Optional[npt.NDArray[np.float64]], Optional[Tuple[int, int]], Optional[Tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]]]:
     """Flatten (n, N, N) → (n, p) if needed; validate ``preserve``."""
     Y = np.asarray(Y, dtype=np.float64)
     matrix_shape = None
@@ -388,6 +396,7 @@ def combat_fit(
     # Note: site effects are NOT subtracted here — we want Z to retain them.
     preserve_fit = np.zeros_like(features)
     if beta_cov is not None:
+        assert preserve is not None  # k > 0 iff preserve was provided
         preserve_fit = preserve @ beta_cov
     Z = (features - alpha[np.newaxis, :] - preserve_fit) / sigma[np.newaxis, :]
 
@@ -495,6 +504,7 @@ def combat_apply(
     adjusted = Z_adj * model.sigma[np.newaxis, :] + model.alpha[np.newaxis, :] + preserve_fit
 
     if matrix_shape is not None:
+        assert triu_idx is not None  # set together in _prepare_inputs
         return unflatten_upper(adjusted, triu_idx, matrix_shape[0])
     return adjusted
 
@@ -552,6 +562,7 @@ def combat_harmonize(
         site_codes, _ = _encode_sites(sites)
 
         def _between_over_total(feats):
+            """Between-site share of the total feature variance."""
             n_sites = int(site_codes.max()) + 1
             site_means = np.stack(
                 [feats[site_codes == s].mean(axis=0) for s in range(n_sites)]

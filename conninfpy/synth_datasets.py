@@ -272,6 +272,7 @@ def generate_fc_matrices(N,  effect_size, mask=None, n_samples_group1=50, n_samp
 
     # Generate sample correlation matrices with variability
     def generate_samples(cov_matrix, n_samples):
+        """Draw connectivity samples for a batch of subjects."""
         return np.array([np.corrcoef(np.random.multivariate_normal(np.zeros(N), cov_matrix, size=N).T)
                          for _ in range(n_samples)])
 
@@ -495,6 +496,7 @@ class ModularDatasetGenerator:
         
         # Helper to generate subjects by sampling time-series
         def sample_subject_matrices(true_cov, n_subs):
+            """Simulate one subject's connectivity matrix."""
             matrices = []
             for _ in range(n_subs):
                 # Generate time series: shape (time_points, N)
