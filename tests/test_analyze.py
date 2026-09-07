@@ -364,7 +364,7 @@ class TestRepeatedMeasuresGLM(unittest.TestCase):
         self.assertFalse(out.inference.harmonized)
 
     def test_orientation_matches_no_confound_paired(self):
-        # The orientation contract: a group2 > group1 effect is a positive
+        # Orientation: a group2 > group1 effect counts as positive
         # signed statistic and lands in the `positive` tail on BOTH paths.
         # (Absolute significance is the underlying function's concern; the
         # GLM intercept test trades power when one edge dominates the

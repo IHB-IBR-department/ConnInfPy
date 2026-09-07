@@ -78,7 +78,7 @@ def fisher_r_to_z(r: npt.NDArray[np.float64],
     if np.any((r < -1) | (r > 1)):
         raise ValueError("Correlation coefficients must be in the range [-1, 1].")
 
-    with np.errstate(invalid='ignore'):  # arctanh(±1) = ±inf, handled below
+    with np.errstate(divide='ignore', invalid='ignore'):  # arctanh(±1): divide-by-zero → ±inf, handled below
         z = np.arctanh(r)
 
     bounds_mask = np.isclose(r, 1.0) | np.isclose(r, -1.0)
