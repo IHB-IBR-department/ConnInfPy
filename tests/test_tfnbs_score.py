@@ -1,6 +1,8 @@
+import time
 import unittest
 from unittest import TestCase
 import numpy as np
+import conninfpy.tfnbs_score as mod
 from conninfpy.pairwise_stats import compute_t_stat, compute_t_stat_diff
 from conninfpy.tfnbs_score import (
     get_tfnbs_score_networkx,
@@ -11,10 +13,8 @@ from conninfpy.tfnbs_score import (
     HAS_NUMBA,
 )
 from conninfpy.synth_datasets import generate_fc_matrices, ModularDatasetGenerator
-from conninfpy.pairwise_stats import compute_t_stat
-from tests import fixtures
 from conninfpy.utils import fisher_r_to_z
-import time
+from tests import fixtures
 
 
 class TestTFNBS(TestCase):
@@ -95,21 +95,21 @@ class TestTFNBS(TestCase):
 
     def test_tfnbs_real_matrix_30N(self):
         t_stat = self.fc_sim_30["t_stat"]
-        score_pos = get_tfnbs_score(t_stat['g2>g1'], self.E, self.H, self.n, start_thres=1.7)
-        score_neg = get_tfnbs_score(t_stat['g1>g2'], self.E, self.H, self.n, start_thres=1.7)
+        score_pos = get_tfnbs_score(t_stat['positive'], self.E, self.H, self.n, start_thres=1.7)
+        score_neg = get_tfnbs_score(t_stat['negative'], self.E, self.H, self.n, start_thres=1.7)
 
         self.assertTrue((score_pos >= 0).all())
         self.assertTrue((score_neg >= 0).all())
 
     def test_time_consumption_scipy_vs_networkx(self):
         """Test that scipy implementation is faster than networkx."""
-        time_original = self.run_and_measure(get_tfnbs_score_networkx, self.fc_sim_100["t_stat"]['g2>g1'])
-        time_scipy = self.run_and_measure(get_tfnbs_score, self.fc_sim_100["t_stat"]['g2>g1'])
+        time_original = self.run_and_measure(get_tfnbs_score_networkx, self.fc_sim_100["t_stat"]['positive'])
+        time_scipy = self.run_and_measure(get_tfnbs_score, self.fc_sim_100["t_stat"]['positive'])
 
         self.assertLess(time_scipy, time_original)
 
     def test_scipy_list_params(self):
-        statsmat = self.fc_sim_30["t_stat"]['g2>g1']
+        statsmat = self.fc_sim_30["t_stat"]['positive']
         result = get_tfnbs_score(statsmat, [0.4, 0.4], [1, 2], 10)
         result_nx = get_tfnbs_score_networkx(statsmat, [0.4, 0.4], [1, 2], 10)
 
@@ -126,7 +126,7 @@ class TestTFNBS(TestCase):
         # Test on larger matrix - compare upper triangles only
         # Note: baseline may have minor asymmetry due to floating point order,
         # optimized version explicitly ensures symmetry
-        t_stat = self.fc_sim_100["t_stat"]['g2>g1']
+        t_stat = self.fc_sim_100["t_stat"]['positive']
         result_baseline_large = get_tfnbs_score_baseline(t_stat, self.E, self.H, self.n, start_thres=1.7)
         result_optimized_large = get_tfnbs_score(t_stat, self.E, self.H, self.n, start_thres=1.7)
 
@@ -191,7 +191,7 @@ class TestTFNBS(TestCase):
 
     def test_baseline_list_params(self):
         """Test that baseline handles list parameters correctly."""
-        statsmat = self.fc_sim_30["t_stat"]['g2>g1']
+        statsmat = self.fc_sim_30["t_stat"]['positive']
         e_list = [0.3, 0.4, 0.5]
         h_list = [2.0, 2.5, 3.0]
 
@@ -319,7 +319,7 @@ class TestNetworkInformedTFNBS(TestCase):
         )
 
         t_stat_dict = compute_t_stat(g1, g2, test_type='two-sample')
-        t_stats = t_stat_dict["g2>g1"]
+        t_stats = t_stat_dict["positive"]
         np.fill_diagonal(t_stats, 0)
 
         ni_scores = get_network_informed_tfnbs_score(t_stats, labels, e=0.5, h=2.0, n=50)
@@ -416,14 +416,14 @@ class TestTFNBSNumbaBackend(TestCase):
 
     def test_scalar_realistic_matrix(self):
         """Scalar (e, h) on realistic 60-node t-stat matrix."""
-        self._compare_backends(self.t_stat_60['g2>g1'], e=0.4, h=3.0, n=30)
+        self._compare_backends(self.t_stat_60['positive'], e=0.4, h=3.0, n=30)
 
     def test_3d_multi_param(self):
         """3D multi-param (e=[list], h=[list]) produce identical output."""
         e_list = [0.3, 0.5, 0.7, 1.0]
         h_list = [1.5, 2.0, 3.0, 4.0]
         r_scipy, r_numba = self._compare_backends(
-            self.t_stat_60['g2>g1'], e=e_list, h=h_list, n=20
+            self.t_stat_60['positive'], e=e_list, h=h_list, n=20
         )
         self.assertEqual(r_scipy.shape, (60, 60, 4))
         self.assertEqual(r_numba.shape, (60, 60, 4))
@@ -465,17 +465,16 @@ class TestTFNBSNumbaBackend(TestCase):
 
     def test_large_matrix_200(self):
         """N=200 matrix for correctness at scale."""
-        self._compare_backends(self.t_stat_200['g2>g1'], e=0.4, h=3.0, n=30)
+        self._compare_backends(self.t_stat_200['positive'], e=0.4, h=3.0, n=30)
 
     def test_large_matrix_200_3d(self):
         """N=200 matrix with multiple parameter pairs."""
         e_list = [0.3, 0.5, 1.0]
         h_list = [2.0, 3.0, 5.0]
-        self._compare_backends(self.t_stat_200['g2>g1'], e=e_list, h=h_list, n=20)
+        self._compare_backends(self.t_stat_200['positive'], e=e_list, h=h_list, n=20)
 
     def test_backend_fallback_without_numba(self):
         """Test that backend='numba' gracefully falls back when numba unavailable."""
-        import conninfpy.tfnbs_score as mod
         original = mod.HAS_NUMBA
         try:
             mod.HAS_NUMBA = False
@@ -490,7 +489,7 @@ class TestTFNBSNumbaBackend(TestCase):
     @unittest.skipUnless(HAS_NUMBA, "Numba not installed")
     def test_numba_speedup(self):
         """When numba is installed, it should be faster than scipy on large matrices."""
-        t = self.t_stat_200['g2>g1']
+        t = self.t_stat_200['positive']
         # Warmup JIT
         get_tfnbs_score(t, e=0.4, h=3.0, n=30, backend='numba')
 

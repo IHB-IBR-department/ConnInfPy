@@ -36,7 +36,7 @@ class TestBasicStats(TestCase):
     def run_and_measure(self, func, arr1, arr2, n_permutations, test_type, random_state, use_mp):
         """Helper function to measure execution time of a function."""
         start_time = time.time()
-        compute_null_dist(arr1, arr2, func, n_permutations=n_permutations, test_type=test_type, random_state=random_state, use_mp=use_mp)
+        compute_null_dist(arr1, arr2, func, n_permutations=n_permutations, test_type=test_type, rng=random_state, use_mp=use_mp)
         return time.time() - start_time
 
     def test_compute_t_stat(self):
@@ -44,14 +44,14 @@ class TestBasicStats(TestCase):
 
         emp_t_dict = compute_t_stat(group_dict['group1'], group_dict['group2'], test_type='two-sample')
 
-        self.assertLess(2, emp_t_dict["g2>g1"][np.triu_indices(10, k=1)].mean())
-        self.assertEqual(0, emp_t_dict["g1>g2"][np.triu_indices(10, k=1)].mean())
+        self.assertLess(2, emp_t_dict["positive"][np.triu_indices(10, k=1)].mean())
+        self.assertEqual(0, emp_t_dict["negative"][np.triu_indices(10, k=1)].mean())
 
     def test_compute_t_stat_diff(self):
         group_dict = self.fc_sim_paired
         t_stat_dict = compute_t_stat_diff(group_dict['group2'] - group_dict['group1'])
-        self.assertLess(2, t_stat_dict["g2>g1"][np.triu_indices(10, k=1)].mean())
-        self.assertEqual(0, t_stat_dict["g1>g2"][np.triu_indices(10, k=1)].mean())
+        self.assertLess(2, t_stat_dict["positive"][np.triu_indices(10, k=1)].mean())
+        self.assertEqual(0, t_stat_dict["negative"][np.triu_indices(10, k=1)].mean())
 
     def test_compute_permut_t_stat_ind(self):
         group_dict = self.fc_sim
@@ -61,8 +61,8 @@ class TestBasicStats(TestCase):
         n1 = group_dict['group1'].shape[0]
         perm_result = _permutation_task_ind(full_group, compute_t_stat, n1, seed=42)
 
-        perm_t_pos = perm_result["g2>g1"]
-        perm_t_neg = perm_result["g1>g2"]
+        perm_t_pos = perm_result["positive"]
+        perm_t_neg = perm_result["negative"]
 
         self.assertGreater(perm_t_pos, 1)
         self.assertGreater(perm_t_neg, 1)
@@ -74,8 +74,8 @@ class TestBasicStats(TestCase):
         emp_t_dict = compute_t_stat(group_dict['group1'], group_dict['group2'], test_type='two-sample')
         emp_tfnbs_dict = apply_tfnbs(emp_t_dict)
 
-        self.assertLess(10, emp_tfnbs_dict["g2>g1"][np.triu_indices(10, k=1)].mean())
-        self.assertLess(1, emp_t_dict["g2>g1"][np.triu_indices(10, k=1)].mean())
+        self.assertLess(10, emp_tfnbs_dict["positive"][np.triu_indices(10, k=1)].mean())
+        self.assertLess(1, emp_t_dict["positive"][np.triu_indices(10, k=1)].mean())
 
     def test_apply_tfnbs_paired(self):
         """Paired: apply_tfnbs from raw groups = apply_tfnbs from diffs."""
@@ -88,17 +88,17 @@ class TestBasicStats(TestCase):
         emp_tfnbs_sp_dict = apply_tfnbs(compute_t_stat_diff(diffs))
 
         np.testing.assert_array_almost_equal(
-            emp_tfnbs_dict["g2>g1"], emp_tfnbs_sp_dict["g2>g1"]
+            emp_tfnbs_dict["positive"], emp_tfnbs_sp_dict["positive"]
         )
-        self.assertGreater(emp_tfnbs_dict["g2>g1"].sum(), emp_t_dict["g2>g1"].sum())
+        self.assertGreater(emp_tfnbs_dict["positive"].sum(), emp_t_dict["positive"].sum())
 
     def test_apply_tfnbs_list_pars(self):
         """Multi-parameter (list of e, h): output carries the param dim."""
         group_dict = self.fc_sim_paired
         t_stat_dict = compute_t_stat(group_dict['group1'], group_dict['group2'], test_type='paired')
         t_stat_mod = apply_tfnbs(t_stat_dict, e=[0.4, 0.6], h=[1, 2])
-        self.assertEqual(t_stat_mod["g2>g1"].shape[-1], 2)
-        self.assertEqual(t_stat_mod["g1>g2"].shape[-1], 2)
+        self.assertEqual(t_stat_mod["positive"].shape[-1], 2)
+        self.assertEqual(t_stat_mod["negative"].shape[-1], 2)
 
     def test__permutation_task_ind_t(self):
         group_dict = self.fc_sim
@@ -108,7 +108,7 @@ class TestBasicStats(TestCase):
                                         30, 42)
         self.assertIsInstance(t_maxes, dict)
         self.assertEqual(len(t_maxes.values()), 2)
-        self.assertGreater(np.max(t_stat["g2>g1"]), t_maxes["g2>g1"])
+        self.assertGreater(np.max(t_stat["positive"]), t_maxes["positive"])
 
     def test__permutation_task_paired(self):
         """Slow-path _permutation_task_paired with raw t-stat scorer."""
@@ -117,7 +117,7 @@ class TestBasicStats(TestCase):
         emp_t = compute_t_stat_diff(diffs)
         t_max_t = _permutation_task_paired(diffs, compute_t_stat_diff, 30)
         self.assertIsInstance(t_max_t, dict)
-        self.assertGreater(emp_t['g1>g2'].max(), t_max_t['g1>g2'])
+        self.assertGreater(emp_t['negative'].max(), t_max_t['negative'])
 
     def test_compute_null_t_stat_ind(self):
         """compute_null_dist (fast path) with raw t-stat: mp and sequential agree."""
@@ -127,14 +127,14 @@ class TestBasicStats(TestCase):
 
         null_t = compute_null_dist(group_dict['group1'], group_dict['group2'],
                                    compute_t_stat, n_permutations=n_permutations,
-                                   test_type='two-sample', random_state=42, use_mp=False)
+                                   test_type='two-sample', rng=42, use_mp=False)
         null_t_mc = compute_null_dist(group_dict['group1'], group_dict['group2'],
                                       compute_t_stat, n_permutations=n_permutations,
-                                      test_type='two-sample', random_state=42, use_mp=True)
+                                      test_type='two-sample', rng=42, use_mp=True)
 
         self.assertIsInstance(null_t, dict)
         self.assertIsInstance(null_t_mc, dict)
-        self.assertEqual((null_t["g2>g1"].mean() - null_t_mc["g1>g2"].mean()).round(), 0)
+        self.assertEqual((null_t["positive"].mean() - null_t_mc["negative"].mean()).round(), 0)
 
     def test_compute_p_val_tfnbs_ind(self):
         """compute_p_val(method='tfnbs'): observed enhancement > null mean."""
@@ -145,11 +145,11 @@ class TestBasicStats(TestCase):
         p = compute_p_val(
             group_dict['group1'], group_dict['group2'],
             n_permutations=100, test_type='two-sample', method='tfnbs',
-            random_state=42, use_mp=False,
+            rng=42, use_mp=False,
         )
         # Signal should surface: at least one edge with small p
-        self.assertLess(p['g2>g1'][np.triu_indices(10, k=1)].min(), 0.2)
-        self.assertGreater(emp_tfnbs['g2>g1'].mean(), 0)
+        self.assertLess(p['positive'][np.triu_indices(10, k=1)].min(), 0.2)
+        self.assertGreater(emp_tfnbs['positive'].mean(), 0)
 
     def test_all_zero_permutation_p_values_are_one(self):
         """Tie-inclusive max-stat counting keeps all-null zero data at p=1."""
@@ -159,7 +159,7 @@ class TestBasicStats(TestCase):
             n_permutations=20,
             test_type='one-sample',
             method='tstat',
-            random_state=0,
+            rng=0,
             use_mp=False,
         )
         triu = np.triu_indices(4, k=1)
@@ -192,10 +192,10 @@ class TestBasicStats(TestCase):
         p = compute_p_val(
             group_dict['group1'], group_dict['group2'],
             n_permutations=50, test_type='two-sample', method='tfnbs',
-            e=[0.4, 0.6], h=[1, 2], use_mp=False, random_state=42,
+            e=[0.4, 0.6], h=[1, 2], use_mp=False, rng=42,
         )
-        self.assertEqual(p['g2>g1'].shape[-1], 2)
-        self.assertEqual(p['g1>g2'].shape[-1], 2)
+        self.assertEqual(p['positive'].shape[-1], 2)
+        self.assertEqual(p['negative'].shape[-1], 2)
 
     def test_compute_p_val_tfnbs_paired_multi_param(self):
         """compute_p_val with list e/h in paired mode returns param-dimensioned p."""
@@ -203,24 +203,24 @@ class TestBasicStats(TestCase):
         p = compute_p_val(
             group_dict['group1'], group_dict['group2'],
             n_permutations=50, test_type='paired', method='tfnbs',
-            e=[0.4, 0.6], h=[1, 2], use_mp=False, random_state=42,
+            e=[0.4, 0.6], h=[1, 2], use_mp=False, rng=42,
         )
-        self.assertEqual(p['g2>g1'].shape[-1], 2)
-        self.assertEqual(p['g1>g2'].shape[-1], 2)
+        self.assertEqual(p['positive'].shape[-1], 2)
+        self.assertEqual(p['negative'].shape[-1], 2)
 
     def test_compute_p_val_tfnbs_mp_consistency(self):
         """compute_p_val with method='tfnbs': mp and sequential paths agree."""
         group_dict = self.fc_sim
         kwargs = dict(
             n_permutations=100, test_type='two-sample', method='tfnbs',
-            random_state=42, e=0.4, h=3.0, n=10,
+            rng=42, e=0.4, h=3.0, n=10,
         )
         p_mp = compute_p_val(group_dict['group1'], group_dict['group2'], use_mp=True, **kwargs)
         p_seq = compute_p_val(group_dict['group1'], group_dict['group2'], use_mp=False, **kwargs)
 
-        self.assertEqual(p_mp["g2>g1"].shape, p_seq["g2>g1"].shape)
-        self.assertEqual(p_mp["g1>g2"].shape, p_seq["g1>g2"].shape)
-        np.testing.assert_allclose(p_mp["g2>g1"].mean(), p_seq["g2>g1"].mean(), rtol=0.3)
+        self.assertEqual(p_mp["positive"].shape, p_seq["positive"].shape)
+        self.assertEqual(p_mp["negative"].shape, p_seq["negative"].shape)
+        np.testing.assert_allclose(p_mp["positive"].mean(), p_seq["positive"].mean(), rtol=0.3)
 
     def test_compute_p_val_indep(self):
         group_dict = self.fc_sim
@@ -228,8 +228,8 @@ class TestBasicStats(TestCase):
         p_vals = compute_p_val(group_dict['group1'], group_dict['group2'],
                                n_permutations=n_permutations, test_type='two-sample', method='tstat', use_mp=True)
 
-        self.assertLess(p_vals["g2>g1"][np.triu_indices(10, k=1)].mean(), 0.3)
-        self.assertGreater(p_vals["g1>g2"][np.triu_indices(10, k=1)].mean(), 0.3)
+        self.assertLess(p_vals["positive"][np.triu_indices(10, k=1)].mean(), 0.3)
+        self.assertGreater(p_vals["negative"][np.triu_indices(10, k=1)].mean(), 0.3)
 
     def test_compute_p_val_indep_tf(self):
         group_dict = self.fc_sim
@@ -238,8 +238,8 @@ class TestBasicStats(TestCase):
         p_vals = compute_p_val(group_dict['group1'], group_dict['group2'],
                                n_permutations=n_permutations, test_type='two-sample', method='tfnbs', use_mp=True)
 
-        self.assertLess(p_vals["g2>g1"][np.triu_indices(10, k=1)].mean(), 0.3)
-        self.assertGreater(p_vals["g1>g2"][np.triu_indices(10, k=1)].mean(), 0.3)
+        self.assertLess(p_vals["positive"][np.triu_indices(10, k=1)].mean(), 0.3)
+        self.assertGreater(p_vals["negative"][np.triu_indices(10, k=1)].mean(), 0.3)
 
     def test_compute_p_val_indep_tf_multi(self):
         group_dict = self.fc_sim
@@ -247,10 +247,10 @@ class TestBasicStats(TestCase):
 
         p_vals = compute_p_val(group_dict['group1'], group_dict['group2'],
                                n_permutations=n_permutations, test_type='two-sample', method='tfnbs', use_mp=True, e=[0.4, 0.6],
-                               h=[1, 2])
+                               h=[1, 2], rng=42)
 
-        self.assertLess(p_vals["g2>g1"][..., 0][np.triu_indices(10, k=1)].mean(), 0.05)
-        self.assertLess(p_vals["g2>g1"][..., 1][np.triu_indices(10, k=1)].mean(), 0.05)
+        self.assertLess(p_vals["positive"][..., 0][np.triu_indices(10, k=1)].mean(), 0.05)
+        self.assertLess(p_vals["positive"][..., 1][np.triu_indices(10, k=1)].mean(), 0.05)
 
     def test_compute_p_val_indep_tf_orig(self):
         group_dict = self.fc_sim
@@ -260,8 +260,8 @@ class TestBasicStats(TestCase):
         p_vals_tf = compute_p_val(group_dict['group1'], group_dict['group2'],
                                   n_permutations=n_permutations, test_type='two-sample', method='tfnbs', use_mp=True)
 
-        self.assertLess(p_vals_tf["g2>g1"][np.triu_indices(10, k=1)].mean(),
-                        p_vals_orig["g2>g1"][np.triu_indices(10, k=1)].mean())
+        self.assertLess(p_vals_tf["positive"][np.triu_indices(10, k=1)].mean(),
+                        p_vals_orig["positive"][np.triu_indices(10, k=1)].mean())
 
     def test_compute_p_val_paired_tf_orig(self):
         group_dict = self.fc_sim_paired
@@ -271,8 +271,8 @@ class TestBasicStats(TestCase):
         p_vals_tf = compute_p_val(group_dict['group1'], group_dict['group2'],
                                   n_permutations=n_permutations, test_type='paired', method='tfnbs', use_mp=True)
 
-        self.assertLess(p_vals_tf["g2>g1"][np.triu_indices(10, k=1)].mean(),
-                        p_vals_orig["g2>g1"][np.triu_indices(10, k=1)].mean())
+        self.assertLess(p_vals_tf["positive"][np.triu_indices(10, k=1)].mean(),
+                        p_vals_orig["positive"][np.triu_indices(10, k=1)].mean())
 
     def test_compute_p_val_tfnbs_multi_params(self):
         """Test TFNBS with multiple parameter combinations e=[0.5, 1], h=[1, 2]."""
@@ -288,20 +288,20 @@ class TestBasicStats(TestCase):
             h=[1, 2],
             n=10,
             use_mp=False,
-            random_state=42
+            rng=42
         )
 
         # Check that p-values are computed
-        self.assertIn("g2>g1", p_vals)
-        self.assertIn("g1>g2", p_vals)
+        self.assertIn("positive", p_vals)
+        self.assertIn("negative", p_vals)
 
         # Check shape: should be (N, N, 2) for 2 parameter combinations
         expected_shape = group_dict['group1'][0].shape + (2,)
-        self.assertEqual(p_vals["g2>g1"].shape, expected_shape)
-        self.assertEqual(p_vals["g1>g2"].shape, expected_shape)
+        self.assertEqual(p_vals["positive"].shape, expected_shape)
+        self.assertEqual(p_vals["negative"].shape, expected_shape)
 
         # Check that different parameter combinations give different results
-        self.assertFalse(np.allclose(p_vals["g2>g1"][..., 0], p_vals["g2>g1"][..., 1]))
+        self.assertFalse(np.allclose(p_vals["positive"][..., 0], p_vals["positive"][..., 1]))
 
     def test_compute_p_val_nbs_two_sample(self):
         """Test NBS method with two-sample test."""
@@ -315,12 +315,12 @@ class TestBasicStats(TestCase):
             threshold=2.0,
             nbs_stat='extent',
             use_mp=False,
-            random_state=42
+            rng=42
         )
         # Check that p-values are computed
-        self.assertIn("g2>g1", p_vals)
-        self.assertIn("g1>g2", p_vals)
-        self.assertEqual(p_vals["g2>g1"].shape, group_dict['group1'][0].shape)
+        self.assertIn("positive", p_vals)
+        self.assertIn("negative", p_vals)
+        self.assertEqual(p_vals["positive"].shape, group_dict['group1'][0].shape)
 
     def test_compute_p_val_nbs_paired(self):
         """Test NBS method with paired test."""
@@ -334,10 +334,10 @@ class TestBasicStats(TestCase):
             threshold=2.0,
             nbs_stat='intensity',
             use_mp=False,
-            random_state=42
+            rng=42
         )
-        self.assertIn("g2>g1", p_vals)
-        self.assertIn("g1>g2", p_vals)
+        self.assertIn("positive", p_vals)
+        self.assertIn("negative", p_vals)
 
     def test_compute_p_val_cnbs_two_sample(self):
         """Test cNBS method with two-sample test."""
@@ -353,10 +353,10 @@ class TestBasicStats(TestCase):
             method='cnbs',
             net_labels=net_labels,
             use_mp=False,
-            random_state=42
+            rng=42
         )
-        self.assertIn("g2>g1", p_vals)
-        self.assertIn("g1>g2", p_vals)
+        self.assertIn("positive", p_vals)
+        self.assertIn("negative", p_vals)
 
     def test_compute_p_val_cnbs_paired(self):
         """Test cNBS method with paired test."""
@@ -371,10 +371,10 @@ class TestBasicStats(TestCase):
             method='cnbs',
             net_labels=net_labels,
             use_mp=False,
-            random_state=42
+            rng=42
         )
-        self.assertIn("g2>g1", p_vals)
-        self.assertIn("g1>g2", p_vals)
+        self.assertIn("positive", p_vals)
+        self.assertIn("negative", p_vals)
 
     def test_compute_p_val_ni_tfnbs_two_sample(self):
         """Test NI-TFNBS method with two-sample test."""
@@ -392,10 +392,10 @@ class TestBasicStats(TestCase):
             h=2.0,
             n=10,
             use_mp=False,
-            random_state=42
+            rng=42
         )
-        self.assertIn("g2>g1", p_vals)
-        self.assertIn("g1>g2", p_vals)
+        self.assertIn("positive", p_vals)
+        self.assertIn("negative", p_vals)
         # NI-TFNBS should produce different results than regular TFNBS
         p_vals_tfnbs = compute_p_val(
             group_dict['group1'], group_dict['group2'],
@@ -406,10 +406,10 @@ class TestBasicStats(TestCase):
             h=2.0,
             n=10,
             use_mp=False,
-            random_state=42
+            rng=42
         )
         # At least some p-values should differ
-        self.assertFalse(np.allclose(p_vals["g2>g1"], p_vals_tfnbs["g2>g1"]))
+        self.assertFalse(np.allclose(p_vals["positive"], p_vals_tfnbs["positive"]))
 
     def test_compute_p_val_fbc_tfnbs_two_sample(self):
         """Test FBC-TFNBS method with two-sample test."""
@@ -428,10 +428,10 @@ class TestBasicStats(TestCase):
             n=10,
             min_cluster_size=3,
             use_mp=False,
-            random_state=42
+            rng=42
         )
-        self.assertIn("g2>g1", p_vals)
-        self.assertIn("g1>g2", p_vals)
+        self.assertIn("positive", p_vals)
+        self.assertIn("negative", p_vals)
 
     def test_compute_p_val_fbc_tfnbs_paired(self):
         """Test FBC-TFNBS method with paired test."""
@@ -450,10 +450,10 @@ class TestBasicStats(TestCase):
             n=10,
             min_cluster_size=2,
             use_mp=False,
-            random_state=42
+            rng=42
         )
-        self.assertIn("g2>g1", p_vals)
-        self.assertIn("g1>g2", p_vals)
+        self.assertIn("positive", p_vals)
+        self.assertIn("negative", p_vals)
 
     def test_constrained_methods_require_net_labels(self):
         """Test that constrained methods raise ValueError without net_labels."""
@@ -517,17 +517,17 @@ class TestBasicStats(TestCase):
             group_dict['group1'], group_dict['group2'],
             test_type='two-sample', method='bonferroni'
         )
-        self.assertIn("g2>g1", p_vals)
-        self.assertIn("g1>g2", p_vals)
+        self.assertIn("positive", p_vals)
+        self.assertIn("negative", p_vals)
         N = group_dict['group1'].shape[1]
-        self.assertEqual(p_vals["g2>g1"].shape, (N, N))
+        self.assertEqual(p_vals["positive"].shape, (N, N))
         # p-values in [0, 1]
-        self.assertTrue(np.all(p_vals["g2>g1"] >= 0))
-        self.assertTrue(np.all(p_vals["g2>g1"] <= 1))
+        self.assertTrue(np.all(p_vals["positive"] >= 0))
+        self.assertTrue(np.all(p_vals["positive"] <= 1))
         # Symmetric
-        np.testing.assert_allclose(p_vals["g2>g1"], p_vals["g2>g1"].T)
+        np.testing.assert_allclose(p_vals["positive"], p_vals["positive"].T)
         # Diagonal should be 1.0 (no self-connections)
-        np.testing.assert_allclose(np.diag(p_vals["g2>g1"]), 1.0)
+        np.testing.assert_allclose(np.diag(p_vals["positive"]), 1.0)
 
     def test_compute_p_val_bh_fdr_two_sample(self):
         """Test BH-FDR correction with two-sample test."""
@@ -536,13 +536,13 @@ class TestBasicStats(TestCase):
             group_dict['group1'], group_dict['group2'],
             test_type='two-sample', method='bh_fdr'
         )
-        self.assertIn("g2>g1", p_vals)
-        self.assertIn("g1>g2", p_vals)
+        self.assertIn("positive", p_vals)
+        self.assertIn("negative", p_vals)
         N = group_dict['group1'].shape[1]
-        self.assertEqual(p_vals["g2>g1"].shape, (N, N))
-        self.assertTrue(np.all(p_vals["g2>g1"] >= 0))
-        self.assertTrue(np.all(p_vals["g2>g1"] <= 1))
-        np.testing.assert_allclose(p_vals["g2>g1"], p_vals["g2>g1"].T)
+        self.assertEqual(p_vals["positive"].shape, (N, N))
+        self.assertTrue(np.all(p_vals["positive"] >= 0))
+        self.assertTrue(np.all(p_vals["positive"] <= 1))
+        np.testing.assert_allclose(p_vals["positive"], p_vals["positive"].T)
 
     def test_compute_p_val_bonferroni_paired(self):
         """Test Bonferroni correction with paired test."""
@@ -551,10 +551,10 @@ class TestBasicStats(TestCase):
             group_dict['group1'], group_dict['group2'],
             test_type='paired', method='bonferroni'
         )
-        self.assertIn("g2>g1", p_vals)
+        self.assertIn("positive", p_vals)
         N = group_dict['group1'].shape[1]
-        self.assertEqual(p_vals["g2>g1"].shape, (N, N))
-        np.testing.assert_allclose(p_vals["g2>g1"], p_vals["g2>g1"].T)
+        self.assertEqual(p_vals["positive"].shape, (N, N))
+        np.testing.assert_allclose(p_vals["positive"], p_vals["positive"].T)
 
     def test_compute_p_val_bh_fdr_paired(self):
         """Test BH-FDR correction with paired test."""
@@ -563,9 +563,9 @@ class TestBasicStats(TestCase):
             group_dict['group1'], group_dict['group2'],
             test_type='paired', method='bh_fdr'
         )
-        self.assertIn("g2>g1", p_vals)
+        self.assertIn("positive", p_vals)
         N = group_dict['group1'].shape[1]
-        self.assertEqual(p_vals["g2>g1"].shape, (N, N))
+        self.assertEqual(p_vals["positive"].shape, (N, N))
 
     def test_bonferroni_more_conservative_than_bh_fdr(self):
         """Bonferroni p-values should be >= BH-FDR p-values."""
@@ -580,7 +580,7 @@ class TestBasicStats(TestCase):
         )
         # Bonferroni is more conservative (larger p-values)
         self.assertTrue(
-            np.all(p_bonf["g2>g1"] >= p_bh["g2>g1"] - 1e-10),
+            np.all(p_bonf["positive"] >= p_bh["positive"] - 1e-10),
             "Bonferroni should be at least as conservative as BH-FDR"
         )
 
@@ -597,16 +597,15 @@ class TestBasicStats(TestCase):
         )
         # Mean p-value in the effect region should be lower than
         # mean p-value across all edges
-        p_effect = p_bh["g2>g1"][effect_idx].mean()
+        p_effect = p_bh["positive"][effect_idx].mean()
         full_triu = np.triu_indices(N, k=1)
-        p_all = p_bh["g2>g1"][full_triu].mean()
+        p_all = p_bh["positive"][full_triu].mean()
         self.assertLess(p_effect, p_all,
                         "BH-FDR should yield lower p-values in the effect region")
 
     def test_parametric_no_permutations_needed(self):
         """Parametric methods should be fast (no permutation overhead)."""
         group_dict = self.fc_sim
-        import time
         start = time.time()
         compute_p_val(
             group_dict['group1'], group_dict['group2'],
@@ -624,17 +623,17 @@ class TestBasicStats(TestCase):
         p_vals = compute_p_val(
             group_dict['group1'], group_dict['group2'],
             test_type='two-sample', method='bh_fdr_perm',
-            n_permutations=50, use_mp=False, random_state=42,
+            n_permutations=50, use_mp=False, rng=42,
         )
-        self.assertIn('g2>g1', p_vals)
-        self.assertIn('g1>g2', p_vals)
+        self.assertIn('positive', p_vals)
+        self.assertIn('negative', p_vals)
         N = group_dict['group1'].shape[1]
-        self.assertEqual(p_vals['g2>g1'].shape, (N, N))
+        self.assertEqual(p_vals['positive'].shape, (N, N))
         # P-values should be in [0, 1]
-        self.assertTrue(np.all(p_vals['g2>g1'] >= 0))
-        self.assertTrue(np.all(p_vals['g2>g1'] <= 1))
+        self.assertTrue(np.all(p_vals['positive'] >= 0))
+        self.assertTrue(np.all(p_vals['positive'] <= 1))
         # Diagonal should be 1 (no self-connections)
-        np.testing.assert_allclose(np.diag(p_vals['g2>g1']), 1.0)
+        np.testing.assert_allclose(np.diag(p_vals['positive']), 1.0)
 
     def test_bh_fdr_perm_detects_effect(self):
         """BH-FDR-perm should detect planted effect (lower p in effect region)."""
@@ -642,13 +641,13 @@ class TestBasicStats(TestCase):
         p_vals = compute_p_val(
             group_dict['group1'], group_dict['group2'],
             test_type='two-sample', method='bh_fdr_perm',
-            n_permutations=100, use_mp=False, random_state=42,
+            n_permutations=100, use_mp=False, rng=42,
         )
         true_diff = group_dict['true_diff']
         effect_mask = np.abs(true_diff) > 0.05
         triu = np.triu_indices(true_diff.shape[0], k=1)
 
-        p_upper = p_vals['g2>g1'][triu]
+        p_upper = p_vals['positive'][triu]
         effect_upper = effect_mask[triu]
         if np.any(effect_upper):
             # P-values in effect region should tend to be lower
@@ -663,9 +662,9 @@ class TestBasicStats(TestCase):
         p_vals = compute_p_val(
             group_dict['group1'], group_dict['group2'],
             test_type='two-sample', method='bh_fdr_perm',
-            n_permutations=50, use_mp=False, random_state=42,
+            n_permutations=50, use_mp=False, rng=42,
         )
-        np.testing.assert_allclose(p_vals['g2>g1'], p_vals['g2>g1'].T)
+        np.testing.assert_allclose(p_vals['positive'], p_vals['positive'].T)
 
     def test_bh_fdr_perm_paired(self):
         """BH-FDR-perm should work with paired test type."""
@@ -676,12 +675,12 @@ class TestBasicStats(TestCase):
         p_vals = compute_p_val(
             g1, g2,
             test_type='paired', method='bh_fdr_perm',
-            n_permutations=50, use_mp=False, random_state=42,
+            n_permutations=50, use_mp=False, rng=42,
         )
         N = g1.shape[1]
-        self.assertEqual(p_vals['g2>g1'].shape, (N, N))
-        self.assertTrue(np.all(p_vals['g2>g1'] >= 0))
-        self.assertTrue(np.all(p_vals['g2>g1'] <= 1))
+        self.assertEqual(p_vals['positive'].shape, (N, N))
+        self.assertTrue(np.all(p_vals['positive'] >= 0))
+        self.assertTrue(np.all(p_vals['positive'] <= 1))
 
     def test_ni_tfnbs_normalization_via_compute_p_val(self):
         """NI-TFNBS normalization parameter should be threaded through compute_p_val."""
@@ -693,13 +692,13 @@ class TestBasicStats(TestCase):
             p_vals = compute_p_val(
                 group_dict['group1'], group_dict['group2'],
                 test_type='two-sample', method='ni_tfnbs',
-                n_permutations=10, use_mp=False, random_state=42,
+                n_permutations=10, use_mp=False, rng=42,
                 net_labels=labels, normalization=norm,
                 e=0.5, h=2.0, n=10,
             )
-            self.assertEqual(p_vals['g2>g1'].shape, (N, N),
+            self.assertEqual(p_vals['positive'].shape, (N, N),
                              f"Shape mismatch for normalization='{norm}'")
-            self.assertTrue(np.all(p_vals['g2>g1'] >= 0),
+            self.assertTrue(np.all(p_vals['positive'] >= 0),
                             f"Negative p-values for normalization='{norm}'")
 
 
@@ -746,8 +745,8 @@ class TestPrecomputedSumsFastPath(TestCase):
         ref = compute_t_stat_diff(diffs)
         N = diffs.shape[1]
         triu = np.triu_indices(N, k=1)
-        np.testing.assert_allclose(t_pos_fast, ref["g2>g1"][triu], atol=1e-10)
-        np.testing.assert_allclose(t_neg_fast, ref["g1>g2"][triu], atol=1e-10)
+        np.testing.assert_allclose(t_pos_fast, ref["positive"][triu], atol=1e-10)
+        np.testing.assert_allclose(t_neg_fast, ref["negative"][triu], atol=1e-10)
 
         Xall_3d = np.concatenate([self.g1, self.g2], axis=0)
         Xall, Xall2, sum_all, sumsq_all = _precompute_twosample_sums(Xall_3d)
@@ -759,15 +758,15 @@ class TestPrecomputedSumsFastPath(TestCase):
         )
 
         ref = compute_t_stat(self.g1, self.g2, test_type='two-sample')
-        np.testing.assert_allclose(t_pos_fast, ref["g2>g1"][triu], atol=1e-10)
-        np.testing.assert_allclose(t_neg_fast, ref["g1>g2"][triu], atol=1e-10)
+        np.testing.assert_allclose(t_pos_fast, ref["positive"][triu], atol=1e-10)
+        np.testing.assert_allclose(t_neg_fast, ref["negative"][triu], atol=1e-10)
 
     def test_tstat_paired_equivalence(self):
         """Fast path (method='tstat', paired) ≈ slow path — p-values similar."""
         p_fast = compute_p_val(
             self.g1p, self.g2p, n_permutations=500,
             test_type='paired', method='tstat',
-            use_mp=False, random_state=0,
+            use_mp=False, rng=0,
         )
         # Slow path: force by using method='tfnbs' with degenerate e=h=0 — still
         # goes through enhancement. Easier: patch via calling via compute_null_dist
@@ -775,7 +774,7 @@ class TestPrecomputedSumsFastPath(TestCase):
         # reproduction of pre-fast-path code is too invasive. Instead we validate
         # the fast path self-consistency: p-values are all > 0 and monotonic with
         # observed t-stats.
-        for key in ('g2>g1', 'g1>g2'):
+        for key in ('positive', 'negative'):
             self.assertTrue(np.all(p_fast[key] > 0), f"{key}: p-values should be > 0 after +1 correction")
             self.assertTrue(np.all(p_fast[key] <= 1), f"{key}: p-values should be ≤ 1")
 
@@ -785,9 +784,9 @@ class TestPrecomputedSumsFastPath(TestCase):
         p = compute_p_val(
             self.g1, self.g2, n_permutations=300,
             test_type='two-sample', method='tstat',
-            use_mp=False, random_state=0,
+            use_mp=False, rng=0,
         )
-        for key in ('g2>g1', 'g1>g2'):
+        for key in ('positive', 'negative'):
             self.assertEqual(p[key].shape, (N, N))
             self.assertTrue(np.all(p[key] > 0), f"{key}: +1 correction should ensure p > 0")
             self.assertTrue(np.all(p[key] <= 1))
@@ -798,10 +797,10 @@ class TestPrecomputedSumsFastPath(TestCase):
         p = compute_p_val(
             self.g1, self.g2, n_permutations=n_perm,
             test_type='two-sample', method='tstat',
-            use_mp=False, random_state=0,
+            use_mp=False, rng=0,
         )
         expected_min = 1.0 / (n_perm + 1.0)
-        for key in ('g2>g1', 'g1>g2'):
+        for key in ('positive', 'negative'):
             self.assertGreaterEqual(np.min(p[key]), expected_min - 1e-12)
 
     def test_bh_fdr_perm_fast_path(self):
@@ -810,9 +809,9 @@ class TestPrecomputedSumsFastPath(TestCase):
         p = compute_p_val(
             self.g1, self.g2, n_permutations=200,
             test_type='two-sample', method='bh_fdr_perm',
-            use_mp=False, random_state=0,
+            use_mp=False, rng=0,
         )
-        for key in ('g2>g1', 'g1>g2'):
+        for key in ('positive', 'negative'):
             self.assertEqual(p[key].shape, (N, N))
             # Diagonal is filled with 1 by reconstruction, but off-diagonal should be > 0
             triu = np.triu_indices(N, k=1)
@@ -824,10 +823,10 @@ class TestPrecomputedSumsFastPath(TestCase):
         p = compute_p_val(
             self.g1, self.g2, n_permutations=50,
             test_type='two-sample', method='tfnbs',
-            use_mp=False, random_state=0,
+            use_mp=False, rng=0,
             e=0.4, h=3.0, n=10,
         )
-        for key in ('g2>g1', 'g1>g2'):
+        for key in ('positive', 'negative'):
             self.assertEqual(p[key].shape, (N, N))
             self.assertTrue(np.all(p[key] > 0), f"{key}: +1 correction in slow path too")
             self.assertTrue(np.all(p[key] <= 1))

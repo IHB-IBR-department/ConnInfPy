@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from conninfpy import AtlasInfo
+from conninfpy import block_mass
 
 
 class TestAtlasInfoBasic(unittest.TestCase):
@@ -207,7 +208,6 @@ class TestNetworkIndexForBlockMass(unittest.TestCase):
 
     def test_block_mass_round_trip(self):
         # Synthetic p-value map with two networks and a fake signal block.
-        from conninfpy import block_mass
 
         atlas = AtlasInfo(
             labels=[f"r{i}" for i in range(6)],

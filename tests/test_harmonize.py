@@ -8,6 +8,8 @@ import unittest
 import numpy as np
 import numpy.testing as npt
 
+import warnings as _w
+
 from conninfpy.harmonize import (
     ComBatModel,
     CombatResult,
@@ -247,7 +249,6 @@ class TestVarianceFloorWarning(unittest.TestCase):
         )
 
     def test_no_warning_on_clean_data(self):
-        import warnings as _w
 
         Y, sites, _, _ = _make_site_planted_data(seed=13)
         with _w.catch_warnings(record=True) as caught:

@@ -10,6 +10,14 @@ import matplotlib.pyplot as plt
 from conninfpy.loaders.manifest import load_manifest, resolve_path, ManifestLoader, validate_manifest_dataset
 from conninfpy.loaders.base import LoadedDataset
 from conninfpy.loaders.builtins import NumpyLoader, NiftiDirectoryLoader
+from conninfpy.loaders.manifest import DatasetManifest
+from conninfpy.atlas import AtlasInfo
+from conninfpy.interpret.evidence import summarize_decoded_terms, score_decoding_evidence
+from conninfpy.interpret.evidence import clean_term_name
+from conninfpy.decode import decode_combined_rois
+from conninfpy.plot import plot_connectome_graph
+from apps.utils.helpers import align_atlas_coordinates
+import matplotlib
 
 class TestManifestLoader(unittest.TestCase):
     def setUp(self):
@@ -45,7 +53,6 @@ class TestManifestLoader(unittest.TestCase):
                 "expected_rois": 10
             }
         }
-        from conninfpy.loaders.manifest import DatasetManifest
         manifest = DatasetManifest(manifest_data, "data.yaml")
         
         # Should not raise error
@@ -68,7 +75,6 @@ class TestManifestLoader(unittest.TestCase):
                 "min_subjects": 10
             }
         }
-        from conninfpy.loaders.manifest import DatasetManifest
         manifest = DatasetManifest(manifest_data, "data.yaml")
         
         # 5 < 10, should raise ValueError
@@ -125,14 +131,12 @@ class TestManifestLoader(unittest.TestCase):
         ])
         
         # Create dummy AtlasInfo
-        from conninfpy.atlas import AtlasInfo
         atlas = AtlasInfo(
             labels=["ROI_0", "ROI_1"],
             networks=["Visual", "Default"],
             coords=np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]])
         )
         
-        from conninfpy.interpret.evidence import summarize_decoded_terms, score_decoding_evidence
         summary = summarize_decoded_terms(decoded_rois, edges, atlas)
         
         # 'fmri' should be filtered out by default stop words list
@@ -186,8 +190,6 @@ class TestManifestLoader(unittest.TestCase):
         self.assertEqual(dataset.data.shape, (5, 3, 3))
 
     def test_align_atlas_coordinates(self) -> None:
-        from conninfpy.atlas import AtlasInfo
-        from apps.utils.helpers import align_atlas_coordinates
         
         ref_atlas = AtlasInfo(
             labels=["ROI_1", "ROI_2", "ROI_3"],
@@ -209,10 +211,6 @@ class TestManifestLoader(unittest.TestCase):
         )
 
     def test_plot_connectome_graph(self) -> None:
-        from conninfpy.atlas import AtlasInfo
-        from conninfpy.plot import plot_connectome_graph
-        import pandas as pd
-        import matplotlib
         
         # Avoid showing window during unit tests
         matplotlib.use("Agg")
@@ -239,14 +237,10 @@ class TestManifestLoader(unittest.TestCase):
         plt.close(fig_neg)
 
     def test_clean_term_name(self) -> None:
-        from conninfpy.interpret.evidence import clean_term_name
         self.assertEqual(clean_term_name("terms_abstract_tfidf__somatosensory"), "somatosensory")
         self.assertEqual(clean_term_name("LDA100_abstract_weight__42_social_cognition"), "social cognition")
 
     def test_decode_combined_rois(self) -> None:
-        from conninfpy.atlas import AtlasInfo
-        from conninfpy.decode import decode_combined_rois
-        import pandas as pd
         
         # Test combined decoding mock dataset or dry run
         atlas = AtlasInfo(

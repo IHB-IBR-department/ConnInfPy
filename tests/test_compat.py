@@ -6,6 +6,7 @@ import warnings
 
 import numpy as np
 
+from conninfpy import compute_p_val, compute_t_stat
 from conninfpy._compat import (
     LEGACY_TO_CANONICAL,
     TailResult,
@@ -85,7 +86,6 @@ class TestPipelineReturnsTailResult(unittest.TestCase):
     """The public pipelines must return TailResult so legacy keys keep working."""
 
     def test_compute_t_stat_returns_tail_result(self):
-        from conninfpy import compute_t_stat
         rng = np.random.default_rng(0)
         g1 = rng.standard_normal((10, 5, 5))
         g2 = rng.standard_normal((10, 5, 5))
@@ -95,6 +95,29 @@ class TestPipelineReturnsTailResult(unittest.TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             self.assertTrue(np.array_equal(result["g2>g1"], result["positive"]))
+
+
+class TestRandomStateDeprecation(unittest.TestCase):
+    """The legacy ``random_state=`` kwarg warns and matches ``rng=``."""
+
+    def test_random_state_warns_and_matches_rng(self):
+
+        rng = np.random.default_rng(0)
+        g1 = rng.standard_normal((10, 5, 5))
+        g2 = rng.standard_normal((10, 5, 5))
+        kwargs = dict(test_type="two-sample", method="tstat",
+                      n_permutations=20, use_mp=False)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            p_legacy = compute_p_val(g1, g2, random_state=7, **kwargs)
+            self.assertTrue(any(
+                issubclass(warning.category, DeprecationWarning)
+                and "random_state" in str(warning.message)
+                for warning in w
+            ))
+        p_modern = compute_p_val(g1, g2, rng=7, **kwargs)
+        np.testing.assert_allclose(p_legacy["positive"], p_modern["positive"])
+        np.testing.assert_allclose(p_legacy["negative"], p_modern["negative"])
 
 
 if __name__ == "__main__":

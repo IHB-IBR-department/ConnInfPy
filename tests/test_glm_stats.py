@@ -124,8 +124,8 @@ class TestComputeGLMStat(unittest.TestCase):
         #
         # We check that the positive/negative separation is consistent:
         # Where ttest has g2>g1, GLM should have positive, and vice versa.
-        ttest_pos = ttest_result["g2>g1"]
-        ttest_neg = ttest_result["g1>g2"]
+        ttest_pos = ttest_result["positive"]
+        ttest_neg = ttest_result["negative"]
         glm_pos = glm_result["positive"]
         glm_neg = glm_result["negative"]
 
@@ -369,17 +369,17 @@ class TestExtractMaxStatsRefactor(unittest.TestCase):
     """Test that _extract_max_stats works with arbitrary keys."""
 
     def test_traditional_keys(self):
-        """Works with existing 'g1>g2' / 'g2>g1' keys."""
+        """Works with existing 'negative' / 'positive' keys."""
         N = 5
         stat_dict = {
-            "g1>g2": np.random.rand(N, N),
-            "g2>g1": np.random.rand(N, N),
+            "negative": np.random.rand(N, N),
+            "positive": np.random.rand(N, N),
         }
         result = _extract_max_stats(stat_dict, (N, N))
-        self.assertIn("g1>g2", result)
-        self.assertIn("g2>g1", result)
-        self.assertAlmostEqual(float(result["g1>g2"]),
-                               float(np.max(stat_dict["g1>g2"])))
+        self.assertIn("negative", result)
+        self.assertIn("positive", result)
+        self.assertAlmostEqual(float(result["negative"]),
+                               float(np.max(stat_dict["negative"])))
 
     def test_glm_keys(self):
         """Works with GLM 'positive' / 'negative' keys."""
@@ -472,7 +472,7 @@ class TestComputePValGLM(unittest.TestCase):
 
         p_vals = compute_p_val_glm(
             Y, interest=age, method='tstat',
-            n_permutations=50, use_mp=False, random_state=0,
+            n_permutations=50, use_mp=False, rng=0,
         )
         self.assertIn("positive", p_vals)
         self.assertIn("negative", p_vals)
@@ -488,7 +488,7 @@ class TestComputePValGLM(unittest.TestCase):
 
         p_vals = compute_p_val_glm(
             Y, interest=age, method='tstat',
-            n_permutations=20, use_mp=False, random_state=0,
+            n_permutations=20, use_mp=False, rng=0,
         )
 
         triu = np.triu_indices(N, k=1)
@@ -507,7 +507,7 @@ class TestComputePValGLM(unittest.TestCase):
 
         p_vals = compute_p_val_glm(
             Y, interest=age, method='tfnbs',
-            n_permutations=50, use_mp=False, random_state=0,
+            n_permutations=50, use_mp=False, rng=0,
             e=0.4, h=3.0, n=5,
         )
         self.assertIn("positive", p_vals)
@@ -532,7 +532,7 @@ class TestComputePValGLM(unittest.TestCase):
 
         p_vals = compute_p_val_glm(
             Y, interest=age, method='tstat',
-            n_permutations=200, use_mp=False, random_state=0,
+            n_permutations=200, use_mp=False, rng=0,
         )
 
         # Planted edge should be significant
@@ -555,7 +555,7 @@ class TestComputePValGLM(unittest.TestCase):
         p_conv = compute_p_val_glm(
             Y, interest=age, confounds=motion,
             method='tstat', n_permutations=100,
-            use_mp=False, random_state=42,
+            use_mp=False, rng=42,
         )
 
         # Advanced: manually build same design
@@ -564,7 +564,7 @@ class TestComputePValGLM(unittest.TestCase):
         p_adv = compute_p_val_glm(
             Y, design_matrix=X, contrast=contrast,
             method='tstat', n_permutations=100,
-            use_mp=False, random_state=42,
+            use_mp=False, rng=42,
         )
 
         npt.assert_array_equal(p_conv["positive"], p_adv["positive"])
@@ -582,12 +582,12 @@ class TestComputePValGLM(unittest.TestCase):
 
         p_one = compute_p_val_glm(
             Y, interest=age, method='tstat',
-            n_permutations=100, use_mp=False, random_state=0,
+            n_permutations=100, use_mp=False, rng=0,
             two_tailed=False,
         )
         p_two = compute_p_val_glm(
             Y, interest=age, method='tstat',
-            n_permutations=100, use_mp=False, random_state=0,
+            n_permutations=100, use_mp=False, rng=0,
             two_tailed=True,
         )
 
@@ -664,7 +664,7 @@ class TestGLMEnhancementMethods(unittest.TestCase):
     def _run_method(self, method, **extra_kwargs):
         p_vals = compute_p_val_glm(
             self.Y, interest=self.age, method=method,
-            n_permutations=30, use_mp=False, random_state=0,
+            n_permutations=30, use_mp=False, rng=0,
             e=0.4, h=3.0, n=5, start_thres=1.65,
             **extra_kwargs,
         )
@@ -821,7 +821,7 @@ class TestFStatPermutation(unittest.TestCase):
         p_vals = compute_p_val_glm(
             Y, design_matrix=X, contrast=C, stat_type='fstat',
             method='tstat', n_permutations=50,
-            use_mp=False, random_state=0,
+            use_mp=False, rng=0,
         )
         self.assertEqual(list(p_vals.keys()), ['omnibus'])
         self.assertEqual(p_vals["omnibus"].shape, (N, N))
@@ -851,7 +851,7 @@ class TestFStatPermutation(unittest.TestCase):
         p_vals = compute_p_val_glm(
             Y, design_matrix=X, contrast=C, stat_type='fstat',
             method='tstat', n_permutations=200,
-            use_mp=False, random_state=0,
+            use_mp=False, rng=0,
         )
         self.assertLess(
             p_vals["omnibus"][1, 2], 0.05,
@@ -872,12 +872,12 @@ class TestFStatPermutation(unittest.TestCase):
         p_one = compute_p_val_glm(
             Y, design_matrix=X, contrast=C, stat_type='fstat',
             method='tstat', n_permutations=30,
-            use_mp=False, random_state=0, two_tailed=False,
+            use_mp=False, rng=0, two_tailed=False,
         )
         p_two = compute_p_val_glm(
             Y, design_matrix=X, contrast=C, stat_type='fstat',
             method='tstat', n_permutations=30,
-            use_mp=False, random_state=0, two_tailed=True,
+            use_mp=False, rng=0, two_tailed=True,
         )
         npt.assert_array_equal(p_one["omnibus"], p_two["omnibus"])
 
@@ -911,13 +911,13 @@ class TestPairedGLMWrapper(unittest.TestCase):
         p_wrap = compute_p_val_paired_glm(
             self.Y_A, self.Y_B,
             method='tstat', n_permutations=50,
-            use_mp=False, random_state=0,
+            use_mp=False, rng=0,
         )
         p_direct = compute_p_val(
             self.Y_A, self.Y_B,
             test_type='paired', method='tstat',
             n_permutations=50,
-            use_mp=False, random_state=0,
+            use_mp=False, rng=0,
         )
         # v2.0+: both pipelines return canonical {'positive', 'negative'}
         self.assertEqual(sorted(p_wrap.keys()), ['negative', 'positive'])
@@ -930,7 +930,7 @@ class TestPairedGLMWrapper(unittest.TestCase):
             self.Y_A, self.Y_B,
             confounds_A=self.fd_A, confounds_B=self.fd_B,
             method='tstat', n_permutations=50,
-            use_mp=False, random_state=0,
+            use_mp=False, rng=0,
         )
         self.assertEqual(sorted(p.keys()), ['negative', 'positive'])
         self.assertEqual(p['positive'].shape, (self.N, self.N))

@@ -185,12 +185,12 @@ class TestComputePValuesAccelerated(unittest.TestCase):
         """Gamma method returns correct structure."""
         rng = np.random.RandomState(42)
         N = 5
-        emp = {"g2>g1": rng.rand(N, N) * 3, "g1>g2": rng.rand(N, N) * 3}
-        null = {"g2>g1": np.abs(rng.standard_normal(200)),
-                "g1>g2": np.abs(rng.standard_normal(200))}
+        emp = {"positive": rng.rand(N, N) * 3, "negative": rng.rand(N, N) * 3}
+        null = {"positive": np.abs(rng.standard_normal(200)),
+                "negative": np.abs(rng.standard_normal(200))}
         p = compute_p_values_accelerated(emp, null, method="gamma")
-        self.assertIn("g2>g1", p)
-        self.assertEqual(p["g2>g1"].shape, (N, N))
+        self.assertIn("positive", p)
+        self.assertEqual(p["positive"].shape, (N, N))
 
 
 # =============================================================================
@@ -218,36 +218,36 @@ class TestAccelerationTTestPipeline(unittest.TestCase):
         p = compute_p_val(
             self.group1, self.group2,
             n_permutations=200, test_type='two-sample',
-            method='tstat', use_mp=False, random_state=0,
+            method='tstat', use_mp=False, rng=0,
             acceleration='gpd',
         )
-        self.assertIn("g2>g1", p)
-        self.assertEqual(p["g2>g1"].shape, (self.N, self.N))
-        self.assertTrue(np.all(p["g2>g1"] >= 0))
-        self.assertTrue(np.all(p["g2>g1"] <= 1))
+        self.assertIn("positive", p)
+        self.assertEqual(p["positive"].shape, (self.N, self.N))
+        self.assertTrue(np.all(p["positive"] >= 0))
+        self.assertTrue(np.all(p["positive"] <= 1))
 
     def test_gamma_tfnbs(self):
         """compute_p_val with acceleration='gamma' and TFNBS."""
         p = compute_p_val(
             self.group1, self.group2,
             n_permutations=200, test_type='two-sample',
-            method='tfnbs', use_mp=False, random_state=0,
+            method='tfnbs', use_mp=False, rng=0,
             acceleration='gamma', e=0.4, h=3.0, n=5,
         )
-        self.assertIn("g2>g1", p)
-        self.assertTrue(np.all(p["g2>g1"] >= 0))
-        self.assertTrue(np.all(p["g2>g1"] <= 1))
+        self.assertIn("positive", p)
+        self.assertTrue(np.all(p["positive"] >= 0))
+        self.assertTrue(np.all(p["positive"] <= 1))
 
     def test_no_acceleration_baseline(self):
         """acceleration=None preserves original behavior."""
         p_none = compute_p_val(
             self.group1, self.group2,
             n_permutations=100, test_type='two-sample',
-            method='tstat', use_mp=False, random_state=0,
+            method='tstat', use_mp=False, rng=0,
             acceleration=None,
         )
         # Just verify it runs — exact values tested elsewhere
-        self.assertIn("g2>g1", p_none)
+        self.assertIn("positive", p_none)
 
 
 # =============================================================================
@@ -273,7 +273,7 @@ class TestAccelerationGLMPipeline(unittest.TestCase):
         """compute_p_val_glm with acceleration='gpd' runs correctly."""
         p = compute_p_val_glm(
             self.Y, interest=self.age, method='tstat',
-            n_permutations=200, use_mp=False, random_state=0,
+            n_permutations=200, use_mp=False, rng=0,
             acceleration='gpd',
         )
         self.assertIn("positive", p)
@@ -285,7 +285,7 @@ class TestAccelerationGLMPipeline(unittest.TestCase):
         """compute_p_val_glm with gamma + TFNBS."""
         p = compute_p_val_glm(
             self.Y, interest=self.age, method='tfnbs',
-            n_permutations=200, use_mp=False, random_state=0,
+            n_permutations=200, use_mp=False, rng=0,
             acceleration='gamma', e=0.4, h=3.0, n=5,
         )
         self.assertIn("positive", p)
@@ -310,7 +310,7 @@ class TestAccelerationGLMPipeline(unittest.TestCase):
 
         p = compute_p_val_glm(
             Y, interest=age, method='tstat',
-            n_permutations=200, use_mp=False, random_state=0,
+            n_permutations=200, use_mp=False, rng=0,
             acceleration='gpd',
         )
 
