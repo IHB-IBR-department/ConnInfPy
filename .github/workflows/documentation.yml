@@ -55,7 +55,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - name: Install package + doc dependencies
         # Install conninfpy itself so autodoc can import every module.
         # Without `pip install -e .` the .. automodule:: directives silently
