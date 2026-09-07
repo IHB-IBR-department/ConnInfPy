@@ -1,3 +1,89 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel", "build"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "conninfpy"
+version = "2.0.0"
+description = "Unified Python framework for permutation-based statistical inference on brain connectivity networks"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Irina Knyazeva", email = "knyazeva@ihb.spb.ru" },
+]
+maintainers = [
+    { name = "Irina Knyazeva", email = "knyazeva@ihb.spb.ru" },
+]
+keywords = [
+    "neuroimaging", "connectivity", "fmri", "eeg",
+    "network-based-statistics", "tfnbs", "glm", "permutation-testing",
+    "fwer", "fdr", "combat",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy",
+    "scipy",
+    "statsmodels",
+    "pandas",
+    "matplotlib",
+    "numba",
+]
+
+[project.urls]
+Documentation = "https://ihb-ibr-department.github.io/ConnInfPy/"
+Source = "https://github.com/IHB-IBR-department/ConnInfPy"
+"Issue Tracker" = "https://github.com/IHB-IBR-department/ConnInfPy/issues"
+
+[project.optional-dependencies]
+app = [
+    "streamlit>=1.37",
+    "scikit-learn",
+    "pyyaml",
+    "networkx",
+    "nibabel>=3.2",
+    "nilearn>=0.10",
+]
+decode = [
+    "nimare>=0.4,<0.6",
+    "nibabel>=3.2",
+]
+full = [
+    "scikit-learn",
+    "pyyaml",
+    "networkx",
+]
+dev = [
+    "pytest",
+    "sphinx",
+    "sphinx-rtd-theme",
+    "myst-parser",
+    "seaborn",
+    "mypy",
+    "scikit-learn",
+    "pyyaml",
+    "networkx",
+]
+notebooks = [
+    "jupyter",
+    "ipykernel",
+    "seaborn",
+]
+
+[tool.setuptools.packages.find]
+include = ["conninfpy*"]
+
+[tool.setuptools.package-data]
+conninfpy = ["atlas_data/*.csv", "atlas_data/*.nii.gz"]
