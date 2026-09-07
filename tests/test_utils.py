@@ -122,8 +122,22 @@ class TestGetComponents(TestCase):
         Failure:  isolated nodes were skipped — downstream NBS-family
                   code counts components from this output.
         """
-        _, sizes = get_components(self.adj)
+        comps, sizes = get_components(self.adj)
         self.assertIn(1, sizes)
+
+    def test_asymmetric_raises_valueerror(self):
+        """Check: an asymmetric adjacency raises ValueError, always.
+
+        Input:    [[0, 1], [0, 0]] — edge present in one triangle only.
+        Expected: ValueError (raised regardless of python -O, unlike
+                  the AssertionError this guard used before).
+        Failure:  the guard regressed to an assert-style check — under
+                  `python -O` it would vanish and scipy would silently
+                  read one triangle, returning components of a
+                  different graph.
+        """
+        with self.assertRaises(ValueError):
+            get_components(np.array([[0.0, 1.0], [0.0, 0.0]]))
 
 
 class TestBinarize(TestCase):

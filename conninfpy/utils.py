@@ -41,8 +41,10 @@ def fisher_r_to_z(r: npt.NDArray[np.float64],
         values. If False, allow infinities and raise a warning.
         (default: True).
     max_z : float
-        Maximum absolute z-value to use when ``handle_bounds=True``
-        (default: 5).
+        Replacement value for boundary inputs when ``handle_bounds=True``
+        (default: 5). Note: ``max_z`` replaces z at r = ±1 and their
+        ``np.isclose`` neighborhood; it does NOT clip other values —
+        near-boundary inputs outside that tolerance keep their true z.
 
     Returns
     -------
@@ -134,6 +136,11 @@ def get_components(A, no_depend=False):
     comp_sizes : np.ndarray of shape (M,)
         Number of nodes in each component.
 
+    Raises
+    ------
+    ValueError
+        If ``A`` is not symmetric.
+
     Notes
     -----
     Isolated nodes form components of size 1. Component numbering is not
@@ -151,8 +158,8 @@ def get_components(A, no_depend=False):
     array([1, 1, 1])
     """
     if not np.all(A == A.T):
-        raise AssertionError('get_components can only be computed for undirected'
-                             ' matrices.  If your matrix is noisy, correct it with np.around')
+        raise ValueError('get_components can only be computed for undirected'
+                         ' matrices. If your matrix is noisy, correct it with np.around')
 
     A = binarize(A, copy=True)
     np.fill_diagonal(A, 1)
