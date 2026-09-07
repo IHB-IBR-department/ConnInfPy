@@ -87,3 +87,35 @@ include = ["conninfpy*"]
 
 [tool.setuptools.package-data]
 conninfpy = ["atlas_data/*.csv", "atlas_data/*.nii.gz"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # Expected from synthetic fixtures (r = ±1 edges); asserted in
+    # tests/test_utils.py::TestFisherRToZ.
+    "ignore:Input contains r = ±1:UserWarning",
+    "ignore:divide by zero encountered in arctanh:RuntimeWarning",
+]
+
+# Run: python -m mypy conninfpy.
+[tool.mypy]
+python_version = "3.12"
+files = ["conninfpy"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_equality = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_calls = false
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+warn_return_any = false
+
+# Scientific stack without complete type stubs.
+[[tool.mypy.overrides]]
+module = [
+    "scipy.*", "sklearn.*", "nilearn.*",
+    "tqdm.*", "numba.*", "nimare.*", "openai.*", "google.*", "yaml.*",
+    "pandas.*", "networkx.*",
+]
+ignore_missing_imports = true
