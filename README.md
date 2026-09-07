@@ -420,7 +420,7 @@ p_vals = compute_p_val_glm(
 )
 ```
 
-![Timing benchmark for TFNBS, NBS, and GLM-TFNBS](figures/timing_benchmark.png)
+![Timing benchmark for TFNBS, NBS, and GLM-TFNBS](docs/timing_benchmark.png)
 
 **Timing benchmark.** The left panel reports wall-clock time for 100
 permutations at increasing network sizes; the right panel shows the same
