@@ -1,0 +1,26 @@
+# conninfpy run examples/configs/abide_mini_age.yaml
+#
+# Age → functional connectivity on the bundled ABIDE-mini sample
+# (204 subjects, Schaefer-100, 5 sites), with sex and head motion as
+# confounds and site handled by ComBat + site dummies + site-blocked
+# permutation (harmonize: auto).
+
+data: ../../datasets/abide_mini.yaml   # manifest, relative to this file
+# input: r                             # optional; taken from the manifest's data_kind
+
+design:
+  type: glm                  # glm | two-sample | paired | one-sample
+  interest: Age              # phenotype column(s); a list tests each in one pass
+  confounds: [Sex, Motion_FD]
+  sites: site
+  # harmonize: auto          # combat_site_dummies_glm | combat_only | site_dummies_glm
+
+inference:                   # any conninfpy.analyze() keyword
+  method: tfnbs
+  n_permutations: 200
+  acceleration: gpd          # remove for exact empirical p-values (then use ~5000)
+  rng: 42
+
+atlas: schaefer_100_yeo7     # built-in name or a CSV path; omit to use the manifest's
+alpha: 0.05
+output: results/abide_mini_age   # relative to this file (git-ignored); --out overrides
