@@ -5,25 +5,34 @@ EEG). One permutation engine shared across nine inference methods, edge-wise
 GLM (Freedman--Lane), parametric empirical-Bayes ComBat, and tail-approximation
 acceleration.
 
-Public quick-start
-------------------
+Quick-start
+-----------
 >>> import numpy as np
->>> from conninfpy import compute_p_val, fisher_r_to_z
+>>> import conninfpy
 >>> rng = np.random.default_rng(0)
->>> corr = np.clip(rng.uniform(-0.5, 0.5, (16, 8, 8)), -0.99, 0.99)
->>> corr = (corr + corr.transpose(0, 2, 1)) / 2
->>> idx = np.arange(8); corr[:, idx, idx] = 0.0
->>> z = fisher_r_to_z(corr)
->>> p = compute_p_val(z[:8], z[8:], test_type='two-sample',
-...                   method='tstat', n_permutations=50, rng=0,
-...                   use_mp=False)
->>> p['positive'].shape
+>>> r = np.tanh(rng.normal(0, 0.3, (16, 8, 8)))      # 16 correlation matrices
+>>> r = (r + r.transpose(0, 2, 1)) / 2
+>>> out = conninfpy.analyze(group1=r[:8], group2=r[8:], input="r",
+...                         test_type="two-sample", method="tstat",
+...                         n_permutations=50, rng=0, use_mp=False)
+>>> out["positive"].shape
 (8, 8)
 
-Returns a :class:`~conninfpy._compat.TailResult` with canonical keys
-``'positive'`` and ``'negative'``. The legacy keys ``'g2>g1'`` and
-``'g1>g2'`` from v1.x remain readable but emit a :class:`DeprecationWarning`
-and will be removed in v2.1.
+:func:`analyze` is the main entry point; it returns an
+:class:`AnalyzeResult` whose ``positive`` / ``negative`` maps hold
+FWER-corrected p-values. Everything else is grouped by module:
+
+- :mod:`conninfpy.stats` — advanced permutation pipelines (custom designs,
+  F-contrasts, null distributions)
+- :mod:`conninfpy.enhance` — network enhancement (TFNBS, NBS, cNBS, ...)
+- :mod:`conninfpy.harmonize` — ComBat and design diagnostics
+- :mod:`conninfpy.acceleration` — GPD / gamma tail approximation
+- :mod:`conninfpy.loaders` — manifest-based data loading (also :func:`load`)
+- :mod:`conninfpy.sim` — synthetic data and topology scenarios
+- :mod:`conninfpy.plot`, :mod:`conninfpy.eeg_utils`
+
+Names imported directly from ``conninfpy`` in earlier versions remain
+importable; ``__all__`` lists the recommended surface.
 """
 __version__ = "2.0.0"
 
@@ -125,91 +134,42 @@ from .acceleration import (
     compute_p_values_accelerated,
 )
 
-from . import loaders
+from . import (
+    acceleration,
+    defaults,
+    eeg_utils,
+    enhance,
+    harmonize,
+    loaders,
+    sim,
+    stats,
+)
+from .loaders import load
 
 
+# The recommended public surface. Everything imported above stays
+# importable from ``conninfpy`` for backward compatibility, but new code
+# should reach advanced functions through their module (``conninfpy.stats``,
+# ``conninfpy.enhance``, ...).
 __all__ = [
-    # version + result types
     "__version__",
-    "TailResult",
+    # main entry point and results
+    "analyze",
+    "AnalyzeResult",
     "InferenceResult",
     "OmnibusInferenceResult",
-    "AnalyzeResult",
-    "analyze",
+    # data in
+    "load",
     "AtlasInfo",
-    "get_bna_246_nifti_path",
-    # defaults
-    "DEFAULT_EXTENT_EXPONENT",
-    "DEFAULT_HEIGHT_EXPONENT",
-    "DEFAULT_START_THRESHOLD",
-    "DEFAULT_N_THRESHOLDS_SCORING",
-    "DEFAULT_N_THRESHOLDS_PERMUTATION",
-    "DEFAULT_N_PERMUTATIONS",
-    "DEFAULT_NBS_THRESHOLD",
-    "DEFAULT_NBS_STAT",
-    "DEFAULT_MIN_CLUSTER_SIZE",
-    # statistical pipelines
-    "compute_p_val",
-    "compute_null_dist",
-    "compute_t_stat",
-    "compute_t_stat_diff",
-    "StatMethod",
-    "TestType",
-    "compute_p_val_glm",
-    "compute_p_val_glm_multi",
-    "compute_p_val_paired_glm",
-    "compute_glm_stat",
-    "build_design_matrix",
-    "GLMStatType",
-    # enhancement (apply_*)
-    "apply_tfnbs",
-    "apply_nbs",
-    "apply_cnbs",
-    "apply_ni_tfnbs",
-    "apply_fbc_tfnbs",
-    # raw scoring
-    "get_tfnbs_score",
-    "get_network_informed_tfnbs_score",
-    "get_fbc_tfnbs_score",
-    "nbs_bct",
-    # acceleration
-    "fit_gpd_tail",
-    "fit_gamma_tail",
-    "compute_p_values_accelerated",
-    # harmonization + design diagnostics
-    "ComBatModel",
-    "CombatResult",
-    "combat_harmonize",
-    "combat_fit",
-    "combat_apply",
-    "compute_vif",
-    "design_diagnostics",
-    "flatten_upper",
-    "unflatten_upper",
-    "block_mass",
-    # synthetic data + topologies
-    "generate_fc_matrices",
-    "generate_multisite_glm_dataset",
-    "ModularDatasetGenerator",
-    "TopologyDataset",
-    "TopologyDatasetGenerator",
-    "TopologyScenario",
-    "get_scenario",
-    "get_scenarios",
-    "list_scenarios",
-    # utilities
     "fisher_r_to_z",
     "fisher_z_to_r",
-    "get_components",
-    "binarize",
-    "create_prior_weights",
-    # EEG
-    "read_from_eeg_dataframe",
-    "reshape_eeg_data",
-    "inverse_reshape_eeg_data",
-    "EEGData",
-    "Electrodes",
-    "Bands",
-    "PairsElectrodes1020",
+    # modules
+    "stats",
+    "enhance",
+    "harmonize",
+    "acceleration",
     "loaders",
+    "sim",
+    "eeg_utils",
+    "defaults",
 ]
