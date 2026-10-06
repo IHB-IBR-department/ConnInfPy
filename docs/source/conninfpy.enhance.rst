@@ -1,9 +1,10 @@
-conninfpy._enhancement
-======================
+conninfpy.enhance
+=================
 
-Shared ``stat_dict → score_dict`` enhancement wrappers used by both the
-t-test pipeline (:mod:`conninfpy.pairwise_stats`) and the GLM pipeline
-(:mod:`conninfpy.glm_stats`).
+Network enhancement: the ``apply_*`` wrappers (shared ``stat_dict → score_dict``
+transformations used by both the t-test pipeline (:mod:`conninfpy.pairwise_stats`) and the GLM pipeline
+(:mod:`conninfpy.glm_stats`)) and the raw scoring functions
+(``get_*_score``, ``nbs_bct``).
 
 These five wrappers are pure, key-agnostic transformations: a statistic
 dictionary keyed by effect direction (``'g2>g1'/'g1>g2'`` for the
@@ -16,7 +17,7 @@ zero diagonal.
 The mathematical definitions of each operator are in the corresponding
 sections of the methods chapter.
 
-.. automodule:: conninfpy._enhancement
+.. automodule:: conninfpy.enhance
    :members:
    :undoc-members:
    :show-inheritance:

@@ -27,9 +27,9 @@ and will be removed in v2.1.
 """
 __version__ = "2.0.0"
 
-from ._analyze import AnalyzeResult, analyze
+from .analysis import AnalyzeResult, analyze
 from ._compat import TailResult
-from ._result import InferenceResult, OmnibusInferenceResult
+from .results import InferenceResult, OmnibusInferenceResult
 from .atlas import AtlasInfo, get_bna_246_nifti_path
 from .defaults import (
     DEFAULT_EXTENT_EXPONENT,
@@ -76,7 +76,7 @@ from .pairwise_stats import (
     TestType,
 )
 
-from ._enhancement import (
+from .enhance import (
     apply_tfnbs,
     apply_nbs,
     apply_cnbs,

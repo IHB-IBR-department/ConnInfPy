@@ -4,7 +4,15 @@ conninfpy
 Submodules
 ----------
 
-Inferential pipelines (top-level entry points):
+Main entry point and result types:
+
+.. toctree::
+   :maxdepth: 1
+
+   conninfpy.analysis
+   conninfpy.results
+
+Inferential pipelines (advanced entry points):
 
 .. toctree::
    :maxdepth: 1
@@ -17,7 +25,7 @@ Enhancement operators:
 .. toctree::
    :maxdepth: 1
 
-   conninfpy._enhancement
+   conninfpy.enhance
    conninfpy.tfnbs_score
    conninfpy.nbs_score
 

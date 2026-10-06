@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from conninfpy.atlas import AtlasInfo
 from conninfpy.decode import decode_rois, annotate_edge_table
-from conninfpy._result import InferenceResult
+from conninfpy.results import InferenceResult
 
 # Mock nimare before importing decode module
 mock_nimare = MagicMock()

@@ -46,7 +46,7 @@ except ImportError as exc:  # pragma: no cover (env-specific)
 from .harmonize import block_mass as _block_mass
 import pandas as pd
 
-from ._result import InferenceResult, OmnibusInferenceResult
+from .results import InferenceResult, OmnibusInferenceResult
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .atlas import AtlasInfo

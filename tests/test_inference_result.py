@@ -171,7 +171,7 @@ class TestGLMTstatPath(unittest.TestCase):
 
 class TestGLMFstatPathOmnibus(unittest.TestCase):
     """F-stat path returns an OmnibusInferenceResult (no zeros-like hack
-    in _analyze.py anymore)."""
+    in analysis.py anymore)."""
 
     def test_fstat_returns_omnibus_inference_result(self):
         rng = np.random.RandomState(5)
