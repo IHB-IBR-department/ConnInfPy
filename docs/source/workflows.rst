@@ -500,8 +500,9 @@ Every result is dict-like and carries metadata and exporters:
 Speed vs. publication runs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``analyze()`` defaults to ``n_permutations=200`` with ``acceleration='gpd'``
-for fast exploration. For a final result use a larger empirical reference:
+Every entry point defaults to ``n_permutations=1000`` with exact empirical
+p-values (``acceleration=None``). For fast exploration opt into GPD tail
+acceleration; for a final result use a larger empirical reference:
 
 .. code-block:: python
 

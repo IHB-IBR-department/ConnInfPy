@@ -31,6 +31,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .defaults import (
+    DEFAULT_ACCELERATION,
     DEFAULT_EXTENT_EXPONENT,
     DEFAULT_HEIGHT_EXPONENT,
     DEFAULT_N_THRESHOLDS_PERMUTATION as DEFAULT_N_THRESHOLDS,
@@ -539,7 +540,7 @@ def compute_p_val_glm(
     method: Union[str, StatMethod] = StatMethod.TFNBS,
     n_permutations: int = DEFAULT_N_PERMUTATIONS,
     two_tailed: bool = False,
-    acceleration: Optional[str] = None,
+    acceleration: Optional[str] = DEFAULT_ACCELERATION,
     use_mp: bool = True,
     rng: RngLike = None,
     random_state: Optional[int] = None,  # deprecated alias for `rng`
@@ -923,7 +924,7 @@ def compute_p_val_glm_multi(
     method: Union[str, StatMethod] = StatMethod.TFNBS,
     n_permutations: int = DEFAULT_N_PERMUTATIONS,
     two_tailed: bool = False,
-    acceleration: Optional[str] = None,
+    acceleration: Optional[str] = DEFAULT_ACCELERATION,
     use_mp: bool = True,
     rng: RngLike = None,
     random_state: Optional[int] = None,

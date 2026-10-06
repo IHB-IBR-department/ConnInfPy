@@ -100,6 +100,12 @@ Hao 2024 reports n=10 is sufficient for FDR control on network data)."""
 DEFAULT_N_PERMUTATIONS: int = 1000
 """Default number of permutations for null distribution."""
 
+DEFAULT_ACCELERATION = None
+"""Default tail acceleration: ``None`` (exact empirical permutation p-values).
+
+``'gpd'`` / ``'gamma'`` are opt-in; with ~200 permutations they reproduce
+large-budget empirical p-values at a fraction of the cost (Winkler 2016)."""
+
 # =============================================================================
 # NBS defaults
 # =============================================================================
