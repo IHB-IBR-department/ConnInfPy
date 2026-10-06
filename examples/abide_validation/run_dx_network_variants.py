@@ -20,7 +20,7 @@ def run_variants():
                       networks=[network_order[i] for i in net_labels.astype(int)])
 
     common = dict(Y=Y, interest=group, confounds=confounds, sites=sites, 
-                  harmonize="nuisance_only", fisher_z=False, n_permutations=500, rng=42)
+                  harmonize="combat_site_dummies_glm", fisher_z=False, n_permutations=500, rng=42)
 
     # 1. NI-TFNBS
     print("Running NI-TFNBS...")

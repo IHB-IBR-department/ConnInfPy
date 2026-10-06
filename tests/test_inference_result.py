@@ -216,7 +216,7 @@ class TestAnalyzeProvenanceThreading(unittest.TestCase):
             out.inference.combat_diagnostics["strategy"],
             "combat_site_dummies_glm",
         )
-        self.assertEqual(out.inference.combat_diagnostics["legacy_strategy"], "D")
+        self.assertNotIn("legacy_strategy", out.inference.combat_diagnostics)
         self.assertTrue(out.inference.strata_provided)
 
     def test_no_sites_means_not_harmonized(self):

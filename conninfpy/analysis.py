@@ -231,37 +231,10 @@ def _resolve_strategy(
       inferential GLM.
     * ``None`` -- no ComBat, no site adjustment (no ``sites`` passed,
       or two-sample call where ComBat has no defensible recipe).
-
-    The old ``'d'`` and ``'e'`` values are accepted as compatibility aliases
-    for the historical table labels used during early development.
     """
-    if harmonize in (
-        COMBAT_SITE_DUMMIES_GLM,
-        "combat_site_glm",
-        "combat_plus_site_dummies_glm",
-        "combat_plus_site_glm",
-        "interest_orthogonal_combat",
-        "interest_orthogonal",
-        "nuisance_only",
-        "d",
-    ):
-        return COMBAT_SITE_DUMMIES_GLM
-    if harmonize in (
-        COMBAT_ONLY,
-        "combat",
-        "combat_no_site_glm",
-        "combat_no_site_dummies_glm",
-    ):
-        return COMBAT_ONLY
-    if harmonize in (
-        SITE_DUMMIES_GLM,
-        "site_glm",
-        "single_stage_site_glm",
-        "single_stage_site_dummies_glm",
-        "no_combat",
-        "e",
-        None,
-    ):
+    if harmonize in (COMBAT_SITE_DUMMIES_GLM, COMBAT_ONLY):
+        return harmonize
+    if harmonize in (SITE_DUMMIES_GLM, None):
         return SITE_DUMMIES_GLM if (glm_mode and sites_provided) else None
     if harmonize == "auto":
         if not sites_provided:
@@ -276,8 +249,8 @@ def _resolve_strategy(
         return None
     raise ValueError(
         "harmonize= must be one of 'auto', 'combat_only', "
-        "'combat_site_dummies_glm', 'site_dummies_glm', or None "
-        f"(legacy aliases are accepted); got {harmonize!r}."
+        "'combat_site_dummies_glm', 'site_dummies_glm', or None; "
+        f"got {harmonize!r}."
     )
 
 
@@ -386,23 +359,16 @@ def analyze(
         Selects the ComBat / site-handling strategy. Three named multi-site
         strategies are supported, matching the paper comparison:
 
-        * ``'combat_only'`` (aliases ``'combat'`` and
-          ``'combat_no_site_glm'``) — fit ComBat with
+        * ``'combat_only'`` — fit ComBat with
           ``preserve = confounds`` only, then test on the harmonized matrix
           without adding site dummies to the downstream GLM. Use this to
           isolate what the ComBat transform itself contributes.
-        * ``'combat_site_dummies_glm'`` (aliases ``'combat_site_glm'``,
-          ``'combat_plus_site_glm'``, ``'nuisance_only'``, and legacy alias
-          ``'d'``) —
-          primary site-aware recipe. Fit ComBat with ``preserve = confounds``
+        * ``'combat_site_dummies_glm'`` — primary site-aware recipe. Fit ComBat with ``preserve = confounds``
           only, deliberately excluding the tested variable, then append site
           dummies to the downstream GLM nuisance design. Use this when the
           analysis needs both a harmonized matrix and residual site control
           during inference.
-        * ``'site_dummies_glm'`` (aliases ``'site_glm'``,
-          ``'single_stage_site_glm'``, ``'no_combat'`` and ``None``; legacy
-          alias ``'e'``) — skip
-          ComBat entirely and model site as fixed-effect nuisance dummies in
+        * ``'site_dummies_glm'`` (or ``None``) — skip ComBat entirely and model site as fixed-effect nuisance dummies in
           the same GLM that tests the variable of interest. Use this when the
           only deliverable is the inference result, when ComBat assumptions
           are questionable, or as the no-ComBat site-aware sensitivity arm.
@@ -569,20 +535,7 @@ def analyze(
 
     # Explicit ComBat guards (only fire for explicit requests; 'auto'
     # resolves to combat_site_dummies_glm only when these guards are satisfied).
-    if harmonize in (
-        COMBAT_ONLY,
-        "combat",
-        "combat_no_site_glm",
-        "combat_no_site_dummies_glm",
-        COMBAT_SITE_DUMMIES_GLM,
-        "combat_site_glm",
-        "combat_plus_site_glm",
-        "combat_plus_site_dummies_glm",
-        "interest_orthogonal_combat",
-        "interest_orthogonal",
-        "nuisance_only",
-        "d",
-    ):
+    if harmonize in (COMBAT_ONLY, COMBAT_SITE_DUMMIES_GLM):
         if sites is None:
             raise ValueError(
                 f"{strategy} requires sites=...; otherwise "
@@ -667,8 +620,6 @@ def analyze(
         Y = res.Y_adjusted
         combat_diag = dict(res.diagnostics)
         combat_diag["strategy"] = strategy
-        if strategy == COMBAT_SITE_DUMMIES_GLM:
-            combat_diag["legacy_strategy"] = "D"
         combat_diag["preserve_columns"] = "confounds_only"
         ratio = combat_diag.get("between_site_variance_ratio_after_over_before")
         if ratio is not None and ratio > 0.5:
@@ -709,7 +660,6 @@ def analyze(
             )
             combat_diag = {
                 "strategy": SITE_DUMMIES_GLM,
-                "legacy_strategy": "E",
                 "preserve_columns": None,
             }
 

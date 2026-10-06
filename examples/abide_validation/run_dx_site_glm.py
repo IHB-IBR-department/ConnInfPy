@@ -1,4 +1,4 @@
-"""ABIDE Diagnosis → FC under analyze(harmonize='nuisance_only') — Strategy D.
+"""ABIDE Diagnosis → FC under analyze(harmonize='combat_site_dummies_glm') — Strategy D.
 
 Canonical ABIDE I group comparison using ComBat Strategy D:
 - ComBat is fit on residuals of interest (preserving confounds only).
@@ -64,7 +64,7 @@ def run_dx_strat_d(data: dict, atlas: AtlasInfo, n_perm: int, seed: int) -> None
         interest=group,
         confounds=confounds,
         sites=sites,
-        harmonize="nuisance_only",  # Strategy D
+        harmonize="combat_site_dummies_glm",  # Strategy D
         fisher_z=False,
         method="tfnbs",
         n_permutations=n_perm,

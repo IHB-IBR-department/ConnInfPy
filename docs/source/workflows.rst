@@ -270,20 +270,20 @@ sensitivity arms, depending on the question.
      - What ComBat does
      - GLM nuisance design
      - When to use
-   * - ``'combat_only'`` / ``'combat'``
+   * - ``'combat_only'``
      - ComBat only
      - Fits with ``preserve = confounds``; tested variable excluded
      - ``confounds``
      - Isolates what the ComBat transform contributes, without residual
        site fixed effects in the inferential GLM.
-   * - ``'combat_site_dummies_glm'`` / ``'nuisance_only'`` / ``'d'``
+   * - ``'combat_site_dummies_glm'``
      - ComBat + site GLM
      - Fits with ``preserve = confounds``; tested variable excluded
      - ``confounds + site dummies``
      - Primary recipe. Removes the Nygaard 2016 label leak and keeps residual
        site control in the inferential GLM. Requires ``sites=`` and
        ``confounds=``; GLM mode only.
-   * - ``'site_dummies_glm'`` / ``None`` / ``'e'``
+   * - ``'site_dummies_glm'`` / ``None``
      - Site GLM
      - Skipped
      - ``confounds + site dummies``

@@ -87,8 +87,6 @@ class InferenceResult(TailResult):
         ``between_site_variance_ratio_after_over_before`` key used by
         :func:`conninfpy.analyze` for residual-site flags.
         ``strategy='site_dummies_glm'`` records provenance but does not run ComBat.
-        ``legacy_strategy`` may contain the old ``'D'`` / ``'E'`` label from
-        early development versions for compatibility.
     """
 
     method: str

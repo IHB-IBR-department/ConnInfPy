@@ -128,7 +128,7 @@ class TestRecipeSmoke(unittest.TestCase):
             out.inference.combat_diagnostics["strategy"],
             "site_dummies_glm",
         )
-        self.assertEqual(out.inference.combat_diagnostics["legacy_strategy"], "E")
+        self.assertNotIn("legacy_strategy", out.inference.combat_diagnostics)
 
         joined = "\n".join(out.flags)
         self.assertIn("strata= auto-set", joined,
