@@ -19,6 +19,13 @@ from typing import Any, Dict, Optional, Sequence, Union
 import numpy as np
 import numpy.typing as npt
 
+from .defaults import (
+    DEFAULT_ACCELERATION,
+    DEFAULT_EXTENT_EXPONENT,
+    DEFAULT_HEIGHT_EXPONENT,
+    DEFAULT_N_PERMUTATIONS,
+    DEFAULT_N_THRESHOLDS_PERMUTATION,
+)
 from .results import InferenceResult, OmnibusInferenceResult
 from ._prepare import infer_input_kind, prepare_connectivity
 from ._rng import RngLike
@@ -292,11 +299,11 @@ def analyze(
     input: Optional[str] = None,
     fisher_z: Optional[bool] = None,
     method: Union[str, StatMethod] = "tfnbs",
-    acceleration: Optional[str] = "gpd",
-    n_permutations: int = 200,
-    e: Union[float, Sequence[float]] = 0.3,
-    h: Union[float, Sequence[float]] = 3.0,
-    n: int = 10,
+    acceleration: Optional[str] = DEFAULT_ACCELERATION,
+    n_permutations: int = DEFAULT_N_PERMUTATIONS,
+    e: Union[float, Sequence[float]] = DEFAULT_EXTENT_EXPONENT,
+    h: Union[float, Sequence[float]] = DEFAULT_HEIGHT_EXPONENT,
+    n: int = DEFAULT_N_THRESHOLDS_PERMUTATION,
     rng: RngLike = None,
     verbose: bool = False,
     use_mp: bool = True,
@@ -421,15 +428,15 @@ def analyze(
         ``input='z'``. Prefer ``input``.
     method : str, default ``'tfnbs'``
         Enhancement method.
-    acceleration : str, default ``'gpd'``
-        ``'gpd'`` / ``'gamma'`` / ``None``. GPD and gamma are
-        tail-approximation accelerators with empirical fallback; use
-        ``None`` and a larger permutation budget when an exact empirical
-        finite-permutation reference is required.
-    n_permutations : int, default ``200``
-        Permutations. The default is tuned for exploratory
-        GPD-accelerated inference; final empirical runs typically use a
-        larger value with ``acceleration=None``.
+    acceleration : str or None, default ``None``
+        ``None`` gives exact empirical permutation p-values. ``'gpd'`` /
+        ``'gamma'`` are tail-approximation accelerators with empirical
+        fallback: with ~200 permutations they reproduce large-budget
+        empirical p-values at a fraction of the cost — a good setting for
+        exploratory runs.
+    n_permutations : int, default ``1000``
+        Permutations. The same defaults apply to every entry point
+        (:mod:`conninfpy.defaults`).
     e, h : float or sequence of float, default ``0.3``, ``3.0``
         TFNBS exponents. Pass equal-length sequences to evaluate a
         whole ``(E, H)`` grid in one call — the threshold loop runs

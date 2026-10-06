@@ -31,7 +31,7 @@ __all__ = [
 # Constants — imported from unified defaults
 # =============================================================================
 
-from .defaults import DEFAULT_NBS_THRESHOLD, DEFAULT_NBS_STAT
+from .defaults import DEFAULT_NBS_STAT, DEFAULT_NBS_THRESHOLD, DEFAULT_N_PERMUTATIONS
 
 
 # =============================================================================
@@ -267,7 +267,7 @@ def nbs_bct(
     group2: Optional[npt.NDArray[np.float64]] = None,
     threshold: float = DEFAULT_NBS_THRESHOLD,
     stat_type: str = DEFAULT_NBS_STAT,
-    n_permutations: int = 100,
+    n_permutations: int = DEFAULT_N_PERMUTATIONS,
     test_type: str = "paired",
     use_mp: bool = True,
     random_state: Optional[int] = None,  # deprecated alias for `rng`
