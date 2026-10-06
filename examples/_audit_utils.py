@@ -43,6 +43,8 @@ import numpy as np
 import numpy.typing as npt
 from scipy import stats
 
+from conninfpy.results import summarize_by_network
+
 
 _EPS = 1e-12
 _TOPK_DEFAULTS = (10, 50, 100, 500)
@@ -122,23 +124,17 @@ def block_mass(
     """K × K block-mass matrix summing ``−log10 p`` over edges binned by
     pairs of network labels.
 
-    Symmetric: ``M[i, j] == M[j, i]``. Diagonal entries are within-network
-    sums of ``−log10 p`` over the upper triangle of the corresponding
-    block.
+    Symmetric: ``M[i, j] == M[j, i]``; rows/columns follow the label value
+    ``0..K-1``. Diagonal entries are within-network sums over the upper
+    triangle of the block. Computed by
+    :func:`conninfpy.results.summarize_by_network` (column
+    ``sum_neglog10p``), the same aggregation users get from
+    ``result.network_summary(atlas)``.
     """
-    N = p_full.shape[0]
-    K = int(net_labels.max() + 1)
-    neglog = -np.log10(p_full + _EPS)
-    M = np.zeros((K, K), dtype=np.float64)
-    iu, ju = np.triu_indices(N, k=1)
-    bi = net_labels[iu]
-    bj = net_labels[ju]
-    lo = np.minimum(bi, bj)
-    hi = np.maximum(bi, bj)
-    np.add.at(M, (lo, hi), neglog[iu, ju])
-    # Mirror to symmetric form (off-diagonal only).
-    M = M + np.triu(M, 1).T
-    return M
+    order = [str(k) for k in range(int(net_labels.max() + 1))]
+    M = summarize_by_network({"p": p_full}, [str(int(k)) for k in net_labels],
+                             as_matrix="sum_neglog10p_p")
+    return M.reindex(index=order, columns=order, fill_value=0.0).to_numpy()
 
 
 def block_mass_correlation(

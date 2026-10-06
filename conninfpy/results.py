@@ -35,9 +35,76 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
 
 from ._compat import TailResult, make_tail_result
-from ._export import build_tailed_dataframe, build_omnibus_dataframe
+from ._export import (
+    build_network_summary,
+    build_omnibus_dataframe,
+    build_tailed_dataframe,
+    network_summary_matrix,
+)
+
+
+def summarize_by_network(
+    p_maps: Any,
+    networks: Any,
+    *,
+    alpha: float = 0.05,
+    as_matrix: Optional[str] = None,
+) -> pd.DataFrame:
+    """Aggregate edge-wise p-value maps over pairs of atlas networks.
+
+    One row per unordered network pair (within-network pairs included):
+    the number of possible edges, the number and proportion of edges with
+    ``p <= alpha`` per tail, and the ``-log10 p`` mass per tail (sum and
+    mean over the block). Network-pair summaries are typically far more
+    reproducible across cohorts than individual edges, so report them
+    alongside edge tables.
+
+    Parameters
+    ----------
+    p_maps : dict of str -> ndarray of shape (N, N), or ndarray
+        P-value maps keyed by tail, e.g. ``{'positive': p_pos,
+        'negative': p_neg}``; a single array is summarized as tail ``'p'``.
+        Edges are taken from the upper triangle.
+    networks : AtlasInfo or sequence of str
+        An atlas (its per-ROI ``networks`` field defines the partition) or
+        one network label per ROI. Any user-defined partition works.
+    alpha : float, default 0.05
+        Significance threshold (``p <= alpha``).
+    as_matrix : str, optional
+        Return one column as a symmetric K × K DataFrame (networks in
+        first-appearance order) instead of the table, e.g.
+        ``'sum_neglog10p_positive'`` or ``'signed_proportion'``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``network_a``, ``network_b``, ``network_pair``,
+        ``within_network``, ``n_edges``, and per tail ``t``: ``n_sig_t``,
+        ``prop_sig_t``, ``sum_neglog10p_t``, ``mean_neglog10p_t``; plus
+        ``signed_proportion`` = ``(n_sig_positive - n_sig_negative) /
+        n_edges`` when both directional tails are given.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> p = np.full((4, 4), 0.5); p[0, 1] = p[1, 0] = 0.01
+    >>> summarize_by_network({"positive": p}, ["A", "A", "B", "B"])[
+    ...     ["network_pair", "n_edges", "n_sig_positive"]]
+      network_pair  n_edges  n_sig_positive
+    0          A—A        1               1
+    1          A—B        4               0
+    2          B—B        1               0
+    """
+    if not isinstance(p_maps, dict):
+        p_maps = {"p": p_maps}
+    labels = list(getattr(networks, "networks", networks))
+    summary = build_network_summary(p_maps, labels, alpha=alpha)
+    if as_matrix is not None:
+        return network_summary_matrix(summary, as_matrix)
+    return summary
 
 
 class InferenceResult(TailResult):
@@ -351,6 +418,27 @@ class InferenceResult(TailResult):
             top_k=top_k,
         )
 
+    def network_summary(
+        self,
+        atlas: Any,
+        *,
+        alpha: float = 0.05,
+        param_idx: Optional[int] = None,
+        as_matrix: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """Aggregate this result over pairs of atlas networks.
+
+        Shortcut for :func:`summarize_by_network` on the ``positive`` /
+        ``negative`` p-value maps; see it for the columns. ``atlas`` is an
+        :class:`~conninfpy.atlas.AtlasInfo` (or one network label per
+        ROI); ``param_idx`` selects a cell of an (E, H) grid result.
+        """
+        p_maps = {
+            "positive": self._project_2d(np.asarray(self["positive"]), param_idx),
+            "negative": self._project_2d(np.asarray(self["negative"]), param_idx),
+        }
+        return summarize_by_network(p_maps, atlas, alpha=alpha, as_matrix=as_matrix)
+
     def to_csv(
         self,
         path: "Any",
@@ -526,6 +614,21 @@ class OmnibusInferenceResult(TailResult):
             top_k=top_k,
         )
 
+    def network_summary(
+        self,
+        atlas: Any,
+        *,
+        alpha: float = 0.05,
+        as_matrix: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """Aggregate the omnibus p-values over pairs of atlas networks.
+
+        Shortcut for :func:`summarize_by_network` with the single tail
+        ``'omnibus'``; see it for the columns.
+        """
+        return summarize_by_network({"omnibus": np.asarray(self["omnibus"])}, atlas,
+                                    alpha=alpha, as_matrix=as_matrix)
+
     def to_csv(
         self,
         path: "Any",
@@ -611,4 +714,5 @@ __all__ = [
     "InferenceResult",
     "OmnibusInferenceResult",
     "make_inference_result",
+    "summarize_by_network",
 ]

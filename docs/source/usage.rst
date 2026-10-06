@@ -374,3 +374,29 @@ Two-sample designs use ``group:`` and ``levels: [group1, group2]``
 Rows with a missing value in any column the design uses are dropped and
 counted in ``provenance.json``. ``python -m conninfpy`` is equivalent.
 
+
+Network-level summaries — ``result.network_summary(atlas)``
+-----------------------------------------------------------
+
+Edge-level findings often replicate poorly across cohorts while the pattern
+over pairs of functional networks is far more stable, so report network-pair
+summaries alongside edge tables. :meth:`~conninfpy.results.InferenceResult.network_summary`
+aggregates a result over pairs of networks defined by the per-region
+``networks`` field of an :class:`~conninfpy.atlas.AtlasInfo` — Yeo-7,
+Yeo-17, lobes, or any partition you supply (a plain list of per-region labels
+also works):
+
+.. code-block:: python
+
+   table = out.network_summary(atlas, alpha=0.05)
+   # network_a, network_b, network_pair, within_network, n_edges,
+   # n_sig_positive / n_sig_negative, prop_sig_*, signed_proportion,
+   # sum_neglog10p_* / mean_neglog10p_*  (* = positive, negative)
+
+   mass = out.network_summary(atlas, as_matrix="sum_neglog10p_positive")  # K × K
+
+For raw p-value maps (e.g. loaded from disk) use
+:func:`conninfpy.results.summarize_by_network`. The same numbers drive
+:func:`conninfpy.plot.plot_network_summary` (``signed_proportion``), and
+:func:`conninfpy.harmonize.block_mass` returns the significant-edge counts.
+

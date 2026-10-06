@@ -215,12 +215,22 @@ out.flags                          # plain-English notes on what analyze() decid
 out.combat_diagnostics             # set when ComBat ran
 
 out.significant_edges(atlas)       # sorted, atlas-annotated edge table (DataFrame)
+out.network_summary(atlas)         # one row per network pair: counts, proportions, -log10 p mass
 out.to_csv("edges.csv", atlas=atlas)
 out.inference.n_significant(0.05)  # {'positive': ..., 'negative': ...}
 
 from conninfpy.plot import summary_figure
 summary_figure(out.inference, atlas=atlas).savefig("summary.pdf")
 ```
+
+**Network-level summaries.** Specific edges often replicate poorly across
+cohorts while network-pair patterns are much more stable, so report both.
+`out.network_summary(atlas)` aggregates the result over pairs of networks
+taken from the atlas's per-region `networks` labels — any partition you
+define: the number of possible edges, significant edges and their proportion
+per direction, a signed proportion, and the summed / mean −log₁₀ p.
+`as_matrix="sum_neglog10p_positive"` (or any other column) returns a K × K
+table; `conninfpy.plot.plot_network_summary` draws the signed proportion.
 
 `conninfpy.AtlasInfo` ships Schaefer-100/200/400 (Yeo-7) and Brainnetome-246;
 `AtlasInfo.from_csv()` reads any other atlas. With the `decode` extra,
