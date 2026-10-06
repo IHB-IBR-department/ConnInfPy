@@ -44,6 +44,10 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # GitHub rejects the `secrets` context inside a step-level `if:` (the
+    # whole workflow fails to load), so expose only a true/false flag here.
+    env:
+      HAS_OPENROUTER_KEY: ${{ secrets.OPENROUTER_API_KEY != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -71,8 +75,10 @@ jobs:
       # PRs. The `if` guard matters: writing an empty .env would make the
       # dotenv test *fail* instead of *skip*.
       - name: Materialize .env from secret (if available)
-        if: ${{ secrets.OPENROUTER_API_KEY != '' }}
-        run: echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" > .env
+        if: ${{ env.HAS_OPENROUTER_KEY == 'true' }}
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY" > .env
 
       # `-q` keeps the log readable on a 3-leg matrix; warnings are
       # disabled because third-party deps currently emit a fair amount of
