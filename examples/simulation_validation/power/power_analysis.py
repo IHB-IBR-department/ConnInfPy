@@ -379,23 +379,24 @@ def _parallel_worker_batched(task):
     )
 
 # =============================================================================
-# TIME ESTIMATION — benchmarked with numba backend, 60 nodes, n_thresholds=30
+# TIME ESTIMATION — measured in the paper run (60 nodes, n = 30, 10 thresholds)
 # =============================================================================
 
-# Per-task seconds at 100 permutations (measured on Apple M-series, numba)
-_BENCH_PERMS = 100
+# Seconds per task at 1000 permutations, measured inside the workers while
+# 18 ran in parallel on an Apple M5 Pro (so sum / n_cores is wall time).
+_BENCH_PERMS = 1000
 _TASK_SECS = {
-    "tstat": 0.9,
-    "tfnbs": 5.5,           # batched 176 (e,h) combos
-    "ni_tfnbs": 4.8,        # batched 176 (e,h) combos
-    "fbc_tfnbs": 4.7,       # batched 176 (e,h) combos
-    "nbs_extent": 1.2,      # per threshold variant
-    "nbs_intensity": 1.5,   # per threshold variant
-    "cnbs": 1.3,
-    "bonferroni": 0.02,     # parametric, no permutations
-    "bh_fdr": 0.02,         # parametric, no permutations
-    "bh_fdr_perm": 0.9,     # permutation-based, same as tstat
+    "tstat": 0.20,
+    "tfnbs": 0.40,          # one (e,h) cell; add _TFNBS_SECS_PER_EH per extra cell
+    "ni_tfnbs": 0.63,
+    "fbc_tfnbs": 0.64,
+    "nbs_extent": 0.58,     # per threshold variant
+    "nbs_intensity": 0.57,
+    "cnbs": 0.45,
+    "bh_fdr_perm": 0.21,
 }
+_TFNBS_SECS_PER_EH = 0.04
+_PARAMETRIC_SECS = {"bonferroni": 0.03, "bh_fdr": 0.03}  # no permutations
 
 
 def estimate_runtime(
@@ -425,7 +426,14 @@ def estimate_runtime(
 
     total_task_secs = 0.0
     for method, param_list in batched_groups:
-        base_time = _TASK_SECS.get(method, 2.0)
+        if method in _PARAMETRIC_SECS:
+            total_task_secs += _PARAMETRIC_SECS[method]
+            continue
+        prefix, _, _ = method.rpartition("_")
+        key = prefix if prefix in ("nbs_extent", "nbs_intensity") else method
+        base_time = _TASK_SECS.get(key, 1.0)
+        if method in TFNBS_METHODS:
+            base_time += (len(param_list) - 1) * _TFNBS_SECS_PER_EH
         total_task_secs += base_time * perm_scale
 
     sequential = total_task_secs * n_conditions
@@ -508,6 +516,9 @@ def _expand_options(base: dict, overrides: dict) -> List[dict]:
 # CHECKPOINTING
 # =============================================================================
 
+CHECKPOINT_MIN_SECONDS = 300
+
+
 def save_checkpoint(results: List[PowerResult], checkpoint_path: Path) -> None:
     """Save intermediate results to checkpoint file."""
     df = pd.DataFrame([vars(r) for r in results])
@@ -519,19 +530,21 @@ def load_checkpoint(checkpoint_path: Path) -> Tuple[List[PowerResult], set]:
     if not checkpoint_path.exists():
         return [], set()
 
-    df = pd.read_csv(checkpoint_path)
+    # keep_default_na=False: an empty method_params must stay "" (as in the
+    # task keys), not become NaN, or those runs are redone and duplicated
+    df = pd.read_csv(checkpoint_path, keep_default_na=False)
     results = []
     completed = set()
 
     casts = {f.name: f.type for f in fields(PowerResult)}
-    casts = {name: {"int": int, "float": float}.get(t, lambda v: v) for name, t in casts.items()}
+    casts = {name: {"int": int, "float": float}.get(t, str) for name, t in casts.items()}
     for _, row in df.iterrows():
         result = PowerResult(**{name: cast(row[name]) for name, cast in casts.items()})
         results.append(result)
         # Key: (method, method_params, scenario, effect_size, n_samples, repeat_id)
         completed.add((
-            row["method"],
-            row["method_params"],
+            result.method,
+            result.method_params,
             row["scenario"],
             float(row["effect_size"]),
             int(row["n_samples"]),
@@ -686,10 +699,15 @@ def run_power_vs_effect_size(
     if checkpoint_dir is not None:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = checkpoint_dir / "checkpoint_effect_size.csv"
+        # A completed run has removed its checkpoint; resume from its results
+        if not checkpoint_path.exists() and (checkpoint_dir / "power_vs_effect_size.csv").exists():
+            resume_path = checkpoint_dir / "power_vs_effect_size.csv"
+        else:
+            resume_path = checkpoint_path
 
     # Load checkpoint if resuming
-    if resume and checkpoint_path and checkpoint_path.exists():
-        results, completed = load_checkpoint(checkpoint_path)
+    if resume and checkpoint_path and resume_path.exists():
+        results, completed = load_checkpoint(resume_path)
         print(f"Resuming from checkpoint: {len(completed)} runs already completed")
     else:
         results = []
@@ -758,6 +776,7 @@ def run_power_vs_effect_size(
             unit="task",
             miniters=1,
         )
+        last_save = time.monotonic()
         for i, batch_results in enumerate(pbar, 1):
             results.extend(batch_results)
             pbar.set_postfix_str(
@@ -765,8 +784,12 @@ def run_power_vs_effect_size(
                 f"ES={batch_results[0].effect_size}"
             )
 
-            if checkpoint_path and (i % checkpoint_every == 0 or i == len(full_tasks)):
+            # Each save rewrites every result so far; throttle by time, or the
+            # writes grow quadratically and stall the workers on large grids
+            due = i % checkpoint_every == 0 and time.monotonic() - last_save > CHECKPOINT_MIN_SECONDS
+            if checkpoint_path and (due or i == len(full_tasks)):
                 save_checkpoint(results, checkpoint_path)
+                last_save = time.monotonic()
 
     return pd.DataFrame([vars(r) for r in results])
 
@@ -803,10 +826,15 @@ def run_power_vs_sample_size(
     if checkpoint_dir is not None:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = checkpoint_dir / "checkpoint_sample_size.csv"
+        # A completed run has removed its checkpoint; resume from its results
+        if not checkpoint_path.exists() and (checkpoint_dir / "power_vs_sample_size.csv").exists():
+            resume_path = checkpoint_dir / "power_vs_sample_size.csv"
+        else:
+            resume_path = checkpoint_path
 
     # Load checkpoint if resuming
-    if resume and checkpoint_path and checkpoint_path.exists():
-        results, completed = load_checkpoint(checkpoint_path)
+    if resume and checkpoint_path and resume_path.exists():
+        results, completed = load_checkpoint(resume_path)
         print(f"Resuming from checkpoint: {len(completed)} runs already completed")
     else:
         results = []
@@ -875,6 +903,7 @@ def run_power_vs_sample_size(
             unit="task",
             miniters=1,
         )
+        last_save = time.monotonic()
         for i, batch_results in enumerate(pbar, 1):
             results.extend(batch_results)
             pbar.set_postfix_str(
@@ -882,8 +911,12 @@ def run_power_vs_sample_size(
                 f"N={batch_results[0].n_samples}"
             )
 
-            if checkpoint_path and (i % checkpoint_every == 0 or i == len(full_tasks)):
+            # Each save rewrites every result so far; throttle by time, or the
+            # writes grow quadratically and stall the workers on large grids
+            due = i % checkpoint_every == 0 and time.monotonic() - last_save > CHECKPOINT_MIN_SECONDS
+            if checkpoint_path and (due or i == len(full_tasks)):
                 save_checkpoint(results, checkpoint_path)
+                last_save = time.monotonic()
 
     return pd.DataFrame([vars(r) for r in results])
 

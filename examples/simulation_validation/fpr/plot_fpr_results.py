@@ -705,8 +705,10 @@ def plot_paper_fwer_calibration(
 
     labels = method_labels or {}
     panels = [
-        ("fwer_max_tail", "fwer_ci_low", "fwer_ci_high",
-         rf"(a) Per direction: worse tail, $\alpha$ = {alpha:.3g} per tail"),
+        # One pre-specified direction: the worse of two tails would be biased
+        # upwards. Both tails enter the simultaneous test in fpr_summary.txt.
+        ("fwer_pos", "fwer_pos_ci_low", "fwer_pos_ci_high",
+         rf"(a) One direction (group 2 > group 1), $\alpha$ = {alpha:.3g}"),
         ("fwer_two_sided_bonf", "fwer_two_sided_bonf_ci_low", "fwer_two_sided_bonf_ci_high",
          rf"(b) Two-sided: either tail, $\alpha/2$ = {alpha / 2:.3g} per tail"),
     ]
