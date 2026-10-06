@@ -206,6 +206,20 @@ class TestPlantedEffectSize(unittest.TestCase):
         diff = ds.group2.mean(axis=0) - ds.group1.mean(axis=0)
         self.assertAlmostEqual(float(diff[planted].mean()), 0.2, delta=0.01)
 
+    def test_population_diff_is_exposed(self):
+        gen = TopologyDatasetGenerator(n_nodes=N_NODES, n_modules=N_MODULES, seed=0)
+        ds = gen.generate("chain", effect_size=0.1, n_samples=2, time_points=10)
+        planted = ds.effect_mask != 0
+        np.testing.assert_allclose(ds.population_diff, ds.population_diff.T, atol=1e-12)
+        # No projection needed at this size: unplanted edges are exactly null
+        self.assertLess(float(np.abs(ds.population_diff[~planted]).max()), 1e-12)
+        self.assertAlmostEqual(float(ds.population_diff[planted].mean()), 0.1, delta=0.02)
+
+    def test_null_dataset_has_identical_populations(self):
+        gen = TopologyDatasetGenerator(n_nodes=N_NODES, n_modules=N_MODULES, seed=0)
+        ds = gen.generate("hub", effect_size=0.0, n_samples=2, time_points=10)
+        self.assertEqual(float(np.abs(ds.population_diff).max()), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

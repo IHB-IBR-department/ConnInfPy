@@ -412,7 +412,8 @@ class ModularDatasetGenerator:
         effect_size: float, 
         n_samples_g1: int = 50, 
         n_samples_g2: int = 50,
-        time_points: int = 200
+        time_points: int = 200,
+        return_population: bool = False,
     ):
         """
         Generates sample correlation matrices for two groups.
@@ -432,14 +433,19 @@ class ModularDatasetGenerator:
             The matrix is treated as undirected: it will be symmetrized internally
             and its diagonal will be set to 0.
         effect_size : float
-            Magnitude of the effect (Cohen's d-like shift in correlation). 
-            Positive values increase correlation, negative values decrease it.
+            Shift of the population correlation on masked edges (Delta r, not
+            Cohen's d). Positive values increase correlation, negative values
+            decrease it. If the shifted matrix is not positive definite it is
+            projected back, which attenuates the shift and moves some
+            unmasked edges; ``return_population=True`` exposes the result.
         n_samples_g1 : int
             Number of subjects in Group 1 (Control).
         n_samples_g2 : int
             Number of subjects in Group 2 (Test).
         time_points : int
             Length of the simulated BOLD time-series. Higher values reduce sampling noise.
+        return_population : bool
+            Also return the two population correlation matrices.
 
         Returns
         -------
@@ -449,6 +455,9 @@ class ModularDatasetGenerator:
             Correlation matrices for Group 2.
         labels : np.ndarray (N,)
             Vector of module assignments for nodes.
+        cov_g1, cov_g2 : np.ndarray (N, N)
+            Population correlation matrices of the two groups; only returned
+            when ``return_population=True``.
         """
         effect_mask = np.asarray(effect_mask, dtype=np.float64)
         if effect_mask.shape != (self.N, self.N):
@@ -475,7 +484,8 @@ class ModularDatasetGenerator:
         # Apply effect: Delta = (Target_Shift + Noise) * Mask
         # - For binary masks (0/1), this reduces to a constant mean shift on masked edges.
         # - For signed/weighted masks, this enables mixed-sign and graded effects.
-        update_vals = (effect_size + effect_noise) * effect_mask
+        # - effect_size=0 is an exact null: the noise only varies a real effect.
+        update_vals = (effect_size + effect_noise) * effect_mask * (effect_size != 0)
         cov_g2 += update_vals
         
         # Re-enforce SPD property after modification. Without an effect the
@@ -502,5 +512,7 @@ class ModularDatasetGenerator:
 
         g1_data = sample_subject_matrices(cov_g1, n_samples_g1)
         g2_data = sample_subject_matrices(cov_g2, n_samples_g2)
-        
+
+        if return_population:
+            return g1_data, g2_data, self.labels, cov_g1, cov_g2
         return g1_data, g2_data, self.labels

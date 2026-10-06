@@ -9,7 +9,12 @@ Figures generated:
 2.  TPR/FDR Heatmap (Topologies vs Methods)
 3.  Effect Size Sweep (TPR curves)
 4.  TFNBS (E,H) Sweep (TPR/FDR heatmaps)
-5.  Prior Misspecification Impact
+5.  Prior Misspecification Impact, m_min sensitivity
+
+Tables (results/tables): the TPR matrix and the FDR ranking of the manuscript.
+
+Effect sizes are shifts of the population correlation on the planted edges
+(Delta r), not Cohen's d.
 
 GLM figures are intentionally skipped until the GLM validation run is
 regenerated.
@@ -54,7 +59,7 @@ METHOD_ORDER = [
     "cnbs", "tfnbs", "ni_tfnbs", "fbc_tfnbs",
 ]
 METHOD_LABELS = {
-    "tstat": "T-stat (uncorr)",
+    "tstat": "Max-t (perm.)",
     "bonferroni": "Bonferroni",
     "bh_fdr": "BH-FDR",
     "nbs_extent": r"NBS Ext ($\tau=2$)",
@@ -73,6 +78,9 @@ GENERATE_GLM_FIGURES = False
 PAPER_TFNBS_E = 0.4
 PAPER_TFNBS_H = 3.0
 TFNBS_METHODS = {"tfnbs", "ni_tfnbs", "fbc_tfnbs"}
+POWER_DIR = RESULTS_DIR / "power" / "power_analysis_1000_30"
+HEATMAP_EFFECT = 0.125  # Delta r of the TPR matrix, power heatmap and (E,H) sweep
+FDR_EFFECT = 0.25       # Delta r of the FDR ranking table
 
 TOPOLOGY_ORDER = [
     "hub", "rich_club", "chain", "within_module_dense", "between_modules_dense",
@@ -152,31 +160,24 @@ def _filter_paper_tfnbs_params(df: pd.DataFrame) -> pd.DataFrame:
     return filtered
 
 
-def plot_power_heatmap(effect_size: float = 0.25):
-    """Plot TPR and FDR heatmap for a specific effect size."""
-    candidates = [
-        RESULTS_DIR / "power" / "power_analysis_1000_30",
-        RESULTS_DIR / "power_analysis_1000_30",
-    ]
-    res_dir = next((path for path in candidates if (path / "power_vs_effect_size.csv").exists()), None)
-    if res_dir is None:
-        print("Skipping Power Heatmap: no power_vs_effect_size.csv found.")
-        return
+def _load_power_results() -> pd.DataFrame | None:
+    """Raw power results, TFNBS rows restricted to the paper (E, H)."""
+    df_path = POWER_DIR / "power_vs_effect_size.csv"
+    if not df_path.exists():
+        print(f"Skipping power figures/tables: {df_path} not found.")
+        return None
+    print(f"Using power results from: {POWER_DIR}")
+    return _filter_paper_tfnbs_params(pd.read_csv(df_path))
 
-    print(f"Using power results from: {res_dir}")
-    df_path = res_dir / "power_vs_effect_size.csv"
-    df = pd.read_csv(df_path)
-    
-    # Try requested ES, if not there pick closest or middle
-    es_vals = df["effect_size"].unique()
-    if effect_size not in es_vals:
-        effect_size = es_vals[len(es_vals)//2]
-        
+
+def plot_power_heatmap(effect_size: float = HEATMAP_EFFECT):
+    """Plot TPR and FDR heatmap for a specific effect size."""
+    df = _load_power_results()
+    if df is None:
+        return
     sub = df[np.isclose(df["effect_size"], effect_size)]
-    sub = _filter_paper_tfnbs_params(sub)
-    
     if sub.empty:
-        print(f"No results for effect_size={effect_size}. Available: {es_vals}")
+        print(f"No results for effect_size={effect_size}. Available: {sorted(df['effect_size'].unique())}")
         return
 
     # Filter methods to those in METHOD_ORDER and present in data
@@ -197,16 +198,16 @@ def plot_power_heatmap(effect_size: float = 0.25):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 11), sharex=True)
     
     sns.heatmap(tpr_pivot, annot=True, fmt=".2f", cmap="YlGnBu", ax=ax1, vmin=0, vmax=1, cbar_kws={'label': 'TPR'})
-    ax1.set_title(f"True Positive Rate (TPR) @ d={effect_size}", fontsize=12, fontweight="bold")
+    ax1.set_title(rf"True Positive Rate (TPR) @ $\Delta r$={effect_size}", fontsize=12, fontweight="bold")
     ax1.set_ylabel("Scenario")
     
     sns.heatmap(fdr_pivot, annot=True, fmt=".2f", cmap="RdYlGn_r", ax=ax2, vmin=0, vmax=0.2, cbar_kws={'label': 'FDR'})
-    ax2.set_title(f"False Discovery Rate (FDR) @ d={effect_size}", fontsize=12, fontweight="bold")
+    ax2.set_title(rf"False Discovery Rate (FDR) @ $\Delta r$={effect_size}", fontsize=12, fontweight="bold")
     ax2.set_ylabel("Scenario")
     
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
-    fig.savefig(OUTPUT_DIR / f"fig2_power_heatmap_d{effect_size}.png", dpi=300, bbox_inches="tight")
+    fig.savefig(OUTPUT_DIR / f"fig2_power_heatmap_dr{effect_size}.png", dpi=300, bbox_inches="tight")
     print(f"Saved Fig 2 (2-row layout) to {OUTPUT_DIR}")
     plt.close(fig)
 
@@ -216,16 +217,9 @@ def plot_power_heatmap(effect_size: float = 0.25):
 
 def plot_effect_size_sweep():
     """Plot TPR vs Effect Size for all methods across topologies."""
-    candidates = [
-        RESULTS_DIR / "power" / "power_analysis_1000_30",
-        RESULTS_DIR / "power_analysis_1000_30",
-    ]
-    res_dir = next((path for path in candidates if (path / "power_vs_effect_size.csv").exists()), None)
-    if res_dir is None:
+    df = _load_power_results()
+    if df is None:
         return
-
-    df_path = res_dir / "power_vs_effect_size.csv"
-    df = pd.read_csv(df_path)
     
     # Identify topologies present in data
     topos_in_data = [t for t in TOPOLOGY_ORDER if t in df["scenario"].values]
@@ -257,7 +251,7 @@ def plot_effect_size_sweep():
                             summary["mean"] + 1.96*summary["se"], alpha=0.1)
 
         ax.set_title(TOPOLOGY_LABELS.get(topo, topo), fontsize=9)
-        ax.set_xlabel("Effect Size (Cohen's d)")
+        ax.set_xlabel(r"Effect size $\Delta r$")
         if i % n_cols == 0:
             ax.set_ylabel("True Positive Rate (TPR)")
         ax.grid(True, alpha=0.3)
@@ -275,15 +269,9 @@ def plot_effect_size_sweep():
 # FIGURE 4: TFNBS (E,H) SWEEP
 # =============================================================================
 
-def plot_tfnbs_eh_sweep(effect_size: float = 0.25):
+def plot_tfnbs_eh_sweep(effect_size: float = HEATMAP_EFFECT):
     """Plot TFNBS TPR/FDR over the (E,H) grid for first-row topologies."""
-    summary_path = (
-        RESULTS_DIR
-        / "power"
-        / "power_analysis_1000_30"
-        / "derived"
-        / "tfnbs_eh_sweep_effect_size.csv"
-    )
+    summary_path = POWER_DIR / "derived" / "tfnbs_eh_sweep_effect_size.csv"
     if not summary_path.exists():
         print(f"Skipping TFNBS E/H sweep: {summary_path} not found.")
         return
@@ -362,13 +350,13 @@ def plot_mmin_sensitivity():
         summary_fdr["se"] = summary_fdr["std"] / np.sqrt(summary_fdr["count"])
         ax2.errorbar(summary_fdr["m_min"], summary_fdr["mean"], yerr=1.96*summary_fdr["se"], label=TOPOLOGY_LABELS.get(topo, topo), marker='s')
 
-    ax1.set_title(f"TPR vs $m_{{min}}$ (FBC-TFNBS, d={es:.2f})")
+    ax1.set_title(f"TPR vs $m_{{min}}$ (FBC-TFNBS, $\\Delta r$={es:.3g})")
     ax1.set_xlabel("$m_{min}$")
     ax1.set_ylabel("TPR")
     ax1.grid(True, alpha=0.3)
     ax1.legend()
     
-    ax2.set_title(f"FDR vs $m_{{min}}$ (FBC-TFNBS, d={es:.2f})")
+    ax2.set_title(f"FDR vs $m_{{min}}$ (FBC-TFNBS, $\\Delta r$={es:.3g})")
     ax2.set_xlabel("$m_{min}$")
     ax2.set_ylabel("FDR")
     ax2.axhline(0.05, color='red', linestyle='--', alpha=0.5)
@@ -577,7 +565,7 @@ def plot_glm_power():
 # TOPOLOGY GALLERY
 # =============================================================================
 
-def plot_topology_gallery_representative(effect_size: float = 0.3, n_samples: int = 30):
+def plot_topology_gallery_representative(effect_size: float = HEATMAP_EFFECT, n_samples: int = 30):
     """Plot representative ground truth and t-stats for all topologies."""
     print(f"Generating Topology Gallery (es={effect_size}, n={n_samples})...")
     plot_topology_gallery(
@@ -588,6 +576,36 @@ def plot_topology_gallery_representative(effect_size: float = 0.3, n_samples: in
 
 
 # =============================================================================
+# TABLES: TPR MATRIX AND FDR RANKING
+# =============================================================================
+
+def write_power_tables() -> None:
+    """Write the manuscript's power tables as CSV (mean and Monte-Carlo SE)."""
+    df = _load_power_results()
+    if df is None:
+        return
+    out_dir = RESULTS_DIR / "tables"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    metrics = ["TPR", "FDR", "FDR_strict"]
+    cell = df.groupby(["effect_size", "method", "scenario"])[metrics].agg(["mean", "sem", "count"])
+    cell.columns = ["_".join(c) for c in cell.columns]
+    cell = cell.reset_index()
+    cell.to_csv(out_dir / "power_by_method_topology.csv", index=False)
+
+    tpr = cell[np.isclose(cell["effect_size"], HEATMAP_EFFECT)].pivot(
+        index="method", columns="scenario", values="TPR_mean")
+    tpr = tpr.reindex(index=[m for m in METHOD_ORDER if m in tpr.index],
+                      columns=[t for t in TOPOLOGY_ORDER if t in tpr.columns])
+    tpr.round(3).to_csv(out_dir / f"tpr_matrix_dr{HEATMAP_EFFECT}.csv")
+
+    # FDR ranking: per-topology means averaged over topologies
+    fdr = cell[np.isclose(cell["effect_size"], FDR_EFFECT)].groupby("method")[
+        ["FDR_mean", "FDR_strict_mean", "TPR_mean"]].mean()
+    fdr.sort_values("FDR_mean").round(3).to_csv(out_dir / f"fdr_ranking_dr{FDR_EFFECT}.csv")
+    print(f"Saved power tables to {out_dir}")
+
+
+# =============================================================================
 # MAIN
 # =============================================================================
 
@@ -595,12 +613,14 @@ def main() -> None:
     """Regenerate all simulation paper figures from existing result tables."""
     print(f"Regenerating paper figures into {OUTPUT_DIR}...")
     
-    plot_topology_gallery_representative(effect_size=0.3, n_samples=30)
+    plot_topology_gallery_representative()
     plot_fwer_calibration()
-    plot_power_heatmap(effect_size=0.25)
+    plot_power_heatmap()
+    write_power_tables()
     plot_effect_size_sweep()
-    plot_tfnbs_eh_sweep(effect_size=0.25)
+    plot_tfnbs_eh_sweep()
     plot_prior_misspecification()
+    plot_mmin_sensitivity()
     
     if GENERATE_GLM_FIGURES:
         plot_glm_fwer_calibration()

@@ -3,18 +3,13 @@
 # Validates that all methods maintain nominal directional FWER under null
 # hypothesis. Edge-wise FPR is reported only as a secondary diagnostic.
 #
-# Usage:
-#   # For full run (all methods, 1000 null datasets)
-#   python examples/fpr/fpr_calibration.py --config examples/fpr/fpr_config_server_run.yaml
+# Usage (from the repository root):
+#   python examples/simulation_validation/fpr/fpr_calibration.py \
+#       --config examples/simulation_validation/configs/fpr_config_1000.yaml
+#   # add --resume to continue an interrupted run, --n-null 100 for a quick pass
 #
-#   # Resume interrupted run
-#   python examples/fpr/fpr_calibration.py --config examples/fpr/fpr_config_server_run.yaml --resume
-#
-#   # Override specific parameters
-#   python examples/fpr/fpr_calibration.py --config examples/fpr/fpr_config_server_run.yaml --n-null 500
-#
-# Estimated runtime: ~4-8 hours with n_jobs=-1 (depending on hardware)
-# Code consists of checkpointing, allowing for interruption and resumtion of computations.
+# Run time: ~40 min on an Apple M5 Pro (4,000 datasets x 11 methods).
+# Results are checkpointed, so an interrupted run can be resumed.
 
 # =============================================================================
 # METHODS TO TEST
@@ -38,9 +33,9 @@ methods:
 # NULL SIMULATION PARAMETERS
 # =============================================================================
 
-# Number of null datasets (effect_size=0) to generate
-# 1000 provides ~95% CI width of ~0.014 for FPR (Clopper-Pearson)
-n_null: 100
+# Number of null datasets per sample size. With 1000, the 95% Clopper-Pearson
+# interval around a true FWER of 0.05 is about [0.037, 0.065].
+n_null: 1000
 
 # Permutations per null test
 # Higher = more accurate p-values, slower execution
@@ -66,18 +61,17 @@ sample_sizes: [10, 30, 50, 100]   # full sample-size sweep, matches prior run
 intra_corr: 0.3    # Within-module correlation (moderate)
 inter_corr: 0.05   # Between-module correlation (weak)
 noise_level: 0.05  # Noise added to correlations
+time_points: 30    # Time points per simulated subject (as in the power simulations)
 
 # =============================================================================
 # TFNBS PARAMETERS
 # =============================================================================
 
-# FPR calibration uses the same canonical TFNBS parameters as the real-data
-# validation suites (ABIDE and Open-Close): E=0.4, H=3.0. For FPR
-# calibration we want one canonical (E,H) per summary row; scan (E,H)
-# sensitivity through power_analysis.py, where grid mode is batched.
+# Same TFNBS settings as the empirical analyses (ABIDE, Open-Close) and the
+# power simulations: E=0.4, H=3.0, 10 thresholds from 1.65.
 tfnbs_e: 0.4
 tfnbs_h: 3.0
-tfnbs_n: 50               # Number of threshold integration steps
+tfnbs_n: 10               # Number of threshold integration steps
 tfnbs_start_thres: 1.65   # Starting threshold (p < 0.05 one-tailed)
 
 # =============================================================================
@@ -109,7 +103,7 @@ seed: 42
 use_mp: false
 
 # Parallel jobs for null runs ACROSS tests
-# -1 = use all available cores (recommended for speed; ~30-60 min for 1000 nulls × 4 sample sizes)
+# -1 = use all available cores
 # 1 = sequential execution (slow but easier debugging)
 n_jobs: -1
 
@@ -122,7 +116,7 @@ checkpoint_every: 20
 # OUTPUT
 # =============================================================================
 
-output_dir: examples/simulation_validation/results/calibration/fpr_calibration_1000
+output_dir: examples/simulation_validation/results/fpr_calibration
 
 # =============================================================================
 # EXPECTED RESULTS
@@ -130,11 +124,11 @@ output_dir: examples/simulation_validation/results/calibration/fpr_calibration_1
 #
 # For a well-calibrated directional FWER method at alpha=0.05 with n_null=1000:
 #   - Expected directional FWER: <= 0.050
-#   - 95% CI width: ~0.014 (Clopper-Pearson)
-#   - Acceptable range: approximately [0.036, 0.064]
+#   - 95% Clopper-Pearson interval at a true FWER of 0.05: about [0.037, 0.065]
 #
 # Methods should pass if the lower bound of their 95% CI does not exceed
-# alpha=0.05. Values below alpha are conservative, not invalid.
+# alpha=0.05. Values below alpha are conservative, not invalid. The same
+# holds for the two-sided FWER with alpha/2 per tail.
 #
 # Common issues:
 #   - Directional FWER > alpha: Method may be LIBERAL (too many null runs
