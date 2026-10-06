@@ -14,6 +14,7 @@ import numpy.typing as npt
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 
+from ._prepare import check_connectivity
 from ._rng import RngLike, resolve_seed, warn_legacy_random_state
 
 
@@ -290,6 +291,10 @@ def nbs_bct(
     if random_state is not None and rng is None:
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
+
+    group1 = check_connectivity(group1, "group1")
+    if group2 is not None:
+        group2 = check_connectivity(group2, "group2")
 
     if test_type in ("paired", "two-sample") and group2 is None:
         raise ValueError(f"group2 is required for test_type='{test_type}'.")
