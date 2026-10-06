@@ -12,7 +12,7 @@ from conninfpy import (
     InferenceResult,
     OmnibusInferenceResult,
 )
-from conninfpy._analyze import AnalyzeResult
+from conninfpy.analysis import AnalyzeResult
 
 
 def _make_tailed_result(N: int = 6) -> InferenceResult:
