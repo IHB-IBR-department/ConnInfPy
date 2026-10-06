@@ -328,4 +328,112 @@ def _sort_dataframe(
     )
 
 
-__all__ = ["build_tailed_dataframe", "build_omnibus_dataframe"]
+# ---------------------------------------------------------------------------
+# Network-pair aggregation
+# ---------------------------------------------------------------------------
+
+def _network_codes(networks) -> "tuple[np.ndarray, list]":
+    """Integer code per ROI and the network names, in first-appearance order.
+
+    The same order as :meth:`AtlasInfo.network_index` and the network plots.
+    """
+    seen: dict = {}
+    for name in networks:
+        if name not in seen:
+            seen[name] = len(seen)
+    codes = np.array([seen[name] for name in networks], dtype=np.int_)
+    return codes, list(seen)
+
+
+def build_network_summary(
+    p_maps: "dict[str, npt.NDArray[np.float64]]",
+    networks,
+    *,
+    alpha: float = 0.05,
+) -> pd.DataFrame:
+    """Aggregate edge-wise p-value maps over pairs of networks.
+
+    Edges are the upper triangle of each ``(N, N)`` map; an edge belongs to
+    the unordered pair of its endpoints' networks. For every tail
+    ``t`` in ``p_maps`` the table holds ``n_sig_t`` (edges with
+    ``p <= alpha``), ``prop_sig_t`` (``n_sig_t / n_edges``) and the
+    ``-log10 p`` mass ``sum_neglog10p_t`` / ``mean_neglog10p_t``. With both
+    ``'positive'`` and ``'negative'`` tails it adds ``signed_proportion =
+    (n_sig_positive - n_sig_negative) / n_edges``. Pairs with no possible
+    edge (a single-ROI network's within-block) are omitted.
+    """
+    names = list(p_maps)
+    first = np.asarray(p_maps[names[0]], dtype=np.float64)
+    _check_square(first, names[0])
+    n_nodes = first.shape[0]
+    if len(networks) != n_nodes:
+        raise ValueError(
+            f"{len(networks)} network labels for {n_nodes} nodes; one label "
+            "per ROI is required."
+        )
+    codes, net_names = _network_codes(networks)
+    n_nets = len(net_names)
+    iu, ju = np.triu_indices(n_nodes, k=1)
+    lo = np.minimum(codes[iu], codes[ju])
+    hi = np.maximum(codes[iu], codes[ju])
+
+    n_edges = np.zeros((n_nets, n_nets))
+    np.add.at(n_edges, (lo, hi), 1.0)
+    a, b = np.nonzero(np.triu(n_edges) > 0)
+    table = {
+        "network_a": [net_names[k] for k in a],
+        "network_b": [net_names[k] for k in b],
+        "network_pair": ["—".join(sorted((net_names[i], net_names[j]))) for i, j in zip(a, b)],
+        "within_network": a == b,
+        "n_edges": n_edges[a, b].astype(int),
+    }
+    for tail in names:
+        p = np.asarray(p_maps[tail], dtype=np.float64)
+        if p.shape != first.shape:
+            raise ValueError(f"p-value map {tail!r} has shape {p.shape}; expected {first.shape}.")
+        p_edges = p[iu, ju]
+        sig = np.zeros((n_nets, n_nets))
+        np.add.at(sig, (lo, hi), (p_edges <= alpha).astype(float))
+        # Permutation p-values are never 0; the floor only guards parametric p.
+        neglog = np.nan_to_num(-np.log10(np.clip(p_edges, 1e-300, 1.0)), nan=0.0)
+        mass = np.zeros((n_nets, n_nets))
+        np.add.at(mass, (lo, hi), neglog)
+        table[f"n_sig_{tail}"] = sig[a, b].astype(int)
+        table[f"prop_sig_{tail}"] = sig[a, b] / n_edges[a, b]
+        table[f"sum_neglog10p_{tail}"] = mass[a, b]
+        table[f"mean_neglog10p_{tail}"] = mass[a, b] / n_edges[a, b]
+    if "positive" in p_maps and "negative" in p_maps:
+        table["signed_proportion"] = (
+            table["n_sig_positive"] - table["n_sig_negative"]
+        ) / table["n_edges"]
+    summary = pd.DataFrame(table)
+    summary.attrs["networks"] = net_names   # row/column order for matrices
+    return summary
+
+
+def network_summary_matrix(summary: pd.DataFrame, value: str) -> pd.DataFrame:
+    """Pivot one column of a network summary into a symmetric K × K table.
+
+    Rows and columns are the networks in first-appearance order; pairs with
+    no possible edge are 0.
+    """
+    if value not in summary.columns:
+        raise ValueError(
+            f"{value!r} is not a summary column; choose from "
+            f"{[c for c in summary.columns if c not in ('network_a', 'network_b', 'network_pair', 'within_network')]}."
+        )
+    order = summary.attrs.get("networks") or list(
+        dict.fromkeys(list(summary["network_a"]) + list(summary["network_b"])))
+    mat = pd.DataFrame(0.0, index=order, columns=order)
+    for a, b, v in zip(summary["network_a"], summary["network_b"], summary[value]):
+        mat.loc[a, b] = v
+        mat.loc[b, a] = v
+    return mat
+
+
+__all__ = [
+    "build_tailed_dataframe",
+    "build_omnibus_dataframe",
+    "build_network_summary",
+    "network_summary_matrix",
+]

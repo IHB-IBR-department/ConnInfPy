@@ -7,14 +7,9 @@ HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 PLOTS = RESULTS / "plots"
 
-def _block_mass(p_map, net_labels):
-    K = int(net_labels.max() + 1); mass = np.zeros((K, K)); nlp = -np.log10(np.maximum(p_map, 1e-300))
-    iu = np.triu_indices(p_map.shape[0], k=1)
-    for idx in range(len(iu[0])):
-        i, j = iu[0][idx], iu[1][idx]; ni, nj = int(net_labels[i]), int(net_labels[j])
-        mass[ni, nj] += nlp[i, j]
-        if ni != nj: mass[nj, ni] += nlp[i, j]
-    return mass
+# Σ −log10 p per network pair, from conninfpy.results.summarize_by_network
+# (the aggregation users get from result.network_summary(atlas)).
+from examples._audit_utils import block_mass as _block_mass
 
 def main():
     ihb = np.load(RESULTS / "ihb_paired_tfnbs.npz")

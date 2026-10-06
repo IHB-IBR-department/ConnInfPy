@@ -46,6 +46,7 @@ except ImportError as exc:  # pragma: no cover (env-specific)
 from .harmonize import block_mass as _block_mass
 import pandas as pd
 
+from ._export import build_network_summary, network_summary_matrix
 from .results import InferenceResult, OmnibusInferenceResult
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -466,64 +467,35 @@ def plot_network_summary(
             f"Unsupported result type {type(result).__name__}; expected "
             "InferenceResult or OmnibusInferenceResult."
         )
-    networks = np.asarray(atlas.networks, dtype=object)
-    if isinstance(result, OmnibusInferenceResult):
-        p_arr = np.asarray(result["omnibus"], dtype=np.float64)
-        N = p_arr.shape[0]
+    omnibus = isinstance(result, OmnibusInferenceResult)
+    if omnibus:
+        p_maps = {"omnibus": np.asarray(result["omnibus"], dtype=np.float64)}
     else:
-        p_pos = np.asarray(result["positive"], dtype=np.float64)
-        p_neg = np.asarray(result["negative"], dtype=np.float64)
-        N = p_pos.shape[0]
+        p_maps = {"positive": np.asarray(result["positive"], dtype=np.float64),
+                  "negative": np.asarray(result["negative"], dtype=np.float64)}
+    N = next(iter(p_maps.values())).shape[0]
     if len(atlas) != N:
         raise ValueError(
             f"atlas has {len(atlas)} ROIs but the result is on "
             f"{N} nodes; cannot summarize."
         )
 
-    # Map each unique network name to an integer code in first-appearance
-    # order, so the heatmap rows align with _network_order().
-    seen: dict = {}
-    for n in networks:
-        if n not in seen:
-            seen[n] = len(seen)
-    codes = np.array([seen[n] for n in networks], dtype=int)
-    K = len(seen)
-    block_names = list(seen.keys())
-
-    iu, ju = np.triu_indices(N, k=1)
-    bi = codes[iu]
-    bj = codes[ju]
-    lo = np.minimum(bi, bj)
-    hi = np.maximum(bi, bj)
-
-    total = np.zeros((K, K), dtype=np.float64)
-    np.add.at(total, (lo, hi), 1.0)
-
-    if isinstance(result, OmnibusInferenceResult):
-        sig_pos = (p_arr[iu, ju] <= alpha)
-        count_pos = np.zeros((K, K), dtype=np.float64)
-        np.add.at(count_pos, (lo[sig_pos], hi[sig_pos]), 1.0)
-        with np.errstate(invalid="ignore", divide="ignore"):
-            cell = np.where(total > 0, count_pos / total, 0.0)
+    # Same numbers as result.network_summary(atlas): one source of truth.
+    summary = build_network_summary(p_maps, list(atlas.networks), alpha=alpha)
+    block_names = summary.attrs["networks"]
+    K = len(block_names)
+    value = "prop_sig_omnibus" if omnibus else "signed_proportion"
+    cell_full = network_summary_matrix(summary, value).to_numpy()
+    total = network_summary_matrix(summary, "n_edges").to_numpy()
+    if omnibus:
         vmin, vmax = 0.0, 1.0
         cmap_eff = "magma" if cmap == "RdBu_r" else cmap
     else:
-        sig_p = (p_pos[iu, ju] <= alpha)
-        sig_n = (p_neg[iu, ju] <= alpha)
-        count_p = np.zeros((K, K), dtype=np.float64)
-        count_n = np.zeros((K, K), dtype=np.float64)
-        np.add.at(count_p, (lo[sig_p], hi[sig_p]), 1.0)
-        np.add.at(count_n, (lo[sig_n], hi[sig_n]), 1.0)
-        with np.errstate(invalid="ignore", divide="ignore"):
-            cell = np.where(total > 0, (count_p - count_n) / total, 0.0)
-        vmax = float(np.max(np.abs(cell))) if cell.size else 1.0
+        vmax = float(np.max(np.abs(cell_full))) if cell_full.size else 1.0
         if vmax <= 0:
             vmax = 1.0
         vmin = -vmax
         cmap_eff = cmap
-
-    # Mirror upper to lower for a symmetric display.
-    cell_full = cell + np.triu(cell, 1).T
 
     if ax is None:
         _fig, ax = plt.subplots(figsize=(5, 4))
@@ -536,7 +508,7 @@ def plot_network_summary(
     if annotate:
         for i in range(K):
             for j in range(K):
-                if total[min(i, j), max(i, j)] <= 0:
+                if total[i, j] <= 0:
                     continue
                 ax.text(j, i, f"{cell_full[i, j]:+.2f}",
                         ha="center", va="center",
