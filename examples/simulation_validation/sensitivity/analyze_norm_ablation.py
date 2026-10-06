@@ -117,7 +117,7 @@ def plot_norm_ablation(df: pd.DataFrame, output_dir: Path):
             )
             ax.axhline(0.05, color="black", linestyle=":", alpha=0.5)
             ax.set_ylim(-0.05, 0.5)
-            ax.set_xlabel("Cohen's $d$")
+            ax.set_xlabel(r"$\Delta r$")
             if col == 0:
                 ax.set_ylabel("FDR")
             ax.grid(True, alpha=0.3)
@@ -171,7 +171,7 @@ def main():
     print("\n=== NI-TFNBS Normalization Comparison ===\n")
     for topo in TOPOLOGIES:
         for es in sorted(ni_sub["effect_size"].unique()):
-            print(f"  {topo} (d={es}):")
+            print(f"  {topo} (dr={es}):")
             for norm in ("sqrt", "linear", "none"):
                 row = summary[
                     (summary["normalization"] == norm) &

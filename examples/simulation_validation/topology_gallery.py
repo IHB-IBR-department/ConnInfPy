@@ -2,16 +2,18 @@
 Topology gallery for the 10 representative scenarios used in power/FPR analysis.
 
 For each scenario, displays:
-  - Ground-truth effect mask (binary/weighted)
+  - Ground truth: population correlation difference between the groups
+    (Delta r on the planted edges, after the positive-definite projection)
   - Uncorrected signed t-statistic from simulated two-sample data
 
-Generation parameters match fpr_config_local.yaml / sweep_config_power_local.yaml:
-  n_nodes=60, n_modules=4, intra_corr=0.3, inter_corr=0.05, noise_level=0.05
+Generation parameters match fpr_config_1000.yaml / sweep_config_power_1000.yaml:
+  n_nodes=60, n_modules=4, intra_corr=0.3, inter_corr=0.05, noise_level=0.05,
+  30 time points per subject
 
 Usage:
     python examples/simulation_validation/topology_gallery.py
     python examples/simulation_validation/topology_gallery.py --output-dir examples/simulation_validation/results/topologies
-    python examples/simulation_validation/topology_gallery.py --effect-size 0.5 --n-samples 50
+    python examples/simulation_validation/topology_gallery.py --effect-size 0.25 --n-samples 50
 """
 from __future__ import annotations
 
@@ -66,7 +68,7 @@ def plot_topology_gallery(
     intra_corr: float = 0.3,
     inter_corr: float = 0.05,
     noise_level: float = 0.05,
-    effect_size: float = 0.3,
+    effect_size: float = 0.125,
     n_samples: int = 30,
     seed: int = 42,
     output_dir: Path = Path("examples/output"),
@@ -104,7 +106,7 @@ def plot_topology_gallery(
         t_dict = compute_t_stat(g1_z, g2_z, test_type="two-sample")
         t_signed = t_dict["positive"] - t_dict["negative"]
 
-        effect_gt = ds.effect_mask * ds.effect_size
+        effect_gt = ds.population_diff
         n_edges = int(np.sum(ds.effect_mask != 0) // 2)
         display_name = DISPLAY_NAMES.get(scenario_name, scenario_name)
 
@@ -112,7 +114,7 @@ def plot_topology_gallery(
         ax_gt = axes[row, col_base]
         max_gt = float(np.max(np.abs(effect_gt))) if np.any(effect_gt) else 1.0
         im_gt = ax_gt.imshow(effect_gt, cmap="seismic", vmin=-max_gt, vmax=max_gt)
-        ax_gt.set_title(f"{display_name}\nGT ({n_edges} edges)", fontsize=9)
+        ax_gt.set_title(f"{display_name}\nGT $\\Delta r$ ({n_edges} edges)", fontsize=9)
         _draw_module_boundaries(ax_gt, ds.net_labels)
         fig.colorbar(im_gt, ax=ax_gt, fraction=0.046, pad=0.04)
 
@@ -129,7 +131,7 @@ def plot_topology_gallery(
             ax.set_yticks([])
 
     fig.suptitle(
-        f"Topology scenarios  |  effect_size={effect_size}  |  "
+        f"Topology scenarios  |  $\\Delta r$={effect_size}  |  "
         f"n_samples={n_samples}  |  {n_nodes} nodes, {n_modules} modules",
         fontsize=13,
         y=0.995,
@@ -138,8 +140,8 @@ def plot_topology_gallery(
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / f"topologies_gallery_es{effect_size:g}_n{n_samples}.png"
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    out_path = output_dir / f"topologies_gallery_dr{effect_size:g}_n{n_samples}.png"
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     return out_path
 
@@ -153,7 +155,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--intra-corr", type=float, default=0.3)
     parser.add_argument("--inter-corr", type=float, default=0.05)
     parser.add_argument("--noise-level", type=float, default=0.05)
-    parser.add_argument("--effect-size", type=float, default=0.3)
+    parser.add_argument("--effect-size", type=float, default=0.125,
+                        help="Delta r: shift of the population correlation on planted edges")
     parser.add_argument("--n-samples", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(

@@ -6,12 +6,12 @@
 # Usage:
 #   python examples/simulation_validation/power/power_analysis.py \
 #     --config examples/simulation_validation/configs/sweep_config_bh_fdr_perm.yaml \
-#     --output-dir examples/simulation_validation/results/bh_fdr_perm \
+#     --output-dir examples/simulation_validation/results/sensitivity/bh_fdr_perm \
 #     --mode effect-size
 
-effect_sizes:
+effect_sizes:    # Delta r (shift of the population correlation)
+  - 0.125
   - 0.25
-  - 0.50
 
 n_samples: 30
 
@@ -29,14 +29,14 @@ methods:
   - fbc_tfnbs
 
 tfnbs_options:
-  e: [0.3]
+  e: [0.4]
   h: [3.0]
-  n_thresholds: 30
-  start_thres: 1.25
+  n_thresholds: 10
+  start_thres: 1.65
   fbc_min_cluster_size: 3
 
-n_repeats: 10
-n_permutations: 100
+n_repeats: 100
+n_permutations: 1000
 alpha: 0.05
 
 n_nodes: 60
@@ -44,4 +44,5 @@ n_modules: 4
 intra_corr: 0.3
 inter_corr: 0.05
 noise_level: 0.05
+time_points: 30
 seed: 42

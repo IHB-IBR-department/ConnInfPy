@@ -79,7 +79,7 @@ def plot_mmin_sensitivity(df: pd.DataFrame, output_dir: Path):
             ax.errorbar(
                 summary["m_min"], summary["TPR_mean"],
                 yerr=1.96 * summary["TPR_se"],
-                marker="o", label=f"d={es}",
+                marker="o", label=rf"$\Delta r$={es}",
             )
             ax.set_title(TOPO_LABELS.get(topo, topo))
             ax.set_ylim(-0.05, 1.05)
@@ -92,7 +92,7 @@ def plot_mmin_sensitivity(df: pd.DataFrame, output_dir: Path):
             ax.errorbar(
                 summary["m_min"], summary["FDR_mean"],
                 yerr=1.96 * summary["FDR_se"],
-                marker="s", label=f"d={es}",
+                marker="s", label=rf"$\Delta r$={es}",
             )
             ax.axhline(0.05, color="black", linestyle=":", alpha=0.5)
             ax.set_ylim(-0.05, 0.5)
