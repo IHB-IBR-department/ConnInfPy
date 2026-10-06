@@ -312,7 +312,6 @@ Planted-effect data for tutorials, power analysis and method comparison:
    import conninfpy
 
    # Two groups of correlation matrices with a planted difference
-   # (needs the [full] extra for scikit-learn)
    g1, g2, _ = conninfpy.sim.generate_fc_matrices(
        N=60, effect_size=0.3, n_samples_group1=30, n_samples_group2=30, seed=0)
 

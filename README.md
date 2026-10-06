@@ -63,58 +63,54 @@ falls back to SciPy automatically:
 
 ```bash
 python -m pip install -e . --no-deps
-python -m pip install numpy scipy statsmodels pandas matplotlib pyyaml threadpoolctl
+python -m pip install numpy scipy statsmodels pandas matplotlib scikit-learn pyyaml threadpoolctl
 ```
 
 ---
 
 ## Quickstart
 
-Thirty subjects per group, 40 regions; the second group has stronger coupling
-among regions 0–5. This needs only the core install and runs in about a
-second — the very first run in a new environment takes ~30 s longer while
-numba compiles and caches the TFNBS kernels:
+Simulate two groups with a planted difference, run TFNBS, and check the result
+against the ground truth. `conninfpy.sim` builds modular networks with 20
+effect topologies (hub, chain, rich club, …); here group 2 has stronger
+connectivity inside one module. Needs only the core install; takes a few
+seconds (the first run in a new environment adds ~30 s while numba compiles
+and caches its kernels):
 
 <!-- readme-quickstart -->
 ```python
-import numpy as np
 import conninfpy
 
-rng = np.random.default_rng(0)
-n_subjects, n_regions, n_timepoints = 30, 40, 200
-
-def correlation_matrices(coupling):
-    """One correlation matrix per subject; regions 0-5 share a common signal."""
-    ts = rng.standard_normal((n_subjects, n_timepoints, n_regions))
-    ts[:, :, :6] += coupling * rng.standard_normal((n_subjects, n_timepoints, 1))
-    return np.array([np.corrcoef(subject.T) for subject in ts])
-
-group1 = correlation_matrices(coupling=0.3)
-group2 = correlation_matrices(coupling=0.6)   # stronger coupling among regions 0-5
+# Two groups of 30 subjects, 40 regions in 4 modules. Group 2 has stronger
+# connectivity inside one module ("within_module_dense", one of 20 scenarios).
+gen = conninfpy.sim.TopologyDatasetGenerator(n_nodes=40, n_modules=4, seed=0)
+ds = gen.generate("within_module_dense", effect_size=0.3, n_samples=30, time_points=200)
 
 out = conninfpy.analyze(
-    group1=group1, group2=group2, test_type="two-sample",
+    group1=ds.group1, group2=ds.group2, input="r", test_type="two-sample",
     method="tfnbs", n_permutations=200, acceleration="gpd", rng=0,
-    use_mp=False,   # tiny example: one process is fastest
 )
 print(out)
-print(out.inference.n_significant(0.05))
-print(out.significant_edges().head(3))
+
+# Score the result against the planted effect
+found = out["positive"] < 0.05
+planted = ds.effect_mask != 0
+print(f"planted edges found: {(found & planted).sum() // 2} of {planted.sum() // 2}")
+print(f"false positives:     {(found & ~planted).sum() // 2}")
 ```
 
 ```text
-AnalyzeResult(inference=InferenceResult(method='tfnbs', n_perms=200, accel=gpd, sig@α=0.05: pos=16, neg=0, wall_time=0.14s))
-{'positive': 16, 'negative': 0}
-   edge_id  roi_i  roi_j   t_signed  p_positive  p_negative  p_min      tail
-0        0      0      1  11.906261       0.005         1.0  0.005  positive
-1        1      0      2  13.034771       0.005         1.0  0.005  positive
-2        2      0      3  10.060728       0.005         1.0  0.005  positive
+AnalyzeResult(inference=InferenceResult(method='tfnbs', n_perms=200, accel=gpd, sig@α=0.05: pos=45, neg=0, wall_time=2.77s))
+planted edges found: 45 of 45
+false positives:     0
 ```
 
-`positive` means `group2 > group1`. `analyze()` noticed the inputs are
-correlations (unit diagonal) and applied Fisher r→z itself; pass
-`input="r"` or `input="z"` to say so explicitly — data that could be either
-raise an error instead of being guessed.
+`out["positive"]` holds FWER-corrected p-values for `group2 > group1`
+(`out["negative"]` for the reverse). `input="r"` says the matrices are
+correlations, so Fisher r→z is applied once; with a unit diagonal `analyze()`
+detects this itself, and data that could be either raise an error instead of
+being guessed. `out.significant_edges(atlas)` turns the result into an edge
+table — see [Results](#results).
 
 ### Real data
 
@@ -242,7 +238,7 @@ associations to the edge table.
 | `conninfpy.harmonize` | `combat_harmonize`, `combat_fit` / `combat_apply` (for train/test transfer), `design_diagnostics`, `compute_vif` |
 | `conninfpy.acceleration` | GPD / gamma tail fits |
 | `conninfpy.loaders` | Manifest-based loading (`load`, `ManifestLoader`) and the bundled loaders |
-| `conninfpy.sim` | Synthetic connectivity with planted effects and the topology scenarios (needs the `[full]` extra for `generate_fc_matrices`) |
+| `conninfpy.sim` | Synthetic connectivity with planted effects and the 20 topology scenarios |
 | `conninfpy.plot`, `conninfpy.eeg_utils` | Figures; EEG data structures and helpers |
 
 Worked examples for each are in the
