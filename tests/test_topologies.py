@@ -182,5 +182,30 @@ class TestScenarioSanityChecks(unittest.TestCase):
         self.assertFalse(np.allclose(z1, ds.group1))
 
 
+class TestPlantedEffectSize(unittest.TestCase):
+    """The realised group difference equals the requested effect_size.
+
+    Regression: masks filled in one triangle were symmetrised by averaging
+    with the empty triangle, so every planted edge got weight 0.5 and the
+    simulations ran at half the stated effect sizes.
+    """
+
+    def test_binary_masks_have_unit_weight(self):
+        gen = TopologyDatasetGenerator(n_nodes=N_NODES, n_modules=N_MODULES, seed=0)
+        for name in list_scenarios():
+            mask = gen.generate(name, effect_size=0.2, n_samples=2, time_points=10).effect_mask
+            with self.subTest(scenario=name):
+                self.assertAlmostEqual(float(np.abs(mask).max()), 1.0)
+                np.testing.assert_array_equal(mask, mask.T)
+
+    def test_realised_shift_matches_effect_size(self):
+        gen = TopologyDatasetGenerator(n_nodes=30, n_modules=3, noise_level=0.0, seed=1)
+        ds = gen.generate("within_module_dense", effect_size=0.2,
+                          n_samples=150, time_points=1000)
+        planted = ds.effect_mask != 0
+        diff = ds.group2.mean(axis=0) - ds.group1.mean(axis=0)
+        self.assertAlmostEqual(float(diff[planted].mean()), 0.2, delta=0.01)
+
+
 if __name__ == "__main__":
     unittest.main()

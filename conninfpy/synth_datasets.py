@@ -454,8 +454,11 @@ class ModularDatasetGenerator:
         if effect_mask.shape != (self.N, self.N):
             raise ValueError(f"effect_mask must have shape ({self.N}, {self.N}).")
 
-        # Enforce undirected mask semantics.
-        effect_mask = (effect_mask + effect_mask.T) / 2
+        # Enforce undirected mask semantics. Each pair keeps the entry of
+        # larger magnitude, so a mask filled in one triangle keeps its planted
+        # values (averaging with the empty triangle used to halve them).
+        effect_mask = np.where(np.abs(effect_mask) >= np.abs(effect_mask.T),
+                               effect_mask, effect_mask.T)
         np.fill_diagonal(effect_mask, 0.0)
 
         # Group 1: Base Covariance
@@ -475,8 +478,10 @@ class ModularDatasetGenerator:
         update_vals = (effect_size + effect_noise) * effect_mask
         cov_g2 += update_vals
         
-        # Re-enforce SPD property after modification
-        cov_g2 = self._enforce_spd(cov_g2)
+        # Re-enforce SPD property after modification. Without an effect the
+        # two groups keep exactly the same covariance (an exact null).
+        if np.any(update_vals):
+            cov_g2 = self._enforce_spd(cov_g2)
         
         # Helper to generate subjects by sampling time-series
         def sample_subject_matrices(true_cov, n_subs):
