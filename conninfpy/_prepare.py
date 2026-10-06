@@ -69,26 +69,33 @@ def infer_input_kind(*arrays: npt.NDArray[np.float64]) -> Optional[str]:
     """Guess whether stacks hold correlations (``'r'``) or Fisher-z (``'z'``).
 
     Returns ``'z'`` when any off-diagonal value exceeds 1 in magnitude,
-    ``'r'`` when every diagonal is 1, and ``None`` when the data cannot
-    tell (all values in [-1, 1] and a diagonal that is not all ones —
-    e.g. correlations whose diagonal was already zeroed, or weak Fisher-z
-    connectivity).
+    ``'r'`` when the diagonal is 1, and ``None`` when the data cannot
+    tell (all values in [-1, 1] and a diagonal that is not ones — e.g.
+    correlations whose diagonal was already zeroed, or weak Fisher-z
+    connectivity). Empty rows (all zero or NaN: a region with no usable
+    signal in that subject) are ignored when checking the diagonal.
     """
     offdiag_max = 0.0
     diag_is_one = True
+    any_one = False
     for arr in arrays:
         arr = np.asarray(arr, dtype=np.float64)
         n_nodes = arr.shape[-1]
         offdiag = ~np.eye(n_nodes, dtype=bool)
+        idx = np.arange(n_nodes)
         for start in range(0, arr.shape[0], _SCAN_BLOCK):
-            block = np.abs(arr[start:start + _SCAN_BLOCK])
+            raw = arr[start:start + _SCAN_BLOCK]
+            block = np.abs(raw)
             if block[:, offdiag].size:
                 offdiag_max = max(offdiag_max, float(np.nanmax(block[:, offdiag])))
-        idx = np.arange(n_nodes)
-        diag_is_one = diag_is_one and bool(np.allclose(arr[:, idx, idx], 1.0))
+            diag = raw[:, idx, idx]
+            is_one = np.isclose(diag, 1.0)
+            empty_row = np.all((raw == 0) | np.isnan(raw), axis=2)
+            diag_is_one = diag_is_one and bool(np.all(is_one | empty_row))
+            any_one = any_one or bool(is_one.any())
     if offdiag_max > 1.0:
         return "z"
-    if diag_is_one:
+    if diag_is_one and any_one:
         return "r"
     return None
 
