@@ -75,6 +75,20 @@ class TestInferInputKind(unittest.TestCase):
         Y[:, 0, 1] = Y[:, 1, 0] = 1.4
         self.assertEqual(infer_input_kind(Y), "z")
 
+    def test_dead_region_does_not_hide_correlations(self):
+        """Check: an all-zero row (region with no signal) keeps input='r'.
+
+        Real case: ABIDE-mini subject 191 has a constant ROI whose whole
+        row, diagonal included, is stored as 0.
+        """
+        Y = _stack(diag=1.0)
+        Y[2, 3, :] = 0.0
+        Y[2, :, 3] = 0.0
+        self.assertEqual(infer_input_kind(Y), "r")
+
+    def test_all_zero_stack_is_ambiguous(self):
+        self.assertIsNone(infer_input_kind(np.zeros((3, 4, 4))))
+
     def test_zero_diagonal_within_unit_range_is_ambiguous(self):
         """Check: zeroed-diagonal data within [-1, 1] cannot be classified."""
         self.assertIsNone(infer_input_kind(_stack(diag=0.0)))
