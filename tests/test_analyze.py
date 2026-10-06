@@ -172,12 +172,12 @@ class TestTwoSampleSitesDemotion(unittest.TestCase):
 
 class TestAnalyzeOneSample(unittest.TestCase):
 
-    def test_one_sample_without_sites_runs_with_default_fisher_z(self):
+    def test_one_sample_without_sites_infers_correlation_input(self):
         rng = np.random.RandomState(30)
         Y = rng.uniform(-0.2, 0.2, size=(12, 5, 5))
         Y = (Y + Y.transpose(0, 2, 1)) / 2
         for i in range(Y.shape[0]):
-            np.fill_diagonal(Y[i], 0.0)
+            np.fill_diagonal(Y[i], 1.0)   # unit diagonal → detected as input='r'
 
         out = analyze(
             group1=Y, test_type="one-sample",
@@ -246,10 +246,10 @@ class TestMultiPredictorGLM(unittest.TestCase):
 
     def _data(self, seed=20, n=30, N=6):
         rng = np.random.RandomState(seed)
-        Y = np.tanh(rng.randn(n, N, N) * 0.3)         # in (-1, 1) for fisher_z
+        Y = np.tanh(rng.randn(n, N, N) * 0.3)         # correlations in (-1, 1)
         Y = (Y + Y.transpose(0, 2, 1)) / 2
         for i in range(n):
-            np.fill_diagonal(Y[i], 0.0)
+            np.fill_diagonal(Y[i], 1.0)   # unit diagonal → detected as input='r'
         age = rng.randn(n)
         sex = (rng.rand(n) < 0.5).astype(float)
         motion = rng.randn(n)
@@ -339,6 +339,9 @@ def _make_paired(n=20, N=6, bump=0.3, seed=0):
     group2 = base + _sym_noise(0.05) + signal
     c1 = rng.randn(n)
     c2 = c1 + rng.randn(n) * 0.3
+    for g in (group1, group2):
+        for i in range(n):
+            np.fill_diagonal(g[i], 1.0)   # correlation-like: input='r' is detected
     return group1, group2, c1, c2
 
 
@@ -416,6 +419,68 @@ class TestRepeatedMeasuresGLM(unittest.TestCase):
         )
         # The two-sample demotion advice must NOT fire for a paired design.
         self.assertFalse(any("two-sample + sites" in f for f in out.flags))
+
+
+# =============================================================================
+# Input scale: correlations vs Fisher-z (no silent double transform)
+# =============================================================================
+
+class TestInputScale(unittest.TestCase):
+    """`input=` decides whether Fisher r→z runs; ambiguous data raise."""
+
+    def _weak_z(self, seed=40, n=10, N=5):
+        # Fisher-z data whose values all fall inside ±1 and whose diagonal is
+        # zero: indistinguishable from correlations by value alone.
+        rng = np.random.RandomState(seed)
+        g = rng.randn(2, n, N, N) * 0.2
+        g = (g + g.transpose(0, 1, 3, 2)) / 2
+        idx = np.arange(N)
+        g[:, :, idx, idx] = 0.0
+        return g[0], g[1]
+
+    def test_ambiguous_input_raises_instead_of_double_transform(self):
+        """Regression: weak Fisher-z data used to be arctanh'd a second time."""
+        g1, g2 = self._weak_z()
+        with self.assertRaisesRegex(ValueError, "input='r'.*input='z'"):
+            analyze(group1=g1, group2=g2, test_type="two-sample",
+                    method="tstat", n_permutations=10, use_mp=False,
+                    acceleration=None)
+
+    def test_input_z_leaves_data_on_its_scale(self):
+        """Check: input='z' gives exactly the advanced pipeline's result."""
+        from conninfpy import compute_p_val
+        g1, g2 = self._weak_z(seed=41)
+        common = dict(test_type="two-sample", method="tstat",
+                      n_permutations=30, use_mp=False, rng=7)
+        out = analyze(group1=g1, group2=g2, input="z", acceleration=None,
+                      **common)
+        ref = compute_p_val(g1, g2, **common)
+        np.testing.assert_array_equal(out.inference.stat_signed, ref.stat_signed)
+
+    def test_fisher_z_alias_matches_input(self):
+        g1, g2 = self._weak_z(seed=42)
+        common = dict(group1=g1, group2=g2, test_type="two-sample",
+                      method="tstat", n_permutations=20, use_mp=False,
+                      acceleration=None, rng=3)
+        a = analyze(fisher_z=True, **common)
+        b = analyze(input="r", **common)
+        np.testing.assert_array_equal(a.inference.stat_signed, b.inference.stat_signed)
+
+    def test_conflicting_input_and_fisher_z_raise(self):
+        g1, g2 = self._weak_z(seed=43)
+        with self.assertRaisesRegex(ValueError, "contradicts"):
+            analyze(group1=g1, group2=g2, test_type="two-sample",
+                    input="z", fisher_z=True, use_mp=False)
+
+    def test_callers_array_is_not_modified(self):
+        g1, g2 = self._weak_z(seed=44)
+        idx = np.arange(g1.shape[-1])
+        g1[:, idx, idx] = 1.0
+        g2[:, idx, idx] = 1.0
+        before = g1.copy()
+        analyze(group1=g1, group2=g2, test_type="two-sample", method="tstat",
+                n_permutations=10, use_mp=False, acceleration=None)
+        np.testing.assert_array_equal(g1, before)
 
 
 if __name__ == "__main__":
