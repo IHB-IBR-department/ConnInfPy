@@ -288,7 +288,7 @@ ABIDE section:
    two-sample permutation test only, while the ABIDE analyses rely on the
    Freedman–Lane GLM with covariates. `glm/glm_validation.py` provides a
    GLM null calibration; its stored results predate the effect-size fix and
-   it is not in the manuscript. Either run it (1,000 nulls; est. < 1 h) and
+   it is not in the manuscript. Either run it (1,000 nulls; run time not yet measured) and
    report it, or drop the GLM caveat paragraph (l. 668).
 
 Resolved by this revision: null calibration design and size, per-direction
