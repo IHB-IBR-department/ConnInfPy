@@ -236,9 +236,14 @@ class TopologyDatasetGenerator:
 
 
 def _ensure_symmetric_zero_diag(matrix: ArrayF) -> ArrayF:
-    """Symmetrize a matrix and zero its diagonal."""
+    """Symmetrize a mask and zero its diagonal.
+
+    Each unordered pair keeps the entry of larger magnitude, so a mask
+    filled in one triangle keeps its planted values. (Averaging with the
+    empty triangle used to halve every planted effect.)
+    """
     matrix = np.asarray(matrix, dtype=np.float64)
-    matrix = (matrix + matrix.T) / 2.0
+    matrix = np.where(np.abs(matrix) >= np.abs(matrix.T), matrix, matrix.T)
     np.fill_diagonal(matrix, 0.0)
     return matrix
 
