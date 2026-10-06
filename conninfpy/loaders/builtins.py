@@ -48,6 +48,16 @@ def _load_atlas_if_present(path: "str | None") -> "AtlasInfo | None":
     return None
 
 
+def _masker_standardize(value: "str | bool | None") -> "str | bool | None":
+    """Translate ``standardize`` for nilearn maskers.
+
+    nilearn 0.14 accepts only ``'zscore_sample'`` (sample SD); the older
+    ``'zscore'`` (population SD) raises. Map it forward: the two differ by a
+    constant factor per time series, so correlations are unchanged.
+    """
+    return "zscore_sample" if value == "zscore" else value
+
+
 class NumpyLoader(BaseDataLoader):
     """Loader for standard numpy files (.npy or .npz) containing 3D arrays."""
     name = "NumpyLoader"
@@ -239,7 +249,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
         subject_regex: str | None = None,
         group_from_folder: bool = False,
         extraction_strategy: str = "mean_signal",
-        standardize: str | bool = "zscore",
+        standardize: str | bool = "zscore_sample",
         detrend: bool = False,
         subjects: dict[str, str] | None = None,
         pheno_path: str | None = None,
@@ -461,9 +471,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
             if not mask_files:
                 raise ValueError(f"No mask files found in atlas directory: {self.atlas_image_path}")
 
-        std_val = self.standardize
-        if std_val == "zscore_sample":
-            std_val = "zscore"
+        std_val = _masker_standardize(self.standardize)
 
         for idx, f in enumerate(files):
             sub_id = os.path.basename(f).split(".")[0]
@@ -838,14 +846,14 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                     if is_mask_dir:
                         ts_cols = []
                         for mask_file in mask_files:
-                            masker = NiftiMasker(mask_img=mask_file, standardize="zscore")
+                            masker = NiftiMasker(mask_img=mask_file, standardize="zscore_sample")
                             if smoothing is not None:
                                 masker.set_params(smoothing_fwhm=smoothing)
                             ts = masker.fit_transform(bf, confounds=confounds)
                             ts_cols.append(ts.mean(axis=1))
                         timeseries = np.column_stack(ts_cols)
                     else:
-                        masker = NiftiLabelsMasker(labels_img=self.atlas_image_path, standardize="zscore")
+                        masker = NiftiLabelsMasker(labels_img=self.atlas_image_path, standardize="zscore_sample")
                         if smoothing is not None:
                             masker.set_params(smoothing_fwhm=smoothing)
                         timeseries = masker.fit_transform(bf, confounds=confounds)
