@@ -148,7 +148,7 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
                 raise ConfigError("type 'two-sample' needs design.group and two design.levels.")
             used = [group_col] + _as_list(site_col)
             keep = _columns(pheno, used, "design").notna().all(axis=1).to_numpy()
-            keep &= pheno[group_col].isin(levels).to_numpy()
+            keep = keep & pheno[group_col].isin(levels).to_numpy()  # not in place: pandas 3 arrays can be read-only
             for level in levels:
                 if not (pheno[group_col] == level).any():
                     raise ConfigError(f"design.levels: {level!r} not found in column {group_col!r}.")
