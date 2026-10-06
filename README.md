@@ -71,7 +71,9 @@ python -m pip install numpy scipy statsmodels pandas matplotlib pyyaml threadpoo
 ## Quickstart
 
 Thirty subjects per group, 40 regions; the second group has stronger coupling
-among regions 0–5. This runs in about a second with only the core install:
+among regions 0–5. This needs only the core install and runs in about a
+second — the very first run in a new environment takes ~30 s longer while
+numba compiles and caches the TFNBS kernels:
 
 <!-- readme-quickstart -->
 ```python
