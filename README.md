@@ -467,3 +467,8 @@ To cite the toolbox: [doi]() and refer to the paper [paper_doi]()
 ```
 
 For further discussions or to report bugs, please contact [knyazeva@ihb.spb.ru](mailto:knyazeva@ihb.spb.ru) or open an issue at https://github.com/IHB-IBR-department/ConnInfPy/issues.
+
+## Acknowledgements
+
+Parts of this codebase were developed with the assistance of
+[Claude Code](https://claude.com/claude-code) (Anthropic).
