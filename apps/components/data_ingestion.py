@@ -12,11 +12,13 @@ from conninfpy.loaders import (
     CSVDirectoryLoader,
     NiftiDirectoryLoader,
     AbideSchaeferLoader,
-    OpenCloseLoader,
+)
+from apps.utils.lab_loaders import (
+    ChinaCloseCloseLoader,
     MultiSiteOpenCloseLoader,
+    OpenCloseLoader,
     StressTimeseriesLoader,
     ZerssenNiftiLoader,
-    ChinaCloseCloseLoader
 )
 from conninfpy.topologies import TopologyDatasetGenerator, list_scenarios
 from conninfpy.interpret.llm_narrative import LLMNarrator

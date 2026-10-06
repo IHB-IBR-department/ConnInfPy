@@ -11,16 +11,12 @@ from conninfpy.loaders.builtins import (
     CSVDirectoryLoader,
     NiftiDirectoryLoader,
     AbideSchaeferLoader,
-    OpenCloseLoader,
-    StressTimeseriesLoader,
-    ZerssenNiftiLoader,
     FmriprepDerivativesLoader,
     TimeseriesDirectoryLoader,
     ConnectivityMatrixLoader,
     ConditionTimeseriesArrayLoader,
-    CustomPreparedZerssenLoader,
-    ChinaCloseCloseLoader
 )
+import importlib
 import inspect
 from conninfpy.atlas import AtlasInfo
 
@@ -79,6 +75,53 @@ def resolve_path(p: Any, manifest_dir: Path) -> Any:
             return str((manifest_dir / path_obj).resolve())
     return p
 
+# Loader classes a manifest can name in its `loader:` field. Projects add
+# their own with register_loader(); a manifest may also give "module:Class".
+_LOADERS: Dict[str, type] = {}
+
+
+def register_loader(cls: type, name: "str | None" = None) -> type:
+    """Make a loader class available to manifests under ``name``.
+
+    Defaults to the class name. Returns the class, so it also works as a
+    decorator. Registering a different class under a taken name replaces it.
+    """
+    _LOADERS[name or cls.__name__] = cls
+    return cls
+
+
+def get_loader(name: str) -> type:
+    """Resolve a manifest ``loader:`` value to a loader class.
+
+    Accepts a registered name (e.g. ``"NumpyLoader"``) or an import path
+    ``"package.module:ClassName"``.
+    """
+    if name in _LOADERS:
+        return _LOADERS[name]
+    if ":" in name:
+        module_name, _, attr = name.partition(":")
+        return getattr(importlib.import_module(module_name), attr)
+    raise ValueError(
+        f"Unknown loader: {name!r}. Registered loaders: {sorted(_LOADERS)}. "
+        "Name a class as 'package.module:ClassName', or register it with "
+        "conninfpy.loaders.register_loader(). The lab-specific Open-Close, "
+        "Stress and Zerssen loaders live in apps/utils/lab_loaders.py."
+    )
+
+
+for _cls in (
+    NumpyLoader,
+    CSVDirectoryLoader,
+    NiftiDirectoryLoader,
+    AbideSchaeferLoader,
+    FmriprepDerivativesLoader,
+    TimeseriesDirectoryLoader,
+    ConnectivityMatrixLoader,
+    ConditionTimeseriesArrayLoader,
+):
+    register_loader(_cls)
+
+
 def load_manifest(path: str) -> DatasetManifest:
     """Parse a dataset manifest YAML into a ``DatasetManifest``."""
     if not os.path.exists(path):
@@ -99,29 +142,10 @@ class ManifestLoader(BaseDataLoader):
         self.resolved_paths = resolve_path(self.manifest.paths, manifest_dir)
         
         
-        loader_map = {
-            "NumpyLoader": NumpyLoader,
-            "CSVDirectoryLoader": CSVDirectoryLoader,
-            "NiftiDirectoryLoader": NiftiDirectoryLoader,
-            "AbideSchaeferLoader": AbideSchaeferLoader,
-            "OpenCloseLoader": OpenCloseLoader,
-            "StressTimeseriesLoader": StressTimeseriesLoader,
-            "ZerssenNiftiLoader": ZerssenNiftiLoader,
-            "FmriprepDerivativesLoader": FmriprepDerivativesLoader,
-            "TimeseriesDirectoryLoader": TimeseriesDirectoryLoader,
-            "ConnectivityMatrixLoader": ConnectivityMatrixLoader,
-            "ConditionTimeseriesArrayLoader": ConditionTimeseriesArrayLoader,
-            "CustomPreparedZerssenLoader": CustomPreparedZerssenLoader,
-            "ChinaCloseCloseLoader": ChinaCloseCloseLoader
-        }
-        
         loader_name = self.manifest.loader
         if not loader_name:
             raise ValueError("Manifest does not specify a loader.")
-        if loader_name not in loader_map:
-            raise ValueError(f"Unknown loader: {loader_name}")
-            
-        loader_class = loader_map[loader_name]
+        loader_class = get_loader(loader_name)
         
         # Build kwargs: merge resolved_paths and params
         kwargs = {}
