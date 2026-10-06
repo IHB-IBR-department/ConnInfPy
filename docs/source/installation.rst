@@ -1,50 +1,52 @@
 Installation
 ============
 
-To install **ConnInfPy**, use one of the approaches below.
+ConnInfPy supports Python **3.12, 3.13 and 3.14** (enforced by the package
+metadata, so ``pip`` refuses other versions instead of failing later inside
+``numba``).
 
-
-1. Install the latest stable version (includes JIT speedup):
-
-.. code-block:: bash
-
-    pip install conninfpy
-
----------------
-
-2. Clone this repository and install in development mode:
+From a clone (until the first PyPI release)
+-------------------------------------------
 
 .. code-block:: bash
 
     git clone https://github.com/IHB-IBR-department/ConnInfPy.git
     cd ConnInfPy
-    pip install -e .
+    conda create -n conninfpy python=3.13 -y
+    conda activate conninfpy
+    python -m pip install -e .
 
+After the release this becomes ``python -m pip install conninfpy``.
+
+Optional extras
 ---------------
 
-3. Install with development dependencies:
+=================  ==============================================================
+Extra              Adds
+=================  ==============================================================
+``[app]``          Streamlit interface (``streamlit``, ``nilearn``, ``nibabel``, ...)
+``[decode]``       NiMARE meta-analytic decoding of significant edges
+``[full]``         ``scikit-learn`` (needed by ``conninfpy.sim.generate_fc_matrices``), ``networkx``
+``[notebooks]``    Jupyter, for the tutorials in ``examples/notebooks/``
+``[dev]``          ``pytest``, Sphinx and the other tools used to test and build the docs
+=================  ==============================================================
 
-.. code-block:: bash
+For example ``python -m pip install -e ".[app,dev]"``. Contributor setup is
+described in ``CONTRIBUTE.md``.
 
-    pip install -e ".[dev]"
+Requirements
+------------
 
----------------
-
-Requirements:
----------------
-- Python **>=3.8** (tested on 3.11)
-- Required: ``numpy``, ``scipy``, ``statsmodels``, ``pandas``, ``matplotlib``, ``numba``
-- Optional ``[full]`` extra: ``scikit-learn``, ``pyyaml``, ``networkx``
-- Optional ``[dev]`` extra: ``pytest``, ``sphinx``, ``sphinx-rtd-theme``,
-  ``myst-parser``, ``seaborn``, ``mypy``
+Core: ``numpy``, ``scipy``, ``statsmodels``, ``pandas``, ``matplotlib``,
+``numba``, ``threadpoolctl``, ``pyyaml``.
 
 .. note::
-   **Safe Install:** If the default installation fails (usually due to ``numba`` or ``llvmlite``
-   compilation issues on legacy systems), you can install without dependencies:
+   **Without numba.** If ``numba`` / ``llvmlite`` cannot be installed on your
+   platform, install without dependencies and add the rest by hand:
 
    .. code-block:: bash
 
-       pip install conninfpy --no-deps
-       pip install numpy scipy statsmodels pandas matplotlib
+       python -m pip install -e . --no-deps
+       python -m pip install numpy scipy statsmodels pandas matplotlib pyyaml threadpoolctl
 
-   The library will automatically detect the missing ``numba`` and fall back to the SciPy backend.
+   ConnInfPy detects the missing ``numba`` and falls back to the SciPy backend.

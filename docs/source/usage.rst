@@ -1,41 +1,57 @@
 Usage
 =====
 
-ConnInfPy provides three top-level inferential pipelines, all sharing a
-common contract: edge-wise statistics → topology-aware enhancement →
-permutation null → FWER / FDR-corrected p-values, with positive and
-negative effects always tested separately.
+Start with :func:`conninfpy.analyze`: it takes per-subject connectivity and a
+design, prepares the input, optionally harmonizes sites, and runs permutation
+inference. The pipelines it is built from live in :mod:`conninfpy.stats` and
+share one contract: edge-wise statistics → topology-aware enhancement →
+permutation null → FWER / FDR-corrected p-values, with positive and negative
+effects tested separately.
 
 Quick reference:
 
 ============================================================  ============================================================
-Pipeline                                                       Use case
+Entry point                                                    Use case
 ============================================================  ============================================================
-:func:`conninfpy.compute_p_val`                                Group / paired / one-sample t-test
-:func:`conninfpy.compute_p_val_glm`                            Continuous predictors with confound regression (Freedman–Lane)
-:func:`conninfpy.compute_p_val_glm_multi`                      Several contrasts under a shared nuisance model in **one** permutation pass
-:func:`conninfpy.compute_p_val_paired_glm`                     Paired A vs B with Δ-level confounds
-:func:`conninfpy.analyze`                                      One-shot Fisher-z → ComBat → GLM/t-test → :class:`InferenceResult`
+:func:`conninfpy.analyze`                                      Main entry point: input preparation → optional ComBat → GLM / t-test inference → :class:`~conninfpy.analysis.AnalyzeResult`
+:func:`conninfpy.stats.compute_p_val`                          Group / paired / one-sample t-test
+:func:`conninfpy.stats.compute_p_val_glm`                      Custom design matrix and t / β / F contrasts (Freedman–Lane)
+:func:`conninfpy.stats.compute_p_val_glm_multi`                Several contrasts under a shared nuisance model in **one** permutation pass
+:func:`conninfpy.stats.compute_p_val_paired_glm`               Paired A vs B with condition-varying confounds
 ============================================================  ============================================================
 
-Two helper layers wrap them:
+Helper modules:
 
 - :mod:`conninfpy.harmonize` — multi-site ComBat harmonization + design diagnostics
 - :mod:`conninfpy.acceleration` — GPD/gamma tail approximation for permutation acceleration
+- :mod:`conninfpy.enhance` — enhancement without permutation (``apply_*``, ``get_*_score``, ``nbs_bct``)
+- :mod:`conninfpy.sim` — synthetic connectivity and topology scenarios
+- :mod:`conninfpy.loaders` — manifest-based data loading (:func:`conninfpy.load`)
 
 Input conventions
 -----------------
 
-- Connectivity tensors: shape ``(n_subjects, N, N)``, symmetric, zero diagonal.
-- Edge weights: Fisher-z transformed correlation coefficients. Use
-  :func:`conninfpy.fisher_r_to_z` before any inference call.
-- The package returns :class:`~conninfpy.InferenceResult` objects, which
-  behave as ``{'positive', 'negative'}`` dicts (canonical keys since
-  v2.0) and additionally carry attributes ``positive`` / ``negative`` /
-  ``method`` / ``n_permutations`` / ``acceleration`` / ``wall_time_s``.
-  The legacy v1.x keys ``'g2>g1'`` / ``'g1>g2'`` (t-test family) remain
-  readable but emit a :class:`DeprecationWarning` and will be removed in
-  v2.1. F-stat omnibus tests still return ``{'omnibus': arr}``.
+- Connectivity tensors: shape ``(n_subjects, N, N)``. Directed (asymmetric)
+  connectivity is supported. The diagonal is zeroed automatically on a copy —
+  your arrays are never modified.
+- :func:`conninfpy.analyze` takes ``input='r'`` (correlations; Fisher r→z is
+  applied once) or ``input='z'`` (already transformed). Left as ``None`` it
+  detects the scale: a unit diagonal means correlations, any value beyond ±1
+  means Fisher z; data that could be either raise an error rather than risk a
+  second transform.
+- The advanced pipelines in :mod:`conninfpy.stats` expect data already on the
+  analysis scale (e.g. Fisher z via :func:`conninfpy.fisher_r_to_z`).
+- Results are :class:`~conninfpy.results.InferenceResult` objects, which
+  behave as ``{'positive', 'negative'}`` dicts and additionally carry
+  ``positive`` / ``negative`` / ``method`` / ``n_permutations`` /
+  ``acceleration`` / ``wall_time_s`` attributes and edge-table exports.
+  ``analyze()`` wraps one in an :class:`~conninfpy.analysis.AnalyzeResult`
+  (``.inference``, plus ``flags`` and ComBat diagnostics). The legacy v1.x
+  keys ``'g2>g1'`` / ``'g1>g2'`` remain readable with a
+  :class:`DeprecationWarning` until v2.1. F-stat omnibus tests return
+  ``{'omnibus': arr}``.
+- Every entry point shares the defaults in :mod:`conninfpy.defaults`
+  (1000 permutations, exact empirical p-values).
 
 t-test pipeline — :func:`compute_p_val`
 ---------------------------------------
@@ -284,3 +300,41 @@ multiplying the runtime.
 
 See :mod:`conninfpy.defaults` for the full list of constants and
 citations (Smith & Nichols 2009, Baggio 2018, Vinokur 2023, Hao 2024).
+
+
+Synthetic data and scenarios — :mod:`conninfpy.sim`
+---------------------------------------------------
+
+Planted-effect data for tutorials, power analysis and method comparison:
+
+.. code-block:: python
+
+   import conninfpy
+
+   # Two groups of correlation matrices with a planted difference
+   # (needs the [full] extra for scikit-learn)
+   g1, g2, _ = conninfpy.sim.generate_fc_matrices(
+       N=60, effect_size=0.3, n_samples_group1=30, n_samples_group2=30, seed=0)
+
+   # 20 controlled effect topologies (hub, rich club, chain, gradient, ...)
+   print(conninfpy.sim.list_scenarios())
+   gen = conninfpy.sim.TopologyDatasetGenerator(n_nodes=100, n_modules=7, seed=42)
+   ds = gen.generate(conninfpy.sim.get_scenario("within_module_dense"),
+                     effect_size=0.3, n_samples=30, time_points=120)
+   # ds.group1 / ds.group2: correlations with a zeroed diagonal → input='r'
+   out = conninfpy.analyze(group1=ds.group1, group2=ds.group2, input="r",
+                           test_type="two-sample", method="tfnbs")
+
+Enhancement without permutation — :mod:`conninfpy.enhance`
+----------------------------------------------------------
+
+Apply an enhancement operator to a statistic map you computed yourself
+(scores only, no p-values):
+
+.. code-block:: python
+
+   from conninfpy import enhance, stats
+
+   t = stats.compute_t_stat(group1_z, group2_z, test_type="two-sample")
+   scores = enhance.apply_tfnbs(t, e=0.3, h=3.0, n=100)   # {'positive', 'negative'}
+

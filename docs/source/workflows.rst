@@ -71,12 +71,14 @@ fixed:
 Input conventions
 -----------------
 
-- Connectivity tensors are shape ``(n_subjects, N, N)``, symmetric, zero
-  diagonal.
-- :func:`analyze` applies Fisher r→z by default (``fisher_z=True``), so pass
-  **raw correlation matrices**. If your matrices are already on the z-scale,
-  pass ``fisher_z=False``. Lower-level functions do not apply the transform
-  automatically — call :func:`conninfpy.fisher_r_to_z` first.
+- Connectivity tensors are shape ``(n_subjects, N, N)``. The diagonal is
+  zeroed automatically (on a copy) by every entry point.
+- :func:`analyze` takes ``input='r'`` for **raw correlation matrices**
+  (Fisher r→z is applied once) or ``input='z'`` for data already on the
+  z-scale. Left as ``None`` it detects the scale from a unit diagonal or
+  values beyond ±1, and raises when the data could be either. The lower-level
+  functions in :mod:`conninfpy.stats` never transform — call
+  :func:`conninfpy.fisher_r_to_z` first.
 - Predictors, confounds, and ``sites`` must be row-aligned to the subject
   axis of the connectivity tensor.
 
