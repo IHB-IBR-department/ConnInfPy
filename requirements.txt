@@ -1,0 +1,3 @@
+# Public Streamlit Cloud runtime (Cloud auto-discovers this root file).
+# Mirrors requirements/gui.txt; NiMARE is intentionally excluded.
+-e .[app]
