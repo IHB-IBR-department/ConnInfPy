@@ -72,7 +72,7 @@ app = [
     "pyyaml",
     "networkx",
     "nibabel>=3.2",
-    "nilearn>=0.10",
+    "nilearn>=0.10.1",  # "zscore_sample" standardization
 ]
 decode = [
     "nimare>=0.4,<0.6",
