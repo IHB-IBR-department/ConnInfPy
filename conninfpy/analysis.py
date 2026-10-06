@@ -2,7 +2,7 @@
 
 Wraps the most common neuroimaging recipe in one function call:
 
-    Fisher r→z (optional) → ComBat (optional) → design diagnostics →
+    input preparation (zero diagonal, Fisher r→z once) → ComBat (optional) →
     GLM with Freedman-Lane permutation → :class:`InferenceResult`.
 
 Use the lower-level :func:`~conninfpy.compute_p_val` /
@@ -20,6 +20,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .results import InferenceResult, OmnibusInferenceResult
+from ._prepare import infer_input_kind, prepare_connectivity
 from ._rng import RngLike
 from .glm_stats import (
     compute_p_val_glm,
@@ -28,7 +29,6 @@ from .glm_stats import (
 )
 from .harmonize import combat_harmonize
 from .pairwise_stats import StatMethod, compute_p_val
-from .utils import fisher_r_to_z
 
 
 COMBAT_ONLY = "combat_only"
@@ -170,6 +170,40 @@ def _site_dummies(
     return out
 
 
+def _resolve_input_kind(
+    input: Optional[str],
+    fisher_z: Optional[bool],
+    stacks: Sequence[Any],
+) -> str:
+    """Resolve ``input=`` (and the legacy ``fisher_z=``) to ``'r'`` or ``'z'``.
+
+    An explicit value wins; otherwise the scale is inferred from the data.
+    Ambiguous data raise instead of guessing, because guessing ``'r'`` on
+    weak Fisher-z data would silently transform it twice.
+    """
+    if fisher_z is not None:
+        legacy = "r" if fisher_z else "z"
+        if input is not None and input != legacy:
+            raise ValueError(
+                f"input={input!r} contradicts fisher_z={fisher_z!r}; pass only "
+                "input= ('r' for correlations, 'z' for Fisher-z data)."
+            )
+        input = legacy
+    if input is not None:
+        if input not in ("r", "z"):
+            raise ValueError(f"input must be 'r', 'z' or None; got {input!r}.")
+        return input
+    kind = infer_input_kind(*stacks)
+    if kind is None:
+        raise ValueError(
+            "Cannot tell whether the connectivity holds correlations or "
+            "Fisher-z values: every value lies in [-1, 1] and the diagonal "
+            "is not all ones. Pass input='r' (correlations; Fisher r→z is "
+            "applied) or input='z' (already transformed)."
+        )
+    return kind
+
+
 def _resolve_strategy(
     harmonize: Any,
     *,
@@ -255,7 +289,8 @@ def analyze(
     sites: Optional[Sequence[Any]] = None,
     preserve: Optional[npt.NDArray[np.float64]] = None,
     harmonize: Optional[str] = "auto",
-    fisher_z: bool = True,
+    input: Optional[str] = None,
+    fisher_z: Optional[bool] = None,
     method: Union[str, StatMethod] = "tfnbs",
     acceleration: Optional[str] = "gpd",
     n_permutations: int = 200,
@@ -373,8 +408,17 @@ def analyze(
         - Two-sample + ``sites`` → skip ComBat with a flag asking
           the caller to promote to GLM with binary ``interest`` for
           the ``'combat_site_dummies_glm'`` recipe.
-    fisher_z : bool, default ``True``
-        Apply Fisher r→z to ``Y`` (or ``group1``/``group2``) first.
+    input : {'r', 'z'} or None, default ``None``
+        Scale of ``Y`` (or ``group1``/``group2``). ``'r'``: correlations,
+        Fisher r→z is applied once. ``'z'``: already on the analysis scale
+        (e.g. Fisher z), left unchanged. ``None`` detects it: a diagonal of
+        ones means ``'r'``, any off-diagonal value beyond ±1 means ``'z'``;
+        anything else is ambiguous and raises ``ValueError`` rather than
+        risk transforming Fisher-z data twice. The diagonal is always
+        zeroed; the caller's arrays are never modified.
+    fisher_z : bool, optional
+        Legacy alias: ``True`` means ``input='r'``, ``False`` means
+        ``input='z'``. Prefer ``input``.
     method : str, default ``'tfnbs'``
         Enhancement method.
     acceleration : str, default ``'gpd'``
@@ -582,15 +626,16 @@ def analyze(
         )
         preserve = None
 
-    # ---- Fisher r→z ----
-    if fisher_z:
-        if glm_mode:
-            Y = fisher_r_to_z(Y)
-        else:
-            if group1 is not None:
-                group1 = fisher_r_to_z(group1)
-            if group2 is not None:
-                group2 = fisher_r_to_z(group2)
+    # ---- Input preparation: zero diagonal, Fisher r→z exactly once ----
+    stacks = [Y] if glm_mode else [g for g in (group1, group2) if g is not None]
+    kind = _resolve_input_kind(input, fisher_z, stacks)
+    if glm_mode:
+        Y = prepare_connectivity(Y, kind, "Y")
+    else:
+        if group1 is not None:
+            group1 = prepare_connectivity(group1, kind, "group1")
+        if group2 is not None:
+            group2 = prepare_connectivity(group2, kind, "group2")
 
     # ---- ComBat strategies: preserve = confounds only ----
     # The tested variable is deliberately omitted from ComBat so the

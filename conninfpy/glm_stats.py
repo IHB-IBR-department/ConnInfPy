@@ -66,6 +66,7 @@ from .acceleration import compute_p_values_accelerated
 from ._compat import TailResult, make_tail_result, normalize_keys
 from ._progress import run_permutations
 from .results import InferenceResult, OmnibusInferenceResult
+from ._prepare import check_connectivity
 from ._rng import RngLike, resolve_seed, warn_legacy_random_state
 
 
@@ -640,6 +641,8 @@ def compute_p_val_glm(
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
 
+    Y = check_connectivity(Y, "Y")
+
     # ---- Resolve API mode ----
     if design_matrix is not None and interest is not None:
         raise ValueError(
@@ -986,6 +989,8 @@ def compute_p_val_glm_multi(
     if random_state is not None and rng is None:
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
+
+    Y = check_connectivity(Y, "Y")
 
     if not contrasts:
         raise ValueError("contrasts must be a non-empty dict.")

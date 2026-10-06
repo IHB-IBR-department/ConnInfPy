@@ -223,7 +223,7 @@ def _run_inference_background(
             test_type=test_type,
             sites=sites,
             harmonize=harmonization_choice,
-            fisher_z=False,
+            input="z",  # same as the former fisher_z=False: the app manages Fisher-z itself
             method=operator_choice,
             n_permutations=n_perms,
             rng=seed_val,
@@ -261,7 +261,7 @@ def _run_inference_background(
                 test_type=test_type,
                 sites=sites,
                 harmonize=harmonization_choice,
-                fisher_z=False,
+                input="z",  # same as the former fisher_z=False: the app manages Fisher-z itself
                 method=comp_method,
                 n_permutations=n_perms,
                 rng=seed_val,

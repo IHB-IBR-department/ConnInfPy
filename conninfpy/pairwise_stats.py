@@ -49,6 +49,7 @@ from .acceleration import compute_p_values_accelerated
 from ._compat import TailResult, make_tail_result, normalize_keys
 from ._progress import run_permutations
 from .results import InferenceResult, make_inference_result
+from ._prepare import check_connectivity
 from ._rng import RngLike, resolve_seed, warn_legacy_random_state
 
 
@@ -1357,6 +1358,15 @@ def compute_p_val(
     if random_state is not None and rng is None:
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
+
+    group1 = check_connectivity(group1, "group1")
+    if group2 is not None:
+        group2 = check_connectivity(group2, "group2")
+        if group2.shape[1:] != group1.shape[1:]:
+            raise ValueError(
+                f"group1 and group2 must have the same (N, N) shape; got "
+                f"{group1.shape[1:]} and {group2.shape[1:]}."
+            )
 
     # Validate method
     try:
