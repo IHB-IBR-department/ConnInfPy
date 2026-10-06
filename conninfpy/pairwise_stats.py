@@ -27,6 +27,7 @@ import numpy.typing as npt
 from scipy import stats
 
 from .defaults import (
+    DEFAULT_ACCELERATION,
     DEFAULT_EXTENT_EXPONENT,
     DEFAULT_HEIGHT_EXPONENT,
     DEFAULT_N_THRESHOLDS_PERMUTATION as DEFAULT_N_THRESHOLDS,
@@ -1200,7 +1201,7 @@ def compute_p_val(
     rng: RngLike = None,
     random_state: Optional[int] = None,  # deprecated alias for `rng`
     n_processes: Optional[int] = None,
-    acceleration: Optional[str] = None,
+    acceleration: Optional[str] = DEFAULT_ACCELERATION,
     verbose: bool = False,
     # Method-specific parameters
     net_labels: Optional[npt.NDArray[np.int_]] = None,
