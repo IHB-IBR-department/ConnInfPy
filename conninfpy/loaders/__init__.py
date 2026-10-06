@@ -10,20 +10,16 @@ from conninfpy.loaders.builtins import (
     CSVDirectoryLoader,
     NiftiDirectoryLoader,
     AbideSchaeferLoader,
-    OpenCloseLoader,
-    MultiSiteOpenCloseLoader,
-    StressTimeseriesLoader,
-    ZerssenNiftiLoader,
     FmriprepDerivativesLoader,
     TimeseriesDirectoryLoader,
     ConnectivityMatrixLoader,
     ConditionTimeseriesArrayLoader,
-    CustomPreparedZerssenLoader,
-    ChinaCloseCloseLoader
 )
 from conninfpy.loaders.manifest import (
     DatasetManifest,
     ManifestLoader,
+    get_loader,
+    register_loader,
     validate_manifest_dataset,
     load_manifest
 )
@@ -41,6 +37,8 @@ def load(manifest_path) -> LoadedDataset:
 
 __all__ = [
     "load",
+    "register_loader",
+    "get_loader",
     "LoadedDataset",
     "DatasetPreview",
     "DataValidationReport",
@@ -50,16 +48,10 @@ __all__ = [
     "CSVDirectoryLoader",
     "NiftiDirectoryLoader",
     "AbideSchaeferLoader",
-    "OpenCloseLoader",
-    "MultiSiteOpenCloseLoader",
-    "StressTimeseriesLoader",
-    "ZerssenNiftiLoader",
     "FmriprepDerivativesLoader",
     "TimeseriesDirectoryLoader",
     "ConnectivityMatrixLoader",
     "ConditionTimeseriesArrayLoader",
-    "CustomPreparedZerssenLoader",
-    "ChinaCloseCloseLoader",
     "DatasetManifest",
     "ManifestLoader",
     "validate_manifest_dataset",
