@@ -139,6 +139,17 @@ class TestGetComponents(TestCase):
         with self.assertRaises(ValueError):
             get_components(np.array([[0.0, 1.0], [0.0, 0.0]]))
 
+    def test_symmetric_nan_is_absent_edge(self):
+        """Check: symmetric NaNs pass the guard and count as no edge.
+
+        Input:    [[0, nan], [nan, 0]] — symmetric, but NaN != NaN.
+        Expected: two isolated nodes, sizes [1, 1].
+        Failure:  the symmetry guard rejected the matrix (plain == on
+                  NaN), so binarize's NaN → absent-edge rule never ran.
+        """
+        _, sizes = get_components(np.array([[0.0, np.nan], [np.nan, 0.0]]))
+        np.testing.assert_array_equal(sizes, [1, 1])
+
 
 class TestBinarize(TestCase):
     """binarize: nonzero→1, zero→0, and the copy=True/False behavior.

@@ -157,7 +157,7 @@ def get_components(A, no_depend=False):
     >>> sizes
     array([1, 1, 1])
     """
-    if not np.all(A == A.T):
+    if not np.array_equal(A, A.T, equal_nan=True):  # NaN != NaN; binarize drops it below
         raise ValueError('get_components can only be computed for undirected'
                          ' matrices. If your matrix is noisy, correct it with np.around')
 
