@@ -32,6 +32,9 @@ docs/_build/
 .venv/
 venv/
 
+# Local debug logs
+*.log
+
 # OS noise
 .DS_Store
 Thumbs.db
