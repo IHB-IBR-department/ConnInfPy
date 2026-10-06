@@ -1,5 +1,15 @@
 """Structured return types for the permutation pipelines.
 
+Two levels:
+
+- :func:`conninfpy.analyze` returns an
+  :class:`~conninfpy.analysis.AnalyzeResult`: the inference result
+  (``.inference``) plus harmonization diagnostics and plain-English
+  ``flags``. Dict-style access (``out['positive']``) and the edge-table
+  methods forward to ``.inference``.
+- The advanced pipelines in :mod:`conninfpy.stats` return the
+  :class:`InferenceResult` / :class:`OmnibusInferenceResult` defined here.
+
 :class:`InferenceResult` is a thin enrichment of
 :class:`~conninfpy._compat.TailResult` that carries run-time metadata
 (method, n_permutations, acceleration, wall-time, optional null

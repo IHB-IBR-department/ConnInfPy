@@ -183,8 +183,9 @@ that differ between conditions (e.g. condition-level motion):
 
 With no confounds, this delegates to ``compute_p_val(test_type='paired')``
 (sign-flip permutation, the exact non-asymptotic null). With Δ-level
-confounds it constructs Δ_Y = Y^A − Y^B, Δ_C = C^A − C^B and runs a
-one-sample GLM on the differences.
+confounds it constructs Δ_Y = Y^B − Y^A, Δ_C = C^B − C^A and runs a
+one-sample GLM on the differences. On both routes ``positive`` means
+Y^B > Y^A.
 
 Methods (enhancement operators)
 -------------------------------
