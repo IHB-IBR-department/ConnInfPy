@@ -58,7 +58,7 @@ def run_method(data, atlas, method_key: str, n_perm: int, seed: int):
 
     kwargs = dict(
         Y=Y, interest=interest, confounds=confounds, sites=sites,
-        harmonize="nuisance_only",  # Strategy D
+        harmonize="combat_site_dummies_glm",  # Strategy D
         fisher_z=False, n_permutations=n_perm, rng=seed, use_mp=True,
     )
 
