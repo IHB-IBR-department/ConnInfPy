@@ -937,6 +937,23 @@ class TestPairedGLMWrapper(unittest.TestCase):
         self.assertTrue(np.all(p['positive'] >= 0))
         self.assertTrue(np.all(p['positive'] <= 1))
 
+    def test_orientation_is_the_same_with_and_without_confounds(self):
+        """`positive` means Y_B > Y_A on both routes.
+
+        Regression: the confound route used Δ = Y_A − Y_B, so the sign of
+        `positive` flipped depending on whether confounds were passed.
+        """
+        Y_B = self.Y_B.copy()
+        Y_B[:, 1, 4] += 3.0
+        Y_B[:, 4, 1] += 3.0
+        common = dict(method='tstat', n_permutations=50, use_mp=False, rng=0)
+        no_conf = compute_p_val_paired_glm(self.Y_A, Y_B, **common)
+        with_conf = compute_p_val_paired_glm(
+            self.Y_A, Y_B, confounds_A=self.fd_A, confounds_B=self.fd_B, **common)
+        for res in (no_conf, with_conf):
+            self.assertGreater(res.stat_signed[1, 4], 0.0)
+            self.assertLess(res['positive'][1, 4], res['negative'][1, 4])
+
     def test_tstat_on_differences_matches_paired_ttest(self):
         """
         At the t-stat level: GLM on Δ = B − A with intercept contrast matches

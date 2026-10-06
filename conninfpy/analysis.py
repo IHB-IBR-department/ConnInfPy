@@ -782,13 +782,11 @@ def analyze(
             **method_kwargs,
         )
     elif paired_glm_mode:
-        # Repeated-measures GLM. Pass the conditions swapped (A=group2,
-        # B=group1) so the tested intercept of Δ = A − B = group2 − group1
-        # keeps analyze()'s `positive = group2 > group1` orientation, matching
-        # the no-confound paired path (compute_p_val(group1, group2, paired)).
+        # Repeated-measures GLM on Δ = group2 − group1, so `positive` keeps
+        # the `group2 > group1` orientation of the no-confound paired path.
         result = compute_p_val_paired_glm(
-            group2, group1,
-            confounds_A=confounds_group2, confounds_B=confounds_group1,
+            group1, group2,
+            confounds_A=confounds_group1, confounds_B=confounds_group2,
             method=method, n_permutations=n_permutations,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
