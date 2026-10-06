@@ -19,7 +19,7 @@ from typing import Any, Dict, Optional, Sequence, Union
 import numpy as np
 import numpy.typing as npt
 
-from ._result import InferenceResult, OmnibusInferenceResult
+from .results import InferenceResult, OmnibusInferenceResult
 from ._rng import RngLike
 from .glm_stats import (
     compute_p_val_glm,

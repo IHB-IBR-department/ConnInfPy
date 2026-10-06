@@ -40,7 +40,7 @@ from .defaults import (
     DEFAULT_NBS_THRESHOLD,
     DEFAULT_NBS_STAT,
 )
-from ._enhancement import (
+from .enhance import (
     apply_cnbs,
     apply_fbc_tfnbs,
     apply_nbs,
@@ -65,7 +65,7 @@ import time
 from .acceleration import compute_p_values_accelerated
 from ._compat import TailResult, make_tail_result, normalize_keys
 from ._progress import run_permutations
-from ._result import InferenceResult, OmnibusInferenceResult
+from .results import InferenceResult, OmnibusInferenceResult
 from ._rng import RngLike, resolve_seed, warn_legacy_random_state
 
 
@@ -508,7 +508,7 @@ def _freedman_lane_permutation_task(
 # =============================================================================
 # Enhancement registry
 # =============================================================================
-# Wrappers live in _enhancement.py and are shared with the t-test pipeline —
+# Wrappers live in enhance.py and are shared with the t-test pipeline —
 # see pairwise_stats.compute_p_val.
 
 _ENHANCE_MAP = {

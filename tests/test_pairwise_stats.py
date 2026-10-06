@@ -8,7 +8,7 @@ from conninfpy.pairwise_stats import (_permutation_task_ind,
                                    compute_p_val,
                                    compute_t_stat,
                                    _compute_welch_degrees_of_freedom)
-from conninfpy._enhancement import apply_tfnbs
+from conninfpy.enhance import apply_tfnbs
 
 from tests import fixtures
 import numpy as np

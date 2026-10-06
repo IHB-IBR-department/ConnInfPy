@@ -1,7 +1,7 @@
 """
-Shared enhancement wrappers for both t-test and GLM pipelines.
+Network enhancement: the ``apply_*`` wrappers plus the raw scoring functions.
 
-Each wrapper is a pure transformation: ``stat_dict → score_dict``. It takes a
+The ``apply_*`` wrappers are shared by the t-test and GLM pipelines. Each wrapper is a pure transformation: ``stat_dict → score_dict``. It takes a
 per-direction statistic dict (``{'positive': ..., 'negative': ...}``) and
 applies the corresponding network-based enhancement to each direction
 independently.
@@ -34,12 +34,13 @@ from .defaults import (
     DEFAULT_N_THRESHOLDS_PERMUTATION as DEFAULT_N_THRESHOLDS,
     DEFAULT_START_THRESHOLD,
 )
-from .nbs_score import get_cnbs_score, get_nbs_score
+from .nbs_score import get_cnbs_score, get_nbs_score, nbs_bct
 from .tfnbs_score import (
     get_fbc_tfnbs_score,
     get_network_informed_tfnbs_score,
     get_tfnbs_score,
 )
+from .utils import create_prior_weights
 
 __all__ = [
     "apply_tfnbs",
@@ -47,6 +48,13 @@ __all__ = [
     "apply_cnbs",
     "apply_ni_tfnbs",
     "apply_fbc_tfnbs",
+    # raw scoring (no permutation)
+    "get_tfnbs_score",
+    "get_network_informed_tfnbs_score",
+    "get_fbc_tfnbs_score",
+    "create_prior_weights",
+    # classical BCT-style NBS reference (own permutation loop)
+    "nbs_bct",
 ]
 
 

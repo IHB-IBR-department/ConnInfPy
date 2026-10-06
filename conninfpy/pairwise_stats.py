@@ -4,7 +4,7 @@ Pairwise statistical testing module for network analysis.
 This module provides functions for computing t-statistics and p-values
 using permutation testing, with optional enhancement (TFNBS, NBS, cNBS,
 NI-TFNBS, FBC-TFNBS) applied via shared ``apply_*`` wrappers from
-``conninfpy._enhancement``.
+``conninfpy.enhance``.
 
 Main Functions
 --------------
@@ -36,7 +36,7 @@ from .defaults import (
     DEFAULT_NBS_THRESHOLD,
     DEFAULT_NBS_STAT,
 )
-from ._enhancement import (
+from .enhance import (
     apply_cnbs,
     apply_fbc_tfnbs,
     apply_nbs,
@@ -48,7 +48,7 @@ import time
 from .acceleration import compute_p_values_accelerated
 from ._compat import TailResult, make_tail_result, normalize_keys
 from ._progress import run_permutations
-from ._result import InferenceResult, make_inference_result
+from .results import InferenceResult, make_inference_result
 from ._rng import RngLike, resolve_seed, warn_legacy_random_state
 
 
@@ -124,7 +124,7 @@ class StatMethod(str, Enum):
 CONSTRAINED_METHODS = {StatMethod.CNBS, StatMethod.NI_TFNBS, StatMethod.FBC_TFNBS}
 
 # Enhancement-function registry. Maps StatMethod → pure `stat_dict → stat_dict`
-# wrapper from ._enhancement (shared with glm_stats.compute_p_val_glm). Methods
+# wrapper from .enhance (shared with glm_stats.compute_p_val_glm). Methods
 # without enhancement (raw t-stat, parametric baselines, bh_fdr_perm) map to None.
 _ENHANCE_MAP = {
     StatMethod.TSTAT: None,

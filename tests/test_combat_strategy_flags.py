@@ -32,7 +32,7 @@ import warnings
 import numpy as np
 
 from conninfpy import analyze, generate_multisite_glm_dataset
-from conninfpy._analyze import _site_dummies
+from conninfpy.analysis import _site_dummies
 
 
 # Tiny problem size — Tier-1 must stay fast.

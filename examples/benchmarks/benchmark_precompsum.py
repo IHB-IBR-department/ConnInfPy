@@ -48,7 +48,7 @@ from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from conninfpy._enhancement import apply_nbs, apply_tfnbs
+from conninfpy.enhance import apply_nbs, apply_tfnbs
 from conninfpy.pairwise_stats import (
     _extract_max_stats,
     _fast_perm_task_enhanced_paired,
