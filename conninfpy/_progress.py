@@ -24,6 +24,22 @@ except ImportError:  # pragma: no cover (env-specific)
     _HAS_TQDM = False
 
 
+def _limit_worker_threads() -> None:
+    """Pool initializer: one BLAS/OpenMP thread per worker process.
+
+    The pool already runs one permutation per core. Left alone, every
+    worker's BLAS also starts one thread per core, oversubscribing the
+    machine (measured on 18 cores: a small TFNBS run took 9.3 s with the
+    default threading and 2.6 s with one thread per worker).
+    """
+    try:
+        import numpy  # noqa: F401  (load BLAS first so threadpoolctl sees it)
+        from threadpoolctl import threadpool_limits
+    except ImportError:  # pragma: no cover (threadpoolctl is a core dep)
+        return
+    threadpool_limits(limits=1)
+
+
 def run_permutations(
     task_func: Callable[[int], T],
     seeds: Sequence[int],
@@ -81,10 +97,8 @@ def run_permutations(
         ctx = multiprocessing.get_context("forkserver")
     except ValueError:  # pragma: no cover (platform-specific)
         ctx = multiprocessing.get_context("spawn")
-    if n_processes is not None:
-        pool = ctx.Pool(processes=n_processes)
-    else:
-        pool = ctx.Pool()
+    # processes=None lets Pool use every core.
+    pool = ctx.Pool(processes=n_processes, initializer=_limit_worker_threads)
     with pool as p:
         if not verbose:
             return list(p.map(task_func, seeds))
