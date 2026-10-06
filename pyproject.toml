@@ -55,6 +55,9 @@ dependencies = [
     "pyyaml",
 ]
 
+[project.scripts]
+conninfpy = "conninfpy.cli:main"
+
 [project.urls]
 Documentation = "https://ihb-ibr-department.github.io/ConnInfPy/"
 Source = "https://github.com/IHB-IBR-department/ConnInfPy"

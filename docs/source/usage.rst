@@ -338,3 +338,40 @@ Apply an enhancement operator to a statistic map you computed yourself
    t = stats.compute_t_stat(group1_z, group2_z, test_type="two-sample")
    scores = enhance.apply_tfnbs(t, e=0.3, h=3.0, n=100)   # {'positive', 'negative'}
 
+
+Command line — ``conninfpy run``
+--------------------------------
+
+An analysis file (YAML) names a data manifest, the design and the inference
+settings; ``conninfpy run`` loads the data, calls :func:`conninfpy.analyze`
+and writes ``edges.csv`` (significant edges, atlas-annotated when an atlas is
+known), ``pvals.npz`` and ``provenance.json`` (package version, analysis file,
+data summary, warnings, run time):
+
+.. code-block:: yaml
+
+   data: ../../datasets/abide_mini.yaml   # manifest, relative to this file
+   design:
+     type: glm                            # glm | two-sample | paired | one-sample
+     interest: Age                        # a list tests several predictors in one pass
+     confounds: [Sex, Motion_FD]          # text columns are one-hot encoded
+     sites: site
+   inference:                             # any conninfpy.analyze() keyword
+     method: tfnbs
+     n_permutations: 200
+     acceleration: gpd
+     rng: 42
+   atlas: schaefer_100_yeo7               # built-in name or CSV path
+   output: results/abide_mini_age
+
+.. code-block:: bash
+
+   conninfpy run examples/configs/abide_mini_age.yaml [--out DIR] [--n-permutations N] [--no-mp]
+   conninfpy info
+
+Two-sample designs use ``group:`` and ``levels: [group1, group2]``
+(``positive`` = second level higher); paired designs use ``condition:``,
+``levels:`` and ``subject:`` (default ``subject_id``) and pair rows by subject.
+Rows with a missing value in any column the design uses are dropped and
+counted in ``provenance.json``. ``python -m conninfpy`` is equivalent.
+
