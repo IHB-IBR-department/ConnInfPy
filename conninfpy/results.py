@@ -38,7 +38,6 @@ import numpy.typing as npt
 
 from ._compat import TailResult, make_tail_result
 from ._export import build_tailed_dataframe, build_omnibus_dataframe
-from .decode import annotate_edge_table
 
 
 class InferenceResult(TailResult):
@@ -394,6 +393,8 @@ class InferenceResult(TailResult):
         sig_kwargs = {k: v for k, v in kwargs.items() if k in sig_keys}
         decode_kwargs = {k: v for k, v in kwargs.items() if k not in sig_keys}
         
+        from .decode import annotate_edge_table  # decoding is optional; load on use
+
         edges = self.significant_edges(atlas=atlas, **sig_kwargs)
         return annotate_edge_table(edges, atlas, top_n=top_n, **decode_kwargs)
 

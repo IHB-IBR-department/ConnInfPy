@@ -9,10 +9,6 @@ import streamlit as st
 from conninfpy.atlas import AtlasInfo
 from conninfpy.loaders import (
     AbideSchaeferLoader,
-    OpenCloseLoader,
-    MultiSiteOpenCloseLoader,
-    StressTimeseriesLoader,
-    ZerssenNiftiLoader,
     NumpyLoader,
     CSVDirectoryLoader,
     NiftiDirectoryLoader,
@@ -20,9 +16,17 @@ from conninfpy.loaders import (
     TimeseriesDirectoryLoader,
     ConnectivityMatrixLoader,
     ConditionTimeseriesArrayLoader,
-    CustomPreparedZerssenLoader,
     ManifestLoader,
-    ChinaCloseCloseLoader
+)
+# Lab-specific loaders live with the app; importing them also registers
+# them for manifests (e.g. datasets/open_close.yaml).
+from apps.utils.lab_loaders import (
+    ChinaCloseCloseLoader,
+    CustomPreparedZerssenLoader,
+    MultiSiteOpenCloseLoader,
+    OpenCloseLoader,
+    StressTimeseriesLoader,
+    ZerssenNiftiLoader,
 )
 
 APP_DIR = Path(__file__).resolve().parent.parent
