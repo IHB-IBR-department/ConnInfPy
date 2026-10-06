@@ -1204,7 +1204,7 @@ def compute_p_val_paired_glm(
     confounds_A: Optional[npt.NDArray[np.float64]] = None,
     confounds_B: Optional[npt.NDArray[np.float64]] = None,
     **kwargs,
-) -> Union[InferenceResult, Dict[str, npt.NDArray[np.float64]]]:
+) -> Union[InferenceResult, OmnibusInferenceResult]:
     """
     Paired-difference GLM: test ``Y_A`` vs ``Y_B`` within-subject, optionally
     controlling for per-subject differences in confounds.
@@ -1216,8 +1216,8 @@ def compute_p_val_paired_glm(
       permutation). This is numerically equivalent to a one-sample GLM on
       the differences and avoids the Freedman-Lane degeneracy that occurs
       when the contrast targets the only column in the design matrix.
-    - **With confounds** → builds ``Δ_Y = Y_A − Y_B`` and
-      ``Δ_C = confounds_A − confounds_B``, then calls
+    - **With confounds** → builds ``Δ_Y = Y_B − Y_A`` and
+      ``Δ_C = confounds_B − confounds_A``, then calls
       :func:`compute_p_val_glm` with ``design_matrix = [1, Δ_C]``,
       ``contrast = [1, 0, ..., 0]`` (intercept as the effect of interest).
 
@@ -1234,7 +1234,7 @@ def compute_p_val_paired_glm(
     confounds_A, confounds_B : ndarray of shape (n_subjects,) or (n_subjects, k), optional
         Aligned per-subject confound values for the two conditions. Either
         pass both or neither. If passed, the *difference*
-        ``confounds_A - confounds_B`` enters the GLM as a nuisance regressor.
+        ``confounds_B - confounds_A`` enters the GLM as a nuisance regressor.
     **kwargs
         Forwarded to the downstream call (``compute_p_val`` or
         ``compute_p_val_glm``). ``test_type`` is fixed to ``'paired'`` when
@@ -1242,12 +1242,12 @@ def compute_p_val_paired_glm(
 
     Returns
     -------
-    dict
-        ``{'positive', 'negative'}`` regardless of routing. For the
-        no-confound path, ``positive`` corresponds to ``Y_B > Y_A`` (B has
-        greater connectivity); for the with-confound path it corresponds
-        to the sign of the ``Y_A - Y_B`` intercept adjusted for ``Δ_C``.
-        Legacy keys ``'g2>g1'`` / ``'g1>g2'`` remain accessible with a
+    InferenceResult
+        Directional ``'positive'`` / ``'negative'`` p-values. On both
+        routes ``positive`` means ``Y_B > Y_A`` (B has greater
+        connectivity), the same orientation as
+        ``compute_p_val(Y_A, Y_B, test_type='paired')``; with confounds it
+        is the ``Δ_Y = Y_B − Y_A`` intercept adjusted for ``Δ_C``. Legacy keys ``'g2>g1'`` / ``'g1>g2'`` remain accessible with a
         :class:`DeprecationWarning` until v2.1.
 
     Raises
@@ -1299,8 +1299,10 @@ def compute_p_val_paired_glm(
             f"{Y_A.shape[0]}."
         )
 
-    Delta_Y = Y_A - Y_B
-    Delta_C = confounds_A - confounds_B
+    # B − A, so `positive` means Y_B > Y_A exactly as on the no-confound
+    # route (compute_p_val paired: positive = group2 > group1).
+    Delta_Y = Y_B - Y_A
+    Delta_C = confounds_B - confounds_A
     if Delta_C.ndim == 1:
         Delta_C = Delta_C[:, np.newaxis]
 
