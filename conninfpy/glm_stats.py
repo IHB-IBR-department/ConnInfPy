@@ -48,18 +48,20 @@ from .enhance import (
     apply_ni_tfnbs,
     apply_tfnbs,
 )
-from .pairwise_stats import (
-    _extract_max_stats,
+from ._engine import (
     _collect_results_to_arrays,
     _compute_p_values_from_null,
+    _encode_strata,
+    _extract_max_stats,
     _is_worker_process,
     _stratified_perm,
-    _encode_strata,
+    get_available_cores,
+)
+from .pairwise_stats import (
+    CONSTRAINED_METHODS,
+    StatMethod,
     _grid_from_kwargs,
     compute_p_val,
-    get_available_cores,
-    StatMethod,
-    CONSTRAINED_METHODS,
 )
 import time
 
