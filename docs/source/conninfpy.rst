@@ -1,8 +1,8 @@
 conninfpy
 =========
 
-Submodules
-----------
+Start with :func:`conninfpy.analyze`; reach advanced functions through
+their module.
 
 Main entry point and result types:
 
@@ -12,15 +12,16 @@ Main entry point and result types:
    conninfpy.analysis
    conninfpy.results
 
-Inferential pipelines (advanced entry points):
+Advanced inference (custom designs, F-contrasts, null distributions):
 
 .. toctree::
    :maxdepth: 1
 
+   conninfpy.stats
    conninfpy.pairwise_stats
    conninfpy.glm_stats
 
-Enhancement operators:
+Network enhancement:
 
 .. toctree::
    :maxdepth: 1
@@ -42,6 +43,7 @@ Synthetic data and benchmark scenarios:
 .. toctree::
    :maxdepth: 1
 
+   conninfpy.sim
    conninfpy.synth_datasets
    conninfpy.topologies
 

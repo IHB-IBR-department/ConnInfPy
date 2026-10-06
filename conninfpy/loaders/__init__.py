@@ -28,7 +28,19 @@ from conninfpy.loaders.manifest import (
     load_manifest
 )
 
+
+def load(manifest_path) -> LoadedDataset:
+    """Load a dataset described by a YAML manifest.
+
+    Shortcut for ``ManifestLoader(manifest_path).load()``. The result
+    carries ``data`` (n_subjects, N, N) or timeseries, ``pheno`` (a
+    per-subject DataFrame), ``data_kind`` and, when known, ``atlas``.
+    """
+    return ManifestLoader(str(manifest_path)).load()
+
+
 __all__ = [
+    "load",
     "LoadedDataset",
     "DatasetPreview",
     "DataValidationReport",
