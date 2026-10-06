@@ -1,6 +1,6 @@
-But # Simulation & Calibration Validation
+# Simulation & Calibration Validation
 
-odeThis directory implements the "Multiverse Audit" axis: family-wise error (FWE) control under the null, and statistical power under known topologies.
+This directory implements the "Multiverse Audit" axis: family-wise error (FWE) control under the null, and statistical power under known topologies.
 
 ## Scientific Claims
 

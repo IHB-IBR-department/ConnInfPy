@@ -22,8 +22,12 @@ from conninfpy import fisher_r_to_z
 # Paths
 # =============================================================================
 
-DATA_DIR = os.path.expanduser(
-    "~/Yandex.Disk.localized/IHB/ABIDE_TS_Schaefer100"
+# ABIDE I PCP time series (Schaefer-100, extracted with nilearn). Defaults to
+# the repository copy; set ABIDE_TS_DIR to read them from elsewhere.
+DATA_DIR = os.environ.get(
+    "ABIDE_TS_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                 "datasets", "ABIDE_TS_Schaefer100"),
 )
 OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "results", "abide_prepared.npz")
