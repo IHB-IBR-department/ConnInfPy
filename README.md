@@ -110,8 +110,9 @@ streamlit run apps/streamlit_nimare.py
 
 ### Streamlit Cloud profiles
 
-`requirements/gui.txt` is the public Streamlit Cloud profile.
-It intentionally excludes NiMARE, so Cloud discovers the lightweight runtime
+The repository-root `requirements.txt` is the public Streamlit Cloud profile
+(Cloud only looks for dependency files next to the entry point or at the repo
+root, so it mirrors `requirements/gui.txt` there). It intentionally excludes NiMARE, so Cloud discovers the lightweight runtime
 automatically and labels decoding as available in the offline version.
 
 To run the complete local/offline version, install:
