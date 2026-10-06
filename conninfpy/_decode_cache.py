@@ -1,3 +1,4 @@
+import inspect
 import os
 import shutil
 import pickle
@@ -19,6 +20,32 @@ def get_cache_dir(cache_dir: str | None = None) -> Path:
         return Path(env_val)
     return Path.home() / ".conninfpy" / "nimare"
 
+def _fetch_files(fetch, **kwargs):
+    """Call a NiMARE fetcher and get the downloaded-file manifest back.
+
+    NiMARE >= 0.21 returns a ``Studyset`` by default; ``return_type='files'``
+    restores the list-of-dicts manifest (``coordinates`` / ``metadata`` /
+    ``features``) that older versions returned unconditionally.
+    """
+    if "return_type" in inspect.signature(fetch).parameters:
+        kwargs["return_type"] = "files"
+    return fetch(**kwargs)
+
+
+def _load_cached(pkl_path):
+    """Load a pickled NiMARE dataset; ``None`` if it is missing or unreadable.
+
+    A cache written by another NiMARE / pandas version can fail with any
+    exception (AttributeError, ModuleNotFoundError, ...), not only
+    ``PickleError``; in every case rebuild rather than crash.
+    """
+    try:
+        with open(pkl_path, "rb") as f:
+            return pickle.load(f)
+    except Exception:
+        return None
+
+
 def fetch_neurosynth_dataset(cache_dir: str | None = None, *, force: bool = False):
     """One-shot fetch + Coordinate -> Dataset conversion.
     
@@ -38,18 +65,16 @@ def fetch_neurosynth_dataset(cache_dir: str | None = None, *, force: bool = Fals
     pkl_path = c_dir / "neurosynth_dataset.pkl"
 
     if pkl_path.exists() and not force:
-        try:
-            with open(pkl_path, "rb") as f:
-                return pickle.load(f)
-        except (pickle.PickleError, EOFError):
-            # If the pickle is corrupted, rebuild
-            pass
+        cached = _load_cached(pkl_path)
+        if cached is not None:
+            return cached
 
     # Fetch raw files
     raw_dir = c_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     
-    db_files = fetch_neurosynth(data_dir=str(raw_dir), version="7", active_filters=["glove"])
+    db_files = _fetch_files(fetch_neurosynth, data_dir=str(raw_dir), version="7",
+                            active_filters=["glove"])
     if not db_files:
         raise RuntimeError("Failed to fetch Neurosynth dataset from NiMARE.")
         
@@ -101,17 +126,16 @@ def fetch_neuroquery_dataset(cache_dir: str | None = None, *, force: bool = Fals
     pkl_path = c_dir / "neuroquery_dataset.pkl"
 
     if pkl_path.exists() and not force:
-        try:
-            with open(pkl_path, "rb") as f:
-                return pickle.load(f)
-        except (pickle.PickleError, EOFError):
-            pass
+        cached = _load_cached(pkl_path)
+        if cached is not None:
+            return cached
 
     # Fetch raw files
     raw_dir = c_dir / "raw_nq"
     raw_dir.mkdir(parents=True, exist_ok=True)
     
-    db_files = fetch_neuroquery(
+    db_files = _fetch_files(
+        fetch_neuroquery,
         data_dir=str(raw_dir),
         version="1",
         source="combined",

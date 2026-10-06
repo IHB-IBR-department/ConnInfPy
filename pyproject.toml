@@ -75,7 +75,8 @@ app = [
     "nilearn>=0.10.1",  # "zscore_sample" standardization
 ]
 decode = [
-    "nimare>=0.4,<0.6",
+    # 0.5.5 and 0.22.1 tested; NiMARE pins its own compatible nilearn.
+    "nimare>=0.5.5",
     "nibabel>=3.2",
 ]
 full = [
