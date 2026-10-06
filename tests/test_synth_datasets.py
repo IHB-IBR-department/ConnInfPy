@@ -29,6 +29,21 @@ class Test(TestCase):
         self.assertEqual(group1.shape, (50, N, N))
 
 
+    def test_one_sided_masks(self):
+        """Masks with only +1 (or only -1) cells generate data.
+
+        Regression: the -1 branch drew noise sized by the +1 cells, so any
+        mask whose +1 and -1 cell counts differed raised a broadcast error.
+        """
+        N = 12
+        for sign in (1, -1):
+            mask = np.zeros((N, N))
+            mask[:4, :4] = sign
+            g1, g2, _ = generate_fc_matrices(N, 0.2, mask, 5, 6, seed=0)
+            self.assertEqual(g1.shape, (5, N, N))
+            self.assertEqual(g2.shape, (6, N, N))
+
+
 class TestModularDatasetGenerator(TestCase):
     
     def setUp(self):
