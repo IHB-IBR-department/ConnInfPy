@@ -4,7 +4,7 @@
 # expected run times and open issues.
 #
 # Usage (from anywhere in the repository):
-#   bash paper/reproduce_figures.sh                 # everything (~3.5 h on an M5 Pro)
+#   bash paper/reproduce_figures.sh                 # everything (~3 h on an M5 Pro)
 #   bash paper/reproduce_figures.sh abide collect   # selected stages
 # Stages: abide | openclose | simulation | sensitivity | benchmarks | collect | all
 #
