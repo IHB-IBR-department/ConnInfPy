@@ -141,7 +141,7 @@ class TestCombatSiteDummiesGlmProvenance(unittest.TestCase):
             out.combat_diagnostics.get("strategy"),
             "combat_site_dummies_glm",
         )
-        self.assertEqual(out.combat_diagnostics.get("legacy_strategy"), "D")
+        self.assertNotIn("legacy_strategy", out.combat_diagnostics)
         self.assertEqual(
             out.combat_diagnostics.get("preserve_columns"),
             "confounds_only",
@@ -179,7 +179,7 @@ class TestSiteDummiesGlmProvenance(unittest.TestCase):
             out.combat_diagnostics.get("strategy"),
             "site_dummies_glm",
         )
-        self.assertEqual(out.combat_diagnostics.get("legacy_strategy"), "E")
+        self.assertNotIn("legacy_strategy", out.combat_diagnostics)
         self.assertNotIn(
             "between_site_variance_ratio_after_over_before",
             out.combat_diagnostics,

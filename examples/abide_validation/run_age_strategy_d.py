@@ -76,7 +76,7 @@ def run_variant(
 ) -> None:
     print("\n" + "=" * 72)
     print(f"{label}: interest={interest_name}, confounds={confound_names}")
-    print(f"  harmonize='nuisance_only' (Strategy D), site dummies in GLM")
+    print(f"  harmonize='combat_site_dummies_glm' (Strategy D), site dummies in GLM")
     print("=" * 72)
 
     Y = data["connectivity_z"]
@@ -94,7 +94,7 @@ def run_variant(
         interest=interest,
         confounds=confounds,
         sites=sites,
-        harmonize="nuisance_only",                   # Strategy D
+        harmonize="combat_site_dummies_glm",                   # Strategy D
         fisher_z=False,
         method="tfnbs",
         e=0.4, h=3.0, n=10,

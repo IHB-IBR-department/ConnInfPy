@@ -67,7 +67,7 @@ class TestAutoDispatchGLM(unittest.TestCase):
             out.inference.combat_diagnostics["strategy"],
             "combat_site_dummies_glm",
         )
-        self.assertEqual(out.inference.combat_diagnostics["legacy_strategy"], "D")
+        self.assertNotIn("legacy_strategy", out.inference.combat_diagnostics)
         self.assertIn(
             "between_site_variance_ratio_after_over_before",
             out.inference.combat_diagnostics,
@@ -90,7 +90,7 @@ class TestAutoDispatchGLM(unittest.TestCase):
             out.inference.combat_diagnostics["strategy"],
             "site_dummies_glm",
         )
-        self.assertEqual(out.inference.combat_diagnostics["legacy_strategy"], "E")
+        self.assertNotIn("legacy_strategy", out.inference.combat_diagnostics)
         self.assertTrue(out.inference.strata_provided)
 
     def test_explicit_preserve_overridden_under_combat_site_dummies_glm(self):
@@ -291,7 +291,7 @@ class TestMultiPredictorGLM(unittest.TestCase):
                 out[k].combat_diagnostics.get('strategy'),
                 'combat_site_dummies_glm',
             )
-            self.assertEqual(out[k].combat_diagnostics.get('legacy_strategy'), 'D')
+            self.assertNotIn("legacy_strategy", out[k].combat_diagnostics)
             self.assertTrue(out[k].flags)        # shared flags copied to each
 
     def test_dict_interest_supports_eh_grid(self):
