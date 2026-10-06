@@ -104,6 +104,9 @@ class TopologyDataset:
     - `group1`/`group2` are arrays of shape (n_samples, N, N) with zero diagonal.
     - `net_labels` can be passed to cNBS/NI/FBC methods.
     - `effect_mask` is the signed/weighted topology mask (not multiplied by effect_size).
+    - `population_diff` is the population correlation of group 2 minus that of
+      group 1. It equals ``effect_size * effect_mask`` (plus the per-edge effect
+      noise) unless the positive-definite projection had to move it.
     """
 
     group1: ArrayF
@@ -113,6 +116,7 @@ class TopologyDataset:
     effect_size: float
     scenario: TopologyScenario
     meta: Dict[str, object] = field(default_factory=dict)
+    population_diff: Optional[ArrayF] = None
 
     def fisher_z(self) -> Tuple[ArrayF, ArrayF]:
         """Element-wise Fisher r-to-z transform (upper triangle helper)."""
@@ -201,13 +205,16 @@ class TopologyDatasetGenerator:
             gen.rng = np.random.default_rng(data_seed)
             gen.base_cov = gen._create_base_covariance(intra_corr, inter_corr, self.noise_level)
 
-        g1, g2, net_labels = gen.generate_data(
+        g1, g2, net_labels, cov_g1, cov_g2 = gen.generate_data(
             effect_mask=effect_mask,
             effect_size=float(effect_size),
             n_samples_g1=n_samples_g1,
             n_samples_g2=n_samples_g2,
             time_points=time_points,
+            return_population=True,
         )
+        population_diff = cov_g2 - cov_g1
+        np.fill_diagonal(population_diff, 0.0)
 
         if zero_diagonal:
             diag = np.arange(self.n_nodes)
@@ -232,6 +239,7 @@ class TopologyDatasetGenerator:
             effect_size=float(effect_size),
             scenario=scenario_obj,
             meta=meta,
+            population_diff=population_diff,
         )
 
 

@@ -11,7 +11,7 @@ Usage:
 
     python examples/simulation_validation/power/tfnbs_eh_sweep.py \
         --results-dir examples/simulation_validation/results/power/power_analysis_1000_30 \
-        --effect-size 0.25 \
+        --effect-size 0.125 \
         --sample-size 30
 
     # Replot from existing summary CSVs only:
@@ -37,7 +37,7 @@ import seaborn as sns
 
 DEFAULT_RESULTS_DIR = Path("examples/simulation_validation/results/power/power_analysis_1000_30")
 TFNBS_METHODS = ("tfnbs", "ni_tfnbs", "fbc_tfnbs")
-METRICS = ("TPR", "FDR", "precision", "FPR")
+METRICS = ("TPR", "FDR", "FDR_strict", "precision", "FPR")
 GROUP_COLS = ["method", "scenario", "effect_size", "n_samples", "e", "h"]
 PAPER_CHOICE_E = 0.4
 PAPER_CHOICE_H = 3.0
@@ -129,6 +129,8 @@ def _summarize_power_table(path: Path) -> pd.DataFrame:
         "TPR_std",
         "FDR_mean",
         "FDR_std",
+        "FDR_strict_mean",
+        "FDR_strict_std",
         "precision_mean",
         "precision_std",
         "FPR_mean",
@@ -350,8 +352,9 @@ def plot_metric_rows(
             ax.set_xlabel("E")
             ax.set_ylabel(f"{metric}\nH" if col == 0 else "H")
 
+    selector_label = r"$\Delta r$" if selector_col == "effect_size" else selector_col
     fig.suptitle(
-        f"{METHOD_LABELS.get(method, method)} (E,H) sweep, {selector_col}={selector_value:g}",
+        f"{METHOD_LABELS.get(method, method)} (E,H) sweep, {selector_label}={selector_value:g}",
         y=1.02,
         fontsize=12,
         fontweight="bold",
@@ -469,7 +472,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR)
     parser.add_argument("--summary-dir", type=Path, default=None)
     parser.add_argument("--plot-dir", type=Path, default=None)
-    parser.add_argument("--effect-size", type=float, nargs="+", default=[0.25])
+    parser.add_argument("--effect-size", type=float, nargs="+", default=[0.125])
     parser.add_argument("--sample-size", type=float, nargs="*", default=[])
     parser.add_argument("--metric", nargs="+", default=["TPR", "FDR"])
     parser.add_argument("--method", nargs="+", choices=TFNBS_METHODS, default=list(TFNBS_METHODS))

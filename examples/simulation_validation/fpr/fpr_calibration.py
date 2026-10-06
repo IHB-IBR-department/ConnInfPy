@@ -129,11 +129,12 @@ class FPRConfig:
     intra_corr: float = 0.3
     inter_corr: float = 0.05
     noise_level: float = 0.05
+    time_points: int = 30       # same as the power simulations
 
     # Method-specific parameters
-    tfnbs_e: float = 0.3
+    tfnbs_e: float = 0.4
     tfnbs_h: float = 3.0
-    tfnbs_n: int = 50
+    tfnbs_n: int = 10
     tfnbs_start_thres: float = 1.65
     nbs_threshold: float = 2.0
     fbc_min_cluster: int = 3
@@ -243,9 +244,10 @@ def generate_null_dataset(
     intra_corr: float = 0.3,
     inter_corr: float = 0.05,
     noise_level: float = 0.05,
+    time_points: int = 30,
     seed: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Generate a null dataset with no true effect."""
+    """Generate a null dataset: both groups share one population correlation."""
 
     generator = ModularDatasetGenerator(
         N=n_nodes,  # ModularDatasetGenerator uses 'N' for number of nodes
@@ -264,6 +266,7 @@ def generate_null_dataset(
         effect_size=0.0,  # NULL hypothesis
         n_samples_g1=n_samples,
         n_samples_g2=n_samples,
+        time_points=time_points,
     )
 
     return group1, group2, net_labels
@@ -293,6 +296,7 @@ def run_single_null_test(
         intra_corr=config.intra_corr,
         inter_corr=config.inter_corr,
         noise_level=config.noise_level,
+        time_points=config.time_points,
         seed=seed,
     )
 
@@ -310,56 +314,43 @@ def run_single_null_test(
     # Number of edges in upper triangle
     n_edges = config.n_nodes * (config.n_nodes - 1) // 2
 
-    # Compute p-values
-    try:
-        p_vals = compute_p_val(
-            group1_z, group2_z,
-            test_type="two-sample",
-            method=compute_method,
-            n_permutations=config.n_permutations,
-            use_mp=config.use_mp,
-            random_state=seed,
-            **kwargs,
-        )
+    # Compute p-values (an error stops the run: recording it as "nothing
+    # significant" would bias the FWER estimate downwards)
+    p_vals = compute_p_val(
+        group1_z, group2_z,
+        test_type="two-sample",
+        method=compute_method,
+        n_permutations=config.n_permutations,
+        use_mp=config.use_mp,
+        random_state=seed,
+        **kwargs,
+    )
 
-        p_pos = np.array(p_vals["g2>g1"])
-        p_neg = np.array(p_vals["g1>g2"])
+    p_pos = np.array(p_vals["g2>g1"])
+    p_neg = np.array(p_vals["g1>g2"])
 
-        # Get upper triangle only (symmetric matrix)
-        triu_idx = np.triu_indices(config.n_nodes, k=1)
-        p_pos_upper = p_pos[triu_idx]
-        p_neg_upper = p_neg[triu_idx]
+    # Get upper triangle only (symmetric matrix)
+    triu_idx = np.triu_indices(config.n_nodes, k=1)
+    p_pos_upper = p_pos[triu_idx]
+    p_neg_upper = p_neg[triu_idx]
 
-        # Positive direction metrics
-        sig_mask_pos = p_pos_upper <= config.alpha
-        any_sig_pos = bool(np.any(sig_mask_pos))
-        n_sig_pos = int(np.sum(sig_mask_pos))
-        fpr_pos = n_sig_pos / n_edges
-        min_p_pos = float(np.min(p_pos_upper))
+    # Positive direction metrics
+    sig_mask_pos = p_pos_upper <= config.alpha
+    any_sig_pos = bool(np.any(sig_mask_pos))
+    n_sig_pos = int(np.sum(sig_mask_pos))
+    fpr_pos = n_sig_pos / n_edges
+    min_p_pos = float(np.min(p_pos_upper))
 
-        # Negative direction metrics
-        sig_mask_neg = p_neg_upper <= config.alpha
-        any_sig_neg = bool(np.any(sig_mask_neg))
-        n_sig_neg = int(np.sum(sig_mask_neg))
-        fpr_neg = n_sig_neg / n_edges
-        min_p_neg = float(np.min(p_neg_upper))
+    # Negative direction metrics
+    sig_mask_neg = p_neg_upper <= config.alpha
+    any_sig_neg = bool(np.any(sig_mask_neg))
+    n_sig_neg = int(np.sum(sig_mask_neg))
+    fpr_neg = n_sig_neg / n_edges
+    min_p_neg = float(np.min(p_neg_upper))
 
-        # Combined metrics (both directions)
-        n_sig_total = n_sig_pos + n_sig_neg
-        fpr_total = n_sig_total / (2 * n_edges)  # Denominator is 2*n_edges for two-sided
-
-    except Exception as e:
-        print(f"  ERROR in {method} run {null_run_id}: {e}")
-        any_sig_pos = False
-        any_sig_neg = False
-        n_sig_pos = 0
-        n_sig_neg = 0
-        fpr_pos = 0.0
-        fpr_neg = 0.0
-        n_sig_total = 0
-        fpr_total = 0.0
-        min_p_pos = 1.0
-        min_p_neg = 1.0
+    # Combined metrics (both directions)
+    n_sig_total = n_sig_pos + n_sig_neg
+    fpr_total = n_sig_total / (2 * n_edges)  # Denominator is 2*n_edges for two-sided
 
     elapsed = time.time() - start_time
 
@@ -921,7 +912,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         f.write(f"  two_sided_alpha_per_tail = {config.alpha / 2:.6f}\n")
         f.write(f"  n_nodes = {config.n_nodes}\n")
         f.write(f"  n_edges = {summary_df['n_edges'].iloc[0]}\n")
-        f.write(f"  sample_sizes = {sample_sizes}\n\n")
+        f.write(f"  sample_sizes = {sample_sizes}\n")
+        f.write(f"  time_points = {config.time_points}\n")
+        f.write(f"  tfnbs: e = {config.tfnbs_e}, h = {config.tfnbs_h}, "
+                f"n = {config.tfnbs_n}, start_thres = {config.tfnbs_start_thres}\n\n")
 
         f.write("Metrics Explained:\n")
         f.write("  Directional FWER: P(any FP in one tail | H0). This is the\n")

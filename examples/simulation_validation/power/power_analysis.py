@@ -91,7 +91,7 @@ os.environ["NUMBA_NUM_THREADS"] = _SINGLE_THREAD
 import argparse
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import itertools
@@ -124,8 +124,8 @@ class PowerResult:
     effect_size: float
     n_samples: int
     repeat_id: int
-    n_true: int       # Number of true effect edges
-    n_null: int       # Number of null edges
+    n_true: int       # Number of planted edges
+    n_null: int       # Number of null edges (excludes leak edges)
     TP: int           # True Positives
     FP: int           # False Positives
     FN: int           # False Negatives
@@ -133,7 +133,11 @@ class PowerResult:
     TPR: float        # Sensitivity/Power
     FPR: float        # False Positive Rate
     precision: float
-    FDR: float
+    FDR: float        # False-discovery proportion, leak edges not scored
+    FDR_strict: float  # Same, with detections on leak edges counted as false
+    n_leak: int       # Unplanted edges moved by the positive-definite projection
+    sig_leak: int     # Detections on leak edges
+    realised_effect: float  # Mean population Delta r over the planted edges
     elapsed_time: float
 
 
@@ -164,136 +168,40 @@ def _apply_label_override(net_labels, label_override, n_nodes):
         raise ValueError(f"Unknown label_override: '{label_override}'")
 
 
-def run_single_power_test(
-    method: str,
-    method_params: str,
-    scenario: str,
-    effect_size: float,
-    n_samples: int,
-    repeat_id: int,
-    n_nodes: int = 60,
-    n_modules: int = 4,
-    time_points: int = 30,
-    n_permutations: int = 500,
-    alpha: float = 0.05,
-    use_mp: bool = False,
-    seed_base: int = 42,
-    method_kwargs: dict = None,
-    intra_corr: float = 0.3,
-    inter_corr: float = 0.05,
-    uniform_corr: float = 0.15,
-    noise_level: float = 0.05,
-    label_override: str = None,
-) -> PowerResult:
-    """Run a single power simulation."""
+# Edges whose population correlation the positive-definite projection moved
+# by more than LEAK_TOL (see TopologyDataset.population_diff) are real but
+# unplanted differences: a detection there is neither a true nor a false
+# positive. FDR_strict counts it as false.
+LEAK_TOL = 0.01
 
-    start_time = time.time()
 
-    # Generate data using the same topology definitions as sim_method_comparisons.py.
-    seed = seed_base + repeat_id * 1000
-    generator = topo.TopologyDatasetGenerator(
-        n_nodes=n_nodes,
-        n_modules=n_modules,
-        intra_corr=intra_corr,
-        inter_corr=inter_corr,
-        uniform_corr=uniform_corr,
-        noise_level=noise_level,
-        seed=seed,
-    )
-    dataset = generator.generate(
-        scenario,
-        effect_size=effect_size,
-        n_samples=n_samples,
-        time_points=time_points,
-    )
-    group1_z, group2_z = dataset.fisher_z()
-    effect_mask = dataset.effect_mask
-    net_labels = _apply_label_override(dataset.net_labels, label_override, n_nodes)
+def _truth_masks(dataset, triu_idx) -> Tuple[np.ndarray, np.ndarray, float]:
+    """Planted and leak edges in the upper triangle, and the realised effect."""
+    planted = dataset.effect_mask[triu_idx] != 0
+    diff = dataset.population_diff[triu_idx]
+    leak = ~planted & (np.abs(diff) > LEAK_TOL)
+    realised = float(diff[planted].mean()) if planted.any() else 0.0
+    return planted, leak, realised
 
-    # Prepare method kwargs
-    kwargs = method_kwargs or {}
-    if method in ["cnbs", "ni_tfnbs", "fbc_tfnbs"]:
-        kwargs["net_labels"] = net_labels
 
-    # Compute p-values
-    method_key = method.split("_")[0] if method.startswith("nbs_") else method
-    if method.startswith("nbs_"):
-        kwargs["nbs_stat"] = method.split("_")[1]
-
-    try:
-        p_vals = compute_p_val(
-            group1_z, group2_z,
-            test_type="two-sample",
-            method=method_key,
-            n_permutations=n_permutations,
-            use_mp=False,
-            random_state=seed,
-            **kwargs,
-        )
-
-        # Get p-values for positive direction (group2 > group1)
-        p_pos = np.array(p_vals["g2>g1"])
-
-        # Get upper triangle
-        triu_idx = np.triu_indices(n_nodes, k=1)
-        p_upper = p_pos[triu_idx]
-        mask_upper = effect_mask[triu_idx] != 0
-
-        # Compute metrics
-        sig_mask = p_upper < alpha
-
-        TP = int(np.sum(sig_mask & mask_upper))
-        FP = int(np.sum(sig_mask & ~mask_upper))
-        FN = int(np.sum(~sig_mask & mask_upper))
-        TN = int(np.sum(~sig_mask & ~mask_upper))
-
-        n_true = int(np.sum(mask_upper))
-        n_null = int(np.sum(~mask_upper))
-
-        TPR = TP / n_true if n_true > 0 else 0.0
-        FPR = FP / n_null if n_null > 0 else 0.0
-        precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
-        FDR = FP / (TP + FP) if (TP + FP) > 0 else 0.0
-
-    except Exception as e:
-        print(f"  ERROR in {method} repeat {repeat_id}: {e}")
-        n_true = int(np.sum(effect_mask[np.triu_indices(n_nodes, k=1)] != 0))
-        n_null = n_nodes * (n_nodes - 1) // 2 - n_true
-        TP, FP, FN, TN = 0, 0, n_true, n_null
-        TPR, FPR, precision, FDR = 0.0, 0.0, 0.0, 0.0
-
-    elapsed = time.time() - start_time
-
-    return PowerResult(
-        method=method,
-        method_params=method_params,
-        scenario=scenario,
-        effect_size=effect_size,
-        n_samples=n_samples,
-        repeat_id=repeat_id,
-        n_true=n_true,
-        n_null=n_null,
-        TP=TP, FP=FP, FN=FN, TN=TN,
-        TPR=TPR, FPR=FPR,
-        precision=precision, FDR=FDR,
-        elapsed_time=elapsed,
-    )
-def _parallel_worker(task):
-    (method, method_params, kwargs, scenario, effect_size, repeat_id,
-     n_nodes, n_modules, time_points, n_permutations, alpha, seed,
-     intra_corr, inter_corr, uniform_corr, noise_level, n_samples,
-     label_override) = task
-
-    return run_single_power_test(
-        method=method, method_params=method_params, scenario=scenario,
-        effect_size=effect_size, n_samples=n_samples, repeat_id=repeat_id,
-        n_nodes=n_nodes, n_modules=n_modules, time_points=time_points,
-        n_permutations=n_permutations, alpha=alpha,
-        use_mp=False,  # CRITICAL: Each core handles one whole test
-        seed_base=seed, method_kwargs=kwargs,
-        intra_corr=intra_corr, inter_corr=inter_corr,
-        uniform_corr=uniform_corr, noise_level=noise_level,
-        label_override=label_override,
+def _score(p_upper: np.ndarray, alpha: float, planted: np.ndarray, leak: np.ndarray) -> dict:
+    """Score the g2>g1 p-map against the planted edges (significant: p <= alpha)."""
+    sig = p_upper <= alpha
+    null = ~planted & ~leak
+    TP = int(np.sum(sig & planted))
+    FP = int(np.sum(sig & null))
+    FN = int(np.sum(~sig & planted))
+    TN = int(np.sum(~sig & null))
+    sig_leak = int(np.sum(sig & leak))
+    n_true, n_null = TP + FN, FP + TN
+    return dict(
+        n_true=n_true, n_null=n_null, TP=TP, FP=FP, FN=FN, TN=TN,
+        TPR=TP / n_true if n_true > 0 else 0.0,
+        FPR=FP / n_null if n_null > 0 else 0.0,
+        precision=TP / (TP + FP) if (TP + FP) > 0 else 0.0,
+        FDR=FP / (TP + FP) if (TP + FP) > 0 else 0.0,
+        FDR_strict=(FP + sig_leak) / (TP + FP + sig_leak) if (TP + FP + sig_leak) > 0 else 0.0,
+        n_leak=int(np.sum(leak)), sig_leak=sig_leak,
     )
 
 
@@ -343,7 +251,7 @@ def run_single_power_test_batched(
         Samples per group.
     repeat_id : int
         Repeat identifier (used for seeding).
-    Other parameters match run_single_power_test.
+    Other parameters configure the generator (see TopologyDatasetGenerator).
 
     Returns
     -------
@@ -370,12 +278,9 @@ def run_single_power_test_batched(
         time_points=time_points,
     )
     group1_z, group2_z = dataset.fisher_z()
-    effect_mask = dataset.effect_mask
     net_labels = _apply_label_override(dataset.net_labels, label_override, n_nodes)
     triu_idx = np.triu_indices(n_nodes, k=1)
-    mask_upper = effect_mask[triu_idx] != 0
-    n_true = int(np.sum(mask_upper))
-    n_null = int(np.sum(~mask_upper))
+    planted, leak, realised = _truth_masks(dataset, triu_idx)
 
     results = []
     method_key = method.split("_")[0] if method.startswith("nbs_") else method
@@ -390,69 +295,31 @@ def run_single_power_test_batched(
         if method in ("cnbs", "ni_tfnbs", "fbc_tfnbs"):
             base_kw["net_labels"] = net_labels
 
-        try:
-            p_vals = compute_p_val(
-                group1_z, group2_z,
-                test_type="two-sample",
-                method=method_key,
-                n_permutations=n_permutations,
-                use_mp=False,
-                random_state=seed,
-                e=e_list, h=h_list,
-                **base_kw,
-            )
-            elapsed = time.time() - start_time
-            avg_elapsed = elapsed / len(all_method_params)
+        p_vals = compute_p_val(
+            group1_z, group2_z,
+            test_type="two-sample",
+            method=method_key,
+            n_permutations=n_permutations,
+            use_mp=False,
+            random_state=seed,
+            e=e_list, h=h_list,
+            **base_kw,
+        )
+        avg_elapsed = (time.time() - start_time) / len(all_method_params)
+        p_pos_3d = np.array(p_vals["g2>g1"])  # (N, N, n_params)
 
-            p_pos_3d = np.array(p_vals["g2>g1"])  # (N, N, n_params)
-
-            for i, (param_label, _) in enumerate(all_method_params):
-                if p_pos_3d.ndim == 3:
-                    p_upper = p_pos_3d[:, :, i][triu_idx]
-                else:
-                    # Scalar fallback (single param)
-                    p_upper = p_pos_3d[triu_idx]
-
-                sig_mask = p_upper < alpha
-                TP = int(np.sum(sig_mask & mask_upper))
-                FP = int(np.sum(sig_mask & ~mask_upper))
-                FN = int(np.sum(~sig_mask & mask_upper))
-                TN = int(np.sum(~sig_mask & ~mask_upper))
-                TPR = TP / n_true if n_true > 0 else 0.0
-                FPR = FP / n_null if n_null > 0 else 0.0
-                precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
-                FDR = FP / (TP + FP) if (TP + FP) > 0 else 0.0
-                
-                # Ensure param_label is a string, not None
-                if param_label is None and "e" in _ and "h" in _:
-                    param_label = f"e={_['e']},h={_['h']}"
-
-                results.append(PowerResult(
-                    method=method, method_params=param_label,
-                    scenario=scenario, effect_size=effect_size,
-                    n_samples=n_samples, repeat_id=repeat_id,
-                    n_true=n_true, n_null=n_null,
-                    TP=TP, FP=FP, FN=FN, TN=TN,
-                    TPR=TPR, FPR=FPR,
-                    precision=precision, FDR=FDR,
-                    elapsed_time=avg_elapsed,
-                ))
-
-        except Exception as exc:
-            print(f"  ERROR in batched {method} repeat {repeat_id}: {exc}")
-            elapsed = time.time() - start_time
-            for param_label, _ in all_method_params:
-                if param_label is None and "e" in _ and "h" in _:
-                    param_label = f"e={_['e']},h={_['h']}"
-                results.append(PowerResult(
-                    method=method, method_params=param_label,
-                    scenario=scenario, effect_size=effect_size,
-                    n_samples=n_samples, repeat_id=repeat_id,
-                    n_true=n_true, n_null=n_null,
-                    TP=0, FP=0, FN=n_true, TN=n_null,
-                    TPR=0.0, FPR=0.0, precision=0.0, FDR=0.0,
-                    elapsed_time=elapsed / len(all_method_params),
-                ))
+        for i, (param_label, kw) in enumerate(all_method_params):
+            p_map = p_pos_3d[:, :, i] if p_pos_3d.ndim == 3 else p_pos_3d
+            if param_label is None:
+                param_label = f"e={kw['e']},h={kw['h']}"
+            results.append(PowerResult(
+                method=method, method_params=param_label,
+                scenario=scenario, effect_size=effect_size,
+                n_samples=n_samples, repeat_id=repeat_id,
+                **_score(p_map[triu_idx], alpha, planted, leak),
+                realised_effect=realised,
+                elapsed_time=avg_elapsed,
+            ))
     else:
         # NON-BATCHED: run each variant separately (tstat, nbs, cnbs, or single-param TFNBS)
         for param_label, kwargs in all_method_params:
@@ -462,42 +329,23 @@ def run_single_power_test_batched(
             if method in ("cnbs", "ni_tfnbs", "fbc_tfnbs"):
                 kw["net_labels"] = net_labels
 
-            try:
-                p_vals = compute_p_val(
-                    group1_z, group2_z,
-                    test_type="two-sample",
-                    method=method_key,
-                    n_permutations=n_permutations,
-                    use_mp=False,
-                    random_state=seed,
-                    **kw,
-                )
-                p_pos = np.array(p_vals["g2>g1"])
-                p_upper = p_pos[triu_idx]
-                sig_mask = p_upper < alpha
-                TP = int(np.sum(sig_mask & mask_upper))
-                FP = int(np.sum(sig_mask & ~mask_upper))
-                FN = int(np.sum(~sig_mask & mask_upper))
-                TN = int(np.sum(~sig_mask & ~mask_upper))
-                TPR = TP / n_true if n_true > 0 else 0.0
-                FPR = FP / n_null if n_null > 0 else 0.0
-                precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
-                FDR = FP / (TP + FP) if (TP + FP) > 0 else 0.0
-            except Exception as exc:
-                print(f"  ERROR in {method} repeat {repeat_id}: {exc}")
-                TP, FP, FN, TN = 0, 0, n_true, n_null
-                TPR, FPR, precision, FDR = 0.0, 0.0, 0.0, 0.0
-
-            elapsed = time.time() - start_time
+            p_vals = compute_p_val(
+                group1_z, group2_z,
+                test_type="two-sample",
+                method=method_key,
+                n_permutations=n_permutations,
+                use_mp=False,
+                random_state=seed,
+                **kw,
+            )
+            p_pos = np.array(p_vals["g2>g1"])
             results.append(PowerResult(
                 method=method, method_params=param_label,
                 scenario=scenario, effect_size=effect_size,
                 n_samples=n_samples, repeat_id=repeat_id,
-                n_true=n_true, n_null=n_null,
-                TP=TP, FP=FP, FN=FN, TN=TN,
-                TPR=TPR, FPR=FPR,
-                precision=precision, FDR=FDR,
-                elapsed_time=elapsed,
+                **_score(p_pos[triu_idx], alpha, planted, leak),
+                realised_effect=realised,
+                elapsed_time=time.time() - start_time,
             ))
 
     return results
@@ -675,26 +523,10 @@ def load_checkpoint(checkpoint_path: Path) -> Tuple[List[PowerResult], set]:
     results = []
     completed = set()
 
+    casts = {f.name: f.type for f in fields(PowerResult)}
+    casts = {name: {"int": int, "float": float}.get(t, lambda v: v) for name, t in casts.items()}
     for _, row in df.iterrows():
-        result = PowerResult(
-            method=row["method"],
-            method_params=row["method_params"],
-            scenario=row["scenario"],
-            effect_size=float(row["effect_size"]),
-            n_samples=int(row["n_samples"]),
-            repeat_id=int(row["repeat_id"]),
-            n_true=int(row["n_true"]),
-            n_null=int(row["n_null"]),
-            TP=int(row["TP"]),
-            FP=int(row["FP"]),
-            FN=int(row["FN"]),
-            TN=int(row["TN"]),
-            TPR=float(row["TPR"]),
-            FPR=float(row["FPR"]),
-            precision=float(row["precision"]),
-            FDR=float(row["FDR"]),
-            elapsed_time=float(row["elapsed_time"]),
-        )
+        result = PowerResult(**{name: cast(row[name]) for name, cast in casts.items()})
         results.append(result)
         # Key: (method, method_params, scenario, effect_size, n_samples, repeat_id)
         completed.add((
@@ -772,6 +604,12 @@ def _iter_method_variants(
 ) -> List[Tuple[str, dict]]:
     variants = []
     for method in methods:
+        # "nbs_extent_3.0" names its own threshold (it used to fall through
+        # to the default threshold of 2.0)
+        prefix, _, threshold = method.rpartition("_")
+        if prefix in ("nbs_extent", "nbs_intensity"):
+            variants.append((method, {"threshold": float(threshold)}))
+            continue
         configs = method_configs.get(method, {})
         if isinstance(configs, list):
             variants.extend((method, cfg) for cfg in configs)
@@ -1058,6 +896,9 @@ def summarize_power_results(df: pd.DataFrame, groupby_cols: List[str]) -> pd.Dat
         "FPR": ["mean", "std"],
         "precision": ["mean", "std"],
         "FDR": ["mean", "std"],
+        "FDR_strict": ["mean", "std"],
+        "n_leak": ["mean"],
+        "realised_effect": ["mean"],
         "elapsed_time": ["mean", "std"],
     }).reset_index()
 

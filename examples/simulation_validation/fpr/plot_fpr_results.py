@@ -704,72 +704,57 @@ def plot_paper_fwer_calibration(
         order = list(summary["method"].unique())
 
     labels = method_labels or {}
-    
-    fig, ax = plt.subplots(figsize=(10, 4))
-    
-    if "n_samples" in summary.columns and summary["n_samples"].nunique() > 1:
-        n_samples = sorted(summary["n_samples"].unique())
-        x = np.arange(len(order))
-        width = 0.8 / len(n_samples)
-        colors = sns.color_palette("viridis", len(n_samples))
-        
+    panels = [
+        ("fwer_max_tail", "fwer_ci_low", "fwer_ci_high",
+         rf"(a) Per direction: worse tail, $\alpha$ = {alpha:.3g} per tail"),
+        ("fwer_two_sided_bonf", "fwer_two_sided_bonf_ci_low", "fwer_two_sided_bonf_ci_high",
+         rf"(b) Two-sided: either tail, $\alpha/2$ = {alpha / 2:.3g} per tail"),
+    ]
+    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    x = np.arange(len(order))
+    multi_n = "n_samples" in summary.columns and summary["n_samples"].nunique() > 1
+    n_samples = sorted(summary["n_samples"].unique()) if multi_n else [None]
+    width = 0.8 / len(n_samples)
+    colors = sns.color_palette("viridis", len(n_samples))
+    ymax = max(0.1, 1.25 * float(np.nanmax(
+        summary[[hi for _, _, hi, _ in panels]].to_numpy(dtype=float))))
+
+    for ax, (est_col, lo_col, hi_col, title) in zip(axes, panels):
         for i, n in enumerate(n_samples):
             offset = (i - len(n_samples) / 2 + 0.5) * width
-            mdf = summary[summary["n_samples"] == n].set_index("method").reindex(order)
-            
-            # Mask NaNs
-            valid = ~mdf["fwer_max_tail"].isna()
+            sub = summary if n is None else summary[summary["n_samples"] == n]
+            mdf = sub.set_index("method").reindex(order)
+            valid = ~mdf[est_col].isna()
             if not valid.any():
                 continue
-            
-            # Use box-style representation for CIs
             _plot_cp_interval_boxes(
                 ax,
                 x[valid] + offset,
-                mdf.loc[valid, "fwer_max_tail"].values,
-                mdf.loc[valid, "fwer_ci_low"].values,
-                mdf.loc[valid, "fwer_ci_high"].values,
+                mdf.loc[valid, est_col].values,
+                mdf.loc[valid, lo_col].values,
+                mdf.loc[valid, hi_col].values,
                 [colors[i]] * valid.sum(),
                 width=width * 0.8,
-                label=f"N={n}"
             )
-        
-        ax.set_xticks(x)
-        ax.set_xticklabels([labels.get(m, m) for m in order], rotation=45, ha="right")
-        # Custom legend to avoid repeating box-elements
-        from matplotlib.patches import Patch
-        legend_elements = [Patch(facecolor=colors[i], label=f"N={n}") for i, n in enumerate(n_samples)]
-        ax.legend(handles=legend_elements, title="Sample Size", fontsize=8, title_fontsize=9)
-    else:
-        # Fallback to single dimension logic if n_samples not present
-        x = np.arange(len(order))
-        mdf = summary.set_index("method").reindex(order)
-        colors = [METHOD_COLORS.get(method, "#42A5F5") for method in order]
-        
-        _plot_cp_interval_boxes(
-            ax,
-            x,
-            mdf["fwer_max_tail"].values,
-            mdf["fwer_ci_low"].values,
-            mdf["fwer_ci_high"].values,
-            colors,
-            width=0.6
-        )
-        ax.set_xticks(x)
-        ax.set_xticklabels([labels.get(m, m) for m in order], rotation=45, ha="right")
+        ax.axhline(alpha, color="red", linestyle="--", alpha=0.6)
+        ax.set_ylim(0, ymax)
+        ax.set_ylabel("FWER")
+        ax.set_title(title, loc="left", fontsize=10)
+        ax.grid(axis="y", alpha=0.3)
 
-    ax.axhline(alpha, color="red", linestyle="--", alpha=0.6, label=f"Target alpha={alpha:.2f}")
-    ax.set_ylim(0, max(0.1, float(summary["fwer_ci_high"].max(skipna=True)) * 1.25))
-    ax.set_ylabel("Worst-tail directional FWER")
-    ax.set_title("Directional Family-Wise Error Rate Control (95% CI)")
-    ax.grid(axis="y", alpha=0.3)
-    
-    # Only add alpha to legend if not already there
-    handles, legends = ax.get_legend_handles_labels()
-    if f"Target alpha={alpha:.2f}" not in legends:
-        handles.append(plt.Line2D([0], [0], color="red", linestyle="--", alpha=0.6))
-        legends.append(f"Target alpha={alpha:.2f}")
-        ax.legend(handles, legends, fontsize=8)
+    axes[-1].set_xticks(x)
+    axes[-1].set_xticklabels([labels.get(m, m) for m in order], rotation=45, ha="right")
+    from matplotlib.patches import Patch
+    handles = [plt.Line2D([0], [0], color="red", linestyle="--", alpha=0.6)]
+    names = [rf"$\alpha$ = {alpha:.2f}"]
+    if multi_n:
+        handles += [Patch(facecolor=colors[i], alpha=0.45, edgecolor="black") for i in range(len(n_samples))]
+        names += [f"n = {n} per group" for n in n_samples]
+    n_runs = int(summary["n_null_runs"].max())
+    axes[0].legend(handles, names, fontsize=8, ncol=len(names), loc="upper right")
+    fig.suptitle(f"Family-wise error rate under the null ({n_runs:,} datasets per cell; "
+                 "boxes: 95% Clopper-Pearson interval)", fontsize=11)
+    fig.tight_layout()
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out = output_dir / filename

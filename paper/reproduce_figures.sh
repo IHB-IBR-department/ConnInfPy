@@ -4,9 +4,9 @@
 # expected run times and open issues.
 #
 # Usage (from anywhere in the repository):
-#   bash paper/reproduce_figures.sh                 # everything (~1.5 h on an M5 Pro)
+#   bash paper/reproduce_figures.sh                 # everything (~3.5 h on an M5 Pro)
 #   bash paper/reproduce_figures.sh abide collect   # selected stages
-# Stages: abide | openclose | simulation | benchmarks | collect | all
+# Stages: abide | openclose | simulation | sensitivity | benchmarks | collect | all
 #
 # Results go to examples/*/results/; `collect` copies the figures into
 # paper/figures/ under the manuscript's file names (without the `_alt`
@@ -16,9 +16,8 @@ cd "$(dirname "$0")/.."
 export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 PY="${PYTHON:-python}"
 
-# Null-calibration design (override via environment). The manuscript states
-# 1,000 null datasets; the sample sizes below match the existing results
-# (the manuscript text says 30/50/100/200 — see paper/README.md, issue 2).
+# Null-calibration design (override via environment, e.g. FPR_N_NULL=100 for
+# a quick pass).
 FPR_N_NULL="${FPR_N_NULL:-1000}"
 FPR_SAMPLE_SIZES="${FPR_SAMPLE_SIZES:-10 30 50 100}"
 
@@ -27,8 +26,10 @@ step() { printf '\n=== %s ===\n' "$*"; }
 abide() {
   step "ABIDE: QC + connectivity (764 subjects, 15 sites)"
   $PY examples/abide_validation/prepare_data.py
-  step "ABIDE: age, ComBat + site dummies (variants: age, age+diagnosis, motion), 5000 permutations"
-  $PY examples/abide_validation/run_age_strategy_d.py --variant all
+  # Age and diagnosis are separate analyses: the age model adjusts for sex and
+  # motion only (not diagnosis).
+  step "ABIDE: age (sex + motion covariates), ComBat + site dummies, 5000 permutations"
+  $PY examples/abide_validation/run_age_strategy_d.py --variant age
   step "ABIDE: diagnosis under four site strategies, 5000 permutations each"
   $PY examples/abide_validation/run_naive_baseline.py
   $PY examples/abide_validation/run_dx_combat_only.py
@@ -58,20 +59,52 @@ openclose() {
 }
 
 simulation() {
+  local SV=examples/simulation_validation
   step "Simulation: FWER calibration, ${FPR_N_NULL} nulls x n in {${FPR_SAMPLE_SIZES}} x 11 methods, 1000 permutations"
-  $PY examples/simulation_validation/fpr/fpr_calibration.py \
-      --config examples/simulation_validation/configs/fpr_config_1000.yaml \
-      --n-null "$FPR_N_NULL" --sample-sizes $FPR_SAMPLE_SIZES \
-      --output-dir examples/simulation_validation/results/fpr_calibration --resume
-  step "Simulation: power, 10 topologies x 3 effect sizes x 30 repeats, 1000 permutations"
-  $PY examples/simulation_validation/power/power_analysis.py \
-      --config examples/simulation_validation/configs/sweep_config_power_1000.yaml --mode effect-size
+  $PY $SV/fpr/fpr_calibration.py --config $SV/configs/fpr_config_1000.yaml \
+      --n-null "$FPR_N_NULL" --sample-sizes $FPR_SAMPLE_SIZES --resume
+  step "Simulation: power, 10 topologies x Delta r {0.075, 0.125, 0.25} x 100 repeats, 1000 permutations"
+  $PY $SV/power/power_analysis.py --config $SV/configs/sweep_config_power_1000.yaml \
+      --mode effect-size --resume
   step "Simulation: TFNBS (E,H) summaries"
-  $PY examples/simulation_validation/power/tfnbs_eh_sweep.py \
-      --results-dir examples/simulation_validation/results/power/power_analysis_1000_30 \
-      --effect-size 0.25 --sample-size 30
-  step "Simulation: figures (FWER, power heatmaps, (E,H), topology gallery)"
-  $PY examples/simulation_validation/regenerate_paper_figures.py
+  $PY $SV/power/tfnbs_eh_sweep.py \
+      --results-dir $SV/results/power/power_analysis_1000_30 --effect-size 0.125 --sample-size 30
+  step "Simulation: figures and power tables"
+  $PY $SV/regenerate_paper_figures.py
+}
+
+sensitivity() {
+  local SV=examples/simulation_validation
+  local P=$SV/power/power_analysis.py C=$SV/configs R=$SV/results/sensitivity
+  step "Sensitivity: prior misspecification (true / 7 / 2 blocks)"
+  for L in true 7blocks 2blocks; do
+    $PY $P --config $C/sweep_config_prior_misspec.yaml --mode effect-size --resume \
+        --label-override $L --output-dir $R/prior_misspec/prior_misspec_$L
+  done
+  $PY $SV/sensitivity/analyze_prior_misspec.py --true-dir $R/prior_misspec/prior_misspec_true \
+      --seven-dir $R/prior_misspec/prior_misspec_7blocks --two-dir $R/prior_misspec/prior_misspec_2blocks \
+      --output-dir $R/prior_misspec/comparison
+  step "Sensitivity: FBC-TFNBS m_min in {1, 2, 3, 5, 10}"
+  for M in 1 2 3 5 10; do
+    $PY $P --config $C/sweep_config_mmin.yaml --mode effect-size --resume \
+        --fbc-min-cluster $M --output-dir $R/mmin/mmin_$M
+  done
+  $PY $SV/sensitivity/analyze_mmin_sensitivity.py --mmin-values 1 2 3 5 10 \
+      --results-dirs $R/mmin/mmin_1 $R/mmin/mmin_2 $R/mmin/mmin_3 $R/mmin/mmin_5 $R/mmin/mmin_10 \
+      --output-dir $R/mmin/comparison
+  step "Sensitivity: NI-TFNBS block normalization (sqrt / linear / none)"
+  for N in sqrt linear none; do
+    $PY $P --config $C/sweep_config_norm_ablation.yaml --mode effect-size --resume \
+        --ni-normalization $N --output-dir $R/ablation/norm_$N
+  done
+  $PY $SV/sensitivity/analyze_norm_ablation.py --sqrt-dir $R/ablation/norm_sqrt \
+      --linear-dir $R/ablation/norm_linear --none-dir $R/ablation/norm_none \
+      --output-dir $R/ablation/comparison
+  step "Sensitivity: permutation BH-FDR"
+  $PY $P --config $C/sweep_config_bh_fdr_perm.yaml --mode effect-size --resume \
+      --output-dir $R/bh_fdr_perm
+  step "Sensitivity: figures"
+  $PY $SV/regenerate_paper_figures.py
 }
 
 benchmarks() {
@@ -99,16 +132,20 @@ collect() {
   copy "$O/plot5_retest_specificity.png"     "$F/openclose"
   copy "$S/fig1_fwer_calibration.png"        "$F/simulation"
   # Manuscript fig2a (TPR) / fig2b (FDR) are two panels of this figure
-  copy "$S/fig2_power_heatmap_d0.25.png"     "$F/simulation"
-  copy "$S/fig4_tfnbs_eh_tpr_fdr.png"        "$F/simulation"
-  copy "$S/topologies_gallery_es0.3_n30.png" "$F/simulation"
+  copy "$S/fig2_power_heatmap_dr0.125.png"     "$F/simulation"
+  copy "$S/fig4_tfnbs_eh_tpr_fdr.png"          "$F/simulation"
+  copy "$S/topologies_gallery_dr0.125_n30.png" "$F/simulation"
+  copy "$S/fig5_prior_misspecification.png"    "$F/simulation"
+  copy "$S/mmin_sensitivity.png"               "$F/simulation"
+  mkdir -p "$F/tables"
+  for t in examples/simulation_validation/results/tables/*.csv; do copy "$t" "$F/tables"; done
   copy examples/benchmarks/res_benchmarks/timing_benchmark.png "$F/figures"
 }
 
 for stage in "${@:-all}"; do
   case "$stage" in
-    abide|openclose|simulation|benchmarks|collect) "$stage" ;;
-    all) abide; openclose; simulation; benchmarks; collect ;;
-    *) echo "unknown stage: $stage (abide|openclose|simulation|benchmarks|collect|all)" >&2; exit 2 ;;
+    abide|openclose|simulation|sensitivity|benchmarks|collect) "$stage" ;;
+    all) abide; openclose; simulation; sensitivity; benchmarks; collect ;;
+    *) echo "unknown stage: $stage (abide|openclose|simulation|sensitivity|benchmarks|collect|all)" >&2; exit 2 ;;
   esac
 done

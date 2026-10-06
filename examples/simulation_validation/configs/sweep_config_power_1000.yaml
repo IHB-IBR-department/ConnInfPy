@@ -3,17 +3,16 @@
 # Uses numba-accelerated TFNBS scoring (auto backend) and batched 3D mode
 # for the full (e,h) parameter grid (176 combos in a single call).
 #
-# Per-task benchmarks (measured: 60 nodes, numba, n_thresholds=30):
-#   Method         | 100 perms | 500 perms | Notes
-#   tstat          |    0.9s   |    4.5s   | baseline, no enhancement
-#   tfnbs  (×176)  |    5.5s   |   27.5s   | batched 176 (e,h) combos
-#   ni_tfnbs (×176)|    4.8s   |   24s     | batched 176 (e,h) combos
-#   fbc_tfnbs(×176)|    4.7s   |   24s     | batched 176 (e,h) combos
-#   nbs_extent     |    1.2s   |    6s     | per threshold variant
-#   nbs_intensity  |    1.5s   |    7.5s   | per threshold variant
-#   cnbs           |    1.3s   |    6.5s   | single variant
-#   Times scale ~linearly with n_permutations.
-#   power_analysis.py prints a runtime estimate before launching.
+# Effect sizes are shifts of the population correlation on the planted edges
+# (Delta r), not Cohen's d. Each subject's matrix is a sample correlation of
+# 30 time points, so on the subject-level Fisher-z values of a planted edge
+# Delta r = 0.075 / 0.125 / 0.25 is about Cohen's d = 0.4 / 0.7 / 1.4.
+#
+# Power is scored on the g2>g1 map (all planted effects are positive) with
+# significance p <= alpha; edges moved by the positive-definite projection
+# are not scored (see power_analysis.py, LEAK_TOL).
+#
+# power_analysis.py prints a runtime estimate before launching.
 #
 # Usage:
 #   python examples/simulation_validation/power/power_analysis.py \
@@ -24,9 +23,9 @@
 # =============================================================================
 
 effect_sizes:
-  - 0.15   # Weak — methods start to diverge here
-  - 0.25   # Moderate — key comparison point
-  - 0.50   # Very strong — ceiling effects expected
+  - 0.075  # Weak — methods start to diverge here
+  - 0.125  # Moderate — key comparison point (Fig. power heatmap, (E,H) sweep)
+  - 0.25   # Strong — FDR ranking table
 
 n_samples: 30
 
@@ -40,7 +39,7 @@ sample_sizes:
   - 50     # Large
   - 100    # Very large (server config, included for comparison)
 
-effect_size: 0.25
+effect_size: 0.125
 
 # =============================================================================
 # SCENARIOS — 10 representative topologies
@@ -84,9 +83,10 @@ methods:
 tfnbs_options:
   e: [0.05, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30, 1.40, 1.50]
   h: [0.50, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
-  # Computed in a single batched call per task
-  n_thresholds: 30
-  start_thres: 1.25
+  # Computed in a single batched call per task. Threshold settings match the
+  # empirical analyses and the FWER calibration.
+  n_thresholds: 10
+  start_thres: 1.65
   fbc_min_cluster_size: 3
 
 nbs_options:
@@ -96,7 +96,7 @@ nbs_options:
 # SIMULATION
 # =============================================================================
 
-n_repeats: 30          # simulated datasets per (topology, effect size)
+n_repeats: 100         # simulated datasets per (topology, effect size)
 n_permutations: 1000    # permutations per test
 alpha: 0.05
 
@@ -109,6 +109,7 @@ n_modules: 4
 intra_corr: 0.3
 inter_corr: 0.05
 noise_level: 0.05
+time_points: 30        # time points per simulated subject
 
 # =============================================================================
 # EXECUTION

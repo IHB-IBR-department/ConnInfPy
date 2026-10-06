@@ -361,10 +361,8 @@ def run_single_calibration_task(task: tuple) -> GLMCalibrationResult:
         min_p_pos = float(np.min(p_pos_upper))
         min_p_neg = float(np.min(p_neg_upper))
     except Exception as exc:
-        print(f"  ERROR in GLM calibration {method} run {run_id}: {exc}")
-        elapsed = 0.0
-        n_sig_pos = n_sig_neg = 0
-        min_p_pos = min_p_neg = 1.0
+        # Recording a failure as "nothing significant" would bias FWER down
+        raise RuntimeError(f"GLM calibration {method} run {run_id} failed") from exc
 
     n_sig_total = n_sig_pos + n_sig_neg
     return GLMCalibrationResult(
@@ -410,10 +408,7 @@ def run_single_power_task(task: tuple) -> GLMPowerResult:
         FN = int(np.sum(~sig_upper & signal_upper))
         TN = int(np.sum(~sig_upper & ~signal_upper))
     except Exception as exc:
-        print(f"  ERROR in GLM power {method} {scenario} repeat {repeat_id}: {exc}")
-        method_params = ""
-        elapsed = 0.0
-        TP, FP, FN, TN = 0, 0, n_true, n_null
+        raise RuntimeError(f"GLM power {method} {scenario} repeat {repeat_id} failed") from exc
 
     TPR = TP / n_true if n_true else 0.0
     FPR = FP / n_null if n_null else 0.0

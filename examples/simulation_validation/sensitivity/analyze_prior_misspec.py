@@ -106,7 +106,7 @@ def print_degradation_summary(df_comp: pd.DataFrame):
                 continue
             true_tpr = true_match.iloc[0]["TPR_mean"]
             delta = row7["TPR_mean"] - true_tpr
-            print(f"  {method:12s} | {row7['scenario']:30s} | d={row7['effect_size']:.2f} | "
+            print(f"  {method:12s} | {row7['scenario']:30s} | dr={row7['effect_size']:.2f} | "
                   f"TPR: {true_tpr:.3f} -> {row7['TPR_mean']:.3f} (7blk, delta={delta:+.3f})")
 
 
