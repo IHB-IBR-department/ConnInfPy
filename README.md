@@ -126,23 +126,21 @@ few seconds:
 ```python
 import conninfpy
 
-if __name__ == "__main__":   # scripts need this guard: worker processes re-import the file
-    data = conninfpy.load("datasets/abide_mini.yaml")
-    pheno = data.pheno
-    out = conninfpy.analyze(
-        data.data,                                     # correlations, detected automatically
-        interest=pheno["Age"].to_numpy(float),
-        confounds=pheno[["Sex", "Motion_FD"]].to_numpy(float),
-        sites=pheno["site"].to_numpy(),                # ComBat + site dummies + site-blocked permutation
-        method="tfnbs", n_permutations=200, acceleration="gpd", rng=0,
-    )
-    print(out)
-    print(out.significant_edges(conninfpy.AtlasInfo.schaefer_100_yeo7()))
+data = conninfpy.load("datasets/abide_mini.yaml")
+pheno = data.pheno
+out = conninfpy.analyze(
+    data.data,                                     # correlations, detected automatically
+    interest=pheno["Age"].to_numpy(float),
+    confounds=pheno[["Sex", "Motion_FD"]].to_numpy(float),
+    sites=pheno["site"].to_numpy(),                # ComBat + site dummies + site-blocked permutation
+    method="tfnbs", n_permutations=200, acceleration="gpd", rng=0,
+)
+print(out)
+print(out.significant_edges(conninfpy.AtlasInfo.schaefer_100_yeo7()))
 ```
 
-Permutations run on all CPU cores by default (`use_mp=True`). In a script,
-keep the `if __name__ == "__main__":` guard — without it every worker
-re-runs the whole script. Jupyter notebooks need no guard.
+Permutations run on all CPU cores by default (`use_mp=True`), in scripts and
+notebooks alike — no `if __name__ == "__main__":` guard is needed.
 
 Your own data can be any NumPy stack of shape `(n_subjects, N, N)`, or a small
 YAML manifest read with `conninfpy.load()`; see
