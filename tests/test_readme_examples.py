@@ -45,11 +45,12 @@ def _run_as_script(code: str, timeout: int = 300) -> str:
 
 class TestReadmeExamples(unittest.TestCase):
 
-    def test_quickstart_runs_and_finds_the_planted_block(self):
+    def test_quickstart_recovers_the_planted_effect(self):
         out = _run_as_script(_example("readme-quickstart"))
-        counts = eval(re.search(r"\{'positive': \d+, 'negative': \d+\}", out).group(0))
-        self.assertGreaterEqual(counts["positive"], 10)   # 15 planted edges
-        self.assertEqual(counts["negative"], 0)
+        found, planted = map(int, re.search(r"planted edges found: (\d+) of (\d+)", out).groups())
+        false_pos = int(re.search(r"false positives:\s+(\d+)", out).group(1))
+        self.assertGreaterEqual(found, 0.8 * planted)     # README shows 45 of 45
+        self.assertLessEqual(false_pos, 2)                # README shows 0
 
     @unittest.skipUnless((REPO / "datasets" / "abide_mini.yaml").exists(),
                          "bundled ABIDE-mini dataset not present")

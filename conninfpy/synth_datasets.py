@@ -2,11 +2,7 @@
 import numpy as np
 from scipy import linalg
 
-try:
-    from sklearn.datasets import make_sparse_spd_matrix
-    HAS_SKLEARN = True
-except ImportError:
-    HAS_SKLEARN = False
+from sklearn.datasets import make_sparse_spd_matrix
 
 
 __all__ = [
@@ -98,12 +94,6 @@ def generate_multisite_glm_dataset(
     >>> data["sites"].shape, data["interest"].shape
     ((24,), (24,))
     """
-    if not HAS_SKLEARN:
-        raise ImportError(
-            "scikit-learn is required for generate_multisite_glm_dataset(). "
-            "Install it with `pip install conninfpy[full]`."
-        )
-
     if not 0.0 <= corr_site_interest <= 1.0:
         raise ValueError(
             f"corr_site_interest must be in [0, 1], got {corr_site_interest}."
@@ -233,12 +223,6 @@ def generate_fc_matrices(N,  effect_size, mask=None, n_samples_group1=50, n_samp
     >>> np.allclose(c1, c1.T)
     True
     """
-    if not HAS_SKLEARN:
-        raise ImportError(
-            "scikit-learn is required for generate_fc_matrices(). "
-            "Install it with `pip install conninfpy[full]`."
-        )
-
     if seed is not None:
         np.random.seed(seed)
     if mask is None:

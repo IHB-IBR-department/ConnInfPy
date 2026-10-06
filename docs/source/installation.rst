@@ -26,7 +26,7 @@ Extra              Adds
 =================  ==============================================================
 ``[app]``          Streamlit interface (``streamlit``, ``nilearn``, ``nibabel``, ...)
 ``[decode]``       NiMARE meta-analytic decoding of significant edges
-``[full]``         ``scikit-learn`` (needed by ``conninfpy.sim.generate_fc_matrices``), ``networkx``
+``[full]``         ``networkx``
 ``[notebooks]``    Jupyter, for the tutorials in ``examples/notebooks/``
 ``[dev]``          ``pytest``, Sphinx and the other tools used to test and build the docs
 =================  ==============================================================
@@ -38,7 +38,7 @@ Requirements
 ------------
 
 Core: ``numpy``, ``scipy``, ``statsmodels``, ``pandas``, ``matplotlib``,
-``numba``, ``threadpoolctl``, ``pyyaml``.
+``numba``, ``scikit-learn``, ``threadpoolctl``, ``pyyaml``.
 
 .. note::
    **Without numba.** If ``numba`` / ``llvmlite`` cannot be installed on your
@@ -47,6 +47,6 @@ Core: ``numpy``, ``scipy``, ``statsmodels``, ``pandas``, ``matplotlib``,
    .. code-block:: bash
 
        python -m pip install -e . --no-deps
-       python -m pip install numpy scipy statsmodels pandas matplotlib pyyaml threadpoolctl
+       python -m pip install numpy scipy statsmodels pandas matplotlib scikit-learn pyyaml threadpoolctl
 
    ConnInfPy detects the missing ``numba`` and falls back to the SciPy backend.

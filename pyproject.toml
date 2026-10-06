@@ -46,6 +46,9 @@ dependencies = [
     "pandas",
     "matplotlib",
     "numba",
+    # conninfpy.sim (generate_fc_matrices, generate_multisite_glm_dataset)
+    # and the ML-transfer examples; also pulled in by nilearn for the app.
+    "scikit-learn",
     # Caps BLAS threads inside permutation workers (conninfpy._progress);
     # without it the pool oversubscribes the CPU.
     "threadpoolctl",
@@ -66,7 +69,6 @@ Source = "https://github.com/IHB-IBR-department/ConnInfPy"
 [project.optional-dependencies]
 app = [
     "streamlit>=1.47",
-    "scikit-learn",
     "pyyaml",
     "networkx",
     "nibabel>=3.2",
@@ -77,7 +79,6 @@ decode = [
     "nibabel>=3.2",
 ]
 full = [
-    "scikit-learn",
     "pyyaml",
     "networkx",
 ]
@@ -88,7 +89,6 @@ dev = [
     "myst-parser",
     "seaborn",
     "mypy",
-    "scikit-learn",
     "pyyaml",
     "networkx",
 ]
