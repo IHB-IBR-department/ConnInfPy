@@ -254,7 +254,7 @@ def generate_fc_matrices(N,  effect_size, mask=None, n_samples_group1=50, n_samp
     # Create modified covariance for the second condition or group
     mod_cov = base_cov.copy()
     mod_cov[mask == 1] += effect_size + np.abs(np.random.normal(0,0.05, mod_cov[mask == 1].shape)) # Increase correlations in masked regions
-    mod_cov[mask == -1] -= effect_size - np.abs(np.random.normal(0,0.1, mod_cov[mask == 1].shape)) # Decrease correlations in masked regions
+    mod_cov[mask == -1] -= effect_size - np.abs(np.random.normal(0,0.1, mod_cov[mask == -1].shape)) # Decrease correlations in masked regions
     np.fill_diagonal(mod_cov, 1.0)
     mod_cov = (mod_cov+mod_cov.T)/2
 
