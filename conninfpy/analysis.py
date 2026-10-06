@@ -94,6 +94,13 @@ class AnalyzeResult:
         """
         return self.inference.significant_edges(*args, **kwargs)
 
+    def network_summary(self, atlas: Any, **kwargs: Any) -> "Any":
+        """Delegate to the underlying inference result's
+        :meth:`~conninfpy.InferenceResult.network_summary`: aggregate the
+        result over pairs of atlas networks.
+        """
+        return self.inference.network_summary(atlas, **kwargs)
+
     def to_csv(self, path: "Any", **kwargs: Any) -> None:
         """Delegate to the underlying inference result's
         :meth:`~conninfpy.InferenceResult.to_csv`.

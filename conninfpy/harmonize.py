@@ -724,6 +724,10 @@ def block_mass(
 ) -> npt.NDArray[np.int_]:
     r"""Aggregate edge-level survival counts into a network-block matrix.
 
+    For the full network-pair table (both tails, proportions, ``-log10 p``
+    mass) from a result and an atlas, use
+    :meth:`InferenceResult.network_summary <conninfpy.results.InferenceResult.network_summary>`.
+
     For an upper-triangular set of significant edges (``p <= alpha``),
     count how many fall within each unordered pair of network labels
     ``(i, j)``. The diagonal counts within-network edges.
