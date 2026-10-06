@@ -148,6 +148,21 @@ YAML manifest read with `conninfpy.load()`; see
 Bundled loaders cover NumPy arrays, CSV/NIfTI/timeseries directories,
 fMRIPrep derivatives and ABIDE.
 
+### Command line
+
+The same analysis without writing Python: an analysis file names the data
+manifest, the design (phenotype columns) and the inference settings.
+
+```bash
+conninfpy run examples/configs/abide_mini_age.yaml   # writes edges.csv, pvals.npz, provenance.json
+conninfpy info                                       # versions, TFNBS backend, cores
+```
+
+See [`examples/configs/abide_mini_age.yaml`](examples/configs/abide_mini_age.yaml)
+for every option; designs are `glm`, `two-sample`, `paired` and `one-sample`.
+`provenance.json` records the package version, the analysis file, the data
+used and any warnings, so a result can be traced back to how it was made.
+
 ---
 
 ## Choosing the design
