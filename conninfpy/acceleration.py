@@ -104,9 +104,11 @@ def _fit_gpd_mom(
     if y_bar <= 0 or s2 <= 0:
         return 0.0, 0.0, False
 
-    # Method of moments (Hosking & Wallis, 1987)
+    # Method of moments (Hosking & Wallis, 1987). Their shape k is -xi in the
+    # survival form used here, S(y) = (1 + xi y / sigma)^(-1/xi), for which
+    # mean^2 / variance = 1 - 2 xi.
     ratio = y_bar ** 2 / s2
-    xi = (ratio - 1) / 2
+    xi = (1 - ratio) / 2
     sigma = y_bar * (ratio + 1) / 2
 
     if sigma <= 0 or not np.isfinite(xi) or not np.isfinite(sigma):

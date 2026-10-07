@@ -390,6 +390,13 @@ ABIDE section:
     claim was a tie artefact (97% of edge-tails sit at p = 1) and was
     replaced by the decision agreement at α = 0.05. The paper uses exact
     p-values throughout.
+    A second GPD error was found by the 2026-10-07 audit and fixed: the
+    method-of-moments shape had the wrong sign (Hosking & Wallis's k = −ξ
+    used as ξ), so light tails were fitted as heavy and vice versa; the
+    goodness-of-fit check then usually rejected the fit and the permutation
+    p-values were returned instead. With the sign fixed the fitted tail is
+    used and is unbiased for light, exponential and heavy tails (median
+    p/true 0.86–1.04 over 200 runs).
 11. **Package default E = 0.3 vs the paper's E = 0.4.** The paper scripts now
     pass E explicitly; decide whether the package default should match the
     setting the paper recommends. `openclose_validation/run_eh_sensitivity.py`
