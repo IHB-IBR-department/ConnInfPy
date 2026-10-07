@@ -69,7 +69,7 @@ from .acceleration import compute_p_values_accelerated
 from ._compat import TailResult, make_tail_result, normalize_keys
 from ._progress import run_permutations
 from .results import InferenceResult, OmnibusInferenceResult
-from ._prepare import check_connectivity
+from ._prepare import check_connectivity, check_finite_design
 from ._rng import RngLike, resolve_seed, warn_legacy_random_state
 
 
@@ -377,14 +377,14 @@ def build_design_matrix(
         Contrast vector [0, ..., 0, 1] targeting the interest column.
     """
     n = len(interest)
-    interest = np.asarray(interest, dtype=np.float64)
+    interest = check_finite_design(interest, "interest")
     if interest.ndim == 1:
         interest = interest[:, np.newaxis]
 
     intercept = np.ones((n, 1), dtype=np.float64)
 
     if confounds is not None:
-        confounds = np.asarray(confounds, dtype=np.float64)
+        confounds = check_finite_design(confounds, "confounds")
         if confounds.ndim == 1:
             confounds = confounds[:, np.newaxis]
         X = np.hstack([intercept, confounds, interest])
@@ -661,7 +661,7 @@ def compute_p_val_glm(
     if interest is not None:
         X, contrast_vec = build_design_matrix(interest, confounds)
     else:
-        X = np.asarray(design_matrix, dtype=np.float64)
+        X = check_finite_design(design_matrix, "design_matrix")
         if contrast is None:
             raise ValueError("contrast is required when using design_matrix.")
         contrast_vec = np.asarray(contrast, dtype=np.float64)
@@ -1006,7 +1006,7 @@ def compute_p_val_glm_multi(
         )
     n_subjects, N, _ = Y.shape
 
-    X = np.asarray(design_matrix, dtype=np.float64)
+    X = check_finite_design(design_matrix, "design_matrix")
     if X.shape[0] != n_subjects:
         raise ValueError(
             f"design_matrix has {X.shape[0]} rows but Y has {n_subjects} subjects."

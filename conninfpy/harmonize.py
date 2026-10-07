@@ -70,6 +70,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import numpy.typing as npt
 
+from ._prepare import check_finite_design
+
 
 # Floor applied to variance estimates inside ComBat. Matches the
 # `np.maximum(·, _VAR_FLOOR)` calls in `combat_fit`. Below this value we
@@ -307,9 +309,10 @@ def _prepare_inputs(
         features = Y
     else:
         raise ValueError(f"Y must be 2D (n, p) or 3D (n, N, N); got ndim={Y.ndim}.")
+    check_finite_design(features, "ComBat input Y")
 
     if preserve is not None:
-        preserve = np.asarray(preserve, dtype=np.float64)
+        preserve = check_finite_design(preserve, "preserve")
         if preserve.ndim == 1:
             preserve = preserve[:, np.newaxis]
         if preserve.shape[0] != features.shape[0]:

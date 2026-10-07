@@ -57,7 +57,15 @@ def validate_loaded_dataset(dataset: LoadedDataset, check_inference_ready: bool 
             f"Data must be numeric, got dtype {data.dtype}. Check CSV header and separator settings."
         )
     elif not np.isfinite(data).all():
-        errors.append("Data contains missing, infinite, or NaN values.")
+        if data.ndim == 3 and data.shape[1] == data.shape[2]:
+            from .._prepare import _format_nonfinite, nonfinite_report
+
+            report = nonfinite_report(data)
+            errors.append(_format_nonfinite(report, "Connectivity data") if report["n_values"]
+                          else "Connectivity data has NaN/infinite values on the diagonal only "
+                               "(a region with a constant signal?).")
+        else:
+            errors.append("Data contains missing, infinite, or NaN values.")
 
     # Retrieve subject IDs if present
     subj_ids = dataset.subject_ids

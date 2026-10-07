@@ -603,8 +603,11 @@ class AbideSchaeferLoader(BaseDataLoader):
         for sub_id in subject_ids:
             ts = d[sub_id]["time_series"] # shape: (timepoints, 100)
             # Compute Pearson correlation matrix
-            corr = np.corrcoef(ts.T)
-            corr = np.nan_to_num(corr)
+            # A region with a constant signal has undefined correlations:
+            # keep them as NaN so validation reports them (filling 0 would
+            # pass them off as measured zero connectivity).
+            with np.errstate(invalid="ignore", divide="ignore"):
+                corr = np.corrcoef(ts.T)
             corr_list.append(corr)
             
             labels.append(d[sub_id].get("label", "unknown"))
@@ -1172,7 +1175,9 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
                 else:
                     raise ValueError(f"Unsupported session policy: {self.close_session_policy}")
             
-            corr_mats = np.array([np.nan_to_num(np.corrcoef(ts.T)) for ts in arr])
+            # Undefined correlations (constant region signal) stay NaN.
+            with np.errstate(invalid="ignore", divide="ignore"):
+                corr_mats = np.array([np.corrcoef(ts.T) for ts in arr])
             
             all_corr.append(corr_mats)
             all_conditions.extend([cond] * len(sub_list))

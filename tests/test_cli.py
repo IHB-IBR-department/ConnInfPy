@@ -169,7 +169,9 @@ class TestCommand(unittest.TestCase):
                 cwd=REPO, capture_output=True, text=True, timeout=600,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
-            self.assertIn("204 subjects × 100 regions", proc.stdout)
+            # 204 in the file; one subject has a region without signal and is
+            # dropped by the manifest (params.missing: drop_subjects)
+            self.assertIn("203 subjects × 100 regions", proc.stdout)
             self.assertTrue((Path(tmp) / "edges.csv").exists())
 
 
