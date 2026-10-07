@@ -27,7 +27,7 @@ simulations and benchmarks need no data.
 | Fig `fig:abide-age-networks` | `abide/plot3_network_block_mass.png` | `run_age_strategy_d.py --variant age` → `plot_paper_figures.py` |
 | Table `tab:abide-dx`, Fig `fig:abide-dx` | `abide/plot6_diagnosis_methodology.png`; counts from `results/diagnosis/*_edges.csv` | `run_naive_baseline.py`, `run_dx_combat_only.py`, `run_dx_strategy_e.py`, `run_dx_site_glm.py` → `plot_diagnosis_quadrant.py` |
 | Table `tab:method-spread` | `results/age_development/methods/*.npz` | `run_age_method_comparison.py` (+ `plot_method_sensitivity.py`) |
-| Table `tab:tfnbs-multiverse`, Fig `fig:abide-multiverse` | `abide/plot5_tfnbs_grid_sensitivity.png`; `results/age_development/sensitivity/eh/` | `run_eh_sensitivity.py` |
+| Table `tab:tfnbs-multiverse`, Fig `fig:abide-multiverse` | `results/age_development/sensitivity/eh/multiverse_summary.csv` (+ pairwise matrices); `abide/plot5_tfnbs_grid_sensitivity.png` (counts per cell; the manuscript figure shows a Spearman matrix, which no script plots) | `run_eh_sensitivity.py` |
 | Table `tab:oc-within` | `results/{ihb,china}_paired_tfnbs*_edges.csv` | `openclose_validation/run_paired_tfnbs.py` |
 | Table `tab:oc-cross`, Fig `fig:oc-replication` | `results/audit/openclose_agreement.csv`, `openclose/plot2_block_mass_convergence.png` | `audit_openclose_agreement.py` |
 | Fig `fig:oc-specificity` | `openclose/plot5_retest_specificity.png` | `ml/run_ml_feature_selection.py`, `run_retest_methods.py` → `plot5_retest_specificity.py` |
@@ -218,6 +218,56 @@ E ≈ H/10, (0.6, 6) … (0.9, 9), have about the same FDP and mean TPR
   above BH's first thresholds over 1,770 edges. It is not used in the
   manuscript.
 
+## Empirical analyses: reproduction check (2026-10-07)
+
+ABIDE and Open-Close were re-run end to end with the current code and
+compared with the stored results and the manuscript.
+
+**Reproduce exactly** (edge sets identical; p-values within 0.005 from the
+refactored permutation engine): ABIDE age 170 + 86; diagnosis naive 520,
+site dummies 187, ComBat + site dummies 187; the seven-method age table
+(35 / 61 / 117 / 239 / 256 / 440 / 892); Open-Close within-cohort counts
+(939 / 695 / 2,220 / 898), cross-cohort agreement (Jaccard 0.148 / 0.159,
+Spearman 0.25 / 0.26, block-mass r 0.79 / 0.61) and the negative control
+(Jaccard 0.006 / 0.000 against random 0.023 / 0.015).
+
+Fixed on the way:
+
+1. **TFNBS parameters were inherited from a changed default.** The package
+   default E moved from 0.4 to 0.3 on 2026-05-25 (`e565d65`). The four
+   diagnosis scripts, NI-/FBC-TFNBS in the method comparison and FBC-TFNBS
+   in three Open-Close scripts passed no E and silently switched to 0.3
+   (diagnosis naive 520 → 280, NI 61 → 48, FBC 117 → 105). All paper
+   scripts now pass (E, H, n) = (0.4, 3, 10).
+2. **The `abide` stage always stopped** at a BH-FDR call the GLM pipeline
+   cannot run (not in the manuscript); removed.
+3. **Unreported GPD p-values.** The stored diagnosis results used GPD tail
+   acceleration (the old `analyze()` default). With exact permutation
+   p-values (5,000 permutations) three arms are unchanged, but
+   **ComBat-only gives 315 (53 + 262), not 177 (53 + 124)**. See open issue
+   10 for why GPD moved this decision.
+4. **The (E,H) multiverse was not reproducible and used a different
+   design.** No script produced the Spearman matrices behind
+   `tab:tfnbs-multiverse` (files from 2026-05-24), and the sweep used
+   ComBat data without site dummies or within-site permutation, with GPD at
+   200 permutations. `run_eh_sensitivity.py` now uses the age map's design
+   and exact p-values (5,000 permutations) and writes the matrices; its
+   (0.4, 3.0) cell reproduces the age map (TFNBS 170 + 86, NI 61, FBC 117).
+
+New multiverse results (TFNBS, 36 cells, 630 pairs):
+
+| | positive | negative |
+|---|---|---|
+| significant edges per cell | 32–527 (median 248) | 13–344 (median 86) |
+| edges at p = 1 per cell | 89–95% | 93–96% |
+| Spearman of −log₁₀ p, all edges | median 1.000 [0.690, 1.000] | 1.000 [0.747, 1.000] |
+| Spearman, edges with p < 1 in either cell | median 0.963 [0.609, 1.000] | 0.994 [0.910, 1.000] |
+| Jaccard of significant sets | median 0.47 [0.06, 1.00] | 0.30 [0.04, 1.00] |
+
+The all-edge Spearman is close to 1 mostly because ~90% of edges tie at
+p = 1 in every cell; the below-ceiling Spearman and the Jaccard describe
+the agreement better.
+
 ## Manuscript text to update
 
 Simulation section (`sec:evaluation`):
@@ -270,10 +320,20 @@ ABIDE section:
 
 9. **Age model (l. 291).** "adjusting for sex, head motion, and diagnosis" →
    "adjusting for sex and head motion". Age and diagnosis are separate
-   analyses. The reported 170 + 86 edges, the seven-method comparison and
-   the (E,H) multiverse all use this model (`run_age_strategy_d.py
-   --variant age`, `run_age_method_comparison.py`, `run_eh_sensitivity.py`);
-   no recomputation is needed.
+   analyses. The reported 170 + 86 edges and the seven-method comparison use
+   this model and are unchanged.
+10. **Diagnosis, ComBat-only arm (l. 300, `tab:abide-dx`).** 177 (53 + 124) →
+    315 (53 + 262). The other three arms are unchanged.
+11. **Multiverse (l. 347, `tab:tfnbs-multiverse`).** Replace the table with
+    the numbers above (state the design: same model as the age map, exact
+    p-values, 5,000 permutations). "Positive-tail minimum correlation 0.812"
+    → 0.609 (edges below p = 1) or 0.690 (all edges). Report the count
+    range and the Jaccard — they show how much the thresholded maps move.
+    The figure caption describes a Spearman matrix; the repository figure
+    shows counts per cell.
+12. **Methods.** State that all empirical p-values are exact permutation
+    p-values (5,000 permutations, no tail approximation) and that every
+    TFNBS-family operator uses (E, H, n) = (0.4, 3, 10).
 
 ## Issues still open
 
@@ -290,9 +350,7 @@ ABIDE section:
    cohort has no public archive yet.
 4. **ABIDE site strategy.** The age map, the method comparison and the
    multiverse use ComBat + site dummies (Strategy D), while the text calls
-   the site-dummies GLM primary. The multiverse uses a third design
-   (ComBat-harmonised data without site dummies or site-blocked permutation)
-   and GPD with 200 permutations, neither of which is reported.
+   the site-dummies GLM primary (the multiverse now matches the age map).
 5. **ABIDE "naive" arm changes two things.** It drops the age / sex / motion
    covariates as well as site handling, so 520 vs 187 edges confounds
    covariate adjustment with site handling.
@@ -314,8 +372,22 @@ ABIDE section:
    GLM null calibration; its stored results predate the effect-size fix and
    it is not in the manuscript. Either run it (1,000 nulls; run time not yet measured) and
    report it, or drop the GLM caveat paragraph (l. 668).
+10. **GPD tail approximation (package, `acceleration.py`).** `fit_gpd_tail`
+    starts the threshold at the median of the max-statistic null
+    (`np.linspace(0.50, 0.90, 5)`), not at the upper quartile its docstring
+    and Winkler et al. (2016) give, and then replaces *every* p-value above
+    that threshold with the GPD value — including p ≈ 0.05, which 5,000
+    permutations estimate exactly from ~250 exceedances. On the ABIDE
+    ComBat-only arm this halved one tail (262 → 124 edges). Suggested fix:
+    start at the 0.75 quantile and use the GPD only where few null maxima
+    exceed the observed statistic (e.g. < 10), keeping the empirical
+    p-value elsewhere. The paper no longer uses GPD.
+11. **Package default E = 0.3 vs the paper's E = 0.4.** The paper scripts now
+    pass E explicitly; decide whether the package default should match the
+    setting the paper recommends. `openclose_validation/run_eh_sensitivity.py`
+    (not in the manuscript) still uses GPD with 200 permutations.
 
 Resolved by this revision: null calibration design and size, per-direction
 vs two-sided FWER, power tables from the final run, TFNBS settings
-differing by experiment, and the ABIDE age-model description (text change
-only).
+differing by experiment, the ABIDE age-model description (text change
+only), the multiverse design, and unreported GPD in the empirical results.
