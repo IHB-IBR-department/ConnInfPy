@@ -216,6 +216,14 @@ class ManifestLoader(BaseDataLoader):
         keep_rois = self.resolved_paths.get("keep_rois") or self.manifest.params.get("keep_rois")
         if keep_rois is not None:
             dataset = filter_dataset_rois(dataset, keep_rois)
+
+        # Missing connectivity: by default left in place, so validation and the
+        # inference entry points report it; "drop_subjects" removes them.
+        missing = self.manifest.params.get("missing", "raise")
+        if missing == "drop_subjects":
+            dataset = drop_subjects_with_missing(dataset)
+        elif missing != "raise":
+            raise ValueError(f"params.missing must be 'raise' or 'drop_subjects'; got {missing!r}.")
             
         # Apply checks/validations from manifest
         validate_manifest_dataset(dataset, self.manifest)
@@ -284,6 +292,41 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
         dataset.roi_labels = [dataset.roi_labels[i] for i in keep_idx if i < len(dataset.roi_labels)]
         
     return dataset
+
+def drop_subjects_with_missing(dataset: LoadedDataset) -> LoadedDataset:
+    """Remove subjects whose connectivity has NaN / infinite off-diagonal values.
+
+    Connectivity data only. With a ``condition_column`` (repeated measures),
+    every observation of an affected subject is removed so pairs stay
+    complete. The removed subjects are listed in ``dataset.warnings``.
+    """
+    from .._prepare import nonfinite_report
+
+    data = np.asarray(dataset.data)
+    if dataset.data_kind == "timeseries" or data.ndim != 3 or data.shape[1] != data.shape[2]:
+        return dataset
+    report = nonfinite_report(data)
+    if not report["n_values"]:
+        return dataset
+    drop = np.zeros(data.shape[0], dtype=bool)
+    drop[report["subjects"]] = True
+    if dataset.condition_column and dataset.subject_ids is not None:
+        bad_ids = {dataset.subject_ids[i] for i in report["subjects"]}
+        drop = np.array([sid in bad_ids for sid in dataset.subject_ids])
+    keep = ~drop
+    ids = (list(np.asarray(dataset.subject_ids)[drop]) if dataset.subject_ids is not None
+           else list(np.flatnonzero(drop)))
+    dataset.data = data[keep]
+    dataset.pheno = dataset.pheno.loc[keep].reset_index(drop=True)
+    if dataset.subject_ids is not None:
+        dataset.subject_ids = list(np.asarray(dataset.subject_ids)[keep])
+    regions = ", ".join(f"ROI {r} in {c}" for r, c in sorted(report["rois"].items())) or "scattered edges"
+    dataset.warnings.append(
+        f"Removed {int(drop.sum())} observation(s) with missing connectivity "
+        f"({regions}): {ids}."
+    )
+    return dataset
+
 
 def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest):
     """Check a loaded dataset against its manifest's ``checks``."""

@@ -11,6 +11,12 @@ metadata:
   cohort: "ABIDE-mini"
   atlas_name: "Schaefer-100"
 
+params:
+  # A few ABIDE subjects have a region with a constant (zero) signal, so its
+  # correlations are undefined. Drop those subjects explicitly (reported in
+  # the dataset warnings) instead of treating the values as zero.
+  missing: drop_subjects
+
 checks:
   expected_rois: 100
   min_subjects: 200

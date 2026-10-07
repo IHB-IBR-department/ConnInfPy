@@ -118,8 +118,9 @@ table — see [Results](#results).
 ### Real data
 
 From a clone of the repository, the bundled ABIDE-mini dataset (204 subjects,
-Schaefer-100, 5 sites) runs an age analysis with multi-site harmonization in a
-few seconds:
+Schaefer-100, 5 sites; one subject with a region without signal is dropped on
+loading, as its manifest specifies) runs an age analysis with multi-site
+harmonization in a few seconds:
 
 <!-- readme-real-data -->
 ```python

@@ -193,6 +193,25 @@ def get_available_cores():
         return multiprocessing.cpu_count()
 
 
+def _check_finite_statistics(
+    observed: npt.NDArray, null_dist: npt.NDArray, key: str
+) -> None:
+    """Refuse to turn NaN statistics into p-values.
+
+    ``x >= NaN`` is always False, so a NaN in the null maxima would give every
+    edge the smallest possible p-value. Inputs are checked on entry; this
+    catches NaN created inside a computation.
+    """
+    if np.isnan(null_dist).any() or np.isnan(observed).any():
+        raise RuntimeError(
+            f"NaN statistics in the {key!r} tail (observed: "
+            f"{int(np.isnan(observed).sum())} values, permutation maxima: "
+            f"{int(np.isnan(null_dist).sum())} of {null_dist.shape[0]}); "
+            "p-values would be meaningless. Check the input for edges that "
+            "are constant across all subjects."
+        )
+
+
 def _compute_p_values_from_null(
     emp_t_dict: Dict[str, npt.NDArray],
     max_null_dict: Dict[str, npt.NDArray]
@@ -225,6 +244,7 @@ def _compute_p_values_from_null(
     for key in keys:
         emp_t = emp_t_dict[key]
         null_dist = max_null_dict[key]
+        _check_finite_statistics(emp_t, null_dist, key)
 
         if is_2d:
             # Shape: (N, N) vs (n_permutations,)
