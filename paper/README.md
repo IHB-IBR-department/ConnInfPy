@@ -323,7 +323,11 @@ ABIDE section:
    analyses. The reported 170 + 86 edges and the seven-method comparison use
    this model and are unchanged.
 10. **Diagnosis, ComBat-only arm (l. 300, `tab:abide-dx`).** 177 (53 + 124) →
-    315 (53 + 262). The other three arms are unchanged.
+    315 (53 + 262). The other three arms are unchanged. The count is
+    fragile: 138 of the 262 negative edges form one TFNBS cluster with a
+    shared exact p of 0.0496 (SE 0.003), so a different permutation draw
+    could put it on either side of 0.05. Worth a sentence, or report this
+    arm at block level.
 11. **Multiverse (l. 347, `tab:tfnbs-multiverse`).** Replace the table with
     the numbers above (state the design: same model as the age map, exact
     p-values, 5,000 permutations). "Positive-tail minimum correlation 0.812"
@@ -375,13 +379,18 @@ ABIDE section:
 10. **GPD tail approximation (package, `acceleration.py`).** `fit_gpd_tail`
     starts the threshold at the median of the max-statistic null
     (`np.linspace(0.50, 0.90, 5)`), not at the upper quartile its docstring
-    and Winkler et al. (2016) give, and then replaces *every* p-value above
-    that threshold with the GPD value — including p ≈ 0.05, which 5,000
-    permutations estimate exactly from ~250 exceedances. On the ABIDE
-    ComBat-only arm this halved one tail (262 → 124 edges). Suggested fix:
-    start at the 0.75 quantile and use the GPD only where few null maxima
-    exceed the observed statistic (e.g. < 10), keeping the empirical
-    p-value elsewhere. The paper no longer uses GPD.
+    gives (citing Winkler et al., 2016). With thousands of exceedances the
+    first candidate passes the Anderson–Darling check, so the GPD is fitted
+    to the upper half of the null maxima. It then replaces *every* p-value
+    above that threshold — including p ≈ 0.05, which 5,000 permutations
+    estimate directly from ~250 exceedances (Monte-Carlo SE 0.003). On the
+    ABIDE ComBat-only negative tail the fitted tail is 0.057 where the
+    empirical tail is 0.050 (+14%). That moved one 138-edge cluster with an
+    exact p of 0.0496 to 0.056, hence 262 vs 124 edges. Suggested fix: start
+    at the 0.75 quantile and use the GPD only where fewer than ~10 null
+    maxima exceed the observed statistic (Knijnenburg et al., 2009), keeping
+    the empirical p-value elsewhere; on this arm that returns the exact
+    result (262). The paper no longer uses GPD.
 11. **Package default E = 0.3 vs the paper's E = 0.4.** The paper scripts now
     pass E explicitly; decide whether the package default should match the
     setting the paper recommends. `openclose_validation/run_eh_sensitivity.py`
