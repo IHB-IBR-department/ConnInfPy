@@ -45,8 +45,8 @@ def main():
     ax1.tick_params(axis='x', rotation=30)
     
     sns.barplot(data=best_avg, x="pretty_name", y="d_vs_all", hue="pretty_name", palette="coolwarm", ax=ax2, legend=False)
-    ax2.set_title("$\Delta$ AUC vs. All-Edges Baseline", fontsize=14, fontweight='bold')
-    ax2.set_ylabel("$\Delta$ ROC-AUC", fontsize=12)
+    ax2.set_title(r"$\Delta$ AUC vs. All-Edges Baseline", fontsize=14, fontweight='bold')
+    ax2.set_ylabel(r"$\Delta$ ROC-AUC", fontsize=12)
     ax2.set_xlabel("Feature Selector", fontsize=12)
     ax2.tick_params(axis='x', rotation=30)
     

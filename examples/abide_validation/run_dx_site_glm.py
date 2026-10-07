@@ -67,6 +67,7 @@ def run_dx_strat_d(data: dict, atlas: AtlasInfo, n_perm: int, seed: int) -> None
         harmonize="combat_site_dummies_glm",  # Strategy D
         fisher_z=False,
         method="tfnbs",
+        e=0.4, h=3.0, n=10,  # prespecified (Hao et al.), not the package default
         n_permutations=n_perm,
         rng=seed,
         use_mp=True,

@@ -41,7 +41,7 @@ SELECTORS = {
     "nbs_30":   dict(method="nbs", threshold=3.0),
     "cnbs":     dict(method="cnbs"),
     "ni_tfnbs": dict(method="ni_tfnbs", e=0.4, h=3.0, n=10),
-    "fbc_tfnbs":dict(method="fbc_tfnbs"),
+    "fbc_tfnbs":dict(method="fbc_tfnbs", e=0.4, h=3.0, n=10),
     "bh_fdr":   dict(method="bh_fdr"),
 }
 
