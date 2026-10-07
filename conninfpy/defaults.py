@@ -103,8 +103,9 @@ DEFAULT_N_PERMUTATIONS: int = 1000
 DEFAULT_ACCELERATION = None
 """Default tail acceleration: ``None`` (exact empirical permutation p-values).
 
-``'gpd'`` / ``'gamma'`` are opt-in; with ~200 permutations they reproduce
-large-budget empirical p-values at a fraction of the cost (Winkler 2016)."""
+``'gpd'`` / ``'gamma'`` are opt-in for exploration with ~200 permutations: a
+fitted tail replaces the p-values that fewer than 10 permutations reach
+(Winkler 2016); all others stay exact."""
 
 # =============================================================================
 # NBS defaults

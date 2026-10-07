@@ -403,10 +403,9 @@ def analyze(
         Enhancement method.
     acceleration : str or None, default ``None``
         ``None`` gives exact empirical permutation p-values. ``'gpd'`` /
-        ``'gamma'`` are tail-approximation accelerators with empirical
-        fallback: with ~200 permutations they reproduce large-budget
-        empirical p-values at a fraction of the cost — a good setting for
-        exploratory runs.
+        ``'gamma'`` replace the p-values that fewer than 10 permutations
+        reach with a fitted tail and keep all others exact — with ~200
+        permutations, a setting for exploratory runs.
     n_permutations : int, default ``1000``
         Permutations. The same defaults apply to every entry point
         (:mod:`conninfpy.defaults`).

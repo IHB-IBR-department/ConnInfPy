@@ -25,9 +25,12 @@ harmonization, and permutation inference with any of nine methods.
   confounds, directional (positive/negative) FWER.
 - **Multi-site data** — parametric empirical-Bayes ComBat (Johnson 2007;
   Fortin 2017/2018) in NumPy, site dummies, and site-blocked permutation.
-- **GPD/gamma tail acceleration** — 200 permutations reproduce 5000-permutation
-  empirical p-values within $|\Delta(-\log_{10}p)| \le 0.001$ on >99% of edges
-  (≈25× faster), with a goodness-of-fit guard and empirical fallback.
+- **GPD/gamma tail acceleration** for exploratory runs with few permutations:
+  where fewer than 10 permutations reach the observed statistic, the p-value
+  comes from a fitted tail; every other p-value stays the exact permutation
+  p-value. With 200 permutations, decisions at α = 0.05 matched 5,000 exact
+  permutations on 99.99% of edges in the examples below (≈25× faster). Use
+  exact p-values (the default) for reported results.
 - **JIT-compiled TFNBS** via `numba` (≈15× end-to-end on a 60×60, 200-permutation
   benchmark), with a SciPy fallback.
 - **20-scenario topology library** of planted effects (hub, rich club, chain,

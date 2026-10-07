@@ -5,14 +5,19 @@ Implements tail approximation via Generalized Pareto Distribution (GPD)
 and gamma approximation, following Winkler et al. (2016) "Faster
 permutation inference in brain imaging", NeuroImage.
 
-These methods reduce the number of permutations needed for accurate
-p-value estimation from ~5000 to ~200, yielding 10-100x speedup
-while maintaining exact error rates for FWER-corrected inference.
+A finite set of J permutations resolves p-values down to about 1/J. Where
+fewer than ``MIN_EXCEEDANCES`` null maxima reach the observed statistic, the
+permutation p-value is too coarse and a fitted tail is used instead; every
+other p-value stays the exact permutation p-value (Knijnenburg et al., 2009).
+The fitted tail is an approximation, so the p-values it replaces are not
+exact.
 
 References
 ----------
 Winkler et al. (2016). Faster permutation inference in brain imaging.
     NeuroImage, doi:10.1016/j.neuroimage.2016.05.068
+Knijnenburg et al. (2009). Fewer permutations, more accurate P-values.
+    Bioinformatics 25(12), i161-i168.
 """
 
 from __future__ import annotations
@@ -32,6 +37,41 @@ __all__ = [
     "fit_gamma_tail",
     "compute_p_values_accelerated",
 ]
+
+# The tail fit replaces a permutation p-value only when fewer than this many
+# null maxima reach the observed statistic; above it the permutation count is
+# precise enough on its own (Knijnenburg et al., 2009).
+MIN_EXCEEDANCES = 10
+
+
+def _empirical_p(
+    null_dist: npt.NDArray[np.float64],
+    observed: npt.NDArray[np.float64],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.int64]]:
+    """Tie-inclusive max-statistic p-values (Phipson-Smyth +1) and counts."""
+    count = np.sum(observed[..., np.newaxis] <= null_dist, axis=-1)
+    return (count + 1.0) / (len(null_dist) + 1.0), count
+
+
+def _replace_sparse_tail(
+    p_empirical: npt.NDArray[np.float64],
+    count: npt.NDArray[np.int64],
+    tail_p: npt.NDArray[np.float64],
+    J: int,
+    min_exceedances: int,
+) -> npt.NDArray[np.float64]:
+    """Use the fitted tail only where the permutation count is too coarse.
+
+    ``tail_p`` holds fitted p-values for the statistics with
+    ``count < min_exceedances`` (in that order). They are clipped to
+    ``[1/J, (min_exceedances + 1)/(J + 1)]`` so that p-values stay
+    non-increasing in the statistic across the switch.
+    """
+    p = np.copy(p_empirical)
+    sparse = count < min_exceedances
+    upper = (min_exceedances + 1.0) / (J + 1.0)
+    p[sparse] = np.clip(tail_p, 1.0 / J, upper)
+    return p
 
 
 def _fit_gpd_mom(
@@ -151,22 +191,24 @@ def fit_gpd_tail(
     observed: npt.NDArray[np.float64],
     n_thresholds: int = 5,
     ad_threshold: float = 2.5,
+    min_exceedances: int = MIN_EXCEEDANCES,
 ) -> npt.NDArray[np.float64]:
     """
-    Compute p-values using GPD tail approximation.
+    Compute p-values with a GPD tail approximation where permutations are too few.
 
-    Fits a GPD to the upper tail of the null distribution and uses
-    the fitted distribution to compute p-values for the observed
-    statistics. Falls back to empirical p-values when GPD fit is poor.
-    This is a tail approximation, not an exact finite-permutation
-    procedure.
+    Every statistic first gets its permutation p-value. Only statistics that
+    fewer than ``min_exceedances`` null maxima reach — where that p-value
+    rests on a handful of permutations — get the GPD tail value instead.
+    This is a tail approximation, not an exact finite-permutation procedure.
 
-    Algorithm (Winkler et al., 2016, Section 2.2.3):
+    Algorithm (Winkler et al., 2016; Knijnenburg et al., 2009):
 
-    1. Set initial threshold ``u`` at upper quartile of ``null_dist``
-    2. Fit GPD to exceedances ``y = T_star_j - u`` by method of moments
-    3. Test fit with Anderson-Darling; if poor, increase ``u`` and retry
-    4. Compute ``p = (k / J) * GPD_sf(T - u)`` where ``k`` = #exceedances
+    1. Set the threshold ``u`` at the upper quartile of ``null_dist``.
+    2. Fit a GPD to the exceedances ``y = T_star_j - u`` by method of moments.
+    3. Test the fit with Anderson-Darling; if poor, raise ``u`` (up to the
+       0.95 quantile) and retry.
+    4. For the sparse-tail statistics, ``p = (k / J) * GPD_sf(T - u)`` where
+       ``k`` is the number of exceedances.
 
     Parameters
     ----------
@@ -175,28 +217,28 @@ def fit_gpd_tail(
     observed : ndarray of shape ``(*spatial_dims,)``
         Observed statistics (e.g., shape (N, N) for connectivity).
     n_thresholds : int, default=5
-        Maximum number of threshold increases to try for good GPD fit.
+        Number of thresholds tried between the 0.75 and 0.95 quantiles.
     ad_threshold : float, default=2.5
         Anderson-Darling threshold for acceptable fit.
+    min_exceedances : int, default=10
+        The GPD replaces the permutation p-value only for statistics reached
+        by fewer than this many null maxima.
 
     Returns
     -------
     p_values : ndarray of same shape as observed
-        P-values. Uses GPD where fit is good, empirical otherwise. The
-        empirical fallback uses tie-inclusive max-statistic counting and
-        the Phipson-Smyth +1 correction.
+        Permutation p-values (tie-inclusive, Phipson-Smyth +1), with GPD
+        values in the sparse tail when a good fit is found.
     """
     J = len(null_dist)
     null_sorted = np.sort(null_dist)
+    p_empirical, count = _empirical_p(null_dist, observed)
 
-    # Empirical p-values as fallback (with +1 correction — Phipson & Smyth 2010)
-    count = np.sum(observed[..., np.newaxis] <= null_dist, axis=-1)
-    p_empirical = (count + 1.0) / (J + 1.0)
+    sparse = count < min_exceedances
+    if not np.any(sparse):
+        return p_empirical
 
-    # Try increasing thresholds for GPD fit
-    quantiles = np.linspace(0.50, 0.90, n_thresholds)
-
-    for q in quantiles:
+    for q in np.linspace(0.75, 0.95, n_thresholds):
         u = np.quantile(null_sorted, q)
         exceedances = null_sorted[null_sorted > u] - u
 
@@ -212,26 +254,15 @@ def fit_gpd_tail(
         if ad_stat > ad_threshold:
             continue
 
-        # Good fit found — compute p-values from GPD
-        k = len(exceedances)  # number of exceedances
-        tail_fraction = k / J  # P(T > u)
-
-        # For observed values > u: p = tail_fraction * GPD_sf(T - u)
-        # For observed values <= u: use empirical p-value
-        above_u = observed > u
-        p_gpd = np.copy(p_empirical)
-
-        if np.any(above_u):
-            gpd_tail_p = tail_fraction * _gpd_sf(observed[above_u] - u, sigma, xi)
-            # Ensure p-values are in [1/J, 1] (can't be more precise than 1/J)
-            gpd_tail_p = np.clip(gpd_tail_p, 1.0 / J, 1.0)
-            p_gpd[above_u] = gpd_tail_p
+        # Good fit found: P(T > u) times the GPD survival above u
+        k = len(exceedances)
+        tail_p = (k / J) * _gpd_sf(np.maximum(observed[sparse] - u, 0.0), sigma, xi)
 
         logger.debug(
-            f"GPD fit: u={u:.3f}, k={k}, xi={xi:.4f}, "
-            f"sigma={sigma:.4f}, AD={ad_stat:.3f}"
+            f"GPD fit: u={u:.3f} (q={q:.2f}), k={k}, xi={xi:.4f}, "
+            f"sigma={sigma:.4f}, AD={ad_stat:.3f}, sparse={int(sparse.sum())}"
         )
-        return p_gpd
+        return _replace_sparse_tail(p_empirical, count, tail_p, J, min_exceedances)
 
     # No good fit found — fall back to empirical
     logger.debug("GPD fit failed at all thresholds, using empirical p-values")
@@ -241,14 +272,16 @@ def fit_gpd_tail(
 def fit_gamma_tail(
     null_dist: npt.NDArray[np.float64],
     observed: npt.NDArray[np.float64],
+    min_exceedances: int = MIN_EXCEEDANCES,
 ) -> npt.NDArray[np.float64]:
     """
-    Compute p-values using gamma (Pearson type III) approximation.
+    Compute p-values with a gamma (Pearson type III) tail where permutations are too few.
 
-    Fits a gamma distribution to the null distribution using method
-    of moments (first three moments) and computes p-values from the
-    fitted distribution. Simpler and more robust than GPD, but still an
-    approximation to the finite-permutation tail.
+    Fits a gamma distribution to the null distribution by the method of
+    moments (first three moments). As in :func:`fit_gpd_tail`, the fitted
+    value replaces the permutation p-value only for statistics reached by
+    fewer than ``min_exceedances`` null maxima. Simpler than the GPD, but
+    still an approximation to the finite-permutation tail.
 
     Parameters
     ----------
@@ -256,25 +289,29 @@ def fit_gamma_tail(
         Max-statistic null distribution.
     observed : ndarray of shape ``(*spatial_dims,)``
         Observed statistics.
+    min_exceedances : int, default=10
+        See :func:`fit_gpd_tail`.
 
     Returns
     -------
     p_values : ndarray of same shape as observed
-        P-values from fitted gamma distribution, or tie-inclusive
-        empirical p-values with the Phipson-Smyth +1 correction when
-        gamma fitting is not possible.
+        Permutation p-values (tie-inclusive, Phipson-Smyth +1), with gamma
+        values in the sparse tail when the gamma can be fitted.
     """
 
     J = len(null_dist)
+    p_empirical, count = _empirical_p(null_dist, observed)
+    sparse = count < min_exceedances
+    if not np.any(sparse):
+        return p_empirical
 
     mean = np.mean(null_dist)
     var = np.var(null_dist, ddof=1)
     skew_val = float(stats.skew(null_dist))
 
     if var <= 0 or abs(skew_val) < 1e-10:
-        # Can't fit gamma, fall back to empirical (with +1 correction)
-        count = np.sum(observed[..., np.newaxis] <= null_dist, axis=-1)
-        return (count + 1.0) / (J + 1.0)
+        # Can't fit gamma, keep the permutation p-values
+        return p_empirical
 
     # Gamma parameters from moments
     # shape a = 4/skew^2, scale b = sqrt(var / a), loc = mean - a*b
@@ -282,11 +319,8 @@ def fit_gamma_tail(
     b = np.sqrt(var / a)
     loc = mean - a * b
 
-    # P-values from gamma survival function
-    p_values = stats.gamma.sf(observed, a, loc=loc, scale=b)
-    p_values = np.clip(p_values, 1.0 / J, 1.0)
-
-    return p_values
+    tail_p = stats.gamma.sf(observed[sparse], a, loc=loc, scale=b)
+    return _replace_sparse_tail(p_empirical, count, tail_p, J, min_exceedances)
 
 
 def compute_p_values_accelerated(
