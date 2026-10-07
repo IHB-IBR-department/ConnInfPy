@@ -170,11 +170,22 @@ cNBS 0.422, NBS-int 0.427 — same ranking. The leak edges matter mainly for
 cNBS, whose block decision spreads to them (partial bipartite: 0.63 vs 0.72
 strict).
 
-**(E,H) grid** (176 cells: E ∈ 0.05–1.5, H ∈ 0.5–10). At Δr = 0.125, 71 cells
-have FDP ≤ 0.05 in all five plotted topologies with non-zero TPR (74 at
-Δr = 0.25; 14 in the old run). (0.4, 3) is one of them (max FDP 0.040, mean
-TPR 0.28); cells along E ≈ H/10 (0.6, 6) … (0.9, 9) are equivalent (mean TPR
-0.28–0.30).
+**(E,H) grid** (176 cells: E ∈ 0.05–1.5, H ∈ 0.5–10). Criterion as in the
+manuscript: mean FDP over the 100 datasets ≤ 0.05 in each of the five
+plotted topologies, with non-zero TPR. On the point estimates, 71 cells meet
+it at Δr = 0.125 (74 at Δr = 0.25; 14 in the old run). Allowing for
+Monte-Carlo error (95% normal interval of each mean; SE 0.003–0.02):
+
+| Cells (of 176) | Δr = 0.125 | Δr = 0.25 |
+|---|---|---|
+| upper bound ≤ 0.05 in all five (shown ≤ 0.05) | 66 | 70 |
+| lower bound > 0.05 in some topology (shown above) | 92 | 96 |
+| undecided | 18 | 10 |
+
+(0.4, 3) is undecided at Δr = 0.125 — hub FDP 0.040, upper bound 0.054 — and
+shown ≤ 0.05 at Δr = 0.25 (hub 0.035, upper bound 0.044). Cells along
+E ≈ H/10, (0.6, 6) … (0.9, 9), have about the same FDP and mean TPR
+(0.28–0.30 vs 0.28 at Δr = 0.125).
 
 **Robustness** (4 topologies: hub, rich club, chain, between-module dense;
 `results/sensitivity/`).
@@ -228,9 +239,12 @@ Simulation section (`sec:evaluation`):
    NBS has FDP 0.05 with TPR 0.87 at Δr = 0.25.
 6. **(E,H) (l. 570).** "36 tested combinations" → 176. "(0.4, 3.0) was the
    only tested configuration with FDP ≤ 0.05 in all five topologies" is
-   false (71 of 176 cells; 14 already in the old run). Say instead that
-   (0.4, 3.0) was fixed a priori from Hao et al. and lies in a broad region
-   of acceptable settings.
+   false: 71 of 176 cells meet it on point estimates (14 already in the old
+   run), 66 with the upper 95% bound ≤ 0.05; at Δr = 0.125, (0.4, 3.0)
+   itself is not distinguishable from 0.05 on the hub topology (0.040,
+   upper bound 0.054). Say instead that (0.4, 3.0) was fixed a priori from
+   Hao et al., lies in a broad region of settings with mean FDP ≤ 0.05, and
+   report the hub FDP with its interval.
 7. **Robustness (l. 572–573).** Supported; numbers above. Add that m_min = 2
    performed as well as 3 with lower FDP.
 8. **Appendix, NI normalization rationale (l. 709).** Not supported by the
