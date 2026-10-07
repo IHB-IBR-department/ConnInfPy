@@ -73,14 +73,11 @@ def run_method(data, atlas, method_key: str, n_perm: int, seed: int):
     elif method_key == "cnbs":
         out = analyze(**kwargs, method="cnbs", net_labels=data["net_labels"])
     elif method_key == "ni_tfnbs":
-        out = analyze(**kwargs, method="ni_tfnbs", net_labels=data["net_labels"])
+        out = analyze(**kwargs, method="ni_tfnbs", net_labels=data["net_labels"],
+                      e=0.4, h=3.0, n=10)
     elif method_key == "fbc_tfnbs":
         out = analyze(**kwargs, method="fbc_tfnbs", net_labels=data["net_labels"],
-                     min_cluster_size=3)
-    elif method_key == "bh_fdr":
-        bh_kwargs = dict(kwargs)
-        bh_kwargs["n_permutations"] = 0
-        out = analyze(**bh_kwargs, method="bh_fdr")
+                     e=0.4, h=3.0, n=10, min_cluster_size=3)
     else:
         raise ValueError(f"Unknown method_key: {method_key}")
 
@@ -108,7 +105,9 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument(
         "--methods", nargs="+",
-        default=["tstat", "nbs_2.0", "nbs_3.0", "tfnbs", "cnbs", "ni_tfnbs", "fbc_tfnbs", "bh_fdr"],
+        # The seven methods of the manuscript's method-spread table. (The GLM
+        # pipeline has no parametric BH-FDR, so it is not offered here.)
+        default=["tstat", "nbs_2.0", "nbs_3.0", "tfnbs", "cnbs", "ni_tfnbs", "fbc_tfnbs"],
     )
     args = ap.parse_args()
     n_perm = 500 if args.quick else 5000
