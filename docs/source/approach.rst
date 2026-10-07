@@ -340,12 +340,17 @@ so that the harmonization never incorporates the labels the permutation will
 later shuffle (which would otherwise inflate false positives). The site
 strategies and their trade-offs are described in :ref:`wf-glm-sites`.
 
-**Acceleration (GPD).** Resolving a small p-value normally requires thousands
-of permutations. ``acceleration='gpd'`` fits a generalized Pareto distribution
-to the extreme tail of the null-maximum distribution, so ~200 permutations
-approximate ~5000 (a ~25× reduction in runtime), with a goodness-of-fit check
-that falls back to the empirical count when the fit is poor. It is appropriate
-for exploration; a large empirical run is recommended for the final result.
+**Acceleration (GPD).** With J permutations a p-value rests on the number of
+null maxima that reach the observed statistic; when fewer than 10 do, that
+count is too coarse. ``acceleration='gpd'`` fits a generalized Pareto
+distribution to the upper quartile of the null-maximum distribution and uses
+it for those statistics only — every other p-value stays the exact
+permutation p-value (Winkler et al., 2016; Knijnenburg et al., 2009). Fitted
+p-values are kept between 1/J and the smallest permutation p-value they
+replace, and a goodness-of-fit check falls back to the permutation p-values
+when the fit is poor. With ~200 instead of ~5000 permutations (~25× faster)
+this suits exploration; use exact p-values from a large run for the final
+result.
 
 
 End-to-end example
