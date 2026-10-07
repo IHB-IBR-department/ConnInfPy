@@ -600,8 +600,9 @@ def compute_p_val_glm(
     acceleration : {'gpd', 'gamma'} or None, default=None
         Permutation acceleration method (Winkler et al., 2016). If None,
         use standard empirical p-values. 'gpd' fits a Generalized Pareto
-        Distribution to the tail of the null distribution. 'gamma' fits
-        a gamma distribution using method of moments. Both are
+        Distribution to the tail of the null distribution, 'gamma' a gamma
+        distribution by the method of moments; either replaces only the
+        p-values that fewer than 10 null maxima reach. Both are
         approximation accelerators with empirical fallback; use
         ``acceleration=None`` for exact empirical finite-permutation
         p-values.

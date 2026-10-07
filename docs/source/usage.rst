@@ -273,15 +273,14 @@ cohorts, freeze, apply to held-out sites at test time), use
 Permutation acceleration — :mod:`conninfpy.acceleration`
 --------------------------------------------------------
 
-Set ``acceleration='gpd'`` (or ``'gamma'``) on either pipeline to
-replace the empirical permutation p-value formula with a fitted
-parametric tail (Generalized Pareto Distribution, Winkler 2016b).
-Reduces the perm budget from ~5000 to ~200 with ~25× wall-clock saving.
-Reproduces the empirical FWER-corrected p-values to within
-``|Δ(-log10 p)| ≤ 0.001`` on >99% of edges in the ConnInfPy ABIDE Age
-validation. A goodness-of-fit guard (Anderson–Darling on tail
-exceedances) falls back to empirical p-values when the GPD does not
-fit cleanly.
+Set ``acceleration='gpd'`` (or ``'gamma'``) on either pipeline to use a
+fitted parametric tail (Generalized Pareto Distribution, Winkler 2016b)
+where the permutation count is too coarse: statistics reached by fewer
+than 10 null maxima get the fitted p-value, all others keep the exact
+permutation p-value. This makes ~200 permutations usable for exploration
+(~25× faster than ~5000). A goodness-of-fit guard (Anderson–Darling on
+tail exceedances) falls back to permutation p-values when the GPD does
+not fit cleanly. Report exact p-values from a large run.
 
 Topology-aware default integration steps
 ----------------------------------------

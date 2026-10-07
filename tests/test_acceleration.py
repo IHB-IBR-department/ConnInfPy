@@ -119,6 +119,47 @@ class TestFitGPDTail(unittest.TestCase):
         self.assertTrue(np.all(p_gpd <= 1))
 
 
+class TestTailOnlyWherePermutationsAreTooFew(unittest.TestCase):
+    """The fitted tail replaces a permutation p-value only in the sparse tail.
+
+    Regression: the GPD threshold started at the median of the null and the
+    fit replaced every p-value above it, including p ~ 0.05 that 5,000
+    permutations estimate directly; on ABIDE this moved a 138-edge cluster
+    with exact p = 0.0496 to 0.056.
+    """
+
+    def setUp(self):
+        rng = np.random.RandomState(0)
+        self.null = rng.exponential(scale=1.0, size=5000)
+        J = len(self.null)
+        # Statistics reached by many null maxima: the 50th..99th percentiles
+        self.dense_obs = np.quantile(self.null, [0.5, 0.9, 0.95, 0.975, 0.99])
+        count = np.sum(self.dense_obs[:, None] <= self.null[None, :], axis=1)
+        self.assertTrue(np.all(count >= 10))
+        self.p_exact = (count + 1.0) / (J + 1.0)
+
+    def test_gpd_keeps_permutation_p_values_in_dense_tail(self):
+        npt.assert_array_equal(fit_gpd_tail(self.null, self.dense_obs), self.p_exact)
+
+    def test_gamma_keeps_permutation_p_values_in_dense_tail(self):
+        npt.assert_array_equal(fit_gamma_tail(self.null, self.dense_obs), self.p_exact)
+
+    def test_gpd_sparse_tail_is_unbiased(self):
+        # Exponential null: the GPD (xi = 0) is the true tail above any
+        # threshold. Single fits are noisy, so check the median over seeds.
+        truth = np.array([0.001, 0.0005])           # ~5 and ~2.5 exceedances of 5,000
+        obs = -np.log(truth)
+        ratios = [fit_gpd_tail(np.random.RandomState(seed).exponential(size=5000), obs) / truth
+                  for seed in range(20)]
+        npt.assert_allclose(np.median(ratios, axis=0), 1.0, atol=0.25)
+
+    def test_p_values_monotone_across_the_switch(self):
+        grid = np.linspace(np.quantile(self.null, 0.99), self.null.max() * 1.2, 200)
+        for fit in (fit_gpd_tail, fit_gamma_tail):
+            p = fit(self.null, grid)
+            self.assertTrue(np.all(np.diff(p) <= 1e-15), fit.__name__)
+
+
 # =============================================================================
 # 3. Gamma approximation
 # =============================================================================

@@ -376,21 +376,20 @@ ABIDE section:
    GLM null calibration; its stored results predate the effect-size fix and
    it is not in the manuscript. Either run it (1,000 nulls; run time not yet measured) and
    report it, or drop the GLM caveat paragraph (l. 668).
-10. **GPD tail approximation (package, `acceleration.py`).** `fit_gpd_tail`
-    starts the threshold at the median of the max-statistic null
-    (`np.linspace(0.50, 0.90, 5)`), not at the upper quartile its docstring
-    gives (citing Winkler et al., 2016). With thousands of exceedances the
-    first candidate passes the Anderson–Darling check, so the GPD is fitted
-    to the upper half of the null maxima. It then replaces *every* p-value
-    above that threshold — including p ≈ 0.05, which 5,000 permutations
-    estimate directly from ~250 exceedances (Monte-Carlo SE 0.003). On the
-    ABIDE ComBat-only negative tail the fitted tail is 0.057 where the
-    empirical tail is 0.050 (+14%). That moved one 138-edge cluster with an
-    exact p of 0.0496 to 0.056, hence 262 vs 124 edges. Suggested fix: start
-    at the 0.75 quantile and use the GPD only where fewer than ~10 null
-    maxima exceed the observed statistic (Knijnenburg et al., 2009), keeping
-    the empirical p-value elsewhere; on this arm that returns the exact
-    result (262). The paper no longer uses GPD.
+10. **GPD tail approximation (package) — fixed.** `fit_gpd_tail` started
+    its threshold at the median of the max-statistic null (its docstring
+    said the upper quartile, citing Winkler et al., 2016) and replaced every
+    p-value above it, including p ≈ 0.05, which 5,000 permutations estimate
+    directly (Monte-Carlo SE 0.003). On the ABIDE ComBat-only negative tail
+    the fitted tail was 0.057 where the empirical tail was 0.050 (+14%),
+    which moved one 138-edge cluster with exact p = 0.0496 to 0.056 (262 vs
+    124 edges). Now the fit starts at the upper quartile and replaces only
+    the p-values that fewer than 10 null maxima reach (Knijnenburg et al.,
+    2009); the gamma option follows the same rule. On this arm the GPD now
+    gives the exact result (262). The README's "≤ 0.001 on >99% of edges"
+    claim was a tie artefact (97% of edge-tails sit at p = 1) and was
+    replaced by the decision agreement at α = 0.05. The paper uses exact
+    p-values throughout.
 11. **Package default E = 0.3 vs the paper's E = 0.4.** The paper scripts now
     pass E explicitly; decide whether the package default should match the
     setting the paper recommends. `openclose_validation/run_eh_sensitivity.py`
