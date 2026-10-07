@@ -170,6 +170,16 @@ cNBS 0.422, NBS-int 0.427 — same ranking. The leak edges matter mainly for
 cNBS, whose block decision spreads to them (partial bipartite: 0.63 vs 0.72
 strict).
 
+**Analytical check.** BH controls FDR at π₀·α (equality under independence,
+≤ under positive dependence), where π₀ is the fraction of null edges. Here
+π₀·α = 0.048 on average; the simulated BH FDR is 0.044 / 0.051 / 0.047 at
+Δr = 0.075 / 0.125 / 0.25, and 26 of the 30 topology × effect cells are
+within 2 SE of π₀·α (the other four lie below it, as positive dependence
+allows). No closed form exists for the cluster and block methods, hence the
+simulation. The FDP intervals above are the normal (CLT) interval of a mean,
+mean ± 1.96·SD/√100; distribution-free bounds (Hoeffding, empirical
+Bernstein) are about ±0.1 at 100 repeats and too wide to be useful.
+
 **(E,H) grid** (176 cells: E ∈ 0.05–1.5, H ∈ 0.5–10). Criterion as in the
 manuscript: mean FDP over the 100 datasets ≤ 0.05 in each of the five
 plotted topologies, with non-zero TPR. On the point estimates, 71 cells meet
