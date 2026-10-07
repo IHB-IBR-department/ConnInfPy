@@ -1,7 +1,8 @@
 # conninfpy run examples/configs/abide_mini_age.yaml
 #
 # Age → functional connectivity on the bundled ABIDE-mini sample
-# (204 subjects, Schaefer-100, 5 sites), with sex and head motion as
+# (204 subjects, Schaefer-100, 5 sites; the manifest drops one subject whose
+# connectivity is undefined for one region), with sex and head motion as
 # confounds and site handled by ComBat + site dummies + site-blocked
 # permutation (harmonize: auto).
 

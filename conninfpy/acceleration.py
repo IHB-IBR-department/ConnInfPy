@@ -355,9 +355,12 @@ def compute_p_values_accelerated(
     fit_func = fit_gpd_tail if method == "gpd" else fit_gamma_tail
     p_values = {}
 
+    from ._engine import _check_finite_statistics
+
     for key in emp_stat_dict:
         emp = emp_stat_dict[key]
         null = max_null_dict[key]
+        _check_finite_statistics(np.asarray(emp), np.asarray(null), key)
 
         if emp.ndim == 2:
             # Standard case: (N, N) vs (J,)

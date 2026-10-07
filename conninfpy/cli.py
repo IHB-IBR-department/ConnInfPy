@@ -90,7 +90,10 @@ def _numeric(frame: pd.DataFrame) -> np.ndarray:
 def _connectivity(dataset: Any) -> Tuple[np.ndarray, Optional[str]]:
     """Connectivity stack and its scale ('r' / 'z' / None) from a loaded dataset."""
     if dataset.data_kind == "timeseries":
-        corr = np.array([np.nan_to_num(np.corrcoef(np.asarray(ts).T)) for ts in dataset.data])
+        # Undefined correlations (constant region signal) stay NaN and are
+        # rejected with a report by the inference entry points.
+        with np.errstate(invalid="ignore", divide="ignore"):
+            corr = np.array([np.corrcoef(np.asarray(ts).T) for ts in dataset.data])
         return corr, "r"
     return np.asarray(dataset.data, dtype=np.float64), _KIND_TO_INPUT.get(dataset.data_kind)
 
