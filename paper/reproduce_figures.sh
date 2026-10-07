@@ -35,9 +35,12 @@ abide() {
   $PY examples/abide_validation/run_dx_combat_only.py
   $PY examples/abide_validation/run_dx_strategy_e.py
   $PY examples/abide_validation/run_dx_site_glm.py
+  # Every TFNBS-family call passes (E, H, n) = (0.4, 3, 10) explicitly: the
+  # package default E is 0.3 since 2026-05-25. All p-values are exact
+  # permutation p-values (no GPD tail approximation).
   step "ABIDE: seven-method comparison on age, 5000 permutations each"
   $PY examples/abide_validation/run_age_method_comparison.py
-  step "ABIDE: TFNBS (E,H) multiverse, 36 cells x 3 methods (GPD, 200 permutations)"
+  step "ABIDE: TFNBS (E,H) multiverse, 36 cells x 3 methods, same design as the age map, 5000 permutations"
   $PY examples/abide_validation/run_eh_sensitivity.py
   step "ABIDE: figures"
   $PY examples/abide_validation/plot_paper_figures.py

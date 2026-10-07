@@ -15,11 +15,21 @@ Grid
 E ∈ {0.20, 0.40, 0.50, 0.75, 1.00, 1.30}  (6 values)
 H ∈ {1.00, 2.00, 3.00, 5.00, 7.00, 10.00} (6 values)
 
+Design: the same model as the age map (run_age_strategy_d.py --variant age):
+age with sex and motion as covariates, ComBat + site dummies, permutation
+within site, exact p-values from 5,000 permutations (no tail approximation).
+The (0.4, 3.0) cell therefore reproduces the age map.
+
 Output
 ------
 results/age_development/sensitivity/eh/
-  grid_summary.csv                    # per-method per-cell n_sig
-  eh_sensitivity.png                  # 6-panel composite figure
+  grid_summary.csv                    # per-method per-cell n_sig (p <= 0.05)
+  pmaps_<method>.npz                  # p-maps, (N, N, 36) per tail
+  spearman_matrix[_neg].csv           # TFNBS: pairwise Spearman of -log10 p across cells
+  spearman_below_ceiling_matrix[_neg].csv  # same, edges with p < 1 in either cell
+  jaccard_matrix[_neg].csv            # TFNBS: pairwise Jaccard of significant edge sets
+  multiverse_summary.csv              # median / range of the above (Table tfnbs-multiverse)
+results/plots/plot5_tfnbs_grid_sensitivity.png
 """
 from __future__ import annotations
 
@@ -32,8 +42,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from conninfpy import compute_p_val_glm
-from conninfpy.harmonize import combat_harmonize
+from scipy.stats import spearmanr
+
+from conninfpy import analyze
 
 HERE = Path(__file__).resolve().parent
 DATA_FILE = HERE / "results" / "abide_prepared.npz"
@@ -56,19 +67,30 @@ def _load():
             f"{DATA_FILE} not found — run prepare_data.py first."
         )
     d = np.load(DATA_FILE, allow_pickle=True)
-    data = {k: d[k] for k in d.files}
-    
-    Y = data["connectivity_z"]
-    sites = data["site"]
-    # Preserving Sex, Mean FD (the nuisance confounds)
-    confounds = np.column_stack([
-        data["sex"].astype(float),
-        data["mean_fd"].astype(float)
-    ])
-    print("Harmonizing ABIDE for sensitivity sweep (Strategy D)...")
-    combat_out = combat_harmonize(Y, sites, preserve=confounds)
-    data["connectivity_z_harm"] = combat_out.Y_adjusted
-    return data
+    return {k: d[k] for k in d.files}
+
+
+def _pairwise(pmaps: np.ndarray, labels: list, alpha: float) -> tuple:
+    """Similarity between cells: Spearman of -log10 p and Jaccard of significant sets.
+
+    Most edges sit at the ceiling p = 1 in every cell, and these ties push the
+    all-edge Spearman towards 1. The third matrix is the Spearman over edges
+    below the ceiling in at least one of the two cells.
+    """
+    neglog = -np.log10(pmaps)                      # (n_edges, K)
+    rho = spearmanr(neglog).correlation
+    K = pmaps.shape[1]
+    rho_below = np.ones((K, K))
+    for a in range(K):
+        for b in range(a + 1, K):
+            keep = (pmaps[:, a] < 1) | (pmaps[:, b] < 1)
+            rho_below[a, b] = rho_below[b, a] = spearmanr(pmaps[keep, a], pmaps[keep, b]).correlation
+    sig = pmaps <= alpha
+    inter = sig.T.astype(int) @ sig.astype(int)
+    union = sig.sum(0)[:, None] + sig.sum(0)[None, :] - inter
+    jac = np.where(union > 0, inter / np.maximum(union, 1), 1.0)
+    frame = lambda m: pd.DataFrame(m, index=labels, columns=labels)
+    return frame(rho), frame(rho_below), frame(jac)
 
 
 def _make_eh_panels(
@@ -144,27 +166,29 @@ def _make_eh_panels(
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n-permutations", type=int, default=200)
+    ap.add_argument("--n-permutations", type=int, default=5000)
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
+    alpha = 0.05
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
     data = _load()
-    conn = data["connectivity_z_harm"]
-    age = data["age"].astype(float)
+    Y = data["connectivity_z"]
     confounds = np.column_stack([
         data["sex"].astype(float),
         data["mean_fd"].astype(float)
     ])
     net_labels = data["net_labels"]
-    print(f"Loaded ABIDE: n={conn.shape[0]}, N={conn.shape[1]}")
+    print(f"Loaded ABIDE: n={Y.shape[0]}, N={Y.shape[1]}")
 
     cells = list(product(E_GRID, H_GRID))
     e_list = [e for e, _ in cells]
     h_list = [h for _, h in cells]
+    labels = [f"E{e:.2f}_H{h:.2f}" for e, h in cells]
     K = len(cells)
+    iu = np.triu_indices(Y.shape[1], k=1)
 
     methods = ["tfnbs", "ni_tfnbs", "fbc_tfnbs"]
     all_rows = []
@@ -173,26 +197,50 @@ def main():
         print(f"\nRunning {mname} sweep ({K} cells) ...")
         t0 = time.time()
         kwargs = {"net_labels": net_labels} if mname in ("ni_tfnbs", "fbc_tfnbs") else {}
-        res = compute_p_val_glm(
-            conn, interest=age, confounds=confounds,
-            method=mname,
-            n_permutations=args.n_permutations,
-            acceleration="gpd",
+        out = analyze(
+            Y, interest=data["age"].astype(float), confounds=confounds,
+            sites=data["site"], harmonize="combat_site_dummies_glm",  # as the age map
+            fisher_z=False, method=mname,
             e=e_list, h=h_list, n=10,
-            use_mp=True, rng=args.seed,
+            n_permutations=args.n_permutations, acceleration=None,
+            rng=args.seed, use_mp=True,
             **kwargs
         )
         print(f"  Done in {time.time()-t0:.1f}s")
+        pos = np.asarray(out.inference["positive"])
+        neg = np.asarray(out.inference["negative"])
+        np.savez_compressed(OUT_DIR / f"pmaps_{mname}.npz", positive=pos, negative=neg,
+                            cells=np.array(labels))
 
-        pos_edges = res["positive"][np.triu_indices(conn.shape[1], k=1)]
-        neg_edges = res["negative"][np.triu_indices(conn.shape[1], k=1)]
-
+        pos_edges, neg_edges = pos[iu], neg[iu]
         for k, (e, h) in enumerate(cells):
             all_rows.append(dict(
                 method=mname, E=e, H=h,
-                n_sig_pos=int((pos_edges[:, k] < 0.05).sum()),
-                n_sig_neg=int((neg_edges[:, k] < 0.05).sum()),
+                n_sig_pos=int((pos_edges[:, k] <= alpha).sum()),
+                n_sig_neg=int((neg_edges[:, k] <= alpha).sum()),
             ))
+
+        if mname == "tfnbs":
+            summary = []
+            for tail, edges, suffix in (("positive", pos_edges, ""), ("negative", neg_edges, "_neg")):
+                rho, rho_below, jac = _pairwise(edges, labels, alpha)
+                rho.to_csv(OUT_DIR / f"spearman_matrix{suffix}.csv")
+                rho_below.to_csv(OUT_DIR / f"spearman_below_ceiling_matrix{suffix}.csv")
+                jac.to_csv(OUT_DIR / f"jaccard_matrix{suffix}.csv")
+                tri = np.triu_indices(K, k=1)
+                summary.append(dict(tail=tail, measure="share_of_edges_at_p1", n_pairs=K,
+                                    median=float(np.median((edges >= 1).mean(0))),
+                                    min=float((edges >= 1).mean(0).min()),
+                                    max=float((edges >= 1).mean(0).max())))
+                for name, m in (("spearman_neglog10p", rho),
+                                ("spearman_below_ceiling", rho_below), ("jaccard", jac)):
+                    v = m.to_numpy()[tri]
+                    summary.append(dict(tail=tail, measure=name, n_pairs=len(v),
+                                        median=float(np.median(v)), min=float(v.min()),
+                                        max=float(v.max())))
+            summary = pd.DataFrame(summary)
+            summary.to_csv(OUT_DIR / "multiverse_summary.csv", index=False)
+            print(summary.round(3).to_string(index=False))
 
     df = pd.DataFrame(all_rows)
     df.to_csv(OUT_DIR / "grid_summary.csv", index=False)
