@@ -287,6 +287,8 @@ def analyze(
     rng: RngLike = None,
     verbose: bool = False,
     use_mp: bool = True,
+    missing: str = "raise",
+    min_coverage: float = 0.8,
     **method_kwargs: Any,
 ) -> Union[AnalyzeResult, Dict[str, AnalyzeResult]]:
     """Run the standard prepare → harmonize → GLM/two-sample → infer recipe.
@@ -428,6 +430,18 @@ def analyze(
         Show a progress bar during permutation.
     use_mp : bool, default ``True``
         Use multiprocessing for the permutation loop.
+    missing : {'raise', 'available_case'}, default ``'raise'``
+        Missing connectivity values (NaN), e.g. a region without signal in
+        one subject. ``'raise'`` stops with a report of the affected
+        subjects and regions. ``'available_case'`` tests each edge with the
+        subjects who have it — no subject is dropped and nothing is filled
+        in; edges kept by fewer than ``min_coverage`` of a group's subjects
+        are not tested (p = NaN). Two-sample, paired and one-sample designs
+        only for now; the coverage report is in
+        ``result.inference.missing_report`` and summarised in ``flags``.
+    min_coverage : float, default ``0.8``
+        Minimum share of each group's subjects (or of the pairs) an edge
+        needs under ``missing='available_case'``.
     **method_kwargs
         Forwarded to the underlying pipeline (e.g. ``net_labels``,
         ``min_cluster_size``, ``threshold``).
@@ -595,13 +609,24 @@ def analyze(
     # ---- Input preparation: zero diagonal, Fisher r→z exactly once ----
     stacks = [Y] if glm_mode else [g for g in (group1, group2) if g is not None]
     kind = _resolve_input_kind(input, fisher_z, stacks)
+    if missing not in ("raise", "available_case"):
+        raise ValueError(f"missing must be 'raise' or 'available_case'; got {missing!r}.")
+    if missing == "available_case" and (glm_mode or paired_glm_mode):
+        if any(np.isnan(np.asarray(a, dtype=np.float64)).any()
+               for a in (Y, group1, group2) if a is not None):
+            raise NotImplementedError(
+                "missing='available_case' is implemented for two-sample, paired "
+                "and one-sample designs; GLM designs (interest / confounds) need "
+                "complete connectivity for now."
+            )
+    allow_missing = missing == "available_case"
     if glm_mode:
         Y = prepare_connectivity(Y, kind, "Y")
     else:
         if group1 is not None:
-            group1 = prepare_connectivity(group1, kind, "group1")
+            group1 = prepare_connectivity(group1, kind, "group1", allow_missing=allow_missing)
         if group2 is not None:
-            group2 = prepare_connectivity(group2, kind, "group2")
+            group2 = prepare_connectivity(group2, kind, "group2", allow_missing=allow_missing)
 
     # ---- ComBat strategies: preserve = confounds only ----
     # The tested variable is deliberately omitted from ComBat so the
@@ -755,9 +780,12 @@ def analyze(
             method=method, n_permutations=n_permutations,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
-            strata=auto_strata,
+            strata=auto_strata, missing=missing, min_coverage=min_coverage,
             **method_kwargs,
         )
+        if result.missing_report is not None:
+            from ._available_case import describe
+            flags.append(describe(result.missing_report))
 
     # ---- Provenance threading ----
     # The lower-level compute_p_val* entry-points don't know that

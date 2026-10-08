@@ -359,8 +359,10 @@ def build_network_summary(
     ``p <= alpha``), ``prop_sig_t`` (``n_sig_t / n_edges``) and the
     ``-log10 p`` mass ``sum_neglog10p_t`` / ``mean_neglog10p_t``. With both
     ``'positive'`` and ``'negative'`` tails it adds ``signed_proportion =
-    (n_sig_positive - n_sig_negative) / n_edges``. Pairs with no possible
-    edge (a single-ROI network's within-block) are omitted.
+    (n_sig_positive - n_sig_negative) / n_edges``. ``n_edges`` counts the
+    tested edges: an edge with a NaN p-value (not tested, e.g. too few
+    subjects under available-case analysis) is excluded. Pairs without a
+    tested edge (e.g. a single-ROI network's within-block) are omitted.
     """
     names = list(p_maps)
     first = np.asarray(p_maps[names[0]], dtype=np.float64)
@@ -377,8 +379,9 @@ def build_network_summary(
     lo = np.minimum(codes[iu], codes[ju])
     hi = np.maximum(codes[iu], codes[ju])
 
+    tested = np.isfinite(first[iu, ju])
     n_edges = np.zeros((n_nets, n_nets))
-    np.add.at(n_edges, (lo, hi), 1.0)
+    np.add.at(n_edges, (lo, hi), tested.astype(float))
     a, b = np.nonzero(np.triu(n_edges) > 0)
     table = {
         "network_a": [net_names[k] for k in a],

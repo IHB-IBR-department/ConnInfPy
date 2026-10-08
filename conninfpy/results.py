@@ -153,6 +153,11 @@ class InferenceResult(TailResult):
         ``between_site_variance_ratio_after_over_before`` key used by
         :func:`conninfpy.analyze` for residual-site flags.
         ``strategy='site_dummies_glm'`` records provenance but does not run ComBat.
+    missing_report : dict or None
+        Set by available-case analysis (``missing='available_case'``):
+        subjects and regions with missing connectivity, per-edge sample
+        sizes (``edge_n``), the edges not tested for lack of coverage
+        (their p-values are NaN), and a Fisher test of missingness by group.
     """
 
     method: str
@@ -169,6 +174,7 @@ class InferenceResult(TailResult):
     combat_diagnostics: Optional[Dict[str, Any]]
     e_grid: Optional[npt.NDArray[np.float64]]
     h_grid: Optional[npt.NDArray[np.float64]]
+    missing_report: Optional[Dict[str, Any]]
 
     def __new__(
         cls,
@@ -189,6 +195,7 @@ class InferenceResult(TailResult):
         combat_diagnostics: Optional[Dict[str, Any]] = None,
         e_grid: Optional[npt.NDArray[np.float64]] = None,
         h_grid: Optional[npt.NDArray[np.float64]] = None,
+        missing_report: Optional[Dict[str, Any]] = None,
     ) -> "InferenceResult":
         instance = super().__new__(cls)
         TailResult.__init__(
@@ -208,6 +215,7 @@ class InferenceResult(TailResult):
         instance.combat_diagnostics = combat_diagnostics
         instance.e_grid = e_grid
         instance.h_grid = h_grid
+        instance.missing_report = missing_report
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
