@@ -4,6 +4,26 @@ from typing import Sequence, Callable, Optional, Any
 from ._decode_cache import fetch_neurosynth_dataset
 from .atlas import AtlasInfo
 
+
+# NiMARE NeurosynthDecoder output: pForward, zForward, probForward, pReverse,
+# zReverse, probReverse. Terms are ranked by the reverse-inference association
+# z (zReverse); its p-value is reported alongside. (The previous code looked
+# for columns this schema does not have and fell back to the first column,
+# pForward, sorted descending — the least significant terms first.)
+_ASSOCIATION_COLUMNS = (("zReverse", "pReverse"),)
+
+
+def _association_columns(decoded_df: pd.DataFrame) -> "tuple[str, str]":
+    """Association z column and its p-value column in a decoder output table."""
+    for z_col, p_col in _ASSOCIATION_COLUMNS:
+        if z_col in decoded_df.columns and p_col in decoded_df.columns:
+            return z_col, p_col
+    raise ValueError(
+        f"Unrecognised decoder output columns {list(decoded_df.columns)}; expected "
+        "NiMARE NeurosynthDecoder's zReverse / pReverse."
+    )
+
+
 def decode_rois(atlas: AtlasInfo,
                 roi_ids: Optional[Sequence[int]] = None,
                 *,
@@ -35,7 +55,9 @@ def decode_rois(atlas: AtlasInfo,
     Returns
     -------
     pandas.DataFrame
-        Columns: ``roi_id``, ``roi_name``, ``network``, ``rank``, ``term``, ``score``.
+        Columns: ``roi_id``, ``roi_name``, ``network``, ``rank``, ``term``,
+        ``score`` (reverse-inference association z, NiMARE ``zReverse``) and
+        ``p`` (its p-value, ``pReverse``); terms are ranked by ``score``.
     """
     if atlas.coords is None:
         raise ValueError("Atlas coordinates are None; cannot decode without spatial centroids.")
@@ -78,20 +100,14 @@ def decode_rois(atlas: AtlasInfo,
                 "network": network_name,
                 "rank": 1,
                 "term": "inconclusive",
-                "score": 0.0
+                "score": 0.0,
+                "p": float("nan"),
             })
             continue
             
         decoded_df = decoder.transform(active_ids)
         
-        z_col = None
-        for candidate in ['z_assoc', 'z', 'z_association', 'est']:
-            if candidate in decoded_df.columns:
-                z_col = candidate
-                break
-        if z_col is None:
-            z_col = decoded_df.columns[0]
-            
+        z_col, p_col = _association_columns(decoded_df)
         sorted_df = decoded_df.sort_values(by=z_col, ascending=False)
         
         rank = 1
@@ -108,7 +124,8 @@ def decode_rois(atlas: AtlasInfo,
                 "network": network_name,
                 "rank": rank,
                 "term": term_str,
-                "score": score_val
+                "score": score_val,
+                "p": float(row_data[p_col]),
             })
             rank += 1
             if rank > top_n:
@@ -121,7 +138,8 @@ def decode_rois(atlas: AtlasInfo,
                 "network": network_name,
                 "rank": 1,
                 "term": "inconclusive",
-                "score": 0.0
+                "score": 0.0,
+                "p": float("nan"),
             })
             
     return pd.DataFrame(rows)
@@ -227,12 +245,13 @@ def decode_combined_rois(
     Returns
     -------
     pandas.DataFrame
-        Columns: `rank`, `term`, `score`.
+        Columns: `rank`, `term`, `score` (reverse-inference association z,
+        NiMARE `zReverse`) and `p` (`pReverse`).
     """
     if atlas.coords is None:
         raise ValueError("Atlas coordinates are None; cannot decode without spatial centroids.")
     if not roi_ids:
-        return pd.DataFrame(columns=["rank", "term", "score"])
+        return pd.DataFrame(columns=["rank", "term", "score", "p"])
 
     try:
         from nimare.decode.discrete import NeurosynthDecoder
@@ -266,7 +285,8 @@ def decode_combined_rois(
         return pd.DataFrame([{
             "rank": 1,
             "term": "inconclusive",
-            "score": 0.0
+            "score": 0.0,
+            "p": float("nan"),
         }])
 
     # 2. Fit and run NeurosynthDecoder
@@ -274,14 +294,7 @@ def decode_combined_rois(
     decoder.fit(dataset)
     decoded_df = decoder.transform(active_id_list)
 
-    z_col = None
-    for candidate in ['z_assoc', 'z', 'z_association', 'est']:
-        if candidate in decoded_df.columns:
-            z_col = candidate
-            break
-    if z_col is None:
-        z_col = decoded_df.columns[0]
-
+    z_col, p_col = _association_columns(decoded_df)
     sorted_df = decoded_df.sort_values(by=z_col, ascending=False)
 
     rows = []
@@ -296,7 +309,8 @@ def decode_combined_rois(
         rows.append({
             "rank": rank,
             "term": term_str,
-            "score": score_val
+            "score": score_val,
+            "p": float(row_data[p_col]),
         })
         rank += 1
         if rank > top_n:
@@ -306,7 +320,8 @@ def decode_combined_rois(
         rows.append({
             "rank": 1,
             "term": "inconclusive",
-            "score": 0.0
+            "score": 0.0,
+            "p": float("nan"),
         })
 
     return pd.DataFrame(rows)
