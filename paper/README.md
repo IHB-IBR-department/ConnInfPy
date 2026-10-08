@@ -406,3 +406,24 @@ Resolved by this revision: null calibration design and size, per-direction
 vs two-sided FWER, power tables from the final run, TFNBS settings
 differing by experiment, the ABIDE age-model description (text change
 only), the multiverse design, and unreported GPD in the empirical results.
+
+## Package fixes from the 2026-10-07 audit (reported results unchanged)
+
+Fixed in the package; none changes a number in the paper, because the
+reported analyses use complete, symmetric data, exact p-values, selection
+contrasts, E ≥ 0.2 and their own loaders. The ABIDE age map was re-run after
+the GLM changes: identical (256 edges, max |Δp| = 0).
+
+| Fix | Why the paper is unaffected |
+|---|---|
+| NaN/Inf input made every edge significant → rejected; `missing='available_case'` option | complete data |
+| Directed (asymmetric) input tested inconsistently → rejected | symmetric matrices |
+| GPD shape sign; gamma fitted to non-right-skewed nulls | exact p-values |
+| Fisher r→z clipping not monotone near ±1 | no |r| ≈ 1 off the diagonal |
+| Decoding ranked by forward p | — |
+| GLM reduced model for general contrasts (X null(C)); sign flips for mean tests (paired GLM with confounds) | selection contrasts; paired runs without confounds |
+| Zero-variance edges gave t ≈ 1e16; non-estimable contrasts; paired pseudo-pairs | none in the data |
+| TFNBS at E = 0 scored inactive edges (SciPy backends, FBC) | E grids start at 0.2; Numba backend |
+| fMRIPrep loader ignored the censoring mask | ABIDE / Open-Close loaders |
+| Legacy `generate_fc_matrices` not a null at effect 0 | simulations use `TopologyDatasetGenerator` |
+| Multi-contrast GLM used one joint null | no multi-predictor analysis |
