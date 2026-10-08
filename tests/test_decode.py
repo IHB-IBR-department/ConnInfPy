@@ -20,13 +20,20 @@ class MockNeurosynthDecoder:
     def fit(self, dataset):
         pass
     def transform(self, active_ids):
-        # Return a simple mock dataframe
-        data = {
-            'z_assoc': [5.0, 4.0, 3.0, 2.0, 1.0, 0.5],
-            'p_assoc': [0.0001, 0.0002, 0.0003, 0.004, 0.05, 0.1]
-        }
+        # NiMARE NeurosynthDecoder schema. pForward is the first column and
+        # increases down the list, so ranking by it (the old bug: first
+        # column, descending) would put 'auditory' first; zReverse puts
+        # 'memory' first.
         terms = ['memory', 'attention', 'executive', 'motor', 'visual', 'auditory']
-        return pd.DataFrame(data, index=terms)
+        data = {
+            'pForward': [0.0001, 0.001, 0.01, 0.2, 0.5, 0.9],
+            'zForward': [3.7, 3.1, 2.3, 0.8, 0.0, -1.3],
+            'probForward': [0.6, 0.5, 0.4, 0.3, 0.2, 0.1],
+            'pReverse': [0.0001, 0.0002, 0.0003, 0.004, 0.05, 0.1],
+            'zReverse': [5.0, 4.0, 3.0, 2.0, 1.0, 0.5],
+            'probReverse': [0.9, 0.8, 0.7, 0.6, 0.5, 0.4],
+        }
+        return pd.DataFrame(data, index=pd.Index(terms, name="Term"))
 
 mock_decode_discrete.NeurosynthDecoder = MockNeurosynthDecoder
 
@@ -73,14 +80,22 @@ def test_decode_rois_shape_and_values(sample_atlas, mock_dataset):
     
     # Rows should be: 2 ROIs * 3 top_n = 6 rows
     assert len(res) == 6
-    assert list(res.columns) == ['roi_id', 'roi_name', 'network', 'rank', 'term', 'score']
+    assert list(res.columns) == ['roi_id', 'roi_name', 'network', 'rank', 'term', 'score', 'p']
     
     # Verify values for ROI_A (id=0)
     roi_a_df = res[res['roi_id'] == 0]
     assert len(roi_a_df) == 3
     assert list(roi_a_df['rank']) == [1, 2, 3]
     assert list(roi_a_df['term']) == ['memory', 'attention', 'executive']
-    assert list(roi_a_df['score']) == [5.0, 4.0, 3.0]
+    assert list(roi_a_df['score']) == [5.0, 4.0, 3.0]          # zReverse
+    assert list(roi_a_df['p']) == [0.0001, 0.0002, 0.0003]       # pReverse
+
+
+def test_unrecognised_decoder_schema_raises(sample_atlas, mock_dataset, monkeypatch):
+    monkeypatch.setattr(MockNeurosynthDecoder, "transform",
+                        lambda self, ids: pd.DataFrame({"z_assoc": [1.0]}, index=["memory"]))
+    with pytest.raises(ValueError, match="zReverse"):
+        decode_rois(sample_atlas, roi_ids=[0], top_n=1, radius_mm=6.0, dataset=mock_dataset)
 
 def test_decode_rois_empty_studies(sample_atlas, mock_dataset):
     # ROI_C is at (100, 100, 100). If we set radius_mm=1.0, only study3 is matched.
