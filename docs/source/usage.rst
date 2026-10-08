@@ -145,7 +145,12 @@ GLM pipeline — :func:`compute_p_val_glm`
 
 Edge-wise GLM with Freedman–Lane permutation. Use this when you have a
 continuous predictor and want to control for nuisance regressors
-(motion, age, sex, site).
+(motion, age, sex, site). The null model is ``X null(C)`` — the fits allowed
+by ``C β = 0`` — so general contrasts such as ``β_x − β_z`` keep their
+common effect in the null (Winkler et al. 2014). Residuals are permuted
+across subjects (within ``strata``), or sign-flipped when the tested effect
+involves the mean (``scheme='auto'``; override with ``scheme='permutation'``
+or ``'sign-flip'``). Freedman–Lane is approximately, not exactly, valid.
 
 Convenience API (recommended):
 
@@ -261,7 +266,10 @@ that differ between conditions (e.g. condition-level motion):
 With no confounds, this delegates to ``compute_p_val(test_type='paired')``
 (sign-flip permutation, the exact non-asymptotic null). With Δ-level
 confounds it constructs Δ_Y = Y^B − Y^A, Δ_C = C^B − C^A and runs a
-one-sample GLM on the differences. On both routes ``positive`` means
+one-sample GLM on the differences, resampled by sign flips of the
+reduced-model residuals (row permutations cannot change the tested mean;
+sign flips assume symmetric errors). With all-zero Δ-confounds it reduces
+exactly to the paired sign-flip test. On both routes ``positive`` means
 Y^B > Y^A.
 
 Methods (enhancement operators)
