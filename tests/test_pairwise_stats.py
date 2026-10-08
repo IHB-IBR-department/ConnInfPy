@@ -301,7 +301,11 @@ class TestBasicStats(TestCase):
         self.assertEqual(p_vals["negative"].shape, expected_shape)
 
         # Check that different parameter combinations give different results
-        self.assertFalse(np.allclose(p_vals["positive"][..., 0], p_vals["positive"][..., 1]))
+        # (in either tail: a strong tail can saturate at 1/(B+1) in both cells)
+        self.assertTrue(any(
+            not np.allclose(p_vals[tail][..., 0], p_vals[tail][..., 1])
+            for tail in ("positive", "negative")
+        ))
 
     def test_compute_p_val_nbs_two_sample(self):
         """Test NBS method with two-sample test."""

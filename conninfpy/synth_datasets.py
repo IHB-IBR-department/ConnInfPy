@@ -195,8 +195,12 @@ def generate_fc_matrices(N,  effect_size, mask=None, n_samples_group1=50, n_samp
     n_samples_group2 : int
         Number of matrices in group 2 (default: 50).
     repeated_measures : bool
-        If True, generate within-subject repeated-measures (paired) data,
-        otherwise independent groups (default: False).
+        If True, generate within-subject repeated-measures (paired) data:
+        each subject has its own correlation structure around the population
+        one (estimated from ``4 N`` draws), shared by both conditions, and the
+        second condition adds the masked effect to it. Uses
+        ``n_samples_group1`` subjects. Otherwise independent groups
+        (default: False).
     seed : int, optional
         Random seed for reproducibility.
 
@@ -209,7 +213,11 @@ def generate_fc_matrices(N,  effect_size, mask=None, n_samples_group1=50, n_samp
     (base_cov, mod_cov) : tuple of np.ndarray
         Original covariance matrix and modified covariance matrix with the
         ``effect_size`` introduced; used for group 1 and group 2 matrices
-        respectively.
+        respectively. Masked entries move by ``effect_size * (1 + |u|)``
+        (``u ~ N(0, 0.25)`` for +1, ``N(0, 0.5)`` for -1 entries) in the mask's
+        direction, then the matrix is projected to SPD (which can move
+        unmasked entries slightly). With ``effect_size=0`` it equals
+        ``base_cov`` exactly: a null.
 
     Examples
     --------
@@ -235,35 +243,47 @@ def generate_fc_matrices(N,  effect_size, mask=None, n_samples_group1=50, n_samp
     # Generate base covariance matrix
     base_cov = make_sparse_spd_matrix(N, alpha=0.8, norm_diag=True, random_state=seed)
 
-    # Create modified covariance for the second condition or group
-    mod_cov = base_cov.copy()
-    mod_cov[mask == 1] += effect_size + np.abs(np.random.normal(0,0.05, mod_cov[mask == 1].shape)) # Increase correlations in masked regions
-    mod_cov[mask == -1] -= effect_size - np.abs(np.random.normal(0,0.1, mod_cov[mask == -1].shape)) # Decrease correlations in masked regions
-    np.fill_diagonal(mod_cov, 1.0)
-    mod_cov = (mod_cov+mod_cov.T)/2
-
-
     def enforce_spd(matrix, eps=1e-6):
         """ Ensures a matrix is symmetric positive definite (SPD) by adjusting eigenvalues. """
         eigvals, eigvecs = np.linalg.eigh(matrix)       # Get eigenvalues & eigenvectors
         eigvals[eigvals < eps] = eps                    # Replace negative eigenvalues with small positive value
         return eigvecs @ np.diag(eigvals) @ eigvecs.T   # Reconstruct SPD matrix
 
-
-    # Enforce SPD property
-    mod_cov = enforce_spd(mod_cov)
-
+    # Create modified covariance for the second condition or group. The
+    # per-edge spread scales with the effect, so effect_size=0 is an exact
+    # null and a small effect never reverses direction.
+    mod_cov = base_cov.copy()
+    if effect_size != 0:
+        pos, neg = mask == 1, mask == -1
+        mod_cov[pos] += effect_size * (1 + np.abs(np.random.normal(0, 0.25, pos.sum())))
+        mod_cov[neg] -= effect_size * (1 + np.abs(np.random.normal(0, 0.5, neg.sum())))
+        np.fill_diagonal(mod_cov, 1.0)
+        mod_cov = enforce_spd((mod_cov + mod_cov.T) / 2)
 
     # Generate sample correlation matrices with variability
+    def sample_corr(cov_matrix):
+        return np.corrcoef(np.random.multivariate_normal(np.zeros(N), cov_matrix, size=N).T)
+
     def generate_samples(cov_matrix, n_samples):
         """Draw connectivity samples for a batch of subjects."""
-        return np.array([np.corrcoef(np.random.multivariate_normal(np.zeros(N), cov_matrix, size=N).T)
-                         for _ in range(n_samples)])
+        return np.array([sample_corr(cov_matrix) for _ in range(n_samples)])
 
     if repeated_measures:
-        # Generate paired data (same subjects measured twice)
-        group1 = generate_samples(base_cov, n_samples_group1)
-        group2 = generate_samples(mod_cov, n_samples_group1)  # Same number as group1
+        # Paired data: both conditions share the subject's own correlation
+        # structure; the second adds the population effect to it.
+        effect = mod_cov - base_cov
+        np.fill_diagonal(effect, 0.0)
+        group1, group2 = [], []
+        for _ in range(n_samples_group1):
+            subject = np.corrcoef(np.random.multivariate_normal(np.zeros(N), base_cov, size=4 * N).T)
+            shifted = subject
+            if effect_size != 0:
+                shifted = enforce_spd(subject + effect)
+                d = np.sqrt(np.diag(shifted))
+                shifted = shifted / np.outer(d, d)
+            group1.append(sample_corr(subject))
+            group2.append(sample_corr(shifted))
+        group1, group2 = np.array(group1), np.array(group2)
     else:
         # Generate independent groups
         group1 = generate_samples(base_cov, n_samples_group1)
