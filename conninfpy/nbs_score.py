@@ -75,33 +75,6 @@ def _check_square(t_stat: npt.NDArray[np.floating]) -> None:
         raise ValueError("Diagonal elements must be zero (no self-connections).")
 
 
-def _validate_net_labels(
-    net_labels: npt.NDArray[np.integer],
-    n_nodes: int,
-) -> npt.NDArray[np.integer]:
-    """Validate network labels against the node count."""
-    if net_labels.shape[0] != n_nodes:
-        raise ValueError(
-            f"net_labels shape {net_labels.shape} does not match number of nodes {n_nodes}."
-        )
-    _, inverse = np.unique(net_labels, return_inverse=True)
-    return inverse
-
-
-def _compute_canonical_block_ids(
-    edge_rows: npt.NDArray[np.intp],
-    edge_cols: npt.NDArray[np.intp],
-    node_labels: npt.NDArray[np.integer],
-    n_networks: int,
-) -> npt.NDArray[np.intp]:
-    """Canonical (sorted) network-pair id per edge."""
-    labels_i = node_labels[edge_rows]
-    labels_j = node_labels[edge_cols]
-    min_labels = np.minimum(labels_i, labels_j)
-    max_labels = np.maximum(labels_i, labels_j)
-    return min_labels * n_networks + max_labels
-
-
 # =============================================================================
 # NBS scoring
 # =============================================================================
