@@ -16,7 +16,7 @@ Entry point                                                    Use case
 :func:`conninfpy.analyze`                                      Main entry point: input preparation → optional ComBat → GLM / t-test inference → :class:`~conninfpy.analysis.AnalyzeResult`
 :func:`conninfpy.stats.compute_p_val`                          Group / paired / one-sample t-test
 :func:`conninfpy.stats.compute_p_val_glm`                      Custom design matrix and t / β / F contrasts (Freedman–Lane)
-:func:`conninfpy.stats.compute_p_val_glm_multi`                Several contrasts under a shared nuisance model in **one** permutation pass
+:func:`conninfpy.stats.compute_p_val_glm_multi`                Several contrasts of one design, each with its own null, shared permutations
 :func:`conninfpy.stats.compute_p_val_paired_glm`               Paired A vs B with condition-varying confounds
 ============================================================  ============================================================
 
@@ -219,13 +219,15 @@ designs or testing several predictors jointly:
 Multi-contrast GLM in one pass — :func:`compute_p_val_glm_multi`
 ----------------------------------------------------------------
 
-If you need to test several contrasts of interest under the same
-nuisance model — e.g. ``age``, ``sex``, and ``mean_fd`` separately
-while treating the others as nuisance — calling
-:func:`compute_p_val_glm` once per contrast wastes work: the
-reduced-model residual fit and the per-permutation
-``X_pinv @ Y_perm`` matrix multiplication are identical. The
-multi-contrast wrapper does it in one pass.
+To test several contrasts of one design — e.g. ``age``, ``sex``, and
+``mean_fd`` separately, each adjusted for the others — the
+multi-contrast wrapper runs them in one call. Each contrast gets its
+own Freedman–Lane reduced model ``X null(c)`` (the other predictors are
+nuisance) and its own resampling scheme; the permutations are shared,
+so each result equals :func:`compute_p_val_glm` for that contrast with
+the same ``rng``. Passing ``nuisance_contrast`` instead requests one
+joint null for all contrasts ("all marked coefficients are zero"),
+which is conservative when one of them has a real effect.
 
 .. code-block:: python
 

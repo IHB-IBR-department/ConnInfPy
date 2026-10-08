@@ -258,10 +258,13 @@ in the order that makes each straightforward.
 Several predictors at once
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The costly part of Freedman–Lane — the reduced-model fit and the permuted
-residuals — is computed once and reused for every predictor under the shared
-nuisance model, yielding a calibrated null per predictor in a single
-permutation run (see :ref:`wf-multi-interest`).
+Each predictor is tested against its own Freedman–Lane null: its reduced
+model keeps the other predictors as nuisance, so a real effect of one
+predictor stays in the fitted part while another is tested. The permutations
+are shared across predictors, so each result equals a separate single-predictor
+run with the same seed (see :ref:`wf-multi-interest`). A single reduced model
+that removes every predictor at once would test the joint null "all of them
+are zero" instead, which is conservative when one of them has an effect.
 
 Multiple sites — permute within site
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

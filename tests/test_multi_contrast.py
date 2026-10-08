@@ -52,6 +52,27 @@ class TestMultiContrast(unittest.TestCase):
             self.assertEqual(ir.method, "tstat")
             self.assertEqual(ir.n_permutations, 20)
 
+    def test_each_contrast_equals_its_single_contrast_run(self):
+        """Per-contrast nulls: multi[k] is compute_p_val_glm(c_k) with the same seed.
+
+        Covers a mean test (intercept, sign flips) next to slopes (permutation),
+        within-stratum permutation, and an enhanced statistic.
+        """
+        Y, X, contrasts = _make_inputs()
+        contrasts = {"mean": np.array([1.0, 0, 0, 0]), **contrasts}
+        strata = np.repeat([0, 1], Y.shape[0] // 2)
+        for kw in ({"method": "tstat"}, {"method": "tfnbs", "e": 0.4, "h": 3.0, "n": 10},
+                   {"method": "tstat", "stat_type": "beta", "strata": strata}):
+            with self.subTest(**{k: str(v)[:10] for k, v in kw.items()}):
+                multi = compute_p_val_glm_multi(Y, X, contrasts, n_permutations=30,
+                                                use_mp=False, rng=7, **kw)
+                for name, c in contrasts.items():
+                    single = compute_p_val_glm(Y, design_matrix=X, contrast=c, n_permutations=30,
+                                               use_mp=False, rng=7, **kw)
+                    for tail in ("positive", "negative"):
+                        np.testing.assert_array_equal(multi[name][tail], single[tail],
+                                                      err_msg=f"{name} {tail}")
+
     def test_explicit_nuisance_changes_reduced_model(self):
         # If we declare only `age` as the regressor of interest (nuisance =
         # everything else), the reduced model differs from the default
