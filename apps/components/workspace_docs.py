@@ -20,7 +20,7 @@ def render_workspace_docs_view():
     - **bh_fdr / bonferroni:** Standard edge-wise multiple comparison correction.
     - **nbs:** Fixed-threshold connected-component mass (Zalesky et al., 2010).
     - **tfnbs:** Threshold-free connected-component integration (Baggio et al., 2018; Hao et al., 2024).
-    - **cnbs:** Constrained block-mean statistic (Noble et al., 2020).
+    - **cnbs:** Constrained NBS (Noble & Scheinost, 2020): mean signed t per network block, tested per block (Bonferroni across blocks); the inference unit is the block.
     - **ni_tfnbs / fbc_tfnbs:** Block prior informed network threshold-free statistics.
     
     #### Scientific Caveats on Reverse Inference

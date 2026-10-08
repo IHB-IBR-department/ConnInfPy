@@ -19,7 +19,7 @@ pattern documented in developer guide.
 
 from __future__ import annotations
 
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import numpy.typing as npt
 import numpy as np
@@ -34,7 +34,7 @@ from .defaults import (
     DEFAULT_N_THRESHOLDS_PERMUTATION as DEFAULT_N_THRESHOLDS,
     DEFAULT_START_THRESHOLD,
 )
-from .nbs_score import get_cnbs_score, get_nbs_score, nbs_bct
+from .nbs_score import cnbs_block_means, cnbs_blocks, get_cnbs_score, get_nbs_score, nbs_bct
 from .tfnbs_score import (
     get_fbc_tfnbs_score,
     get_network_informed_tfnbs_score,
@@ -106,13 +106,24 @@ def apply_nbs(
 def apply_cnbs(
     stat_dict: Dict[str, npt.NDArray[np.float64]],
     net_labels: npt.NDArray[np.int_],
+    edge_mask: Optional[npt.NDArray[np.bool_]] = None,
     **kwargs,
 ) -> TailResult:
-    """Apply constrained NBS (block-constrained scoring) to each direction."""
-    return _wrap(
-        stat_dict,
-        lambda arr: get_cnbs_score(arr, net_labels),
-    )
+    """Constrained NBS (Noble & Scheinost, 2020): one statistic per block.
+
+    The signed edge statistic (``positive - negative``) is averaged over every
+    edge of each within- and between-network block. Returns block vectors of
+    shape (K,): the mean for the positive tail and minus the mean for the
+    negative tail (or the mean F for an omnibus map). Inference is per block
+    (see :mod:`conninfpy._cnbs`), not by the maximum over edges.
+    """
+    norm = normalize_keys(stat_dict)
+    first = next(iter(norm.values()))
+    blocks = cnbs_blocks(net_labels, first.shape[0])
+    if set(norm.keys()) == {"positive", "negative"}:
+        means = cnbs_block_means(norm["positive"] - norm["negative"], blocks, edge_mask)
+        return make_tail_result(means, -means)
+    return {key: cnbs_block_means(arr, blocks, edge_mask) for key, arr in norm.items()}
 
 
 def apply_ni_tfnbs(

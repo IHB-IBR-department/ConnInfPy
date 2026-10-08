@@ -971,6 +971,7 @@ def compute_p_val(
     strata: Optional[npt.NDArray[Any]] = None,
     missing: str = "raise",
     min_coverage: float = 0.8,
+    cnbs_correction: str = "bonferroni",
     **kwargs
 ) -> InferenceResult:
     """
@@ -989,17 +990,17 @@ def compute_p_val(
     Supports multiple statistical methods: tfnbs, tstat, nbs, cnbs, ni_tfnbs,
     fbc_tfnbs, bonferroni, bh_fdr, bh_fdr_perm.
 
-    .. note:: **cNBS null distribution**
+    .. note:: **cNBS: block-level inference**
 
-       This implementation uses the **max-statistic** null distribution for cNBS,
-       where each permutation contributes its global maximum cNBS score to the
-       null. This is the same family-wise error rate (FWER) control strategy used
-       by classical NBS (Zalesky et al. 2010) and TFNBS.
-
-       Noble & Scheinost (2020) originally proposed computing **per-block** null
-       distributions with Bonferroni correction across blocks. The max-statistic
-       approach used here is more conservative (controls FWER globally) but
-       provides a consistent framework across all methods in this package.
+       ``method='cnbs'`` is the constrained NBS of Noble & Scheinost (2020):
+       the signed t-statistic is averaged over every edge of each within- and
+       between-network block (``net_labels``), each block is tested against
+       its own permutation null (the same block's mean in every permuted
+       map), and the block p-values are corrected across blocks
+       (``cnbs_correction``: Bonferroni for FWER, 'bh' for FDR). Every edge
+       carries its block's p-value; the result's ``block_report`` lists the
+       blocks. A significant block means that the block's mean effect is
+       nonzero, not that each of its edges is affected.
 
     .. note:: **Bonferroni and BH-FDR methods**
 
@@ -1084,6 +1085,9 @@ def compute_p_val(
     min_coverage : float, default=0.8
         Minimum share of each group's subjects (or of the pairs) an edge
         needs to be tested under ``missing='available_case'``.
+    cnbs_correction : {'bonferroni', 'bh'}, default='bonferroni'
+        For ``method='cnbs'``: correction of the block p-values across blocks
+        (Bonferroni: FWER over blocks; 'bh': FDR over blocks).
     **kwargs
         Additional keyword arguments (for future extensions).
 
@@ -1132,6 +1136,9 @@ def compute_p_val(
     if missing not in ("raise", "available_case"):
         raise ValueError(f"missing must be 'raise' or 'available_case'; got {missing!r}.")
     allow_missing = missing == "available_case"
+    if method_str == StatMethod.CNBS.value:
+        from ._cnbs import check_correction
+        check_correction(cnbs_correction)
     group1 = check_connectivity(group1, "group1", allow_missing=allow_missing)
     if group2 is not None:
         group2 = check_connectivity(group2, "group2", allow_missing=allow_missing)
@@ -1204,6 +1211,8 @@ def compute_p_val(
             use_mp=use_mp, n_processes=n_processes, verbose=verbose,
             strata=strata, acceleration=acceleration if mode == "max" else None,
             min_coverage=min_coverage,
+            block_inference=(dict(net_labels=net_labels, correction=cnbs_correction)
+                             if method_enum == StatMethod.CNBS else None),
         )
         e_grid, h_grid = _grid_from_kwargs(method_enum, enhance_kwargs)
         return InferenceResult(
@@ -1215,6 +1224,7 @@ def compute_p_val(
             stat_positive=raw_t_ac["positive"], stat_negative=raw_t_ac["negative"],
             stat_type="tstat", strata_provided=strata is not None,
             e_grid=e_grid, h_grid=h_grid, missing_report=report,
+            block_report=report.pop("block_report", None),
         )
 
     # Parametric methods: compute p-values directly from t-distribution
@@ -1307,7 +1317,14 @@ def compute_p_val(
             strata=strata,
         )
 
-    if acceleration is not None:
+    block_report = None
+    if method_enum == StatMethod.CNBS:
+        from ._cnbs import block_p_values
+        result, block_report = block_p_values(
+            emp_t_dict, max_null_dict, net_labels, group1.shape[1],
+            correction=cnbs_correction, acceleration=acceleration,
+        )
+    elif acceleration is not None:
         result = compute_p_values_accelerated(
             emp_t_dict, max_null_dict, method=acceleration,
         )
@@ -1327,6 +1344,7 @@ def compute_p_val(
         strata_provided=strata is not None,
         e_grid=e_grid,
         h_grid=h_grid,
+        block_report=block_report,
     )
 
 
