@@ -44,6 +44,39 @@ class Test(TestCase):
             self.assertEqual(g2.shape, (6, N, N))
 
 
+    def test_zero_effect_is_a_null(self):
+        """effect_size=0 leaves the covariance unchanged (it used to add |noise|)."""
+        N = 8
+        mask = np.zeros((N, N))
+        mask[:3, :3], mask[3:6, 3:6] = 1, -1
+        _, _, (base, mod) = generate_fc_matrices(N, 0.0, mask, 3, 3, seed=0)
+        np.testing.assert_array_equal(base, mod)
+
+    def test_small_effects_keep_their_direction(self):
+        N = 8
+        mask = np.zeros((N, N))
+        mask[:3, :3], mask[3:6, 3:6] = 1, -1
+        for seed in range(5):
+            _, _, (base, mod) = generate_fc_matrices(N, 0.01, mask, 2, 2, seed=seed)
+            d = (mod - base)[np.triu_indices(N, 1)]
+            m = mask[np.triu_indices(N, 1)]
+            self.assertTrue(np.all(d[m == 1] > 0))
+            self.assertTrue(np.all(d[m == -1] < 0))
+
+    def test_repeated_measures_share_subject_structure(self):
+        """Paired conditions are correlated within subject; independent groups are not."""
+        N = 6
+        mask = np.zeros((N, N))
+        mask[:2, :2] = 1
+        r = {}
+        for paired in (True, False):
+            g1, g2, _ = generate_fc_matrices(N, 0.0, mask, 200, 200, repeated_measures=paired, seed=1)
+            z1, z2 = np.arctanh(g1[:, 2, 4]), np.arctanh(g2[:, 2, 4])
+            r[paired] = np.corrcoef(z1, z2)[0, 1]
+        self.assertGreater(r[True], 0.1)
+        self.assertLess(abs(r[False]), 0.15)
+
+
 class TestModularDatasetGenerator(TestCase):
     
     def setUp(self):
