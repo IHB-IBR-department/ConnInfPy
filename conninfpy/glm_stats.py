@@ -48,6 +48,7 @@ from .enhance import (
     apply_ni_tfnbs,
     apply_tfnbs,
 )
+from . import _degenerate
 from ._engine import (
     _collect_results_to_arrays,
     _compute_p_values_from_null,
@@ -149,6 +150,51 @@ def _precompute_ols(
     XtX_inv = X_pinv @ X_pinv.T
     XtX_inv_diag = np.diag(XtX_inv)
     return X_pinv, XtX_inv_diag, XtX_inv
+
+
+def _mean_square(Y_flat: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Per-column mean of Y**2, the scale for a zero residual variance."""
+    return np.einsum("ij,ij->j", Y_flat, Y_flat) / Y_flat.shape[0]
+
+
+def contrast_is_estimable(
+    contrast: npt.NDArray[np.float64],
+    X: npt.NDArray[np.float64],
+    X_pinv: Optional[npt.NDArray[np.float64]] = None,
+) -> bool:
+    """True when every contrast row is a combination of the rows of X (C = C X⁺X).
+
+    Only then is Cβ the same for every least-squares solution β. With
+    collinear columns (two copies of a variable, a group dummy nested in site
+    dummies) a coefficient on one of them alone is not identified, and the
+    pseudoinverse would report an arbitrary split of their joint effect.
+    """
+    C = np.atleast_2d(np.asarray(contrast, dtype=np.float64))
+    if X_pinv is None:
+        X_pinv = np.linalg.pinv(X)
+    return bool(np.allclose(C @ X_pinv @ X, C, atol=1e-8 * max(1.0, np.abs(C).max())))
+
+
+def _check_estimable(contrast: npt.NDArray[np.float64], X: npt.NDArray[np.float64],
+                     name: str = "Contrast") -> None:
+    if not contrast_is_estimable(contrast, X):
+        raise ValueError(
+            f"{name} is not estimable: it is not a combination of the rows of the "
+            "design matrix (C != C X⁺X), so its value depends on an arbitrary choice "
+            "among equally good fits. This happens with collinear columns (e.g. two "
+            "copies of one variable, or a group indicator that is a sum of site "
+            "dummies). Drop the redundant column or test a combination that is "
+            "identified (e.g. the sum of the collinear coefficients)."
+        )
+
+
+def _infinite_edges(Y, X, contrast, stat_type: str) -> npt.NDArray[np.bool_]:
+    """(N, N) mask of edges whose observed t or F is infinite (exact fit, nonzero contrast)."""
+    N = Y.shape[1]
+    iu = np.triu_indices(N, k=1)
+    mask = np.zeros((N, N), dtype=bool)
+    mask[iu] = _degenerate.glm_infinite(Y[:, iu[0], iu[1]], X, contrast, stat_type)
+    return mask
 
 
 def _residual_degrees_of_freedom(X: npt.NDArray[np.float64]) -> int:
@@ -297,10 +343,13 @@ def compute_glm_stat(
         Cbeta = np.tensordot(C, beta, axes=([1], [0]))  # (r, N, N)
         quad = np.einsum("ixy,ij,jxy->xy", Cbeta, M_inv, Cbeta)  # (N, N)
 
+        # zero residual variance: F = 0 (see _degenerate; entry points
+        # reject an exact fit with a nonzero contrast)
+        floor = _degenerate.RTOL * _mean_square(Y_flat).reshape(N, N)
         with np.errstate(divide="ignore", invalid="ignore"):
             F = quad / (r * sigma2)
-            F = np.where(sigma2 == 0, 0.0, F)
-            F = np.where(F < 0, 0.0, F)  # guard numerical noise near zero
+        F = np.where(sigma2 <= floor, 0.0, F)
+        F = np.where(F < 0, 0.0, F)  # guard numerical noise near zero
 
         return {"omnibus": F}
 
@@ -330,11 +379,10 @@ def compute_glm_stat(
         if XtX_inv is None:
             _, _, XtX_inv = _precompute_ols(X)
         c_XtX_inv_c = contrast @ XtX_inv @ contrast  # scalar
-        se = np.sqrt(c_XtX_inv_c * sigma2)
-
-        with np.errstate(divide='ignore', invalid='ignore'):
-            stat = c_beta / se
-            stat = np.where(se == 0, 0, stat)
+        # zero residual variance: t = 0 (see _degenerate; entry points reject
+        # an exact fit with a nonzero contrast)
+        floor = _degenerate.RTOL * _mean_square(Y_flat).reshape(N, N)
+        stat = _degenerate.t_ratio(c_beta, c_XtX_inv_c * sigma2, c_XtX_inv_c * floor)
     else:
         raise ValueError(
             f"Invalid stat_type: '{stat_type_str}'. "
@@ -771,6 +819,7 @@ def compute_p_val_glm(
         )
     if np.all(contrast_vec == 0):
         raise ValueError("Contrast must have at least one non-zero entry.")
+    _check_estimable(contrast_vec, X)
 
     if acceleration is not None and acceleration not in ("gpd", "gamma"):
         raise ValueError(
@@ -847,6 +896,10 @@ def compute_p_val_glm(
             stat_type=stat_type_str, strata_provided=strata is not None,
             e_grid=e_grid, h_grid=h_grid, missing_report=report,
         )
+
+    # An exact fit with a nonzero contrast has an infinite t (or F)
+    _degenerate.raise_if_infinite(_infinite_edges(Y, X, contrast_vec, stat_type_str),
+                                  "F" if stat_type_str == GLMStatType.FSTAT.value else "t")
 
     # ---- Precompute OLS ----
     X_pinv, XtX_inv_diag, XtX_inv = _precompute_ols(X)
@@ -1152,6 +1205,7 @@ def compute_p_val_glm_multi(
             raise ValueError(
                 f"contrast {name!r}: must be 1D of length {p}, got shape {c.shape}."
             )
+        _check_estimable(c, X, f"Contrast {name!r}")
         contrast_arrays.append(c)
 
     stat_type_str = (
@@ -1198,6 +1252,9 @@ def compute_p_val_glm_multi(
             enhance_kwargs["normalization"] = normalization
     elif method_enum == StatMethod.CNBS:
         enhance_kwargs = {"net_labels": net_labels}
+
+    for name, c in zip(contrast_names, contrast_arrays):
+        _degenerate.raise_if_infinite(_infinite_edges(Y, X, c, stat_type_str))
 
     # ---- Reduced model (shared) ----
     if nuisance_contrast is None:

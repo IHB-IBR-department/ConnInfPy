@@ -32,6 +32,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy import stats
 
+from . import _degenerate
 from ._engine import (
     _bh_fdr_correction,
     _collect_results_to_arrays,
@@ -73,9 +74,8 @@ def _t_one(sum_, sumsq, n):
     with np.errstate(divide="ignore", invalid="ignore"):
         mean = sum_ / n
         var = np.maximum((sumsq - sum_ ** 2 / n) / (n - 1), 0.0)
-        se = np.sqrt(var / n)
-        t = mean / se
-    t = np.where((n >= 2) & (se > 0) & np.isfinite(t), t, 0.0)
+        t = _degenerate.t_ratio(mean, var / n, _degenerate.RTOL * sumsq / n ** 2)
+    t = np.where((n >= 2) & np.isfinite(t), t, 0.0)
     return np.maximum(t, 0.0), np.maximum(-t, 0.0)
 
 
@@ -91,9 +91,9 @@ def _t_two(sum1, sumsq1, n1, sum2, sumsq2, n2):
     m1, v1 = _group_moments(sum1, sumsq1, n1)
     m2, v2 = _group_moments(sum2, sumsq2, n2)
     with np.errstate(divide="ignore", invalid="ignore"):
-        denom = np.sqrt(v1 / n1 + v2 / n2)
-        t = (m2 - m1) / denom
-    t = np.where((n1 >= 2) & (n2 >= 2) & (denom > 0) & np.isfinite(t), t, 0.0)
+        floor = _degenerate.RTOL * (sumsq1 + sumsq2) / (n1 + n2) * (1 / n1 + 1 / n2)
+        t = _degenerate.t_ratio(m2 - m1, v1 / n1 + v2 / n2, floor)
+    t = np.where((n1 >= 2) & (n2 >= 2) & np.isfinite(t), t, 0.0)
     return np.maximum(t, 0.0), np.maximum(-t, 0.0)
 
 
