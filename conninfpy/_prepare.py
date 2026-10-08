@@ -33,7 +33,7 @@ _SCAN_BLOCK = 64
 
 
 def check_connectivity(
-    Y: npt.ArrayLike, name: str = "Y"
+    Y: npt.ArrayLike, name: str = "Y", allow_missing: bool = False
 ) -> npt.NDArray[np.float64]:
     """Validate an ``(n_subjects, N, N)`` stack and zero its diagonal.
 
@@ -61,9 +61,15 @@ def check_connectivity(
         raise ValueError(
             f"{name} must have shape (n_subjects, N, N); got {arr.shape}."
         )
-    report = nonfinite_report(arr)
-    if report["n_values"]:
-        raise ValueError(_format_nonfinite(report, name))
+    if allow_missing:
+        # Available-case analysis: NaN marks a missing value; Inf is an error.
+        off = ~np.eye(arr.shape[-1], dtype=bool)
+        if np.isinf(arr[:, off]).any():
+            raise ValueError(f"{name} has infinite off-diagonal values; only NaN marks missing data.")
+    else:
+        report = nonfinite_report(arr)
+        if report["n_values"]:
+            raise ValueError(_format_nonfinite(report, name))
     idx = np.arange(arr.shape[-1])
     if np.any(arr[:, idx, idx] != 0):  # NaN != 0, so NaN diagonals are zeroed too
         if isinstance(Y, np.ndarray) and np.shares_memory(arr, Y):
@@ -185,7 +191,7 @@ def infer_input_kind(*arrays: npt.NDArray[np.float64]) -> Optional[str]:
 
 
 def prepare_connectivity(
-    Y: npt.ArrayLike, input: str, name: str = "Y"
+    Y: npt.ArrayLike, input: str, name: str = "Y", allow_missing: bool = False
 ) -> npt.NDArray[np.float64]:
     """Check ``Y``, zero its diagonal, and apply Fisher r→z once if needed.
 
@@ -207,7 +213,7 @@ def prepare_connectivity(
     """
     if input not in ("r", "z"):
         raise ValueError(f"input must be 'r' or 'z'; got {input!r}.")
-    arr = check_connectivity(Y, name)
+    arr = check_connectivity(Y, name, allow_missing=allow_missing)
     if input == "r":
         # Diagonal is already zero, so arctanh never sees r = 1 there.
         arr = fisher_r_to_z(arr)

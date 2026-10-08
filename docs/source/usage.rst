@@ -53,6 +53,46 @@ Input conventions
 - Every entry point shares the defaults in :mod:`conninfpy.defaults`
   (1000 permutations, exact empirical p-values).
 
+Missing connectivity
+--------------------
+
+A region without signal in a subject (outside the field of view, signal
+dropout) has undefined correlations. ConnInfPy never treats them as zero.
+
+- **Default (``missing='raise'``)**: every entry point rejects NaN or infinite
+  off-diagonal values and reports the affected subjects, the regions without
+  signal and any other missing edges. (Before this check a single NaN made
+  every edge "significant".)
+- **Available-case analysis (``missing='available_case'``)**, for two-sample,
+  paired and one-sample designs in :func:`conninfpy.analyze` and
+  :func:`compute_p_val`: each edge is tested with the subjects who have it
+  (paired: the complete pairs) — no subject is dropped and nothing is filled
+  in, which matters in cohorts of 30–40. Permutations shuffle or sign-flip
+  whole subjects, so the max-statistic test stays exact given the
+  missingness, which must not depend on the connectivity values themselves.
+  Edges kept by fewer than ``min_coverage`` (default 80 %) of a group's
+  subjects, or by fewer than 3, are not tested: their p-value is NaN and they
+  leave the family (and the Bonferroni / BH count). Bonferroni and BH use
+  per-edge Welch degrees of freedom.
+
+  .. code-block:: python
+
+     out = analyze(group1=g1, group2=g2, test_type="two-sample",
+                   method="tfnbs", missing="available_case")
+     out.flags                         # one-line coverage summary
+     out.inference.missing_report      # per-edge n, untested edges,
+                                       # regions without signal, Fisher test
+                                       # of missingness by group
+
+  Report the coverage, and check ``missing_by_group_p``: missingness that
+  differs between groups is not a validity problem for the test, but the
+  groups are then compared on slightly different subsets per edge.
+- **GLM designs** (``interest`` / ``confounds``) and ComBat need complete data
+  for now.
+- **Dataset manifests** may set ``params: missing: drop_subjects`` to remove
+  affected subjects on loading (listed in the dataset warnings); the bundled
+  ABIDE manifests do.
+
 t-test pipeline — :func:`compute_p_val`
 ---------------------------------------
 
