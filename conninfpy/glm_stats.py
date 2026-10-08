@@ -1515,6 +1515,23 @@ def compute_p_val_paired_glm(
                 "test_type is fixed to 'paired' by compute_p_val_paired_glm; "
                 "do not pass it explicitly."
             )
+        # GLM-only options: a mean test needs sign flips, and a statistic
+        # other than t runs as the one-sample GLM on the differences (which
+        # sign-flips; with t it equals the paired test exactly).
+        scheme = kwargs.pop("scheme", "auto")
+        if scheme == "permutation":
+            raise ValueError(
+                "A paired difference is a mean test: row permutation cannot change "
+                "the tested mean. Use scheme='auto' or 'sign-flip'."
+            )
+        stat_type = kwargs.pop("stat_type", GLMStatType.TSTAT)
+        stat_type_str = stat_type.value if isinstance(stat_type, GLMStatType) else stat_type
+        if stat_type_str != GLMStatType.TSTAT.value:
+            return compute_p_val_glm(
+                Y_B - Y_A, design_matrix=np.ones((Y_A.shape[0], 1)),
+                contrast=np.array([1.0]), stat_type=stat_type_str, scheme="sign-flip",
+                **kwargs,
+            )
         return compute_p_val(Y_A, Y_B, test_type="paired", **kwargs)
 
     # --- With-confound path: one-sample GLM on differences ---
