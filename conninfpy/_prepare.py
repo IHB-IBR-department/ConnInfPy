@@ -15,8 +15,12 @@ Connectivity stacks enter the package in exactly one way:
 The caller's array is never modified; a copy is made only when the
 diagonal actually needs zeroing. Missing (NaN) or infinite off-diagonal
 values are rejected: a single one would turn every permutation maximum into
-NaN, and every edge would then get the smallest possible p-value. Symmetry is not required — directed
-(asymmetric) connectivity is supported downstream.
+NaN, and every edge would then get the smallest possible p-value.
+Matrices must be symmetric: the inference pipelines, ComBat, the parametric
+baselines and the network summaries treat edges as undirected (upper
+triangle), so a directed matrix would be tested inconsistently. The scoring
+utilities (``get_tfnbs_score``, ``get_nbs_score``) still accept directed
+graphs.
 """
 from __future__ import annotations
 
@@ -61,6 +65,7 @@ def check_connectivity(
         raise ValueError(
             f"{name} must have shape (n_subjects, N, N); got {arr.shape}."
         )
+    _check_symmetric(arr, name)
     if allow_missing:
         # Available-case analysis: NaN marks a missing value; Inf is an error.
         off = ~np.eye(arr.shape[-1], dtype=bool)
@@ -76,6 +81,34 @@ def check_connectivity(
             arr = arr.copy()  # never write into the caller's array
         arr[:, idx, idx] = 0.0
     return arr
+
+
+def _check_symmetric(arr: npt.NDArray[np.float64], name: str) -> None:
+    """Reject directed (asymmetric) stacks, including NaN in one triangle only."""
+    scale = 1.0
+    for start in range(0, arr.shape[0], _SCAN_BLOCK):
+        block = arr[start:start + _SCAN_BLOCK]
+        with np.errstate(invalid="ignore"):
+            finite = np.abs(block[np.isfinite(block)])
+            scale = max(scale, float(finite.max()) if finite.size else 0.0)
+    tol = 1e-8 * scale
+    for start in range(0, arr.shape[0], _SCAN_BLOCK):
+        block = arr[start:start + _SCAN_BLOCK]
+        blockT = block.transpose(0, 2, 1)
+        nan_mismatch = np.isnan(block) != np.isnan(blockT)
+        with np.errstate(invalid="ignore"):
+            diff = np.abs(block - blockT)
+        bad = nan_mismatch | (np.nan_to_num(diff, nan=0.0) > tol)
+        if bad.any():
+            s, i, j = np.argwhere(bad)[0]
+            raise ValueError(
+                f"{name} is not symmetric (subject {start + s}: "
+                f"[{i}, {j}] = {block[s, i, j]!r}, [{j}, {i}] = {block[s, j, i]!r}). "
+                "Directed connectivity is not supported by the inference "
+                "pipelines, which treat edges as undirected; symmetrise the "
+                "matrices (e.g. (Y + Y^T) / 2) or analyse each direction "
+                "separately."
+            )
 
 
 def nonfinite_report(Y: npt.ArrayLike) -> dict:
