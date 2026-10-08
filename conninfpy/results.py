@@ -556,6 +556,7 @@ class OmnibusInferenceResult(TailResult):
         preserve_provided: bool = False,
         strata_provided: bool = False,
         combat_diagnostics: Optional[Dict[str, Any]] = None,
+        missing_report: Optional[Dict[str, Any]] = None,
     ) -> "OmnibusInferenceResult":
         instance = super().__new__(cls)
         # Don't go through TailResult's positive/negative initializer —
@@ -572,6 +573,7 @@ class OmnibusInferenceResult(TailResult):
         instance.preserve_provided = preserve_provided
         instance.strata_provided = strata_provided
         instance.combat_diagnostics = combat_diagnostics
+        instance.missing_report = missing_report
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
