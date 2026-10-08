@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import glob
+import logging
 import pickle
 import hashlib
 import re
@@ -13,6 +14,8 @@ from pathlib import Path
 from conninfpy.atlas import AtlasInfo
 from conninfpy.loaders.base import BaseDataLoader, LoadedDataset, DatasetPreview
 from conninfpy.loaders.validation import validate_loaded_dataset
+
+logger = logging.getLogger(__name__)
 
 def compute_dir_hash(files: list[str], extra_params: dict) -> str:
     """Compute a deterministic hash for a list of files and parameters to check cache validity."""
@@ -834,7 +837,9 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                     "strategy": strategy,
                     "n_compcor": n_compcor,
                     "use_GSR": use_GSR,
-                    "smoothing": smoothing
+                    "smoothing": smoothing,
+                    # series cached before the censoring fix kept flagged volumes
+                    "sample_mask": "applied",
                 })
                 os.makedirs(self.cache_dir, exist_ok=True)
                 cache_file = os.path.join(self.cache_dir, f"fmriprep_{cache_key}.npy")
@@ -842,9 +847,11 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                 if os.path.exists(cache_file):
                     timeseries = np.load(cache_file)
                 else:
-                    confounds = None
+                    # load_confounds returns the volumes to keep (non-steady-state
+                    # volumes, scrubbed outliers removed); the masker must apply it
+                    confounds, sample_mask = None, None
                     if cf:
-                        confounds, _ = build_fmriprep_confounds(bf, strategy, n_compcor, use_GSR)
+                        confounds, sample_mask = build_fmriprep_confounds(bf, strategy, n_compcor, use_GSR)
                     
                     if is_mask_dir:
                         ts_cols = []
@@ -852,14 +859,14 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                             masker = NiftiMasker(mask_img=mask_file, standardize="zscore_sample")
                             if smoothing is not None:
                                 masker.set_params(smoothing_fwhm=smoothing)
-                            ts = masker.fit_transform(bf, confounds=confounds)
+                            ts = masker.fit_transform(bf, confounds=confounds, sample_mask=sample_mask)
                             ts_cols.append(ts.mean(axis=1))
                         timeseries = np.column_stack(ts_cols)
                     else:
                         masker = NiftiLabelsMasker(labels_img=self.atlas_image_path, standardize="zscore_sample")
                         if smoothing is not None:
                             masker.set_params(smoothing_fwhm=smoothing)
-                        timeseries = masker.fit_transform(bf, confounds=confounds)
+                        timeseries = masker.fit_transform(bf, confounds=confounds, sample_mask=sample_mask)
                     
                     np.save(cache_file, timeseries)
                     
@@ -872,7 +879,12 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                 else:
                     all_groups.append("control")
                     
-        min_len = min(ts.shape[0] for ts in all_data)
+        n_volumes = [int(ts.shape[0]) for ts in all_data]
+        min_len = min(n_volumes)
+        if len(set(n_volumes)) > 1:
+            logger.warning(
+                "fMRIPrep series have %d-%d volumes after censoring; all are truncated "
+                "to %d (recorded in provenance).", min_len, max(n_volumes), min_len)
         data_list_clean = [ts[:min_len] for ts in all_data]
         data = np.array(data_list_clean)
         
@@ -904,7 +916,10 @@ class FmriprepDerivativesLoader(BaseDataLoader):
             provenance={
                 "bold_pattern": self.bold_pattern,
                 "strategy": strategy,
-                "use_GSR": use_GSR
+                "use_GSR": use_GSR,
+                "censoring": "load_confounds sample_mask applied",
+                "n_volumes": dict(zip(map(str, all_subject_ids), n_volumes)),
+                "truncated_to": min_len,
             }
         )
 
