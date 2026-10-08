@@ -105,6 +105,7 @@ class TestRandomStateDeprecation(unittest.TestCase):
         rng = np.random.default_rng(0)
         g1 = rng.standard_normal((10, 5, 5))
         g2 = rng.standard_normal((10, 5, 5))
+        g1, g2 = (g1 + g1.transpose(0, 2, 1)) / 2, (g2 + g2.transpose(0, 2, 1)) / 2
         kwargs = dict(test_type="two-sample", method="tstat",
                       n_permutations=20, use_mp=False)
         with warnings.catch_warnings(record=True) as w:

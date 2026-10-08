@@ -57,12 +57,28 @@ class TestCheckConnectivity(unittest.TestCase):
         out = check_connectivity(Y)
         self.assertFalse(np.isnan(out).any())
 
-    def test_asymmetric_input_is_accepted(self):
-        """Check: directed (asymmetric) connectivity passes unchanged off-diagonal."""
+    def test_asymmetric_input_is_rejected(self):
+        """Check: directed (asymmetric) connectivity is rejected.
+
+        Regression: it was accepted, but the fast pairwise path tested only the
+        upper triangle while the observed maps kept both directions, so a
+        lower-triangle effect got p = 1/(B+1) against an all-zero null.
+        """
         Y = _stack()
         Y[:, 0, 1] += 0.2
-        out = check_connectivity(Y)
-        np.testing.assert_array_equal(out[:, 0, 1], Y[:, 0, 1])
+        with self.assertRaisesRegex(ValueError, "not symmetric"):
+            check_connectivity(Y)
+
+    def test_one_sided_missing_value_is_asymmetric(self):
+        Y = _stack()
+        Y[2, 0, 1] = np.nan
+        with self.assertRaisesRegex(ValueError, "not symmetric"):
+            check_connectivity(Y, allow_missing=True)
+
+    def test_rounding_level_asymmetry_is_accepted(self):
+        Y = _stack()
+        Y[:, 0, 1] += 1e-13
+        check_connectivity(Y)
 
 
 class TestInferInputKind(unittest.TestCase):
