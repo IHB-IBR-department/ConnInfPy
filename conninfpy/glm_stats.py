@@ -559,6 +559,8 @@ def compute_p_val_glm(
     min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
     normalization: str = "sqrt",
     strata: Optional[npt.NDArray[Any]] = None,
+    missing: str = "raise",
+    min_coverage: float = 0.8,
 ) -> Union[InferenceResult, OmnibusInferenceResult]:
     """
     Compute p-values for connectivity data using GLM with Freedman-Lane permutation.
@@ -623,6 +625,20 @@ def compute_p_val_glm(
         axis (``result.is_grid``, ``result.e_grid``, ``result.h_grid``);
         use ``result.select(param_idx)`` or pass ``param_idx=`` to
         ``significant_edges`` / ``to_csv`` to project to a single cell.
+    missing : {'raise', 'available_case'}, default='raise'
+        Missing connectivity values (NaN). ``'raise'`` stops with a report.
+        ``'available_case'`` fits each edge with the subjects who have it:
+        edges are grouped by missingness pattern, each pattern gets its own
+        full and reduced fits, and every pattern uses the global (within-
+        stratum) permutation restricted to its subjects, so the shuffles
+        stay coherent and equal the standard ones on complete data. Edges
+        kept by fewer than ``min_coverage`` of the subjects, with fewer than
+        2 residual degrees of freedom, or with a contrast that is not
+        estimable on their subjects are not tested (p = NaN); see
+        ``result.missing_report``. Symmetric connectivity only.
+    min_coverage : float, default=0.8
+        Minimum share of subjects an edge needs under
+        ``missing='available_case'``.
 
     Returns
     -------
@@ -645,7 +661,9 @@ def compute_p_val_glm(
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
 
-    Y = check_connectivity(Y, "Y")
+    if missing not in ("raise", "available_case"):
+        raise ValueError(f"missing must be 'raise' or 'available_case'; got {missing!r}.")
+    Y = check_connectivity(Y, "Y", allow_missing=missing == "available_case")
 
     # ---- Resolve API mode ----
     if design_matrix is not None and interest is not None:
@@ -739,6 +757,37 @@ def compute_p_val_glm(
         enhance_kwargs = {"net_labels": net_labels}
 
     enhance_func = _ENHANCE_MAP[method_enum]
+
+    # ---- Missing values (NaN): available-case analysis ----
+    if missing == "available_case" and np.isnan(Y).any():
+        from ._available_case_glm import available_case_glm
+        from .pairwise_stats import _grid_from_kwargs
+
+        p_ac, raw_ac, report = available_case_glm(
+            Y, X, contrast_vec, _compute_reduced_model(X, contrast_vec),
+            stat_type_str, enhance_func, enhance_kwargs,
+            n_permutations=n_permutations, random_state=random_state,
+            use_mp=use_mp, n_processes=n_processes, verbose=verbose,
+            strata=strata, acceleration=acceleration, two_tailed=two_tailed,
+            min_coverage=min_coverage,
+        )
+        method_str = method.value if hasattr(method, "value") else str(method)
+        if stat_type_str == GLMStatType.FSTAT.value:
+            return OmnibusInferenceResult(
+                p_ac["omnibus"], method=method_str, n_permutations=n_permutations,
+                acceleration=acceleration, wall_time_s=time.perf_counter() - _t0,
+                stat_omnibus=raw_ac["omnibus"], stat_type="fstat",
+                strata_provided=strata is not None, missing_report=report,
+            )
+        e_grid, h_grid = _grid_from_kwargs(method_enum, enhance_kwargs)
+        return InferenceResult(
+            p_ac["positive"], p_ac["negative"],
+            method=method_str, n_permutations=n_permutations,
+            acceleration=acceleration, wall_time_s=time.perf_counter() - _t0,
+            stat_positive=raw_ac["positive"], stat_negative=raw_ac["negative"],
+            stat_type=stat_type_str, strata_provided=strata is not None,
+            e_grid=e_grid, h_grid=h_grid, missing_report=report,
+        )
 
     # ---- Precompute OLS ----
     X_pinv, XtX_inv_diag, XtX_inv = _precompute_ols(X)
@@ -944,6 +993,8 @@ def compute_p_val_glm_multi(
     min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
     normalization: str = "sqrt",
     strata: Optional[npt.NDArray[Any]] = None,
+    missing: str = "raise",
+    min_coverage: float = 0.8,
 ) -> Dict[str, InferenceResult]:
     """Run several contrasts under a shared nuisance model in one perm pass.
 
@@ -980,6 +1031,11 @@ def compute_p_val_glm_multi(
     start_thres, min_cluster_size, normalization
         Forwarded to the underlying GLM pipeline (see
         :func:`compute_p_val_glm`).
+    missing, min_coverage
+        See :func:`compute_p_val_glm`. With missing values and
+        ``missing='available_case'``, each contrast is run separately with
+        the same seed (so every contrast sees the same permutations) and
+        tests its predictor against its own nuisance model.
 
     Returns
     -------
@@ -994,10 +1050,26 @@ def compute_p_val_glm_multi(
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
 
-    Y = check_connectivity(Y, "Y")
+    if missing not in ("raise", "available_case"):
+        raise ValueError(f"missing must be 'raise' or 'available_case'; got {missing!r}.")
+    Y = check_connectivity(Y, "Y", allow_missing=missing == "available_case")
 
     if not contrasts:
         raise ValueError("contrasts must be a non-empty dict.")
+    if missing == "available_case" and np.isnan(Y).any():
+        return {
+            name: compute_p_val_glm(
+                Y, design_matrix=design_matrix, contrast=c, stat_type=stat_type,
+                method=method, n_permutations=n_permutations, two_tailed=two_tailed,
+                acceleration=acceleration, use_mp=use_mp, rng=random_state,
+                n_processes=n_processes, verbose=verbose, net_labels=net_labels,
+                threshold=threshold, nbs_stat=nbs_stat, e=e, h=h, n=n,
+                start_thres=start_thres, min_cluster_size=min_cluster_size,
+                normalization=normalization, strata=strata,
+                missing="available_case", min_coverage=min_coverage,
+            )
+            for name, c in contrasts.items()
+        }
 
     Y = np.asarray(Y, dtype=np.float64)
     if Y.ndim != 3 or Y.shape[1] != Y.shape[2]:

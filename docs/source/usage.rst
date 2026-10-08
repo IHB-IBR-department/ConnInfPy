@@ -63,9 +63,10 @@ dropout) has undefined correlations. ConnInfPy never treats them as zero.
   off-diagonal values and reports the affected subjects, the regions without
   signal and any other missing edges. (Before this check a single NaN made
   every edge "significant".)
-- **Available-case analysis (``missing='available_case'``)**, for two-sample,
-  paired and one-sample designs in :func:`conninfpy.analyze` and
-  :func:`compute_p_val`: each edge is tested with the subjects who have it
+- **Available-case analysis (``missing='available_case'``)** in
+  :func:`conninfpy.analyze` and every inference entry point. For two-sample,
+  paired and one-sample designs (:func:`compute_p_val`) each edge is tested
+  with the subjects who have it
   (paired: the complete pairs) — no subject is dropped and nothing is filled
   in, which matters in cohorts of 30–40. Permutations shuffle or sign-flip
   whole subjects, so the max-statistic test stays exact given the
@@ -87,8 +88,24 @@ dropout) has undefined correlations. ConnInfPy never treats them as zero.
   Report the coverage, and check ``missing_by_group_p``: missingness that
   differs between groups is not a validity problem for the test, but the
   groups are then compared on slightly different subsets per edge.
-- **GLM designs** (``interest`` / ``confounds``) and ComBat need complete data
-  for now.
+- **GLM designs** (:func:`compute_p_val_glm`, the multi-contrast and paired
+  GLMs, ``analyze(Y, interest=...)``) use the same option: edges are grouped
+  by missingness pattern, each pattern gets its own full and reduced
+  Freedman–Lane fits on its subjects, and every pattern uses the global
+  (within-site) permutation restricted to its subjects, so the shuffles stay
+  coherent and equal the standard ones on complete data. An edge is also left
+  untested when its pattern has fewer than 2 residual degrees of freedom or
+  the contrast is not estimable on its subjects (e.g. a two-group contrast
+  where one group lacks the edge); a site whose subjects all lack an edge
+  simply drops out of the site dummies. Freedman–Lane is approximate with or
+  without missing values (1,000 simulated nulls, 36 subjects at 3 sites:
+  FWER 0.05–0.06 both for complete and for incomplete data).
+- **ComBat** (``combat_harmonize(..., missing='available_case')``, and the
+  ComBat strategies of ``analyze``) estimates every quantity per feature from
+  the subjects who have it. A site with fewer than 2 subjects for a feature
+  cannot be harmonized there: those values become NaN (counted in
+  ``diagnostics['values_not_harmonized']`` and flagged by ``analyze``) and are
+  then handled as missing.
 - **Dataset manifests** may set ``params: missing: drop_subjects`` to remove
   affected subjects on loading (listed in the dataset warnings); the bundled
   ABIDE manifests do.

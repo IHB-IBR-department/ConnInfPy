@@ -158,11 +158,12 @@ class TestAnalyzeAndSummaries(unittest.TestCase):
                       missing="available_case")
         self.assertTrue(any("available-case analysis" in f and "ROI 2 in 1" in f for f in out.flags))
 
-    def test_glm_with_missing_values_is_not_supported_yet(self):
+    def test_glm_design_runs_available_case(self):
         g1, _, _ = _data()
-        with self.assertRaisesRegex(NotImplementedError, "GLM designs"):
-            analyze(_kill(g1, 0, 2), interest=np.linspace(0, 1, 15), input="z", method="tstat",
-                    n_permutations=19, rng=0, use_mp=False, missing="available_case")
+        out = analyze(_kill(g1, 0, 2), interest=np.linspace(0, 1, 15), input="z", method="tstat",
+                      n_permutations=19, rng=0, use_mp=False, missing="available_case",
+                      min_coverage=0.9)
+        self.assertEqual(out.inference.missing_report["regions_without_signal"], {2: 1})
 
     def test_network_summary_counts_tested_edges_only(self):
         g1, g2, labels = _data()

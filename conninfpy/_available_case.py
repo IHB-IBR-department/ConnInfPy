@@ -251,8 +251,10 @@ def describe(report: Dict[str, Any]) -> str:
         f"{report['n_edges_untested']} below {report['min_coverage']:.0%} coverage not tested; "
         f"per-edge n {report['edge_n_min']}–{int(report['edge_n'].max())}"
     )
-    if report["missing_by_group_p"] is not None:
+    if report.get("missing_by_group_p") is not None:
         text += f"; missingness by group, Fisher p = {report['missing_by_group_p']:.3g}"
+    if report.get("missing_by_interest_p") is not None:
+        text += f"; missingness vs tested variable, p = {report['missing_by_interest_p']:.3g}"
     return text + "."
 
 

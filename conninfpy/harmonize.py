@@ -295,6 +295,7 @@ def _eb_update(
 def _prepare_inputs(
     Y: npt.NDArray[np.float64],
     preserve: Optional[npt.NDArray[np.float64]],
+    allow_missing: bool = False,
 ) -> Tuple[npt.NDArray[np.float64], Optional[npt.NDArray[np.float64]], Optional[Tuple[int, int]], Optional[Tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]]]:
     """Flatten (n, N, N) → (n, p) if needed; validate ``preserve``."""
     Y = np.asarray(Y, dtype=np.float64)
@@ -309,7 +310,11 @@ def _prepare_inputs(
         features = Y
     else:
         raise ValueError(f"Y must be 2D (n, p) or 3D (n, N, N); got ndim={Y.ndim}.")
-    check_finite_design(features, "ComBat input Y")
+    if allow_missing:
+        if np.isinf(features).any():
+            raise ValueError("ComBat input Y has infinite values; only NaN marks missing data.")
+    else:
+        check_finite_design(features, "ComBat input Y")
 
     if preserve is not None:
         preserve = check_finite_design(preserve, "preserve")
@@ -328,6 +333,7 @@ def combat_fit(
     sites: Sequence[Any],
     preserve: Optional[npt.NDArray[np.float64]] = None,
     eb: bool = True,
+    missing: str = "raise",
 ) -> ComBatModel:
     """
     Fit parametric ComBat on a training cohort.
@@ -345,13 +351,23 @@ def combat_fit(
         If True (standard ComBat), apply empirical-Bayes shrinkage on the
         per-(site, feature) effects. If False, use the raw method-of-moments
         estimates — faster but noisier for small per-site sample sizes.
+    missing : {'raise', 'available_case'}, default='raise'
+        Missing values (NaN). ``'available_case'`` estimates every quantity
+        per feature from the subjects who have it (OLS per missingness
+        pattern, per-feature site counts in the method-of-moments and
+        empirical-Bayes steps). A site with fewer than 2 subjects for a
+        feature cannot be harmonized there: those values become NaN.
 
     Returns
     -------
     ComBatModel
         Fitted state, usable with :func:`combat_apply`.
     """
-    features, preserve, _, _ = _prepare_inputs(Y, preserve)
+    if missing not in ("raise", "available_case"):
+        raise ValueError(f"missing must be 'raise' or 'available_case'; got {missing!r}.")
+    features, preserve, _, _ = _prepare_inputs(Y, preserve, allow_missing=missing == "available_case")
+    if missing == "available_case" and np.isnan(features).any():
+        return _combat_fit_available(features, sites, preserve, eb)
     n, p = features.shape
     site_codes, site_labels = _encode_sites(sites)
     n_sites = len(site_labels)
@@ -460,17 +476,128 @@ def combat_fit(
     )
 
 
+def _combat_fit_available(
+    features: npt.NDArray[np.float64],
+    sites: Sequence[Any],
+    preserve: Optional[npt.NDArray[np.float64]],
+    eb: bool,
+) -> ComBatModel:
+    """Parametric ComBat with missing values (NaN): per-feature available-case estimates.
+
+    Same model as :func:`combat_fit`; every estimate uses the subjects
+    present for that feature. The site intercepts and preserve coefficients
+    come from one least-squares fit per missingness pattern, the grand mean
+    weights sites by their per-feature counts, and the method-of-moments and
+    empirical-Bayes steps use per-feature site counts. A (site, feature)
+    with fewer than 2 subjects gets NaN parameters, so its values come back
+    as NaN instead of being adjusted with an unidentified scale.
+    """
+    present = np.isfinite(features)
+    n, p = features.shape
+    site_codes, site_labels = _encode_sites(sites)
+    n_sites = len(site_labels)
+    if n_sites < 2:
+        raise ValueError(
+            f"ComBat needs ≥ 2 sites, got {n_sites}. If you have one site, "
+            f"no harmonization is needed."
+        )
+    D = _site_dummies(site_codes, n_sites)
+    k = 0 if preserve is None else preserve.shape[1]
+    X_full = D if preserve is None else np.hstack([D, preserve])
+
+    # Least squares per missingness pattern
+    beta_full = np.zeros((X_full.shape[1], p))
+    packed = np.packbits(present, axis=0)
+    groups: Dict[bytes, list] = {}
+    for j in range(p):
+        groups.setdefault(packed[:, j].tobytes(), []).append(j)
+    for cols in groups.values():
+        rows = present[:, cols[0]]
+        if not rows.any():
+            continue
+        b, *_ = np.linalg.lstsq(X_full[rows], features[np.ix_(rows, cols)], rcond=None)
+        beta_full[:, cols] = b
+
+    n_site_f = D.T @ present.astype(np.float64)          # (n_sites, p)
+    n_f = present.sum(axis=0).astype(np.float64)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        alpha = np.sum(n_site_f / n_f * beta_full[:n_sites], axis=0)
+    alpha = np.where(n_f > 0, alpha, 0.0)
+    beta_cov = beta_full[n_sites:n_sites + k] if k > 0 else None
+
+    resid = np.where(present, features - X_full @ beta_full, 0.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        sigma_sq = np.sum(resid ** 2, axis=0) / n_f
+    sigma_sq = np.where(n_f > 0, sigma_sq, 1.0)
+    _warn_variance_floor(sigma_sq, "pooled sigma")
+    sigma = np.sqrt(np.maximum(sigma_sq, _VAR_FLOOR))
+
+    preserve_fit = preserve @ beta_cov if beta_cov is not None else 0.0
+    Z = (features - alpha[np.newaxis, :] - preserve_fit) / sigma[np.newaxis, :]
+
+    gamma_star = np.full((n_sites, p), np.nan)
+    delta_star_sq = np.full((n_sites, p), np.nan)
+    for s in range(n_sites):
+        Zs = Z[site_codes == s]
+        Ms = np.isfinite(Zs)
+        cnt = Ms.sum(axis=0).astype(np.float64)
+        ok = cnt >= 2
+        if not ok.any():
+            continue
+        Z0 = np.where(Ms, Zs, 0.0)
+        g_hat = np.where(ok, Z0.sum(axis=0) / np.maximum(cnt, 1), np.nan)
+        ss = np.sum(np.where(Ms, (Zs - g_hat) ** 2, 0.0), axis=0)
+        d_hat = np.where(ok, ss / np.maximum(cnt - 1, 1), np.nan)
+        _warn_variance_floor(d_hat[ok], "per-site delta", site_label=site_labels[s])
+        d_hat = np.where(ok, np.maximum(d_hat, _VAR_FLOOR), np.nan)
+        gamma_star[s], delta_star_sq[s] = g_hat, d_hat
+        if not eb:
+            continue
+        g_bar = float(np.mean(g_hat[ok]))
+        t_sq = float(np.var(g_hat[ok], ddof=1)) if ok.sum() > 1 else 0.0
+        lam, theta = _aprior(d_hat[ok]), _bprior(d_hat[ok])
+        if not np.isfinite(lam) or t_sq <= 0:
+            continue                                     # degenerate prior: keep MoM
+        g_old, d_old = g_hat[ok], d_hat[ok]
+        Zk, Mk, nk = Zs[:, ok], Ms[:, ok], cnt[ok]
+        for _ in range(500):
+            g_new = (nk * t_sq * g_hat[ok] + d_old * g_bar) / (nk * t_sq + d_old)
+            ss_k = np.sum(np.where(Mk, (Zk - g_new) ** 2, 0.0), axis=0)
+            d_new = (theta + 0.5 * ss_k) / (nk / 2.0 + lam - 1.0)
+            change = max(float(np.max(np.abs(g_new - g_old))), float(np.max(np.abs(d_new - d_old))))
+            g_old, d_old = g_new, d_new
+            if change < 1e-4:
+                break
+        gamma_star[s, ok], delta_star_sq[s, ok] = g_old, d_old
+
+    if eb:
+        _warn_variance_floor(delta_star_sq[np.isfinite(delta_star_sq)], "EB-shrunken delta")
+    delta_star = np.sqrt(np.where(np.isfinite(delta_star_sq), np.maximum(delta_star_sq, _VAR_FLOOR), np.nan))
+    return ComBatModel(
+        site_labels=site_labels,
+        alpha=alpha,
+        beta=beta_cov,
+        sigma=sigma,
+        gamma_star=gamma_star,
+        delta_star=delta_star,
+        eb=eb,
+        preserve_n_cols=k,
+    )
+
+
 def combat_apply(
     model: ComBatModel,
     Y: npt.NDArray[np.float64],
     sites: Sequence[Any],
     preserve: Optional[npt.NDArray[np.float64]] = None,
+    missing: str = "raise",
 ) -> npt.NDArray[np.float64]:
     """
     Apply a fitted ComBat model to new data. Sites must all be present in
     the training cohort; unseen sites raise ValueError.
     """
-    features, preserve, matrix_shape, triu_idx = _prepare_inputs(Y, preserve)
+    features, preserve, matrix_shape, triu_idx = _prepare_inputs(
+        Y, preserve, allow_missing=missing == "available_case")
     n = features.shape[0]
     label_to_code = {lab: i for i, lab in enumerate(model.site_labels)}
 
@@ -518,6 +645,7 @@ def combat_harmonize(
     preserve: Optional[npt.NDArray[np.float64]] = None,
     eb: bool = True,
     return_diagnostics: bool = True,
+    missing: str = "raise",
 ) -> CombatResult:
     """
     Fit + transform: parametric empirical-Bayes ComBat on the full cohort.
@@ -554,25 +682,34 @@ def combat_harmonize(
         ``Y_adjusted`` (same shape as input), ``model``, and ``diagnostics``
         (between-site variance ratio before/after, after/before ratio,
         ratio reduction, and per-site sample sizes).
+    missing : {'raise', 'available_case'}, default='raise'
+        See :func:`combat_fit`. Values a site cannot harmonize (fewer than 2
+        of its subjects have them) come back as NaN; their number is in
+        ``diagnostics['values_not_harmonized']``.
     """
-    model = combat_fit(Y, sites, preserve=preserve, eb=eb)
-    Y_adj = combat_apply(model, Y, sites, preserve=preserve)
+    model = combat_fit(Y, sites, preserve=preserve, eb=eb, missing=missing)
+    Y_adj = combat_apply(model, Y, sites, preserve=preserve, missing=missing)
 
     diagnostics: Dict[str, Any] = {}
     if return_diagnostics:
-        features_before, _, _, _ = _prepare_inputs(Y, None)
-        features_after, _, _, _ = _prepare_inputs(Y_adj, None)
+        allow = missing == "available_case"
+        features_before, _, _, _ = _prepare_inputs(Y, None, allow_missing=allow)
+        features_after, _, _, _ = _prepare_inputs(Y_adj, None, allow_missing=allow)
         site_codes, _ = _encode_sites(sites)
+        has_nan = bool(np.isnan(features_before).any() or np.isnan(features_after).any())
+        mean_ = np.nanmean if has_nan else np.mean
+        var_ = np.nanvar if has_nan else np.var
 
         def _between_over_total(feats):
             """Between-site share of the total feature variance."""
             n_sites = int(site_codes.max()) + 1
-            site_means = np.stack(
-                [feats[site_codes == s].mean(axis=0) for s in range(n_sites)]
-            )  # (n_sites, p)
-            grand = feats.mean(axis=0)
-            between = np.mean(np.var(site_means, axis=0, ddof=0))
-            total = float(np.mean(np.var(feats, axis=0, ddof=0)))
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN columns
+                site_means = np.stack(
+                    [mean_(feats[site_codes == s], axis=0) for s in range(n_sites)]
+                )  # (n_sites, p)
+                between = np.nanmean(var_(site_means, axis=0, ddof=0))
+                total = float(np.nanmean(var_(feats, axis=0, ddof=0)))
             return between / max(total, 1e-12)
 
         ratio_before = _between_over_total(features_before)
@@ -586,6 +723,9 @@ def combat_harmonize(
             "site_labels": model.site_labels,
             "per_site_n": [int(np.sum(site_codes == s)) for s in range(len(model.site_labels))],
         }
+        if allow:
+            diagnostics["values_not_harmonized"] = int(
+                np.sum(np.isfinite(features_before) & np.isnan(features_after)))
 
     return CombatResult(Y_adjusted=Y_adj, model=model, diagnostics=diagnostics)
 

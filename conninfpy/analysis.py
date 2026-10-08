@@ -436,9 +436,11 @@ def analyze(
         subjects and regions. ``'available_case'`` tests each edge with the
         subjects who have it — no subject is dropped and nothing is filled
         in; edges kept by fewer than ``min_coverage`` of a group's subjects
-        are not tested (p = NaN). Two-sample, paired and one-sample designs
-        only for now; the coverage report is in
-        ``result.inference.missing_report`` and summarised in ``flags``.
+        are not tested (p = NaN). Works for two-sample, paired and
+        one-sample designs and for GLM designs (per missingness pattern),
+        including the ComBat strategies (per-feature available-case ComBat).
+        The coverage report is in ``result.inference.missing_report`` and
+        summarised in ``flags``.
     min_coverage : float, default ``0.8``
         Minimum share of each group's subjects (or of the pairs) an edge
         needs under ``missing='available_case'``.
@@ -611,17 +613,9 @@ def analyze(
     kind = _resolve_input_kind(input, fisher_z, stacks)
     if missing not in ("raise", "available_case"):
         raise ValueError(f"missing must be 'raise' or 'available_case'; got {missing!r}.")
-    if missing == "available_case" and (glm_mode or paired_glm_mode):
-        if any(np.isnan(np.asarray(a, dtype=np.float64)).any()
-               for a in (Y, group1, group2) if a is not None):
-            raise NotImplementedError(
-                "missing='available_case' is implemented for two-sample, paired "
-                "and one-sample designs; GLM designs (interest / confounds) need "
-                "complete connectivity for now."
-            )
     allow_missing = missing == "available_case"
     if glm_mode:
-        Y = prepare_connectivity(Y, kind, "Y")
+        Y = prepare_connectivity(Y, kind, "Y", allow_missing=allow_missing)
     else:
         if group1 is not None:
             group1 = prepare_connectivity(group1, kind, "group1", allow_missing=allow_missing)
@@ -647,7 +641,7 @@ def analyze(
     # ---- ComBat (runs for combat_only and combat_site_dummies_glm) ----
     if strategy in (COMBAT_ONLY, COMBAT_SITE_DUMMIES_GLM) and sites is not None:
         assert Y is not None
-        res = combat_harmonize(Y, sites=np.asarray(sites), preserve=preserve)
+        res = combat_harmonize(Y, sites=np.asarray(sites), preserve=preserve, missing=missing)
         Y = res.Y_adjusted
         combat_diag = dict(res.diagnostics)
         combat_diag["strategy"] = strategy
@@ -657,6 +651,12 @@ def analyze(
             flags.append(
                 f"ComBat removed less than half of between-site variance "
                 f"(ratio after/before = {ratio:.3f})."
+            )
+        lost = combat_diag.get("values_not_harmonized", 0)
+        if lost:
+            flags.append(
+                f"ComBat could not harmonize {lost} value(s) (fewer than 2 subjects "
+                "of their site have them); they are treated as missing."
             )
 
     # ---- Site dummies → GLM nuisance for the site-GLM strategies ----
@@ -735,7 +735,7 @@ def analyze(
             method=method, n_permutations=n_permutations,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
-            strata=auto_strata,
+            strata=auto_strata, missing=missing, min_coverage=min_coverage,
             **method_kwargs,
         )
         out: Dict[str, AnalyzeResult] = {}
@@ -746,10 +746,14 @@ def analyze(
             )
             res.preserve_provided = preserve is not None
             res.combat_diagnostics = combat_diag
+            res_flags = list(flags)
+            if getattr(res, "missing_report", None) is not None:
+                from ._available_case import describe
+                res_flags.append(describe(res.missing_report))
             out[nm] = AnalyzeResult(
                 inference=res,
                 combat_diagnostics=combat_diag,
-                flags=list(flags),
+                flags=res_flags,
             )
         return out
 
@@ -759,7 +763,7 @@ def analyze(
             method=method, n_permutations=n_permutations,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
-            strata=auto_strata,
+            strata=auto_strata, missing=missing, min_coverage=min_coverage,
             **method_kwargs,
         )
     elif paired_glm_mode:
@@ -771,7 +775,7 @@ def analyze(
             method=method, n_permutations=n_permutations,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
-            strata=auto_strata,
+            strata=auto_strata, missing=missing, min_coverage=min_coverage,
             **method_kwargs,
         )
     else:
@@ -783,9 +787,10 @@ def analyze(
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
             **method_kwargs,
         )
-        if result.missing_report is not None:
-            from ._available_case import describe
-            flags.append(describe(result.missing_report))
+
+    if getattr(result, "missing_report", None) is not None:
+        from ._available_case import describe
+        flags.append(describe(result.missing_report))
 
     # ---- Provenance threading ----
     # The lower-level compute_p_val* entry-points don't know that
