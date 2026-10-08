@@ -659,6 +659,7 @@ def compute_p_val_glm(
     missing: str = "raise",
     min_coverage: float = 0.8,
     scheme: str = "auto",
+    cnbs_correction: str = "bonferroni",
 ) -> Union[InferenceResult, OmnibusInferenceResult]:
     """
     Compute p-values for connectivity data using GLM with Freedman-Lane permutation.
@@ -745,6 +746,10 @@ def compute_p_val_glm(
         the mean — the full design contains the constant but the null model
         does not, as in a one-sample or paired-difference GLM, where no row
         permutation can change the tested mean — and permutes otherwise.
+    cnbs_correction : {'bonferroni', 'bh'}, default='bonferroni'
+        For ``method='cnbs'`` (block-level inference, Noble & Scheinost,
+        2020): correction of the block p-values across blocks. With
+        ``two_tailed=True`` each block's test is two-sided.
 
     Returns
     -------
@@ -861,7 +866,11 @@ def compute_p_val_glm(
         if method_enum == StatMethod.NI_TFNBS:
             enhance_kwargs["normalization"] = normalization
     elif method_enum == StatMethod.CNBS:
+        from ._cnbs import check_correction
+        check_correction(cnbs_correction)
         enhance_kwargs = {"net_labels": net_labels}
+    block_inference = (dict(net_labels=net_labels, correction=cnbs_correction)
+                       if method_enum == StatMethod.CNBS else None)
 
     enhance_func = _ENHANCE_MAP[method_enum]
 
@@ -878,7 +887,9 @@ def compute_p_val_glm(
             strata=strata, acceleration=acceleration, two_tailed=two_tailed,
             min_coverage=min_coverage,
             scheme=_resolve_scheme(X, _compute_reduced_model(X, contrast_vec), scheme),
+            block_inference=block_inference,
         )
+        block_report = report.pop("block_report", None)
         method_str = method.value if hasattr(method, "value") else str(method)
         if stat_type_str == GLMStatType.FSTAT.value:
             return OmnibusInferenceResult(
@@ -886,6 +897,7 @@ def compute_p_val_glm(
                 acceleration=acceleration, wall_time_s=time.perf_counter() - _t0,
                 stat_omnibus=raw_ac["omnibus"], stat_type="fstat",
                 strata_provided=strata is not None, missing_report=report,
+                block_report=block_report,
             )
         e_grid, h_grid = _grid_from_kwargs(method_enum, enhance_kwargs)
         return InferenceResult(
@@ -895,6 +907,7 @@ def compute_p_val_glm(
             stat_positive=raw_ac["positive"], stat_negative=raw_ac["negative"],
             stat_type=stat_type_str, strata_provided=strata is not None,
             e_grid=e_grid, h_grid=h_grid, missing_report=report,
+            block_report=block_report,
         )
 
     # An exact fit with a nonzero contrast has an infinite t (or F)
@@ -996,7 +1009,14 @@ def compute_p_val_glm(
             }
 
     # ---- Compute p-values ----
-    if acceleration is not None:
+    block_report = None
+    if block_inference is not None:
+        from ._cnbs import block_p_values
+        result, block_report = block_p_values(
+            emp_stat_dict, max_null_dict, net_labels, N,
+            correction=cnbs_correction, acceleration=acceleration,
+        )
+    elif acceleration is not None:
         result = compute_p_values_accelerated(
             emp_stat_dict, max_null_dict, method=acceleration,
         )
@@ -1017,6 +1037,7 @@ def compute_p_val_glm(
             strata_provided=strata is not None,
             e_grid=e_grid,
             h_grid=h_grid,
+            block_report=block_report,
         )
     # F-stat path: single 'omnibus' map → OmnibusInferenceResult
     return OmnibusInferenceResult(
@@ -1027,6 +1048,7 @@ def compute_p_val_glm(
         stat_omnibus=raw_stat_dict["omnibus"],
         stat_type="fstat",
         strata_provided=strata is not None,
+        block_report=block_report,
     )
 
 
@@ -1105,6 +1127,7 @@ def compute_p_val_glm_multi(
     missing: str = "raise",
     min_coverage: float = 0.8,
     scheme: str = "auto",
+    cnbs_correction: str = "bonferroni",
 ) -> Dict[str, InferenceResult]:
     """Run several contrasts of one design in a single permutation pass.
 
@@ -1187,6 +1210,7 @@ def compute_p_val_glm_multi(
                 start_thres=start_thres, min_cluster_size=min_cluster_size,
                 normalization=normalization, strata=strata,
                 missing="available_case", min_coverage=min_coverage, scheme=scheme,
+                cnbs_correction=cnbs_correction,
             )
             for name, c in contrasts.items()
         }
@@ -1260,6 +1284,8 @@ def compute_p_val_glm_multi(
         if method_enum == StatMethod.NI_TFNBS:
             enhance_kwargs["normalization"] = normalization
     elif method_enum == StatMethod.CNBS:
+        from ._cnbs import check_correction
+        check_correction(cnbs_correction)
         enhance_kwargs = {"net_labels": net_labels}
 
     for name, c in zip(contrast_names, contrast_arrays):
@@ -1376,7 +1402,12 @@ def compute_p_val_glm_multi(
     for name in contrast_names:
         emp = emp_dicts[name]
         null = null_max_per_contrast[name]
-        if acceleration is not None:
+        block_report = None
+        if method_enum == StatMethod.CNBS:
+            from ._cnbs import block_p_values
+            res, block_report = block_p_values(emp, null, net_labels, N, correction=cnbs_correction,
+                                               acceleration=acceleration)
+        elif acceleration is not None:
             res = compute_p_values_accelerated(emp, null, method=acceleration)
         else:
             res = _compute_p_values_from_null(emp, null)
@@ -1390,6 +1421,7 @@ def compute_p_val_glm_multi(
             stat_negative=raw["negative"],
             stat_type=stat_type_str,
             strata_provided=strata is not None,
+            block_report=block_report,
         )
     return out
 

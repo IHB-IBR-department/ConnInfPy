@@ -128,11 +128,19 @@ Using a known network partition — ``cnbs``, ``ni_tfnbs``, ``fbc_tfnbs``
 Given an atlas partition (e.g. Yeo-7 networks, lobes, or modules), the operator
 can be directed to expect effects that respect those blocks:
 
-- ``cnbs`` (constrained NBS) — averages the statistic within each predefined
-  block and performs inference at the block level (e.g. testing whether the
-  within-DMN block differs as a unit). Most powerful for block-aligned effects
-  such as within-network hypoconnectivity; it can miss effects that span
-  multiple blocks.
+- ``cnbs`` (constrained NBS; Noble & Scheinost, 2020) — averages the
+  **signed** edge statistic over every edge of each within- and
+  between-network block, tests each block against its own permutation null
+  (the same block's mean in every permuted map), and corrects the block
+  p-values across blocks (``cnbs_correction='bonferroni'`` for FWER, the
+  default, or ``'bh'`` for FDR). The inference unit is the block: every
+  edge of a significant block carries the block's p-value, and
+  ``result.block_report`` lists the blocks. A significant block means its
+  *mean* effect is nonzero, not that each of its edges is affected; edges
+  that go in opposite directions cancel. Most powerful for block-aligned
+  effects such as within-network hypoconnectivity; it can miss effects that
+  are small parts of large blocks. With K blocks and Bonferroni the
+  smallest attainable p-value is K/(B+1), so use enough permutations.
 - ``ni_tfnbs`` (network-informed, **soft** prior) — applies TFNBS but reweights
   an edge's component by the activation density of its own block, favouring
   clusters concentrated within a known network. It attains the lowest
@@ -172,8 +180,8 @@ weakest otherwise.
      - mixed focal + extended (default)
      - none
    * - ``cnbs``
-     - aligned with known blocks
-     - within-network effects, high power
+     - a block's mean effect (inference per block)
+     - block-wide effects, high power
      - ``net_labels``
    * - ``ni_tfnbs``
      - block-concentrated (soft)

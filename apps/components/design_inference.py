@@ -627,7 +627,7 @@ def render_design_inference_view(base_atlas, tabs_list):
             elif operator_choice == "fbc_tfnbs":
                 st.info("⚡ **Active Enhancement Operator:** `FBC-TFNBS` (Focus Block Cluster TFNBS)\n\n*Specially optimized for dense, block-like/modular network alterations (within or between modules).*")
             elif operator_choice == "cnbs":
-                st.info("⚡ **Active Enhancement Operator:** `cNBS` (Cluster NBS)\n\n*Focuses on standard component-based clustering for localized connected components.*")
+                st.info("⚡ **Active Enhancement Operator:** `cNBS` (Constrained NBS)\n\n*Averages the signed t over every edge of each network block and tests each block against its own permutation null (Bonferroni across blocks). The inference unit is the block.*")
             elif operator_choice == "nbs":
                 st.info("⚡ **Active Enhancement Operator:** `NBS` (Network-Based Statistics)\n\n*Classic cluster-based method requiring a user-defined primary edge threshold.*")
             elif operator_choice == "tstat":

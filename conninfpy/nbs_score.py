@@ -7,7 +7,8 @@ cNBS scoring in a single module, mirroring the role of tfnbs_score.py.
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -23,6 +24,9 @@ __all__ = [
     "DEFAULT_NBS_STAT",
     "get_nbs_score",
     "get_cnbs_score",
+    "cnbs_blocks",
+    "cnbs_block_means",
+    "CNBSBlocks",
     "nbs_bct",
 ]
 
@@ -170,58 +174,122 @@ def get_nbs_score(
 
 
 # =============================================================================
-# cNBS scoring
+# cNBS scoring (Noble & Scheinost, 2020)
 # =============================================================================
+
+@dataclass(frozen=True)
+class CNBSBlocks:
+    """The blocks of a network partition: every within- and between-network pair.
+
+    Attributes
+    ----------
+    pairs : tuple of (label_a, label_b)
+        Network labels of each block (``label_a <= label_b`` in sorted order);
+        ``(a, a)`` is the within-network block of ``a``.
+    edge_block : ndarray of shape (N, N)
+        Block index of every edge; -1 on the diagonal.
+    n_edges : ndarray of shape (K,)
+        Undirected edges per block.
+    """
+
+    pairs: Tuple[Tuple[Any, Any], ...]
+    edge_block: npt.NDArray[np.intp]
+    n_edges: npt.NDArray[np.intp]
+
+    @property
+    def n_blocks(self) -> int:
+        return len(self.pairs)
+
+
+_BLOCK_CACHE: Dict[Tuple[bytes, str, int], CNBSBlocks] = {}
+
+
+def cnbs_blocks(net_labels: npt.NDArray[Any], n_nodes: int) -> CNBSBlocks:
+    """Blocks of ``net_labels``: one per pair of networks that has at least one edge."""
+    labels = np.asarray(net_labels)
+    if labels.ndim != 1 or labels.shape[0] != n_nodes:
+        raise ValueError(f"net_labels must have shape ({n_nodes},); got {labels.shape}.")
+    key = (labels.tobytes(), labels.dtype.str, n_nodes)
+    if key in _BLOCK_CACHE:
+        return _BLOCK_CACHE[key]
+    values, codes = np.unique(labels, return_inverse=True)
+    k = values.size
+    lo = np.minimum(codes[:, None], codes[None, :])
+    hi = np.maximum(codes[:, None], codes[None, :])
+    canonical = lo * k + hi
+    iu = np.triu_indices(n_nodes, k=1)
+    present = np.unique(canonical[iu])            # a one-node network has no within block
+    lookup = np.full(k * k, -1, dtype=np.intp)
+    lookup[present] = np.arange(present.size)
+    edge_block = lookup[canonical]
+    np.fill_diagonal(edge_block, -1)
+    as_py = lambda v: v.item() if hasattr(v, "item") else v  # noqa: E731
+    blocks = CNBSBlocks(
+        pairs=tuple((as_py(values[c // k]), as_py(values[c % k])) for c in present),
+        edge_block=edge_block,
+        n_edges=np.bincount(edge_block[iu], minlength=present.size),
+    )
+    if len(_BLOCK_CACHE) > 32:
+        _BLOCK_CACHE.clear()
+    _BLOCK_CACHE[key] = blocks
+    return blocks
+
+
+def cnbs_block_means(
+    stat: npt.NDArray[np.float64],
+    blocks: CNBSBlocks,
+    edge_mask: Optional[npt.NDArray[np.bool_]] = None,
+) -> npt.NDArray[np.float64]:
+    """Mean of ``stat`` over every edge of each block (upper triangle).
+
+    ``edge_mask`` restricts the mean to the edges it marks (available-case
+    analysis: untested edges are left out); a block with no edge left is NaN.
+    """
+    iu = np.triu_indices(stat.shape[0], k=1)
+    values, ids = stat[iu], blocks.edge_block[iu]
+    if edge_mask is not None:
+        keep = np.asarray(edge_mask, dtype=bool)[iu]
+        values, ids = values[keep], ids[keep]
+    sums = np.bincount(ids, weights=values, minlength=blocks.n_blocks)
+    counts = np.bincount(ids, minlength=blocks.n_blocks)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(counts > 0, sums / counts, np.nan)
+
 
 def get_cnbs_score(
     t_stat: npt.NDArray[np.float64],
     net_labels: npt.NDArray[np.int_],
 ) -> npt.NDArray[np.float64]:
     """
-    Compute cNBS score: mean t-stat per subnetwork.
+    cNBS statistic (Noble & Scheinost, 2020) as an edge map.
+
+    Every edge gets the mean **signed** statistic of its block (all edges of
+    the within- or between-network pair, whatever their sign or size). The
+    inference unit is the block: see :func:`conninfpy.compute_p_val` with
+    ``method='cnbs'``, which tests each block against its own permutation
+    null and corrects across blocks.
+
+    .. versionchanged:: 2.0
+        Previously the mean of the strictly positive values of one tail,
+        i.e. not the published statistic.
 
     Parameters
     ----------
     t_stat : ndarray of shape (N, N)
-        Non-negative t-statistic matrix (one tail, already separated).
+        Signed, symmetric edge statistic (e.g. t).
     net_labels : ndarray of shape (N,)
-        Network label for each node (0..K-1).
+        Network label of each node.
 
     Returns
     -------
     ndarray of shape (N, N)
-        Matrix where each edge has its subnetwork's mean t-stat.
-        Edges below threshold (t_stat=0) get score=0.
+        Block mean on every off-diagonal edge; 0 on the diagonal.
     """
     _check_square(t_stat)
-    if net_labels.ndim != 1 or net_labels.shape[0] != t_stat.shape[0]:
-        raise ValueError("net_labels must have shape (N,) matching t_stat.")
-
-    # Round to avoid float precision issues at threshold boundaries
-    t_stat = np.round(t_stat, decimals=10)
-
-    is_symm = _is_symmetric(t_stat)
-    normalized_labels = _validate_net_labels(np.asarray(net_labels), t_stat.shape[0])
-    n_networks = int(np.max(normalized_labels) + 1)
-
-    edge_rows, edge_cols, edge_weights = _get_edges(t_stat, 0.0, symmetric=is_symm)
-    if edge_rows.size == 0:
-        return np.zeros_like(t_stat, dtype=np.float64)
-
-    block_ids = _compute_canonical_block_ids(edge_rows, edge_cols, normalized_labels, n_networks)
-    max_block_id = n_networks * n_networks
-
-    sums = np.bincount(block_ids, weights=edge_weights.astype(np.float64), minlength=max_block_id)
-    counts = np.bincount(block_ids, minlength=max_block_id)
-    means = np.divide(sums, counts, out=np.zeros_like(sums), where=counts > 0)
-
-    edge_scores = means[block_ids]
-    scores = np.zeros_like(t_stat, dtype=np.float64)
-    scores[edge_rows, edge_cols] = edge_scores
-    if is_symm:
-        scores[edge_cols, edge_rows] = edge_scores
-
-    return scores
+    blocks = cnbs_blocks(net_labels, t_stat.shape[0])
+    means = cnbs_block_means(np.asarray(t_stat, dtype=np.float64), blocks)
+    out = np.where(blocks.edge_block >= 0, means[np.maximum(blocks.edge_block, 0)], 0.0)
+    return out
 
 
 # =============================================================================

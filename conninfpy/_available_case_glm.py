@@ -148,12 +148,15 @@ def available_case_glm(
     two_tailed: bool,
     min_coverage: float = DEFAULT_MIN_COVERAGE,
     scheme: str = "permutation",
+    block_inference: Optional[Dict[str, Any]] = None,
 ):
     """p-values, raw statistic maps and the coverage report (GLM, missing values).
 
     ``scheme`` is the resolved resampling scheme ('permutation' or
     'sign-flip'); sign flips are drawn per subject and restricted to each
-    pattern's subjects.
+    pattern's subjects. ``block_inference`` (``net_labels``, ``correction``)
+    switches to cNBS block inference over the tested edges; the block table
+    is returned in the report under ``'block_report'``.
     """
     if not 0 < min_coverage <= 1:
         raise ValueError(f"min_coverage must be in (0, 1]; got {min_coverage}.")
@@ -238,6 +241,11 @@ def available_case_glm(
     observed_vec = _vector_stats([E[np.ix_(p.rows, p.edges)] for p in patterns], patterns,
                                  contrast, stat_type, n_edges)
     raw = _to_stat_dict(observed_vec, N, triu, stat_type)
+    tested_mat = np.zeros((N, N), dtype=bool)
+    tested_mat[triu] = tested
+    tested_mat = tested_mat | tested_mat.T
+    if block_inference is not None:
+        enhance_kwargs = {**enhance_kwargs, "edge_mask": tested_mat}
     emp = raw if enhance_func is None else enhance_func(raw, **enhance_kwargs)
 
     seeds = np.random.RandomState(random_state).randint(0, 2**32 - 1, size=n_permutations, dtype=np.int64)
@@ -254,7 +262,15 @@ def available_case_glm(
     if two_tailed and stat_type != "fstat":
         joint = np.maximum(null["positive"], null["negative"])
         null = {"positive": joint, "negative": joint}
-    if acceleration is not None:
+    block_report = None
+    if block_inference is not None:
+        from ._cnbs import block_p_values
+        p_values, block_report = block_p_values(
+            emp, null, block_inference["net_labels"], N,
+            correction=block_inference["correction"], edge_mask=tested_mat,
+            acceleration=acceleration,
+        )
+    elif acceleration is not None:
         from .acceleration import compute_p_values_accelerated
         p_values = compute_p_values_accelerated(emp, null, method=acceleration)
     else:
@@ -267,6 +283,8 @@ def available_case_glm(
         p_values[key] = p
 
     report = _report(Y, X, C, present, tested, triu, N, min_coverage, reasons)
+    if block_report is not None:
+        report["block_report"] = block_report
     return p_values, raw, report
 
 

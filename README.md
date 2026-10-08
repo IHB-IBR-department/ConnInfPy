@@ -198,7 +198,7 @@ Pass `method=` to `analyze()` (or to the advanced pipelines):
 | `"tstat"` | Per-edge $t$, max-statistic FWER | — |
 | `"tfnbs"` | Threshold-free network-based statistic | `e`, `h`, `n`, `start_thres` |
 | `"nbs"` | Classical NBS with a fixed threshold | `threshold`, `nbs_stat` |
-| `"cnbs"` | Constrained NBS (network-block aggregation) | `net_labels` |
+| `"cnbs"` | Constrained NBS (Noble & Scheinost, 2020): mean signed t per network block, a null per block, Bonferroni or BH across blocks; inference per block | `net_labels` |
 | `"ni_tfnbs"` | Network-informed TFNBS (soft block prior) | `net_labels` |
 | `"fbc_tfnbs"` | Functional-block-constrained TFNBS | `net_labels`, `min_cluster_size` |
 | `"bonferroni"` / `"bh_fdr"` | Parametric baselines, no permutation | — |

@@ -300,7 +300,9 @@ both accept:
 ``'tfnbs'``         Threshold-Free NBS (Baggio 2018)
 ``'nbs'``           Classical Network-Based Statistic (Zalesky 2010); supply
                     ``threshold=2.0`` and ``nbs_stat='extent'`` or ``'intensity'``
-``'cnbs'``          Constrained NBS (Noble & Scheinost 2020); supply ``net_labels=``
+``'cnbs'``          Constrained NBS (Noble & Scheinost 2020): mean signed t per
+                    block, one null per block, Bonferroni (or ``cnbs_correction='bh'``)
+                    across blocks; supply ``net_labels=``; inference per block
 ``'ni_tfnbs'``      Network-Informed TFNBS (this work); soft block-density prior;
                     supply ``net_labels=``
 ``'fbc_tfnbs'``     Functional-Block-Clustering TFNBS (this work); hard block
