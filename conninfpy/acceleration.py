@@ -280,7 +280,8 @@ def fit_gamma_tail(
     Compute p-values with a gamma (Pearson type III) tail where permutations are too few.
 
     Fits a gamma distribution to the null distribution by the method of
-    moments (first three moments). As in :func:`fit_gpd_tail`, the fitted
+    moments (first three moments); a null that is not right-skewed cannot be
+    fitted and keeps its permutation p-values. As in :func:`fit_gpd_tail`, the fitted
     value replaces the permutation p-value only for statistics reached by
     fewer than ``min_exceedances`` null maxima. Simpler than the GPD, but
     still an approximation to the finite-permutation tail.
@@ -311,8 +312,10 @@ def fit_gamma_tail(
     var = np.var(null_dist, ddof=1)
     skew_val = float(stats.skew(null_dist))
 
-    if var <= 0 or abs(skew_val) < 1e-10:
-        # Can't fit gamma, keep the permutation p-values
+    if var <= 0 or skew_val < 1e-10:
+        # A gamma with positive scale is always right-skewed (skewness
+        # 2 / sqrt(a) > 0): it cannot represent a symmetric or left-skewed
+        # null, so keep the permutation p-values.
         return p_empirical
 
     # Gamma parameters from moments

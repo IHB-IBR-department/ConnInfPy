@@ -189,6 +189,15 @@ class TestTailOnlyWherePermutationsAreTooFew(unittest.TestCase):
             self.assertGreaterEqual(used, 18, f"shape {shape}: GPD used in {used}/20")
             npt.assert_allclose(np.median(ratios, axis=0), 1.0, atol=0.3, err_msg=f"shape {shape}")
 
+    def test_gamma_keeps_permutation_p_values_for_left_skewed_null(self):
+        # Regression: skewness was squared, so a left-skewed null was fitted
+        # with a right-skewed gamma.
+        rng = np.random.RandomState(3)
+        null = -rng.exponential(size=2000)            # skewness -2
+        obs = np.array([null.max() + 0.01, np.quantile(null, 0.999)])
+        count = np.sum(obs[:, None] <= null[None, :], axis=1)
+        npt.assert_array_equal(fit_gamma_tail(null, obs), (count + 1.0) / (len(null) + 1.0))
+
     def test_p_values_monotone_across_the_switch(self):
         grid = np.linspace(np.quantile(self.null, 0.99), self.null.max() * 1.2, 200)
         for fit in (fit_gpd_tail, fit_gamma_tail):
