@@ -1066,6 +1066,34 @@ class TestPairedGLMWrapper(unittest.TestCase):
             )
 
 
+class TestPairedGLMOptionsWithoutConfounds(unittest.TestCase):
+    """GLM-only options on the no-confound route (compute_p_val takes no **kwargs)."""
+
+    def setUp(self):
+        rng = np.random.default_rng(0)
+        def sym():
+            a = rng.normal(size=(12, 6, 6))
+            a = (a + a.transpose(0, 2, 1)) / 2
+            for s in a:
+                np.fill_diagonal(s, 0)
+            return a
+        self.A, self.B = sym(), sym()
+
+    def test_tstat_and_auto_scheme_are_the_paired_test(self):
+        kw = dict(method="tstat", n_permutations=19, use_mp=False, rng=1)
+        ref = compute_p_val_paired_glm(self.A, self.B, **kw)
+        r = compute_p_val_paired_glm(self.A, self.B, stat_type="tstat", scheme="auto", **kw)
+        np.testing.assert_array_equal(r["positive"], ref["positive"])
+
+    def test_beta_runs_the_one_sample_glm_and_permutation_is_rejected(self):
+        r = compute_p_val_paired_glm(self.A, self.B, stat_type="beta", method="tstat",
+                                     n_permutations=19, use_mp=False, rng=1)
+        self.assertEqual(r.stat_type, "beta")
+        with self.assertRaisesRegex(ValueError, "sign-flip"):
+            compute_p_val_paired_glm(self.A, self.B, scheme="permutation", method="tstat",
+                                     n_permutations=19, use_mp=False)
+
+
 if __name__ == "__main__":
     unittest.main()
 
