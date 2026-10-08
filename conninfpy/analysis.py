@@ -306,9 +306,10 @@ def analyze(
           (or ``(n_subjects, 1)``), e.g. ``age`` or a 0/1 group dummy.
           ``analyze()`` returns one :class:`AnalyzeResult`.
         * **Several predictors** — a dict ``{name: vector}`` (e.g.
-          ``{'age': age, 'sex': sex}``). Each predictor is tested under a
-          shared nuisance model (intercept + ``confounds`` + the other
-          predictors) in one Freedman–Lane permutation pass, via
+          ``{'age': age, 'sex': sex}``). Each predictor is tested adjusted
+          for the intercept, ``confounds`` and the other predictors,
+          against its own Freedman–Lane null, with permutations shared
+          across predictors, via
           :func:`~conninfpy.compute_p_val_glm_multi`. ``analyze()`` then
           returns a ``dict`` mapping each name to its own
           :class:`AnalyzeResult`.
@@ -724,7 +725,7 @@ def analyze(
             )
 
     if multi_mode:
-        # Several predictors under a shared nuisance model in one pass.
+        # Several predictors in one design, each against its own null.
         # Build X = [intercept, confounds(+site dummies), *interest cols]
         # and a unit contrast per predictor. ComBat strategies already ran
         # above with preserve=confounds, excluding *all* tested columns.

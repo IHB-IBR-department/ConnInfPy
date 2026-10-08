@@ -1035,8 +1035,7 @@ def compute_p_val_glm(
 # =============================================================================
 
 def _multi_contrast_perm_task(
-    Y_hat_reduced: npt.NDArray[np.float64],
-    residuals_reduced: npt.NDArray[np.float64],
+    nulls: Tuple[Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], str], ...],
     X: npt.NDArray[np.float64],
     contrast_names: Tuple[str, ...],
     contrast_arrays: Tuple[npt.NDArray[np.float64], ...],
@@ -1049,20 +1048,20 @@ def _multi_contrast_perm_task(
     enhance_kwargs: Dict[str, Any],
     seed: Optional[int] = None,
     strata_codes: Optional[npt.NDArray[np.int_]] = None,
-    scheme: str = "permutation",
 ) -> Dict[str, Dict[str, np.float64]]:
-    """Single Freedman-Lane permutation, evaluated against multiple contrasts.
+    """One Freedman-Lane permutation, evaluated for every contrast.
 
-    Permutes residuals once (within-stratum when ``strata_codes`` is
-    provided), fits the full model once, then for each contrast extracts
-    the per-edge statistic, optionally enhances, and records max-stats.
+    ``nulls[k]`` is contrast k's reduced-model fit, residuals and resampling
+    scheme. Each contrast restarts the generator from ``seed``, so all
+    contrasts see the same permutation (or sign flips) and each result equals
+    a single-contrast :func:`compute_p_val_glm` run with the same seed.
     Returns a nested dict ``{contrast_name: {tail: max_stat}}``.
     """
-    rng = np.random.RandomState(seed)
-    Y_perm = Y_hat_reduced + _shuffle_residuals(residuals_reduced, rng, scheme, strata_codes)
-
     out: Dict[str, Dict[str, np.float64]] = {}
-    for name, contrast in zip(contrast_names, contrast_arrays):
+    for name, contrast, (Y_hat_reduced, residuals_reduced, scheme) in zip(
+            contrast_names, contrast_arrays, nulls):
+        rng = np.random.RandomState(seed)
+        Y_perm = Y_hat_reduced + _shuffle_residuals(residuals_reduced, rng, scheme, strata_codes)
         stat_dict = compute_glm_stat(
             Y_perm, X, contrast,
             stat_type=stat_type,
@@ -1107,15 +1106,21 @@ def compute_p_val_glm_multi(
     min_coverage: float = 0.8,
     scheme: str = "auto",
 ) -> Dict[str, InferenceResult]:
-    """Run several contrasts under a shared nuisance model in one perm pass.
+    """Run several contrasts of one design in a single permutation pass.
 
-    For studies with multiple contrasts of interest under the same nuisance
-    structure (e.g. testing age, sex, and motion separately while using
-    the others as covariates), the Freedman-Lane reduced model and residual
-    permutations are shared across contrasts. The current implementation
-    still recomputes contrast-specific GLM statistics for each contrast, so
-    the speedup is amortized rather than a full K-fold reuse of one fitted
-    model.
+    For studies with several predictors of interest in one model (e.g.
+    testing age, sex and motion, each adjusted for the others), every
+    contrast is tested against its own Freedman-Lane null: the reduced model
+    ``X null(c)`` keeps the other predictors as nuisance, so a real effect of
+    one predictor stays in the fitted part when another is tested. The
+    permutations are shared (one seed per permutation, the same draw for
+    every contrast), so each result equals :func:`compute_p_val_glm` for that
+    contrast with the same ``rng``; the pass shares the design
+    pseudoinverse and the worker pool.
+
+    Contrasts are corrected separately (one family per contrast name, and
+    per ``(e, h)`` cell); selecting the most significant contrast needs an
+    extra correction.
 
     Parameters
     ----------
@@ -1131,10 +1136,14 @@ def compute_p_val_glm_multi(
         F-stat / multi-row contrasts are not supported here — use
         :func:`compute_p_val_glm` for those.
     nuisance_contrast : ndarray, optional
-        Explicit specification of the *combined* set of regressors of
-        interest. The reduced model excludes any column touched by
-        ``nuisance_contrast``. Defaults to the union of ``contrasts.values()``
-        (a column is "of interest" if any contrast is non-zero on it).
+        Request a *joint* null instead: one reduced model, shared by all
+        contrasts, that excludes every column touched by
+        ``nuisance_contrast``. The permuted data then carry none of those
+        columns' effects (the null is "all of them are zero"), not the null
+        of each coefficient; with a real effect on another excluded column
+        this is conservative (raw beta, 1,000 simulated datasets: FWER
+        0.017-0.025 vs 0.050-0.060 with the default). Default: None
+        (per-contrast nulls).
     stat_type : ``'tstat'`` or ``'beta'``
         F-stat is unsupported here.
     method, two_tailed, acceleration, n_permutations, use_mp, rng,
@@ -1256,13 +1265,9 @@ def compute_p_val_glm_multi(
     for name, c in zip(contrast_names, contrast_arrays):
         _degenerate.raise_if_infinite(_infinite_edges(Y, X, c, stat_type_str))
 
-    # ---- Reduced model (shared) ----
+    # ---- Reduced models: one per contrast (X null(c)), or a shared joint null ----
     if nuisance_contrast is None:
-        # Default: column is "of interest" if ANY contrast is non-zero on it.
-        union = np.zeros(p, dtype=np.float64)
-        for c in contrast_arrays:
-            union = np.where(c != 0, 1.0, union)
-        reduced_marker = union  # 1 where of interest → exclude from reduced model
+        reduced_models = [_compute_reduced_model(X, c) for c in contrast_arrays]
     else:
         reduced_marker = np.asarray(nuisance_contrast, dtype=np.float64)
         if reduced_marker.ndim == 1 and reduced_marker.shape[0] != p:
@@ -1270,13 +1275,10 @@ def compute_p_val_glm_multi(
                 f"nuisance_contrast length {reduced_marker.shape[0]} does not "
                 f"match design width {p}."
             )
-
-    # The marker names the columns of interest (non-zero in any row); the
-    # shared null model spans the other columns, so turn it into one unit
-    # contrast row per marked column before taking X null(C).
-    marked = np.flatnonzero(np.any(np.atleast_2d(reduced_marker) != 0, axis=0))
-    X_reduced = _compute_reduced_model(X, np.eye(p)[marked])
-    scheme_used = _resolve_scheme(X, X_reduced, scheme)
+        # the marker names the columns of interest (non-zero in any row);
+        # the joint null spans the other columns
+        marked = np.flatnonzero(np.any(np.atleast_2d(reduced_marker) != 0, axis=0))
+        reduced_models = [_compute_reduced_model(X, np.eye(p)[marked])] * len(contrast_arrays)
     X_pinv, XtX_inv_diag, XtX_inv = _precompute_ols(X)
 
     # ---- Empirical stats per contrast ----
@@ -1295,11 +1297,16 @@ def compute_p_val_glm_multi(
             emp = enhance_func(emp, **enhance_kwargs)
         emp_dicts[name] = emp
 
-    # ---- Fixed-residuals reduced fit (shared) ----
+    # ---- Fixed-residuals reduced fits (one per distinct reduced model) ----
     Y_flat = Y.reshape(n_subjects, -1)
-    Y_hat_reduced_flat = _reduced_fit(X_reduced, Y_flat)
-    Y_hat_reduced = Y_hat_reduced_flat.reshape(n_subjects, N, N)
-    residuals_reduced = Y - Y_hat_reduced
+    nulls = []
+    fitted: Dict[int, Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], str]] = {}
+    for X_reduced in reduced_models:
+        if id(X_reduced) not in fitted:
+            Y_hat_reduced = _reduced_fit(X_reduced, Y_flat).reshape(n_subjects, N, N)
+            fitted[id(X_reduced)] = (Y_hat_reduced, Y - Y_hat_reduced,
+                                     _resolve_scheme(X, X_reduced, scheme))
+        nulls.append(fitted[id(X_reduced)])
 
     reference_shape = (N, N)
 
@@ -1319,8 +1326,7 @@ def compute_p_val_glm_multi(
 
     task_func = partial(
         _multi_contrast_perm_task,
-        Y_hat_reduced,
-        residuals_reduced,
+        tuple(nulls),
         X,
         tuple(contrast_names),
         tuple(contrast_arrays),
@@ -1332,7 +1338,6 @@ def compute_p_val_glm_multi(
         enhance_func,
         enhance_kwargs,
         strata_codes=strata_codes,
-        scheme=scheme_used,
     )
 
     _use_mp = use_mp and not _is_worker_process()

@@ -162,14 +162,16 @@ test **several predictors at once**, pass a dict — see
 Several predictors in one pass
 ------------------------------
 
-To test several predictors **separately** under a shared nuisance model — e.g.
-``age``, ``sex``, and ``mean_fd`` each as an effect of interest while the
-others are controlled — pass ``interest`` as a **dict** ``{name: vector}``.
-``analyze()`` builds one design matrix, shares the Freedman–Lane reduced-model
-fit across predictors (:func:`conninfpy.compute_p_val_glm_multi`), and returns
-a **dict** mapping each name to its own :class:`~conninfpy.InferenceResult`, at
-approximately the cost of a *single* inference call rather than one per
-predictor.
+To test several predictors **separately** in one design — e.g. ``age``,
+``sex``, and ``mean_fd`` each as an effect of interest while the others are
+controlled — pass ``interest`` as a **dict** ``{name: vector}``. ``analyze()``
+builds one design matrix, tests each predictor against its own Freedman–Lane
+null with permutations shared across predictors
+(:func:`conninfpy.compute_p_val_glm_multi`), and returns a **dict** mapping
+each name to its own :class:`~conninfpy.InferenceResult`. Each result equals a
+separate single-predictor run with the same seed; the cost still grows with
+the number of predictors. Each predictor is its own correction family: picking
+the most significant one afterwards needs an extra correction.
 
 .. code-block:: python
 
