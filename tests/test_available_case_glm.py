@@ -4,9 +4,8 @@ missing values.
 
 Calibration was checked separately (1,000 null datasets, 36 subjects at 3
 sites, ComBat + site dummies, within-site permutation, 30 % of subjects
-missing one region): FWER 0.051-0.063, matching the same pipeline on the
-complete data (0.054-0.059) — the small excess is Freedman-Lane's
-approximation in this small design, not the missing-data handling.
+missing one region): FWER 0.051-0.063, every 95 % interval including 0.05,
+as for the same pipeline on the complete data (0.054-0.059).
 """
 
 import unittest
