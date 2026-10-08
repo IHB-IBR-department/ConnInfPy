@@ -123,11 +123,13 @@ datasets per cell, n ∈ {10, 30, 50, 100}, 11 methods = 44 cells).
 | Family | FWER, pooled | Range over cells | Simultaneous test |
 |---|---|---|---|
 | One direction, α per tail | 0.047 | 0.025–0.065 | smallest exact binomial p = 0.021; Bonferroni over 88 tail-cells: 1.0 → pass |
-| Two-sided, α/2 per tail | 0.047 | 0.027–0.061 | smallest p = 0.067; Bonferroni over 44 cells: 1.0 → pass |
+| Two-sided, α/2 per tail | 0.046 | 0.027–0.061 | smallest p = 0.067; Bonferroni over 44 cells: 1.0 → pass |
 | Either tail at α (no correction) | 0.092 | 0.059–0.109 | expected ≈ 2α — not a valid two-sided procedure |
 
 One of the 88 directional intervals lies above 0.05 (FBC-TFNBS, n = 30,
 negative tail, 0.065 [0.051, 0.082]) — about two are expected by chance.
+cNBS rows are the published statistic (2026-10-08, see "cNBS" below; 10
+blocks, Bonferroni across blocks): 0.041–0.053 per tail.
 
 **TPR at Δr = 0.125** (`tables/tpr_matrix_dr0.125.csv`; replaces
 `tab:tpr-matrix`, columns in the manuscript's order; NBS τ = 2, TFNBS
@@ -135,7 +137,7 @@ E = 0.4, H = 3; max-t is the permutation max-statistic test).
 
 | Method | wm-d | bm-d | hub | rich | scat | chain | grad | p-bip | xb-ch | frag |
 |---|---|---|---|---|---|---|---|---|---|---|
-| cNBS | 0.99 | 0.98 | 0.08 | 0.04 | 0.04 | 0.01 | 0.75 | 0.67 | 0.01 | 0.99 |
+| cNBS | 1.00 | 1.00 | 0.02 | 0.01 | 0.01 | 0.005 | 0.58 | 0.09 | 0.01 | 0.43 |
 | NBS-int | 0.76 | 0.69 | 0.33 | 0.47 | 0.53 | 0.21 | 0.11 | 0.29 | 0.21 | 0.34 |
 | NBS-ext | 0.73 | 0.69 | 0.24 | 0.27 | 0.35 | 0.14 | 0.07 | 0.19 | 0.16 | 0.21 |
 | FBC-TFNBS | 0.56 | 0.48 | 0.24 | 0.20 | 0.16 | 0.08 | 0.09 | 0.36 | 0.18 | 0.47 |
@@ -143,7 +145,11 @@ E = 0.4, H = 3; max-t is the permutation max-statistic test).
 | NI-TFNBS | 0.37 | 0.27 | 0.16 | 0.16 | 0.15 | 0.13 | 0.04 | 0.19 | 0.13 | 0.30 |
 | max-t | 0.17 | 0.10 | 0.11 | 0.12 | 0.12 | 0.11 | 0.02 | 0.10 | 0.10 | 0.16 |
 
-The pattern of the old table holds (it was run at the same realised effect).
+The pattern of the old table holds (it was run at the same realised effect),
+except for cNBS, now the published statistic: the old positive-only block
+mean gave 0.99 / 0.98 / 0.08 / 0.04 / 0.04 / 0.01 / 0.75 / 0.67 / 0.01 /
+0.99. Averaging over every edge of a block dilutes effects that cover part
+of it (partial bipartite 0.67 → 0.09, fragmented 0.99 → 0.43).
 Newly available: NBS at τ = 3 (hub 0.40, rich 0.43, frag 0.47, chain 0.07)
 and BH-FDR (0.04–0.46).
 
@@ -161,14 +167,19 @@ edges counted as false).
 | BH-FDR | 0.047 | 0.048 | 0.86 |
 | NBS-extent, τ = 3 | 0.049 | 0.051 | 0.87 |
 | NBS-intensity, τ = 3 | 0.049 | 0.051 | 0.87 |
+| cNBS | 0.177 | 0.186 | 0.45 |
 | NBS-extent, τ = 2 | 0.261 | 0.263 | 0.57 |
-| cNBS | 0.405 | 0.421 | 0.60 |
 | NBS-intensity, τ = 2 | 0.419 | 0.423 | 0.90 |
 
 Old table: t-stat 0.002, NI 0.005, FBC 0.023, TFNBS 0.026, NBS-ext 0.290,
-cNBS 0.422, NBS-int 0.427 — same ranking. The leak edges matter mainly for
-cNBS, whose block decision spreads to them (partial bipartite: 0.63 vs 0.72
-strict).
+cNBS 0.422, NBS-int 0.427 — same ranking except cNBS, which with the
+published statistic (0.177; previously 0.405 in this run) moves above NBS at
+τ = 2. Its FDP is concentrated where a block is only partly affected
+(fragmented within-module 0.62, partial bipartite 0.31, rich club 0.26) and
+is ≤ 0.04 for whole-block effects; a cNBS decision is about the block's mean,
+so edge-level FDP is not its own error criterion. The leak edges matter
+mainly for cNBS, whose block decision spreads to them (partial bipartite:
+0.31 vs 0.33 strict; fragmented 0.62 vs 0.69).
 
 **Analytical check.** BH controls FDR at π₀·α (equality under independence,
 ≤ under positive dependence), where π₀ is the fraction of null edges. Here
@@ -202,7 +213,7 @@ E ≈ H/10, (0.6, 6) … (0.9, 9), have about the same FDP and mean TPR
 
 | Mean over topologies | Δr | correct (4 blocks) | 7 blocks | 2 blocks |
 |---|---|---|---|---|
-| cNBS FDP | 0.125 / 0.25 | 0.14 / 0.43 | 0.28 / 0.67 | 0.32 / 0.66 |
+| cNBS FDP | 0.125 / 0.25 | 0.07 / 0.13 | 0.11 / 0.23 | 0.24 / 0.31 |
 | NI-TFNBS FDP | 0.125 / 0.25 | 0.012 / 0.004 | 0.008 / 0.003 | 0.020 / 0.011 |
 | FBC-TFNBS FDP | 0.125 / 0.25 | 0.066 / 0.027 | 0.072 / 0.037 | 0.074 / 0.043 |
 | FBC-TFNBS TPR | 0.125 / 0.25 | 0.25 / 0.83 | 0.21 / 0.66 | 0.32 / 0.90 |
@@ -268,6 +279,43 @@ The all-edge Spearman is close to 1 mostly because ~90% of edges tie at
 p = 1 in every cell; the below-ceiling Spearman and the Jaccard describe
 the agreement better.
 
+## cNBS: the published statistic (2026-10-08)
+
+`method='cnbs'` now implements Noble & Scheinost (2020) as in the authors'
+code (NBS_benchmarking, `get_constrained_stats.m`, `NBSstats_smn.m`): the
+signed t is averaged over **every** edge of each within- and between-network
+block, each block is tested against its own permutation null, and the block
+p-values are Bonferroni-corrected across blocks (`cnbs_correction='bh'` for
+FDR). Previously the package averaged only the strictly positive values of
+one tail (a changing denominator) against a max-over-blocks null — not the
+published statistic. The inference unit is the block; every edge of a
+significant block carries the block's p-value, and `result.block_report`
+lists the blocks. With K blocks the smallest attainable corrected p is
+K/(B+1).
+
+All cNBS results were recomputed with the new statistic (other methods
+untouched; runs resumed with only the cNBS rows removed):
+
+| Result | Old cNBS | New cNBS |
+|---|---|---|
+| Null FWER per tail (n = 10–100, 10 blocks) | — | 0.041–0.053 (every 95% interval includes 0.05) |
+| TPR at Δr = 0.125, whole-block topologies (wm-d / bm-d) | 0.99 / 0.98 | 1.00 / 1.00 |
+| TPR, partly affected blocks (grad / p-bip / frag) | 0.75 / 0.67 / 0.99 | 0.58 / 0.09 / 0.43 |
+| Mean FDP at Δr = 0.25 (strict) | 0.405 (0.421) | 0.177 (0.186) |
+| Prior misspecification FDP, correct / 7 / 2 blocks (Δr 0.125 / 0.25) | 0.14/0.43, 0.28/0.67, 0.32/0.66 | 0.07/0.13, 0.11/0.23, 0.24/0.31 |
+| ABIDE age map (`tab:method-spread`) | 440 edges | 195 (all positive) |
+| Open-Close selectors, IHB / Beijing (α = 0.05, EO > EC) | — | 4,572 / 3,976 edges (whole blocks) |
+| Open-Close retest, Beijing (1,000 permutations) | — | 924 + 1,979 |
+| ML transfer AUC, α = 0.05, IHB→Beijing / Beijing→IHB | 0.935 / 0.788 | 0.931 / 0.772 |
+
+At α ≤ 0.005 the Open-Close cNBS selects nothing: 27 blocks and 5,000
+permutations give a smallest Bonferroni p of 27/5,001 = 0.0054. The ML table
+reports NaN there; the random/top-k baselines matched to cNBS's edge count
+changed with it (all other selectors are identical). `delta_auc.csv`,
+`best_cells.csv` and `average_cross_site_auc.csv` come from
+`ml/openclose_ml_transfer_from_pvals.py` (not in the manuscript) and were
+not regenerated.
+
 ## Manuscript text to update
 
 Simulation section (`sec:evaluation`):
@@ -294,7 +342,8 @@ Simulation section (`sec:evaluation`):
 4. **Tables.** Replace `tab:tpr-matrix` and `tab:fdr-ranking` values with
    the tables above. Consider adding NBS τ = 3 and BH-FDR rows; the heatmap
    already shows all 11 variants. "t-stat" is the permutation max-t test.
-5. **FDP narrative (l. 544–546, bullets l. 508–512).** cNBS 0.422 → 0.405.
+5. **FDP narrative (l. 544–546, bullets l. 508–512).** cNBS 0.422 → 0.177
+   (published statistic; see "cNBS" above).
    The NBS-intensity absorption of null edges is a τ = 2 property: at τ = 3,
    NBS has FDP 0.05 with TPR 0.87 at Δr = 0.25.
 6. **(E,H) (l. 570).** "36 tested combinations" → 176. "(0.4, 3.0) was the
@@ -321,7 +370,8 @@ ABIDE section:
 9. **Age model (l. 291).** "adjusting for sex, head motion, and diagnosis" →
    "adjusting for sex and head motion". Age and diagnosis are separate
    analyses. The reported 170 + 86 edges and the seven-method comparison use
-   this model and are unchanged.
+   this model and are unchanged, except cNBS (440 → 195 with the published
+   statistic).
 10. **Diagnosis, ComBat-only arm (l. 300, `tab:abide-dx`).** 177 (53 + 124) →
     315 (53 + 262). The other three arms are unchanged. The count is
     fragile: 138 of the 262 negative edges form one TFNBS cluster with a
@@ -338,6 +388,14 @@ ABIDE section:
 12. **Methods.** State that all empirical p-values are exact permutation
     p-values (5,000 permutations, no tail approximation) and that every
     TFNBS-family operator uses (E, H, n) = (0.4, 3, 10).
+13. **cNBS (methods and every cNBS number).** Describe cNBS as published:
+    mean signed t over all edges of each within/between-network block,
+    per-block permutation nulls, Bonferroni across blocks; inference per
+    block (an edge in a significant block is not itself declared). Replace
+    the cNBS rows of `tab:tpr-matrix`, `tab:fdr-ranking`, the robustness
+    text and `tab:method-spread` with the values above. Its edge-level FDP is
+    high only where blocks are partly affected — a property of block-level
+    inference, not an error-control failure.
 
 ## Issues still open
 
