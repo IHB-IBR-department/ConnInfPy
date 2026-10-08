@@ -957,6 +957,8 @@ def compute_p_val(
     min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
     normalization: str = "sqrt",
     strata: Optional[npt.NDArray[Any]] = None,
+    missing: str = "raise",
+    min_coverage: float = 0.8,
     **kwargs
 ) -> InferenceResult:
     """
@@ -1058,6 +1060,18 @@ def compute_p_val(
         across sites. Paired / one-sample sign-flip paths are stratum-invariant
         by construction; ``strata`` is silently accepted but has no effect
         there.
+    missing : {'raise', 'available_case'}, default='raise'
+        Missing connectivity values (NaN). ``'raise'`` stops with a report
+        of the affected subjects and regions. ``'available_case'`` tests
+        each edge with the subjects who have it (paired: complete pairs);
+        permutations move whole subjects, so the test stays exact given
+        the missingness. Edges kept by fewer than ``min_coverage`` of a
+        group's subjects (or by fewer than 3) are not tested: p = NaN.
+        Infinite values are always rejected. The coverage report is in
+        ``result.missing_report``.
+    min_coverage : float, default=0.8
+        Minimum share of each group's subjects (or of the pairs) an edge
+        needs to be tested under ``missing='available_case'``.
     **kwargs
         Additional keyword arguments (for future extensions).
 
@@ -1103,9 +1117,12 @@ def compute_p_val(
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
 
-    group1 = check_connectivity(group1, "group1")
+    if missing not in ("raise", "available_case"):
+        raise ValueError(f"missing must be 'raise' or 'available_case'; got {missing!r}.")
+    allow_missing = missing == "available_case"
+    group1 = check_connectivity(group1, "group1", allow_missing=allow_missing)
     if group2 is not None:
-        group2 = check_connectivity(group2, "group2")
+        group2 = check_connectivity(group2, "group2", allow_missing=allow_missing)
         if group2.shape[1:] != group1.shape[1:]:
             raise ValueError(
                 f"group1 and group2 must have the same (N, N) shape; got "
@@ -1129,6 +1146,53 @@ def compute_p_val(
         )
 
     _t0 = time.perf_counter()
+
+    # Resolve enhancement wrapper (None for raw t-stat)
+    enhance_func = _ENHANCE_MAP[method_enum]
+
+    # Build enhancement kwargs once (method-specific)
+    enhance_kwargs: Dict[str, Any] = {}
+    if method_enum == StatMethod.NBS:
+        enhance_kwargs = {"threshold": threshold, "nbs_stat": nbs_stat}
+    elif method_enum in {StatMethod.TFNBS, StatMethod.NI_TFNBS, StatMethod.FBC_TFNBS}:
+        enhance_kwargs = {"e": e, "h": h, "n": n, "start_thres": start_thres}
+        if method_enum in CONSTRAINED_METHODS:
+            enhance_kwargs["net_labels"] = net_labels
+        if method_enum == StatMethod.FBC_TFNBS:
+            enhance_kwargs["min_cluster_size"] = min_cluster_size
+        if method_enum == StatMethod.NI_TFNBS:
+            enhance_kwargs["normalization"] = normalization
+    elif method_enum == StatMethod.CNBS:
+        enhance_kwargs = {"net_labels": net_labels}
+
+    # Missing values (NaN), allowed only under missing='available_case'
+    if allow_missing and (np.isnan(group1).any() or (group2 is not None and np.isnan(group2).any())):
+        from ._available_case import available_case_p_val
+
+        if method_enum in PARAMETRIC_METHODS:
+            mode = f"parametric_{method_enum.value}"
+        elif method_enum == StatMethod.BH_FDR_PERM:
+            mode = "bh_fdr_perm"
+        else:
+            mode = "max"
+        p_ac, raw_t_ac, report = available_case_p_val(
+            group1, group2, test_type_str, mode, enhance_func, enhance_kwargs,
+            n_permutations=n_permutations, random_state=random_state,
+            use_mp=use_mp, n_processes=n_processes, verbose=verbose,
+            strata=strata, acceleration=acceleration if mode == "max" else None,
+            min_coverage=min_coverage,
+        )
+        e_grid, h_grid = _grid_from_kwargs(method_enum, enhance_kwargs)
+        return InferenceResult(
+            p_ac["positive"], p_ac["negative"],
+            method=method_str,
+            n_permutations=0 if mode.startswith("parametric_") else n_permutations,
+            acceleration=acceleration if mode == "max" else None,
+            wall_time_s=time.perf_counter() - _t0,
+            stat_positive=raw_t_ac["positive"], stat_negative=raw_t_ac["negative"],
+            stat_type="tstat", strata_provided=strata is not None,
+            e_grid=e_grid, h_grid=h_grid, missing_report=report,
+        )
 
     # Parametric methods: compute p-values directly from t-distribution
     if method_enum in PARAMETRIC_METHODS:
@@ -1165,24 +1229,6 @@ def compute_p_val(
             stat_type="tstat",
             strata_provided=strata is not None,
         )
-
-    # Resolve enhancement wrapper (None for raw t-stat)
-    enhance_func = _ENHANCE_MAP[method_enum]
-
-    # Build enhancement kwargs once (method-specific)
-    enhance_kwargs: Dict[str, Any] = {}
-    if method_enum == StatMethod.NBS:
-        enhance_kwargs = {"threshold": threshold, "nbs_stat": nbs_stat}
-    elif method_enum in {StatMethod.TFNBS, StatMethod.NI_TFNBS, StatMethod.FBC_TFNBS}:
-        enhance_kwargs = {"e": e, "h": h, "n": n, "start_thres": start_thres}
-        if method_enum in CONSTRAINED_METHODS:
-            enhance_kwargs["net_labels"] = net_labels
-        if method_enum == StatMethod.FBC_TFNBS:
-            enhance_kwargs["min_cluster_size"] = min_cluster_size
-        if method_enum == StatMethod.NI_TFNBS:
-            enhance_kwargs["normalization"] = normalization
-    elif method_enum == StatMethod.CNBS:
-        enhance_kwargs = {"net_labels": net_labels}
 
     # Compute observed t-stat once, then apply enhancement (if any)
     if test_type_str == TestType.PAIRED.value:
