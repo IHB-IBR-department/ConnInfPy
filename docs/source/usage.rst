@@ -31,8 +31,11 @@ Helper modules:
 Input conventions
 -----------------
 
-- Connectivity tensors: shape ``(n_subjects, N, N)``. Directed (asymmetric)
-  connectivity is supported. The diagonal is zeroed automatically on a copy —
+- Connectivity tensors: shape ``(n_subjects, N, N)``, symmetric. Directed
+  (asymmetric) connectivity is rejected: the pipelines, ComBat, the
+  parametric baselines and the network summaries treat edges as undirected,
+  so it would be tested inconsistently. Symmetrise it or analyse each
+  direction separately. The diagonal is zeroed automatically on a copy —
   your arrays are never modified.
 - :func:`conninfpy.analyze` takes ``input='r'`` (correlations; Fisher r→z is
   applied once) or ``input='z'`` (already transformed). Left as ``None`` it
