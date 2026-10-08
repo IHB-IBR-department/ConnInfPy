@@ -406,11 +406,15 @@ def _compute_reduced_model(
     contrast: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.float64]:
     """
-    Compute the reduced design matrix for Freedman-Lane permutation.
+    Reduced (null-hypothesis) design for Freedman-Lane permutation.
 
-    The reduced model contains all columns NOT targeted by the contrast.
-    For a 2D contrast matrix (F-test), a column is targeted if ANY row of
-    the contrast has a non-zero entry for it.
+    Under ``H0: C beta = 0`` the fitted means are ``X beta`` with ``beta`` in
+    the null space of ``C``, so the reduced design is ``X0 = X null(C)``
+    (Winkler et al. 2014). For contrasts that pick single columns this spans
+    the remaining columns, as before; for a general contrast such as
+    ``beta_x - beta_z`` it keeps the common effect ``beta_x = beta_z`` in the
+    null model, which deleting every touched column wrongly removed. When
+    ``C`` has full column rank (every column tested) ``X0`` has no columns.
 
     Parameters
     ----------
@@ -421,20 +425,69 @@ def _compute_reduced_model(
 
     Returns
     -------
-    X_reduced : ndarray of shape (n_subjects, p_reduced)
-        Reduced design matrix (columns not touched by the contrast).
+    X_reduced : ndarray of shape (n_subjects, p - rank(C))
+        Reduced design matrix (possibly with zero columns).
     """
-    contrast = np.asarray(contrast)
-    if contrast.ndim == 1:
-        keep_cols = np.where(contrast == 0)[0]
-    else:
-        # 2D: keep columns that are zero across ALL contrast rows
-        keep_cols = np.where(np.all(contrast == 0, axis=0))[0]
+    from scipy.linalg import null_space
 
-    if len(keep_cols) == 0:
-        # All columns targeted — reduced model is just intercept
-        return np.ones((X.shape[0], 1), dtype=np.float64)
-    return X[:, keep_cols]
+    C = np.atleast_2d(np.asarray(contrast, dtype=np.float64))
+    return X @ null_space(C)
+
+
+def _reduced_fit(
+    X_reduced: npt.NDArray[np.float64],
+    Y_flat: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    """Fitted values of the reduced model (zero when it has no columns)."""
+    if X_reduced.shape[1] == 0 or not np.any(X_reduced):
+        return np.zeros_like(Y_flat)
+    return X_reduced @ (np.linalg.pinv(X_reduced) @ Y_flat)
+
+
+_SCHEMES = ("auto", "permutation", "sign-flip")
+
+
+def _resolve_scheme(
+    X: npt.NDArray[np.float64],
+    X_reduced: npt.NDArray[np.float64],
+    scheme: str,
+) -> str:
+    """Row permutation or sign flipping of the reduced-model residuals.
+
+    ``'auto'`` uses sign flips when the full model contains the constant and
+    the null model does not — the tested effect then involves the mean (a
+    one-sample or paired-difference GLM), which no row permutation can
+    change. Sign flips assume symmetric errors; row permutations assume
+    exchangeable errors (Winkler et al. 2014).
+    """
+    if scheme not in _SCHEMES:
+        raise ValueError(f"scheme must be one of {_SCHEMES}; got {scheme!r}.")
+    if scheme != "auto":
+        return scheme
+    ones = np.ones(X.shape[0])
+
+    def spans_constant(A: npt.NDArray[np.float64]) -> bool:
+        if A.shape[1] == 0 or not np.any(A):
+            return False
+        r = ones - A @ (np.linalg.pinv(A) @ ones)
+        return bool(np.linalg.norm(r) < 1e-8 * np.sqrt(ones.size))
+
+    return "sign-flip" if spans_constant(X) and not spans_constant(X_reduced) else "permutation"
+
+
+def _shuffle_residuals(
+    residuals: npt.NDArray[np.float64],
+    rng: np.random.RandomState,
+    scheme: str,
+    strata_codes: Optional[npt.NDArray[np.int_]],
+) -> npt.NDArray[np.float64]:
+    """One Freedman-Lane draw: permuted (within strata) or sign-flipped residuals."""
+    n = residuals.shape[0]
+    if scheme == "sign-flip":
+        signs = rng.choice([1.0, -1.0], n)
+        return residuals * signs.reshape((n,) + (1,) * (residuals.ndim - 1))
+    perm_idx = rng.permutation(n) if strata_codes is None else _stratified_perm(strata_codes, rng)
+    return residuals[perm_idx]
 
 
 def _freedman_lane_permutation_task(
@@ -450,6 +503,7 @@ def _freedman_lane_permutation_task(
     enhance_func: Optional[Callable] = None,
     seed: Optional[int] = None,
     strata_codes: Optional[npt.NDArray[np.int_]] = None,
+    scheme: str = "permutation",
     **enhance_kwargs,
 ) -> Dict[str, np.float64]:
     """
@@ -488,12 +542,7 @@ def _freedman_lane_permutation_task(
         Maximum statistics per direction.
     """
     rng = np.random.RandomState(seed)
-    if strata_codes is None:
-        perm_idx = rng.permutation(residuals_reduced.shape[0])
-    else:
-        perm_idx = _stratified_perm(strata_codes, rng)
-    residuals_perm = residuals_reduced[perm_idx]
-    Y_perm = Y_hat_reduced + residuals_perm
+    Y_perm = Y_hat_reduced + _shuffle_residuals(residuals_reduced, rng, scheme, strata_codes)
 
     stat_dict = compute_glm_stat(
         Y_perm, X, contrast,
@@ -561,6 +610,7 @@ def compute_p_val_glm(
     strata: Optional[npt.NDArray[Any]] = None,
     missing: str = "raise",
     min_coverage: float = 0.8,
+    scheme: str = "auto",
 ) -> Union[InferenceResult, OmnibusInferenceResult]:
     """
     Compute p-values for connectivity data using GLM with Freedman-Lane permutation.
@@ -639,6 +689,14 @@ def compute_p_val_glm(
     min_coverage : float, default=0.8
         Minimum share of subjects an edge needs under
         ``missing='available_case'``.
+    scheme : {'auto', 'permutation', 'sign-flip'}, default='auto'
+        How the reduced-model residuals are resampled. ``'permutation'``
+        shuffles subjects (within ``strata``; exchangeable errors).
+        ``'sign-flip'`` flips their signs (symmetric errors; ``strata`` has
+        no effect). ``'auto'`` sign-flips when the tested effect involves
+        the mean — the full design contains the constant but the null model
+        does not, as in a one-sample or paired-difference GLM, where no row
+        permutation can change the tested mean — and permutes otherwise.
 
     Returns
     -------
@@ -770,6 +828,7 @@ def compute_p_val_glm(
             use_mp=use_mp, n_processes=n_processes, verbose=verbose,
             strata=strata, acceleration=acceleration, two_tailed=two_tailed,
             min_coverage=min_coverage,
+            scheme=_resolve_scheme(X, _compute_reduced_model(X, contrast_vec), scheme),
         )
         method_str = method.value if hasattr(method, "value") else str(method)
         if stat_type_str == GLMStatType.FSTAT.value:
@@ -809,10 +868,10 @@ def compute_p_val_glm(
 
     # ---- Freedman-Lane: compute reduced model ----
     X_reduced = _compute_reduced_model(X, contrast_vec)
-    X_red_pinv, _, _ = _precompute_ols(X_reduced)
+    scheme_used = _resolve_scheme(X, X_reduced, scheme)
 
     Y_flat = Y.reshape(n_subjects, -1)
-    Y_hat_reduced_flat = X_reduced @ (X_red_pinv @ Y_flat)
+    Y_hat_reduced_flat = _reduced_fit(X_reduced, Y_flat)
     Y_hat_reduced = Y_hat_reduced_flat.reshape(n_subjects, N, N)
     residuals_reduced = Y - Y_hat_reduced
 
@@ -846,6 +905,7 @@ def compute_p_val_glm(
         stat_type_str,
         enhance_func,
         strata_codes=strata_codes,
+        scheme=scheme_used,
         **enhance_kwargs,
     )
 
@@ -936,6 +996,7 @@ def _multi_contrast_perm_task(
     enhance_kwargs: Dict[str, Any],
     seed: Optional[int] = None,
     strata_codes: Optional[npt.NDArray[np.int_]] = None,
+    scheme: str = "permutation",
 ) -> Dict[str, Dict[str, np.float64]]:
     """Single Freedman-Lane permutation, evaluated against multiple contrasts.
 
@@ -945,11 +1006,7 @@ def _multi_contrast_perm_task(
     Returns a nested dict ``{contrast_name: {tail: max_stat}}``.
     """
     rng = np.random.RandomState(seed)
-    if strata_codes is None:
-        perm_idx = rng.permutation(residuals_reduced.shape[0])
-    else:
-        perm_idx = _stratified_perm(strata_codes, rng)
-    Y_perm = Y_hat_reduced + residuals_reduced[perm_idx]
+    Y_perm = Y_hat_reduced + _shuffle_residuals(residuals_reduced, rng, scheme, strata_codes)
 
     out: Dict[str, Dict[str, np.float64]] = {}
     for name, contrast in zip(contrast_names, contrast_arrays):
@@ -995,6 +1052,7 @@ def compute_p_val_glm_multi(
     strata: Optional[npt.NDArray[Any]] = None,
     missing: str = "raise",
     min_coverage: float = 0.8,
+    scheme: str = "auto",
 ) -> Dict[str, InferenceResult]:
     """Run several contrasts under a shared nuisance model in one perm pass.
 
@@ -1031,7 +1089,7 @@ def compute_p_val_glm_multi(
     start_thres, min_cluster_size, normalization
         Forwarded to the underlying GLM pipeline (see
         :func:`compute_p_val_glm`).
-    missing, min_coverage
+    missing, min_coverage, scheme
         See :func:`compute_p_val_glm`. With missing values and
         ``missing='available_case'``, each contrast is run separately with
         the same seed (so every contrast sees the same permutations) and
@@ -1066,7 +1124,7 @@ def compute_p_val_glm_multi(
                 threshold=threshold, nbs_stat=nbs_stat, e=e, h=h, n=n,
                 start_thres=start_thres, min_cluster_size=min_cluster_size,
                 normalization=normalization, strata=strata,
-                missing="available_case", min_coverage=min_coverage,
+                missing="available_case", min_coverage=min_coverage, scheme=scheme,
             )
             for name, c in contrasts.items()
         }
@@ -1156,8 +1214,12 @@ def compute_p_val_glm_multi(
                 f"match design width {p}."
             )
 
-    X_reduced = _compute_reduced_model(X, reduced_marker)
-    X_red_pinv, _, _ = _precompute_ols(X_reduced)
+    # The marker names the columns of interest (non-zero in any row); the
+    # shared null model spans the other columns, so turn it into one unit
+    # contrast row per marked column before taking X null(C).
+    marked = np.flatnonzero(np.any(np.atleast_2d(reduced_marker) != 0, axis=0))
+    X_reduced = _compute_reduced_model(X, np.eye(p)[marked])
+    scheme_used = _resolve_scheme(X, X_reduced, scheme)
     X_pinv, XtX_inv_diag, XtX_inv = _precompute_ols(X)
 
     # ---- Empirical stats per contrast ----
@@ -1178,7 +1240,7 @@ def compute_p_val_glm_multi(
 
     # ---- Fixed-residuals reduced fit (shared) ----
     Y_flat = Y.reshape(n_subjects, -1)
-    Y_hat_reduced_flat = X_reduced @ (X_red_pinv @ Y_flat)
+    Y_hat_reduced_flat = _reduced_fit(X_reduced, Y_flat)
     Y_hat_reduced = Y_hat_reduced_flat.reshape(n_subjects, N, N)
     residuals_reduced = Y - Y_hat_reduced
 
@@ -1213,6 +1275,7 @@ def compute_p_val_glm_multi(
         enhance_func,
         enhance_kwargs,
         strata_codes=strata_codes,
+        scheme=scheme_used,
     )
 
     _use_mp = use_mp and not _is_worker_process()
