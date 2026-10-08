@@ -61,6 +61,19 @@ class TestFisherRToZ(TestCase):
         self.assertEqual(z[0, 1], 5.0)
         self.assertEqual(z[1, 0], -5.0)
 
+    def test_clipping_is_monotone_and_keeps_nan(self):
+        """Regression: only values within np.isclose of ±1 were capped, so
+        r = 0.99998 gave z = 5.76 but the larger r = 0.99999 gave 5."""
+        r = np.array([0.9999, 0.99998, 0.99999, 1.0, np.nan, -0.99998])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            z = fisher_r_to_z(r)
+        finite = z[np.isfinite(z)]
+        self.assertTrue(np.all(np.diff(finite[:4]) >= 0))
+        np.testing.assert_allclose(z[1:4], 5.0)
+        self.assertEqual(z[5], -5.0)
+        self.assertTrue(np.isnan(z[4]))
+
     def test_out_of_range_raises(self):
         """Check: r outside [-1, 1] fails fast.
 

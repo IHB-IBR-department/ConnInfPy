@@ -37,14 +37,13 @@ def fisher_r_to_z(r: npt.NDArray[np.float64],
         Array of correlation coefficients with values in ``[-1, 1]``.
         Can be any shape (scalar, 1D, 2D, ...).
     handle_bounds : bool, optional
-        If True, replace infinite z-values (from ``r = ±1``) with finite
-        values. If False, allow infinities and raise a warning.
-        (default: True).
+        If True, clip z to ``[-max_z, max_z]`` (this also makes ``r = ±1``
+        finite). If False, keep the exact transform, with infinities at
+        ``r = ±1`` and a warning. (default: True).
     max_z : float
-        Replacement value for boundary inputs when ``handle_bounds=True``
-        (default: 5). Note: ``max_z`` replaces z at r = ±1 and their
-        ``np.isclose`` neighborhood; it does NOT clip other values —
-        near-boundary inputs outside that tolerance keep their true z.
+        Clipping bound when ``handle_bounds=True`` (default: 5, i.e.
+        ``|r| > tanh(5) ≈ 0.99991``). Every value beyond it is clipped, so
+        the transform stays monotone in ``r``.
 
     Returns
     -------
@@ -66,7 +65,10 @@ def fisher_r_to_z(r: npt.NDArray[np.float64],
     -----
     The transformation is :math:`z = \\operatorname{arctanh}(r)`. For
     :math:`r = \\pm 1`, :math:`z` approaches :math:`\\pm\\infty`. When
-    ``handle_bounds=True``, these are capped at ``±max_z``.
+    ``handle_bounds=True``, z is clipped at ``±max_z``. (Earlier versions
+    replaced only values within ``np.isclose`` of ±1, so r = 0.99998 gave
+    z = 5.76 while the larger r = 0.99999 gave 5.) Missing values (NaN)
+    stay NaN.
 
     Examples
     --------
@@ -83,15 +85,20 @@ def fisher_r_to_z(r: npt.NDArray[np.float64],
     with np.errstate(divide='ignore', invalid='ignore'):  # arctanh(±1): divide-by-zero → ±inf, handled below
         z = np.arctanh(r)
 
-    bounds_mask = np.isclose(r, 1.0) | np.isclose(r, -1.0)
-    if np.any(bounds_mask):
+    if handle_bounds:
+        over = np.abs(z) > max_z           # includes r = ±1; NaN compares False
+        if np.any(over):
+            warnings.warn(
+                f"Input contains r = ±1 or |r| > tanh({max_z:g}) = {np.tanh(max_z):.5f} "
+                f"({int(np.sum(over))} value(s)); z clipped at ±{max_z:g}.",
+                UserWarning
+            )
+            z = np.clip(z, -max_z, max_z)
+    elif np.any(np.isinf(z)):
         warnings.warn(
-            "Input contains r = ±1, resulting in infinite z-values. "
-            f"{'Capped at ±' + str(max_z) if handle_bounds else 'Left as infinity.'}",
+            "Input contains r = ±1, resulting in infinite z-values. Left as infinity.",
             UserWarning
         )
-        if handle_bounds:
-            z = np.where(bounds_mask, np.sign(r) * max_z, z)
 
     return z
 
