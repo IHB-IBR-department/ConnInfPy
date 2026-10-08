@@ -59,6 +59,7 @@ from ._engine import (  # shared permutation machinery (re-exported)
 )
 from ._progress import run_permutations
 from .results import InferenceResult, make_inference_result
+from . import _degenerate
 from ._prepare import check_connectivity
 from ._rng import RngLike, resolve_seed, warn_legacy_random_state
 
@@ -252,6 +253,20 @@ def _permutation_task_paired(
     return _extract_max_stats(perm_stat_dict, diffs[0].shape)
 
 
+def _check_paired_counts(group1, group2, test_type: str) -> None:
+    """Paired data must hold the same subjects in both conditions.
+
+    Without this check NumPy broadcasting pairs every subject of one array
+    with a single subject of the other (20 vs 1) and tests pseudo-pairs.
+    """
+    if test_type == TestType.PAIRED.value and group2 is not None \
+            and group1.shape[0] != group2.shape[0]:
+        raise ValueError(
+            "A paired test needs the same subjects in both conditions, in the same "
+            f"order; got {group1.shape[0]} in group1 and {group2.shape[0]} in group2."
+        )
+
+
 # =============================================================================
 # Pre-computed sums fast path (method='tstat' and 'bh_fdr_perm')
 # =============================================================================
@@ -265,10 +280,7 @@ def _onesample_tstat_from_sums(sum_vec, sumsq_vec, n):
     """One-sample t-statistic from pre-computed sums. Returns (t_pos, t_neg) edge vectors."""
     mean = sum_vec / n
     var = np.maximum((sumsq_vec - sum_vec ** 2 / n) / (n - 1), 0)
-    se = np.sqrt(var / n)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        t = mean / se
-        t = np.where(se == 0, 0.0, t)
+    t = _degenerate.t_ratio(mean, var / n, _degenerate.RTOL * sumsq_vec / n ** 2)
     return np.maximum(t, 0.0), np.maximum(-t, 0.0)
 
 
@@ -278,10 +290,9 @@ def _twosample_tstat_from_sums(sum1, sumsq1, n1, sum2, sumsq2, n2):
     mean2 = sum2 / n2
     var1 = np.maximum((sumsq1 - sum1 ** 2 / n1) / (n1 - 1), 0)
     var2 = np.maximum((sumsq2 - sum2 ** 2 / n2) / (n2 - 1), 0)
-    denom = np.sqrt(var1 / n1 + var2 / n2)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        t = (mean2 - mean1) / denom
-        t = np.where(denom == 0, 0.0, t)
+    meansq = (sumsq1 + sumsq2) / (n1 + n2)
+    t = _degenerate.t_ratio(mean2 - mean1, var1 / n1 + var2 / n2,
+                            _degenerate.RTOL * meansq * (1 / n1 + 1 / n2))
     return np.maximum(t, 0.0), np.maximum(-t, 0.0)
 
 
@@ -519,6 +530,7 @@ def compute_null_dist(
         n1, n2 = group1.shape[0], group2.shape[0]
         if n1 < 2 or n2 < 2:
             raise ValueError("Each group must have at least 2 samples.")
+        _check_paired_counts(group1, group2, test_type_str)
 
     if n_permutations < 1:
         raise ValueError("n_permutations must be at least 1.")
@@ -1128,6 +1140,14 @@ def compute_p_val(
                 f"group1 and group2 must have the same (N, N) shape; got "
                 f"{group1.shape[1:]} and {group2.shape[1:]}."
             )
+    if test_type_str not in [t.value for t in TestType]:
+        raise ValueError(
+            f"Invalid test_type: '{test_type_str}'. "
+            f"Must be one of: {[t.value for t in TestType]}"
+        )
+    if test_type_str in (TestType.PAIRED.value, TestType.TWO_SAMPLE.value) and group2 is None:
+        raise ValueError(f"group2 is required for test_type='{test_type_str}'.")
+    _check_paired_counts(group1, group2, test_type_str)
 
     # Validate method
     try:
@@ -1144,6 +1164,9 @@ def compute_p_val(
             f"Method '{method_str}' requires net_labels to be provided. "
             f"Constrained methods are: {[m.value for m in CONSTRAINED_METHODS]}"
         )
+
+    # An edge with zero variance and a nonzero effect has an infinite t
+    _degenerate.raise_if_infinite(_degenerate.pairwise_infinite(group1, group2, test_type_str))
 
     _t0 = time.perf_counter()
 
@@ -1355,6 +1378,7 @@ def compute_t_stat(
         return _compute_t_stat_ind(group1, group2)
 
     elif test_type_str == TestType.PAIRED.value:
+        _check_paired_counts(group1, group2, test_type_str)
         diffs = group2 - group1
         return compute_t_stat_diff(diffs)
 
@@ -1394,11 +1418,11 @@ def compute_t_stat_diff(
         raise ValueError("At least 2 samples required for t-statistic.")
 
     x_mean = np.mean(diff, axis=0)
-    x_std = np.std(diff, axis=0, ddof=1)
+    x_var = np.var(diff, axis=0, ddof=1)
+    meansq = (n - 1) / n * x_var + x_mean ** 2
 
-    with np.errstate(divide='ignore', invalid='ignore'):
-        t_stat = x_mean / (x_std / np.sqrt(n))
-        t_stat = np.where(x_std == 0, 0, t_stat)
+    # zero variance: t = 0 (see _degenerate; entry points reject a nonzero mean)
+    t_stat = _degenerate.t_ratio(x_mean, x_var / n, _degenerate.RTOL * meansq / n)
 
     pos_t = np.where(t_stat > 0, t_stat, 0)
     neg_t = np.where(t_stat < 0, -t_stat, 0)
@@ -1441,12 +1465,12 @@ def _compute_t_stat_ind(
     x_mean_2 = np.mean(group2, axis=0)
     x_var_1 = np.var(group1, axis=0, ddof=1) / n1
     x_var_2 = np.var(group2, axis=0, ddof=1) / n2
+    meansq = ((n1 - 1) * x_var_1 + x_mean_1 ** 2) * n1 / (n1 + n2) \
+        + ((n2 - 1) * x_var_2 + x_mean_2 ** 2) * n2 / (n1 + n2)
 
-    denominator = np.sqrt(x_var_1 + x_var_2)
-
-    with np.errstate(divide='ignore', invalid='ignore'):
-        t_stat = (x_mean_2 - x_mean_1) / denominator
-        t_stat = np.where(denominator == 0, 0, t_stat)
+    # zero variance: t = 0 (see _degenerate; entry points reject a nonzero difference)
+    t_stat = _degenerate.t_ratio(x_mean_2 - x_mean_1, x_var_1 + x_var_2,
+                                 _degenerate.RTOL * meansq * (1 / n1 + 1 / n2))
 
     pos_t = np.where(t_stat > 0, t_stat, 0)
     neg_t = np.where(t_stat < 0, -t_stat, 0)

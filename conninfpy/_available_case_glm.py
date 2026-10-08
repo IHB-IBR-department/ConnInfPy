@@ -30,6 +30,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy import stats
 
+from . import _degenerate
 from ._engine import (
     _collect_results_to_arrays,
     _compute_p_values_from_null,
@@ -40,6 +41,7 @@ from ._engine import (
     get_available_cores,
 )
 from ._prepare import nonfinite_report
+from .glm_stats import contrast_is_estimable
 from ._progress import run_permutations
 
 DEFAULT_MIN_COVERAGE = 0.8
@@ -69,17 +71,16 @@ def _stats(Yp: npt.NDArray[np.float64], pat: _Pattern, contrast, stat_type: str)
         return contrast @ beta
     resid = Yp - pat.X @ beta
     sigma2 = np.sum(resid ** 2, axis=0) / pat.df
+    floor = _degenerate.RTOL * np.mean(Yp ** 2, axis=0)   # zero variance -> 0 (see _degenerate)
     if stat_type == "fstat":
         C = contrast if contrast.ndim == 2 else contrast[None, :]
         Cb = C @ beta
         quad = np.einsum("ie,ij,je->e", Cb, pat.M_inv, Cb)
         with np.errstate(divide="ignore", invalid="ignore"):
             F = quad / (C.shape[0] * sigma2)
-        return np.where((sigma2 > 0) & np.isfinite(F), np.maximum(F, 0.0), 0.0)
-    se = np.sqrt(pat.cXc * sigma2)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        t = (contrast @ beta) / se
-    return np.where((se > 0) & np.isfinite(t), t, 0.0)
+        return np.where((sigma2 > floor) & np.isfinite(F), np.maximum(F, 0.0), 0.0)
+    t = _degenerate.t_ratio(contrast @ beta, pat.cXc * sigma2, pat.cXc * floor)
+    return np.where(np.isfinite(t), t, 0.0)
 
 
 def _to_stat_dict(vec: npt.NDArray[np.float64], N: int, triu, stat_type: str):
@@ -126,10 +127,6 @@ def _task(patterns, contrast, stat_type, N, triu, n_edges, strata_codes, n_subje
     if enhance_func is not None:
         stat = enhance_func(stat, **enhance_kwargs)
     return _extract_max_stats(stat, (N, N))
-
-
-def _estimable(C: npt.NDArray[np.float64], X: npt.NDArray[np.float64], pinv) -> bool:
-    return bool(np.allclose(C @ pinv @ X, C, atol=1e-8 * max(1.0, np.abs(C).max())))
 
 
 def available_case_glm(
@@ -203,7 +200,7 @@ def available_case_glm(
             reasons["degrees_of_freedom"] += edges.size
             continue
         pinv = np.linalg.pinv(Xp)
-        if not _estimable(C, Xp, pinv):
+        if not contrast_is_estimable(C, Xp, pinv):
             reasons["not_estimable"] += edges.size
             continue
         XtX = pinv @ pinv.T
@@ -230,6 +227,13 @@ def available_case_glm(
             f"(min_coverage={min_coverage}), too few residual degrees of freedom, "
             "or a contrast that is not estimable on the available subjects."
         )
+
+    # An exact fit with a nonzero contrast has an infinite t (or F)
+    infinite = np.zeros((N, N), dtype=bool)
+    for pat in patterns:
+        hit = _degenerate.glm_infinite(E[np.ix_(pat.rows, pat.edges)], pat.X, contrast, stat_type)
+        infinite[triu[0][pat.edges[hit]], triu[1][pat.edges[hit]]] = True
+    _degenerate.raise_if_infinite(infinite, "F" if stat_type == "fstat" else "t")
 
     observed_vec = _vector_stats([E[np.ix_(p.rows, p.edges)] for p in patterns], patterns,
                                  contrast, stat_type, n_edges)

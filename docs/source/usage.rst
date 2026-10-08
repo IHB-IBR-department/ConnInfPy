@@ -37,6 +37,19 @@ Input conventions
   so it would be tested inconsistently. Symmetrise it or analyse each
   direction separately. The diagonal is zeroed automatically on a copy —
   your arrays are never modified.
+- Paired data (``test_type='paired'``) must hold the same subjects, in the
+  same order, in both conditions; unequal counts are rejected.
+- Edges with zero variance: an edge that is the same in every subject has no
+  standard error. If its effect is zero too (e.g. 0 everywhere) its statistic
+  is 0 and its p-value 1. If the effect is nonzero (e.g. 0.3 everywhere, or a
+  constant shift between paired conditions) the t or F statistic is infinite
+  and the entry points raise an error naming the edges: such values usually
+  come from duplicated subjects or preprocessing. Set those edges to NaN and
+  pass ``missing='available_case'`` to leave them untested.
+- GLM contrasts must be estimable (``C = C X⁺X``). With collinear columns,
+  e.g. two copies of a variable or a group indicator nested in site dummies,
+  a coefficient on one column alone is not identified and is rejected; test
+  an identified combination or drop the redundant column.
 - :func:`conninfpy.analyze` takes ``input='r'`` (correlations; Fisher r→z is
   applied once) or ``input='z'`` (already transformed). Left as ``None`` it
   detects the scale: a unit diagonal means correlations, any value beyond ±1
