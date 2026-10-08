@@ -97,9 +97,10 @@ dropout) has undefined correlations. ConnInfPy never treats them as zero.
   untested when its pattern has fewer than 2 residual degrees of freedom or
   the contrast is not estimable on its subjects (e.g. a two-group contrast
   where one group lacks the edge); a site whose subjects all lack an edge
-  simply drops out of the site dummies. Freedman–Lane is approximate with or
-  without missing values (1,000 simulated nulls, 36 subjects at 3 sites:
-  FWER 0.05–0.06 both for complete and for incomplete data).
+  simply drops out of the site dummies. In 1,000 simulated nulls (36
+  subjects at 3 sites, ComBat + site dummies, within-site permutation, 30 %
+  of subjects missing one region) FWER stayed within Monte-Carlo error of
+  0.05, as on the complete data (every 95 % interval includes 0.05).
 - **ComBat** (``combat_harmonize(..., missing='available_case')``, and the
   ComBat strategies of ``analyze``) estimates every quantity per feature from
   the subjects who have it. A site with fewer than 2 subjects for a feature
