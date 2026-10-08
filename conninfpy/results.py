@@ -158,6 +158,11 @@ class InferenceResult(TailResult):
         subjects and regions with missing connectivity, per-edge sample
         sizes (``edge_n``), the edges not tested for lack of coverage
         (their p-values are NaN), and a Fisher test of missingness by group.
+    block_report : dict or None
+        Set by ``method='cnbs'``: the inference unit is the block. Lists
+        every within/between-network block with its edge count, mean signed
+        statistic, and uncorrected and corrected p-values per tail; each
+        edge's p-value is its block's corrected p-value.
     """
 
     method: str
@@ -175,6 +180,7 @@ class InferenceResult(TailResult):
     e_grid: Optional[npt.NDArray[np.float64]]
     h_grid: Optional[npt.NDArray[np.float64]]
     missing_report: Optional[Dict[str, Any]]
+    block_report: Optional[Dict[str, Any]]
 
     def __new__(
         cls,
@@ -196,6 +202,7 @@ class InferenceResult(TailResult):
         e_grid: Optional[npt.NDArray[np.float64]] = None,
         h_grid: Optional[npt.NDArray[np.float64]] = None,
         missing_report: Optional[Dict[str, Any]] = None,
+        block_report: Optional[Dict[str, Any]] = None,
     ) -> "InferenceResult":
         instance = super().__new__(cls)
         TailResult.__init__(
@@ -216,6 +223,7 @@ class InferenceResult(TailResult):
         instance.e_grid = e_grid
         instance.h_grid = h_grid
         instance.missing_report = missing_report
+        instance.block_report = block_report
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
@@ -557,6 +565,7 @@ class OmnibusInferenceResult(TailResult):
         strata_provided: bool = False,
         combat_diagnostics: Optional[Dict[str, Any]] = None,
         missing_report: Optional[Dict[str, Any]] = None,
+        block_report: Optional[Dict[str, Any]] = None,
     ) -> "OmnibusInferenceResult":
         instance = super().__new__(cls)
         # Don't go through TailResult's positive/negative initializer —
@@ -574,6 +583,7 @@ class OmnibusInferenceResult(TailResult):
         instance.strata_provided = strata_provided
         instance.combat_diagnostics = combat_diagnostics
         instance.missing_report = missing_report
+        instance.block_report = block_report
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401

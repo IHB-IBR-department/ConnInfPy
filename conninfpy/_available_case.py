@@ -277,12 +277,16 @@ def available_case_p_val(
     strata: Optional[npt.NDArray[Any]],
     acceleration: Optional[str],
     min_coverage: float = DEFAULT_MIN_COVERAGE,
+    block_inference: Optional[Dict[str, Any]] = None,
 ):
     """p-values, raw t maps and the coverage report for one available-case run.
 
     ``method`` is ``'parametric_bonferroni'``, ``'parametric_bh_fdr'``,
     ``'bh_fdr_perm'`` or ``'max'`` (max-statistic, with ``enhance_func``
-    applied when given).
+    applied when given). ``block_inference`` (``net_labels``, ``correction``)
+    switches the permutation path to cNBS block inference: block means over
+    the tested edges, one null per block; the block table is returned in the
+    report under ``'block_report'``.
     """
     if not 0 < min_coverage <= 1:
         raise ValueError(f"min_coverage must be in (0, 1]; got {min_coverage}.")
@@ -342,13 +346,25 @@ def available_case_p_val(
             p_values[key] = _matrix(p)
         return p_values, raw_t, report
 
+    if block_inference is not None:
+        tested_mat = np.zeros((d.N, d.N), dtype=bool)
+        tested_mat[d.triu] = d.tested
+        tested_mat = tested_mat | tested_mat.T
+        enhance_kwargs = {**enhance_kwargs, "edge_mask": tested_mat}
     emp = raw_t if enhance_func is None else enhance_func(raw_t, **enhance_kwargs)
     results = run_permutations(
         partial(_task_max, d, enhance_func, enhance_kwargs), list(seeds),
         use_mp=_use_mp, n_processes=n_processes, verbose=verbose, desc="available_case",
     )
     null = _collect_results_to_arrays(results, n_permutations)
-    if acceleration is not None:
+    if block_inference is not None:
+        from ._cnbs import block_p_values
+        p_values, report["block_report"] = block_p_values(
+            emp, null, block_inference["net_labels"], d.N,
+            correction=block_inference["correction"], edge_mask=tested_mat,
+            acceleration=acceleration,
+        )
+    elif acceleration is not None:
         from .acceleration import compute_p_values_accelerated
         p_values = compute_p_values_accelerated(emp, null, method=acceleration)
     else:
