@@ -118,8 +118,33 @@ def _validate_params(
 
     if e_arr.shape != h_arr.shape:
         raise ValueError("Parameters 'e' and 'h' must have the same shape.")
+    _check_domain(e_arr, h_arr)
 
     return e_arr, h_arr, scalar_mode
+
+
+def _check_domain(e_arr, h_arr) -> None:
+    """E and H must be finite and >= 0.
+
+    E = 0 drops the extent term (height-only integration); a negative E would
+    reward small components and is infinite for unsupported edges (0**E). A
+    negative H would weight low heights above high ones.
+    """
+    for name, arr in (("e", e_arr), ("h", h_arr)):
+        arr = np.asarray(arr, dtype=np.float64)
+        if not np.all(np.isfinite(arr)) or np.any(arr < 0):
+            raise ValueError(f"TFNBS parameter '{name}' must be finite and >= 0; got {arr.tolist()}.")
+
+
+def _extent_power(size, e):
+    """``size ** e`` on supported edges (size > 0) and 0 elsewhere.
+
+    The explicit mask keeps unsupported edges at 0 for E = 0 as well, where
+    0**0 = 1 would otherwise score every inactive edge and the diagonal (the
+    Numba core only visits active edges, so this also keeps the backends equal).
+    """
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(size > 0, size ** e, 0.0)
 
 
 def _compute_thresholds(
@@ -146,6 +171,12 @@ def _compute_thresholds(
     dh : float
         Step size for integration.
     """
+    if not np.isfinite(start_thres) or start_thres < 0:
+        # heights are magnitudes (each tail is enhanced separately); a negative
+        # cutoff makes threshold**H undefined for fractional H
+        raise ValueError(f"start_thres must be finite and >= 0; got {start_thres}.")
+    if int(n) != n or n < 1:
+        raise ValueError(f"n (integration steps) must be a positive integer; got {n}.")
     max_stat = np.max(t_stats)
     dh = (max_stat - start_thres) / n
 
@@ -319,9 +350,9 @@ def get_tfnbs_score(
             clustsize[active_cols, active_rows] = edge_sizes
 
         if scalar_mode:
-            tfnbs += (clustsize ** e_bc) * (threshold ** h_bc)
+            tfnbs += _extent_power(clustsize, e_bc) * (threshold ** h_bc)
         else:
-            tfnbs += (clustsize[..., np.newaxis] ** e_bc) * (threshold ** h_bc)
+            tfnbs += _extent_power(clustsize[..., np.newaxis], e_bc) * (threshold ** h_bc)
 
     tfnbs *= dh
     return tfnbs
@@ -661,6 +692,7 @@ def get_tfnbs_score_baseline(
     h = np.array(h)
     if e.shape != h.shape:
         raise ValueError("e and h must have the same shape!")
+    _check_domain(e, h)
 
     nroi = t_stats.shape[0]
     num_params = len(e)
@@ -693,9 +725,9 @@ def get_tfnbs_score_baseline(
         np.fill_diagonal(clustsize, 0)
 
         if scalar_mode:
-            tfnbs += (clustsize ** e[0]) * (threshold ** h[0])
+            tfnbs += _extent_power(clustsize, e[0]) * (threshold ** h[0])
         else:
-            tfnbs += (clustsize[..., np.newaxis] ** e) * (threshold ** h)
+            tfnbs += _extent_power(clustsize[..., np.newaxis], e) * (threshold ** h)
 
     tfnbs *= dh
     return tfnbs
@@ -795,9 +827,9 @@ def get_tfnbs_score_networkx(
         np.fill_diagonal(clustsize, 0)
 
         if scalar_mode:
-            tfnbs += (clustsize ** e_bc) * (threshold ** h_bc)
+            tfnbs += _extent_power(clustsize, e_bc) * (threshold ** h_bc)
         else:
-            tfnbs += (clustsize[..., np.newaxis] ** e_bc) * (threshold ** h_bc)
+            tfnbs += _extent_power(clustsize[..., np.newaxis], e_bc) * (threshold ** h_bc)
 
     tfnbs *= dh
     return tfnbs
@@ -1076,13 +1108,13 @@ def get_network_informed_tfnbs_score(
 
         # Calculate score increment: h^H * support^E * dh
         if scalar_mode:
-            increment = (threshold ** h_bc) * (edge_supports ** e_bc) * dh
+            increment = (threshold ** h_bc) * _extent_power(edge_supports, e_bc) * dh
             tfnbs[active_rows, active_cols] += increment
             if is_symm:
                 tfnbs[active_cols, active_rows] += increment
         else:
             # Handle parameter sweep (broadcast dimensions)
-            increment = (threshold ** h_bc) * (edge_supports[..., np.newaxis] ** e_bc) * dh
+            increment = (threshold ** h_bc) * _extent_power(edge_supports[..., np.newaxis], e_bc) * dh
             tfnbs[active_rows, active_cols, :] += increment
             if is_symm:
                 tfnbs[active_cols, active_rows, :] += increment
@@ -1275,15 +1307,15 @@ def get_fbc_tfnbs_score(
         ).astype(np.float64)
 
         # Calculate score increment: h^H * support^E * dh
-        # Note: support^E where support=0 gives 0, which is correct (suppressed)
+        # Suppressed edges (support 0) add nothing, also at E = 0 (0**0 = 1)
         if scalar_mode:
-            increment = (threshold ** h_bc) * (edge_supports ** e_bc) * dh
+            increment = (threshold ** h_bc) * _extent_power(edge_supports, e_bc) * dh
             tfnbs[active_rows, active_cols] += increment
             if is_symm:
                 tfnbs[active_cols, active_rows] += increment
         else:
             # Handle parameter sweep
-            increment = (threshold ** h_bc) * (edge_supports[..., np.newaxis] ** e_bc) * dh
+            increment = (threshold ** h_bc) * _extent_power(edge_supports[..., np.newaxis], e_bc) * dh
             tfnbs[active_rows, active_cols, :] += increment
             if is_symm:
                 tfnbs[active_cols, active_rows, :] += increment

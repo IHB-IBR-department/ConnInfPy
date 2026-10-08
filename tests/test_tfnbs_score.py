@@ -727,3 +727,42 @@ class TestNITFNBSNormalization(TestCase):
             )
             self.assertEqual(result.shape, (self.N, self.N, 3),
                              f"3D shape mismatch for normalization='{norm}'")
+
+
+class TestParameterDomain(TestCase):
+    """E = 0 is height-only integration; unsupported edges stay at 0 (0**0 = 1)."""
+
+    def setUp(self):
+        self.t = np.zeros((6, 6))
+        for i, j, v in [(0, 1, 3.0), (1, 2, 2.5), (3, 4, 2.2)]:
+            self.t[i, j] = self.t[j, i] = v
+        self.labels = np.array([0, 0, 0, 1, 1, 1])
+
+    def test_e_zero_scores_only_active_edges_in_every_backend(self):
+        ref = get_tfnbs_score(self.t, e=0.0, h=2.0, n=10, backend="scipy")
+        self.assertTrue(np.all(ref[self.t == 0] == 0))
+        np.testing.assert_allclose(get_tfnbs_score_baseline(self.t, e=0.0, h=2.0, n=10), ref)
+        np.testing.assert_allclose(get_tfnbs_score_networkx(self.t, e=0.0, h=2.0, n=10), ref)
+        if HAS_NUMBA:
+            np.testing.assert_allclose(get_tfnbs_score(self.t, e=0.0, h=2.0, n=10, backend="numba"), ref)
+        # height-only: the isolated edge (3, 4) scores as if alone
+        alone = np.zeros_like(self.t)
+        alone[3, 4] = alone[4, 3] = 2.2
+        alone[0, 1] = alone[1, 0] = 3.0                # same grid maximum
+        self.assertAlmostEqual(ref[3, 4], get_tfnbs_score(alone, e=0.0, h=2.0, n=10, backend="scipy")[3, 4])
+
+    def test_e_zero_keeps_block_suppression(self):
+        fbc = get_fbc_tfnbs_score(self.t, self.labels, e=0.0, h=2.0, n=10, min_cluster_size=3)
+        self.assertTrue(np.all(fbc == 0))              # no block reaches 3 edges
+        ni = get_network_informed_tfnbs_score(self.t, self.labels, e=0.0, h=2.0, n=10)
+        self.assertTrue(np.all(ni[self.t == 0] == 0))
+
+    def test_invalid_parameters_are_rejected(self):
+        for kw in ({"e": -0.1}, {"e": np.nan}, {"h": -1.0}, {"e": [0.4, 0.5], "h": [2.0, -1.0]}):
+            args = {"e": 0.4, "h": 2.0, **kw}
+            with self.subTest(**{k: str(v) for k, v in kw.items()}), self.assertRaises(ValueError):
+                get_tfnbs_score(self.t, n=10, **args)
+        with self.assertRaisesRegex(ValueError, "start_thres"):
+            get_tfnbs_score(self.t, e=0.4, h=2.0, n=10, start_thres=-1.0)
+        with self.assertRaisesRegex(ValueError, "integration steps"):
+            get_tfnbs_score(self.t, e=0.4, h=2.0, n=0)
