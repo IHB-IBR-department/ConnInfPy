@@ -118,6 +118,47 @@ class TestFmriprepDerivativesLoader(unittest.TestCase):
                         self.assertEqual(np.asarray(ds.data).shape[0], 2)
                         self.assertEqual(np.asarray(ds.data).shape[-1], 2)
 
+    def test_censored_volumes_are_removed(self):
+        """The sample_mask from load_confounds reaches the masker.
+
+        nilearn's fake fMRIPrep confounds flag volume 0 as non-steady-state:
+        30 volumes, 29 kept. The mask used to be discarded (30 kept).
+        """
+        try:
+            from nilearn._utils.data_gen import create_fake_bids_dataset
+        except ImportError:
+            self.skipTest("nilearn fake-BIDS generator not available")
+        from nilearn.interfaces.fmriprep import load_confounds
+
+        from conninfpy.loaders import FmriprepDerivativesLoader
+
+        with tempfile.TemporaryDirectory() as tmp:
+            kw = dict(base_dir=tmp, n_sub=2, n_ses=0, tasks=["rest"], n_runs=[1],
+                      with_derivatives=True, with_confounds=True)
+            seed_arg = ("rand_gen" if "rand_gen" in
+                        inspect.signature(create_fake_bids_dataset).parameters else "random_state")
+            kw[seed_arg] = 0
+            deriv = Path(create_fake_bids_dataset(**kw)) / "derivatives"
+            pattern = "sub-*/func/*space-MNI*desc-preproc_bold.nii.gz"
+            bold = sorted(glob.glob(str(deriv / pattern)))[0]
+            img = nib.load(bold)
+            labels = np.zeros(img.shape[:3], dtype=np.int16)
+            labels[:2], labels[2:] = 1, 2
+            atlas = Path(tmp) / "atlas.nii.gz"
+            nib.save(nib.Nifti1Image(labels, img.affine), atlas)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                _, mask = load_confounds(bold, strategy=["motion"], motion="full")
+                ds = FmriprepDerivativesLoader(
+                    derivatives_dir=str(deriv), atlas_image_path=str(atlas), bold_pattern=pattern,
+                    denoising={"strategy": 1}, cache_dir=str(Path(tmp) / "cache"),
+                ).load()
+            if mask is None:
+                self.skipTest("fake confounds flag no volume in this nilearn version")
+            self.assertLess(len(mask), img.shape[3])
+            self.assertEqual(np.asarray(ds.data).shape[1], len(mask))
+            self.assertEqual(ds.provenance["truncated_to"], len(mask))
+
 
 if __name__ == "__main__":
     unittest.main()
