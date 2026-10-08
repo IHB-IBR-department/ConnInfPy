@@ -114,10 +114,14 @@ def _vector_stats(Y_by_pattern, patterns, contrast, stat_type, n_edges):
 
 
 def _task(patterns, contrast, stat_type, N, triu, n_edges, strata_codes, n_subjects,
-          enhance_func, enhance_kwargs, seed):
+          scheme, enhance_func, enhance_kwargs, seed):
     rng = np.random.RandomState(seed)
-    perm_idx = rng.permutation(n_subjects) if strata_codes is None else _stratified_perm(strata_codes, rng)
-    Y_perm = [pat.Y_hat0 + pat.R0[_restricted(perm_idx, pat)] for pat in patterns]
+    if scheme == "sign-flip":
+        signs = rng.choice([1.0, -1.0], n_subjects)
+        Y_perm = [pat.Y_hat0 + pat.R0 * signs[pat.rows][:, None] for pat in patterns]
+    else:
+        perm_idx = rng.permutation(n_subjects) if strata_codes is None else _stratified_perm(strata_codes, rng)
+        Y_perm = [pat.Y_hat0 + pat.R0[_restricted(perm_idx, pat)] for pat in patterns]
     stat = _to_stat_dict(_vector_stats(Y_perm, patterns, contrast, stat_type, n_edges), N, triu, stat_type)
     if enhance_func is not None:
         stat = enhance_func(stat, **enhance_kwargs)
@@ -146,8 +150,14 @@ def available_case_glm(
     acceleration: Optional[str],
     two_tailed: bool,
     min_coverage: float = DEFAULT_MIN_COVERAGE,
+    scheme: str = "permutation",
 ):
-    """p-values, raw statistic maps and the coverage report (GLM, missing values)."""
+    """p-values, raw statistic maps and the coverage report (GLM, missing values).
+
+    ``scheme`` is the resolved resampling scheme ('permutation' or
+    'sign-flip'); sign flips are drawn per subject and restricted to each
+    pattern's subjects.
+    """
     if not 0 < min_coverage <= 1:
         raise ValueError(f"min_coverage must be in (0, 1]; got {min_coverage}.")
     n, N, _ = Y.shape
@@ -204,7 +214,8 @@ def available_case_glm(
             pat.cXc = float(contrast @ XtX @ contrast)
         Yp = E[np.ix_(rows, edges)]
         Xr = X_reduced[rows]
-        pat.Y_hat0 = Xr @ (np.linalg.pinv(Xr) @ Yp)
+        pat.Y_hat0 = (np.zeros_like(Yp) if Xr.shape[1] == 0 or not np.any(Xr)
+                      else Xr @ (np.linalg.pinv(Xr) @ Yp))
         pat.R0 = Yp - pat.Y_hat0
         loc = np.full(n, -1, dtype=np.intp)
         loc[rows] = np.arange(rows.size)
@@ -232,7 +243,7 @@ def available_case_glm(
     if _use_mp and n_processes is not None:
         n_processes = min(n_processes, n_permutations)
     task = partial(_task, patterns, contrast, stat_type, N, triu, n_edges, strata_codes, n,
-                   enhance_func, enhance_kwargs)
+                   scheme, enhance_func, enhance_kwargs)
     results = run_permutations(task, list(seeds), use_mp=_use_mp, n_processes=n_processes,
                                verbose=verbose, desc="available_case_glm")
     null = _collect_results_to_arrays(results, n_permutations)

@@ -334,8 +334,15 @@ class TestBuildDesignMatrix(unittest.TestCase):
 # =============================================================================
 
 
+def _projector(A):
+    """Orthogonal projector onto the column space of A (zero for no columns)."""
+    if A.shape[1] == 0:
+        return np.zeros((A.shape[0], A.shape[0]))
+    return A @ np.linalg.pinv(A)
+
+
 class TestComputeReducedModel(unittest.TestCase):
-    """Test _compute_reduced_model."""
+    """_compute_reduced_model returns X null(C): the fits allowed under C beta = 0."""
 
     def test_removes_interest_column(self):
         """Reduced model excludes columns targeted by contrast."""
@@ -345,19 +352,32 @@ class TestComputeReducedModel(unittest.TestCase):
         self.assertEqual(X_red.shape, (10, 2))  # intercept + confound
 
     def test_no_confounds(self):
-        """With contrast=[0,1] on X=[intercept, interest], reduced = intercept."""
+        """With contrast=[0,1] on X=[intercept, interest], reduced spans the intercept."""
         X = np.column_stack([np.ones(10), np.random.randn(10)])
-        contrast = np.array([0, 1])
-        X_red = _compute_reduced_model(X, contrast)
+        X_red = _compute_reduced_model(X, np.array([0, 1]))
         self.assertEqual(X_red.shape, (10, 1))
-        npt.assert_array_equal(X_red[:, 0], np.ones(10))
+        npt.assert_allclose(_projector(X_red), _projector(X[:, :1]), atol=1e-12)
 
-    def test_all_interest(self):
-        """If contrast targets all columns, reduced model is intercept."""
+    def test_general_contrast_keeps_the_common_effect(self):
+        """Regression: for beta_x - beta_z = 0 the null still allows beta_x = beta_z.
+
+        Deleting every column the contrast touches removed that common
+        effect, so Freedman-Lane permuted residuals that still contained it
+        (FWER ~0.2 in simulation under a true null).
+        """
+        rng = np.random.default_rng(0)
+        x, z = rng.normal(size=20), rng.normal(size=20)
+        X = np.column_stack([np.ones(20), x, z])
+        y = 2.0 + 1.5 * x + 1.5 * z                     # exactly on the null
+        X_red = _compute_reduced_model(X, np.array([0, 1, -1]))
+        self.assertEqual(X_red.shape, (20, 2))
+        npt.assert_allclose(_projector(X_red) @ y, y, atol=1e-10)
+
+    def test_full_rank_contrast_leaves_no_null_columns(self):
+        """When every column is tested there is no null model (no intercept is added)."""
         X = np.random.randn(10, 2)
-        contrast = np.array([1, 1])
-        X_red = _compute_reduced_model(X, contrast)
-        self.assertEqual(X_red.shape, (10, 1))
+        X_red = _compute_reduced_model(X, np.eye(2))
+        self.assertEqual(X_red.shape, (10, 0))
 
 
 # =============================================================================
@@ -784,24 +804,24 @@ class TestFStatCompute(unittest.TestCase):
 class TestReducedModel2D(unittest.TestCase):
     """Reduced-model correctness for 2D contrast matrices."""
 
-    def test_keeps_columns_zero_across_all_rows(self):
-        """A column is kept only if ALL contrast rows are zero for it."""
+    def test_selection_rows_leave_the_other_columns(self):
+        """Rows picking columns 1 and 2: the null model spans columns 0 and 3."""
         X = np.column_stack([np.ones(8), np.arange(8), np.random.randn(8), np.random.randn(8)])
-        # Contrast touches cols 1 and 2 (row 0 on col 1, row 1 on col 2);
-        # cols 0 (intercept) and 3 should remain in reduced.
         C = np.array([[0, 1, 0, 0], [0, 0, 1, 0]], dtype=float)
         X_red = _compute_reduced_model(X, C)
         self.assertEqual(X_red.shape, (8, 2))
-        npt.assert_array_equal(X_red[:, 0], np.ones(8))
-        npt.assert_array_equal(X_red[:, 1], X[:, 3])
+        npt.assert_allclose(_projector(X_red), _projector(X[:, [0, 3]]), atol=1e-12)
 
-    def test_all_columns_targeted_falls_back_to_intercept(self):
-        """If every column is touched by some contrast row, reduced = intercept."""
+    def test_rows_touching_every_column_can_still_leave_a_null_space(self):
+        """[[1, 1, 0], [0, 0, 1]] has rank 2 on 3 columns: the null keeps x0 - x1.
+
+        (The old code returned an intercept that was not even in the design.)
+        """
         X = np.random.randn(6, 3)
         C = np.array([[1, 1, 0], [0, 0, 1]], dtype=float)
         X_red = _compute_reduced_model(X, C)
         self.assertEqual(X_red.shape, (6, 1))
-        npt.assert_array_equal(X_red[:, 0], np.ones(6))
+        npt.assert_allclose(_projector(X_red), _projector((X[:, 0] - X[:, 1])[:, None]), atol=1e-12)
 
 
 class TestFStatPermutation(unittest.TestCase):
@@ -1048,3 +1068,60 @@ class TestPairedGLMWrapper(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestResamplingScheme(unittest.TestCase):
+    """Row permutation vs sign flipping of the reduced-model residuals.
+
+    Regression: the paired GLM with confounds tests the intercept (the mean
+    of the differences) but permuted rows, which can never change a mean, so
+    the null distribution collapsed (FWER 0.002 in simulation, every p near
+    1); sign flipping gives a working test (FWER 0.03-0.05).
+    """
+
+    def _sym(self, Y):
+        Y = (Y + Y.transpose(0, 2, 1)) / 2
+        for s in Y:
+            np.fill_diagonal(s, 0)
+        return Y
+
+    def test_auto_rule(self):
+        from conninfpy.glm_stats import _compute_reduced_model, _resolve_scheme
+        rng = np.random.default_rng(0)
+        n = 12
+        x = rng.normal(size=n)
+        X_mean = np.column_stack([np.ones(n), x])                 # test the intercept
+        c_mean = np.array([1.0, 0.0])
+        X_slope = X_mean                                          # test x
+        c_slope = np.array([0.0, 1.0])
+        self.assertEqual(_resolve_scheme(X_mean, _compute_reduced_model(X_mean, c_mean), "auto"), "sign-flip")
+        self.assertEqual(_resolve_scheme(X_slope, _compute_reduced_model(X_slope, c_slope), "auto"), "permutation")
+        X_noint = x[:, None]                                      # no constant in the model
+        self.assertEqual(_resolve_scheme(X_noint, _compute_reduced_model(X_noint, np.array([1.0])), "auto"),
+                         "permutation")
+        with self.assertRaisesRegex(ValueError, "scheme"):
+            _resolve_scheme(X_mean, X_mean, "bootstrap")
+
+    def test_zero_confound_paired_glm_equals_paired_test(self):
+        from conninfpy.glm_stats import compute_p_val_paired_glm
+        rng = np.random.default_rng(7)
+        n, N = 20, 6
+        Ya = self._sym(rng.normal(size=(n, N, N)))
+        Yb = self._sym(rng.normal(size=(n, N, N)) + 0.4)
+        glm = compute_p_val_paired_glm(Ya, Yb, confounds_A=np.zeros(n), confounds_B=np.zeros(n),
+                                       method="tstat", n_permutations=99, rng=3, use_mp=False)
+        ttest = compute_p_val(Ya, Yb, test_type="paired", method="tstat", n_permutations=99,
+                              rng=3, use_mp=False)
+        npt.assert_array_equal(np.asarray(glm["positive"]), np.asarray(ttest["positive"]))
+
+    def test_paired_glm_with_confound_detects_a_mean_difference(self):
+        from conninfpy.glm_stats import compute_p_val_paired_glm
+        rng = np.random.default_rng(1)
+        n, N = 24, 6
+        ca, cb = rng.normal(size=n), rng.normal(size=n)
+        Ya = self._sym(rng.normal(size=(n, N, N)) + 0.5 * ca[:, None, None])
+        Yb = self._sym(rng.normal(size=(n, N, N)) + 0.5 * cb[:, None, None] + 1.0)
+        r = compute_p_val_paired_glm(Ya, Yb, confounds_A=ca, confounds_B=cb, method="tstat",
+                                     n_permutations=99, rng=0, use_mp=False)
+        iu = np.triu_indices(N, 1)
+        self.assertTrue(np.all(np.asarray(r["positive"])[iu] <= 0.05))
