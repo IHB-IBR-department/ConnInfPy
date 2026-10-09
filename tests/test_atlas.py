@@ -1,5 +1,6 @@
 """Tests for :mod:`conninfpy.atlas`."""
 import csv
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -226,6 +227,65 @@ class TestNetworkIndexForBlockMass(unittest.TestCase):
         self.assertGreater(counts[0, 0], 0)
         self.assertEqual(counts[0, 1], 0)
         self.assertEqual(counts[1, 1], 0)
+
+
+class TestFetchBnaBehavioralDecoding(unittest.TestCase):
+    """Unit tests for fetch_bna_behavioral_decoding with mocked network."""
+
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.cache_dir = Path(self.tmp_dir.name)
+
+    def tearDown(self):
+        self.tmp_dir.cleanup()
+
+    def test_mocked_fetch_and_cache(self):
+        from unittest.mock import MagicMock, patch
+        from conninfpy.atlas import fetch_bna_behavioral_decoding
+
+        mock_bd = json.dumps({"1": {"Action": 2.5}, "166": {"Gustation": 3.3}}).encode()
+        mock_pc = json.dumps({"1": {"TaskA": 1.8}, "166": {"GoNoGo": 2.4}}).encode()
+
+        call_count = {"n": 0}
+
+        def mock_urlopen(req, timeout=30):
+            call_count["n"] += 1
+            resp = MagicMock()
+            if "BDf" in req.full_url:
+                resp.read.return_value = mock_bd
+            else:
+                resp.read.return_value = mock_pc
+            resp.__enter__.return_value = resp
+            return resp
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+            bd, pc = fetch_bna_behavioral_decoding(cache_dir=self.cache_dir)
+            self.assertEqual(call_count["n"], 2)
+            self.assertIn("166", bd)
+            self.assertIn("166", pc)
+            self.assertEqual(bd["166"], {"Gustation": 3.3})
+            self.assertEqual(pc["166"], {"GoNoGo": 2.4})
+
+            # Second call should use cache without network calls
+            bd2, pc2 = fetch_bna_behavioral_decoding(cache_dir=self.cache_dir)
+            self.assertEqual(call_count["n"], 2)
+            self.assertEqual(bd2, bd)
+            self.assertEqual(pc2, pc)
+
+            # Test as_dataframe
+            df = fetch_bna_behavioral_decoding(cache_dir=self.cache_dir, as_dataframe=True)
+            self.assertEqual(len(df), 246)
+            self.assertEqual(df.loc[166, "name"], "vIa_R")
+            self.assertEqual(df.loc[166, "top_behavioral_domain"], "Gustation")
+            self.assertEqual(df.loc[166, "top_paradigm_class"], "GoNoGo")
+
+    def test_fetch_error_raises_ioerror(self):
+        from unittest.mock import patch
+        from conninfpy.atlas import fetch_bna_behavioral_decoding
+
+        with patch("urllib.request.urlopen", side_effect=OSError("Network unreachable")):
+            with self.assertRaises(IOError):
+                fetch_bna_behavioral_decoding(cache_dir=self.cache_dir)
 
 
 if __name__ == "__main__":
