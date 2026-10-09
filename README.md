@@ -58,8 +58,8 @@ python -m pip install -e .
 ```
 
 After the release this becomes `python -m pip install conninfpy`. Optional
-extras: `[app]` (Streamlit interface), `[decode]` (NiMARE meta-analytic
-decoding), `[notebooks]` (Jupyter tutorials), `[dev]` (tests and docs).
+extras: `[app]` (Streamlit interface), `[notebooks]` (Jupyter tutorials),
+`[dev]` (tests and docs).
 
 If `numba` fails to install on your platform, install without it — ConnInfPy
 falls back to SciPy automatically:
@@ -237,9 +237,36 @@ per direction, a signed proportion, and the summed / mean −log₁₀ p.
 table; `conninfpy.plot.plot_network_summary` draws the signed proportion.
 
 `conninfpy.AtlasInfo` ships Schaefer-100/200/400 (Yeo-7) and Brainnetome-246;
-`AtlasInfo.from_csv()` reads any other atlas. With the `decode` extra,
-`out.inference.decoded_edges(atlas)` adds Neurosynth/NeuroQuery term
-associations to the edge table.
+`AtlasInfo.from_csv()` reads any other atlas.
+
+**Anatomical interpretation (Brainnetome).** `conninfpy.annotate` describes
+ROIs and detected connections with the Brainnetome atlas (BNA-246, Fan et al.
+2016):
+
+```python
+from conninfpy.annotate import annotate_rois, summarize_annotation
+
+rois = annotate_rois(coords, names=names, support="sphere", radius_mm=6)  # or support="parcel"
+edges = out.inference.annotated_edges(rois)       # endpoint anatomy + relations
+summary = summarize_annotation(out.inference, rois, level="lobe")
+```
+
+Each ROI is described by the tissue it sampled (overlap of its sphere or
+parcel with BNA regions; a hard label only at the finest level holding at
+least half of it, otherwise "mixed"), with its gyrus, lobe, hemisphere,
+cytoarchitectonic description, Yeo network and BrainMap behavioural domains.
+Each connection gets its hemispheric relation (homotopic or not), circuit
+class (cortico-cortical, thalamo-cortical, ...), distance, sphere overlap and
+population structural connectivity. BrainMap terms are published
+forward-inference associations (which tasks activate a region), not functions
+of a region or a connection, and the summaries are descriptive: they put the
+detections next to the tested opportunities and add no test. The optional
+probabilistic and tractography maps (`BNA_PM_4D.nii.gz`,
+`BNA_SC_3D_246.zip` from atlas.brainnetome.org) are read from
+`datasets/atlases/` or `$CONNINFPY_BNA_DIR`. Brainnetome data are for
+non-commercial use with attribution and share-alike (see
+`conninfpy/atlas_data/NOTICE_BRAINNETOME.txt`); the MIT licence covers the
+code only.
 
 ## Advanced API
 
@@ -264,21 +291,20 @@ Worked examples for each are in the
 
 The optional Streamlit app provides manifest-based data loading, design
 setup, background inference, directional result plots, atlas-aware edge
-exports and NiMARE decoding:
+exports and Brainnetome annotation:
 
 ```bash
 python -m pip install -r requirements/gui.txt
-streamlit run apps/streamlit_nimare.py
+streamlit run apps/streamlit_app.py
 ```
 
 The repository-root `requirements.txt` is the public Streamlit Cloud profile
 (Cloud only looks for dependency files next to the entry point or at the repo
-root, so it mirrors `requirements/gui.txt` there). It excludes NiMARE, so the
-public app labels decoding as available in the offline version; install
-`requirements/gui-full.txt` for the complete local version.
+root, so it mirrors `requirements/gui.txt` there).
 
-**LLM-assisted interpretation (optional).** `conninfpy.interpret` turns
-decoding output into a cautious methods-style summary via OpenAI, Google
+**LLM-assisted interpretation (optional).** `conninfpy.interpret` turns the
+Brainnetome annotation of the detected connections into a cautious
+methods-style summary via OpenAI, Google
 Gemini or OpenRouter (keys read from a local `.env`; without a key it falls
 back to a deterministic template). The app exposes it as its
 "Interpretation" step.

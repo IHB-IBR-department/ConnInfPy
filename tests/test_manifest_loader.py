@@ -12,9 +12,6 @@ from conninfpy.loaders.base import LoadedDataset
 from conninfpy.loaders.builtins import NumpyLoader, NiftiDirectoryLoader
 from conninfpy.loaders.manifest import DatasetManifest
 from conninfpy.atlas import AtlasInfo
-from conninfpy.interpret.evidence import summarize_decoded_terms, score_decoding_evidence
-from conninfpy.interpret.evidence import clean_term_name
-from conninfpy.decode import decode_combined_rois
 from conninfpy.plot import plot_connectome_graph
 from apps.utils.helpers import align_atlas_coordinates
 import matplotlib
@@ -116,44 +113,6 @@ class TestManifestLoader(unittest.TestCase):
         self.assertEqual(dataset.data.shape, (5, 10, 10))
         self.assertEqual(len(dataset.subject_ids), 5)
 
-    def test_decoding_evidence_summarization_and_scoring(self) -> None:
-        # Create a mock decoded dataframe
-        decoded_rois = pd.DataFrame([
-            {"roi_id": 0, "roi_name": "ROI_0", "network": "Visual", "rank": 1, "term": "social", "score": 4.5},
-            {"roi_id": 0, "roi_name": "ROI_0", "network": "Visual", "rank": 2, "term": "fmri", "score": 3.0}, # method word
-            {"roi_id": 1, "roi_name": "ROI_1", "network": "Default", "rank": 1, "term": "social", "score": 5.0},
-            {"roi_id": 1, "roi_name": "ROI_1", "network": "Default", "rank": 2, "term": "memory", "score": 4.0},
-        ])
-        
-        # Create mock edges
-        edges = pd.DataFrame([
-            {"roi_i": 0, "roi_j": 1}
-        ])
-        
-        # Create dummy AtlasInfo
-        atlas = AtlasInfo(
-            labels=["ROI_0", "ROI_1"],
-            networks=["Visual", "Default"],
-            coords=np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]])
-        )
-        
-        summary = summarize_decoded_terms(decoded_rois, edges, atlas)
-        
-        # 'fmri' should be filtered out by default stop words list
-        terms = [t["term"] for t in summary["aggregated_terms"]]
-        self.assertNotIn("fmri", terms)
-        self.assertIn("social", terms)
-        self.assertIn("memory", terms)
-        
-        # 'social' appears in 2 ROIs, so weighted count is 2.0 (since burden is 1 for each ROI)
-        social_stats = [t for t in summary["aggregated_terms"] if t["term"] == "social"][0]
-        self.assertEqual(social_stats["roi_count"], 2)
-        self.assertEqual(social_stats["weighted_count"], 2.0)
-        self.assertEqual(social_stats["best_rank"], 1)
-        
-        score = score_decoding_evidence(summary)
-        self.assertEqual(score["evidence_quality"], "weak") # recurrence count is 1 ('social'), len(terms) is 2, max_weighted is 2.0
-
     def test_manifest_loader_roi_filtering(self) -> None:
         # Create a temporary manifest for NumpyLoader with keep_rois
         npy_path = self.manifest_dir / "test_data.npy"
@@ -236,22 +195,6 @@ class TestManifestLoader(unittest.TestCase):
         self.assertIsNotNone(fig_neg)
         plt.close(fig_neg)
 
-    def test_clean_term_name(self) -> None:
-        self.assertEqual(clean_term_name("terms_abstract_tfidf__somatosensory"), "somatosensory")
-        self.assertEqual(clean_term_name("LDA100_abstract_weight__42_social_cognition"), "social cognition")
-
-    def test_decode_combined_rois(self) -> None:
-        
-        # Test combined decoding mock dataset or dry run
-        atlas = AtlasInfo(
-            labels=["ROI_1", "ROI_2"],
-            networks=["Vis", "Mot"],
-            coords=np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]])
-        )
-        
-        # Should return empty df or not crash for empty roi list
-        df = decode_combined_rois(atlas, [])
-        self.assertTrue(df.empty)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,3 +1,4 @@
-# Full local/offline runtime, including NiMARE meta-analytic decoding.
+# Full local runtime. Brainnetome annotation needs no extra package; this file
+# is kept for existing setups and equals requirements/gui.txt.
 
--e .[app,decode]
+-e .[app]
