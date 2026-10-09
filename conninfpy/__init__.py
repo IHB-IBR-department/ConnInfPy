@@ -39,7 +39,7 @@ __version__ = "2.0.0"
 from .analysis import AnalyzeResult, analyze
 from ._compat import TailResult
 from .results import InferenceResult, OmnibusInferenceResult
-from .atlas import AtlasInfo, get_bna_246_nifti_path
+from .atlas import AtlasInfo, get_bna_246_nifti_path, fetch_bna_behavioral_decoding
 from .defaults import (
     DEFAULT_EXTENT_EXPONENT,
     DEFAULT_HEIGHT_EXPONENT,
@@ -161,6 +161,7 @@ __all__ = [
     # data in
     "load",
     "AtlasInfo",
+    "fetch_bna_behavioral_decoding",
     "fisher_r_to_z",
     "fisher_z_to_r",
     # modules
