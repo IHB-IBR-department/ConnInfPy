@@ -56,6 +56,9 @@ dependencies = [
     # loaders subpackage is pulled in by the top-level __init__, so a
     # core install is unusable without it. Keep in core, not an extra.
     "pyyaml",
+    # Atlas label images and Brainnetome annotation (conninfpy.atlas,
+    # conninfpy.brainnetome, conninfpy.annotate).
+    "nibabel>=3.2",
 ]
 
 [project.scripts]
@@ -73,11 +76,6 @@ app = [
     "networkx",
     "nibabel>=3.2",
     "nilearn>=0.10.1",  # "zscore_sample" standardization
-]
-decode = [
-    # 0.5.5 and 0.22.1 tested; NiMARE pins its own compatible nilearn.
-    "nimare>=0.5.5",
-    "nibabel>=3.2",
 ]
 full = [
     "pyyaml",
@@ -132,7 +130,7 @@ warn_return_any = false
 [[tool.mypy.overrides]]
 module = [
     "scipy.*", "sklearn.*", "nilearn.*",
-    "tqdm.*", "numba.*", "nimare.*", "openai.*", "google.*", "yaml.*",
+    "tqdm.*", "numba.*", "openai.*", "google.*", "yaml.*",
     "pandas.*", "networkx.*",
 ]
 ignore_missing_imports = true

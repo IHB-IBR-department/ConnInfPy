@@ -2,7 +2,7 @@ import os
 import re
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 from .evidence import validate_evidence
 from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 
@@ -33,21 +33,23 @@ COGNITIVE_TERMS_TO_GUARD = {
 }
 
 SAFE_STRUCTURAL_WORDS = {
-    "the", "and", "a", "of", "to", "in", "is", "that", "for", "on", "with", "as", "by", "at", 
+    "the", "and", "a", "of", "to", "in", "is", "that", "for", "on", "with", "as", "by", "at",
     "an", "be", "this", "are", "from", "it", "or", "have", "were", "was", "not", "which",
-    "but", "association", "associations", "decodes", "decode", "decoding", "enriched", 
-    "spatial", "literature", "neurosynth", "nimare", "evidence", "packet", "roi", "rois", 
-    "network", "networks", "edge", "edges", "contrast", "atlas", "schaefer", "yeo", "bna", 
-    "cautions", "caution", "cautious", "caveat", "caveats", "mechanistic", "mechanism", 
-    "mechanisms", "claim", "claims", "score", "scores", "rank", "ranks", "ranked", 
-    "associated", "showed", "showing", "strongest", "reflect", "reflects", "frequency", 
-    "frequencies", "rather", "than", "prove", "proves", "proven", "task", "engagement", 
-    "activation", "activations", "engaged", "summary", "interpretation", "report", "ready",
-    "sentence", "cautious", "publication", "methods", "result", "inconclusive", "weak", 
-    "sparse", "contradictory", "generic", "consistent", "standard", "average", "paired", 
-    "group", "univariate", "threshold", "thresholding", "significant", "significance",
-    "default", "control", "limitation", "limitations", "cognitive", "construct", "constructs",
-    "working", "span", "spans", "spanning"
+    "but", "association", "associations", "associated", "literature", "evidence", "packet",
+    "roi", "rois", "network", "networks", "edge", "edges", "connection", "connections",
+    "contrast", "atlas", "schaefer", "yeo", "bna", "brainnetome", "brainmap", "forward",
+    "inference", "likelihood", "ratio", "ratios", "profile", "profiles", "domain", "domains",
+    "term", "terms", "published", "region", "regions", "subregion", "subregions", "gyrus",
+    "lobe", "lobes", "hemisphere", "hemispheric", "homotopic", "heterotopic", "homologous",
+    "intrahemispheric", "interhemispheric", "cortico", "cortical", "subcortical", "thalamo",
+    "endpoint", "endpoints", "mixed", "unassigned", "component", "components", "block", "blocks",
+    "unit", "detected", "detection", "detections", "tested", "caution", "cautions", "cautious",
+    "caveat", "caveats", "mechanistic", "mechanism", "mechanisms", "claim", "claims", "showed",
+    "showing", "reflect", "reflects", "rather", "than", "prove", "proves", "task", "tasks",
+    "engagement", "activation", "activations", "engaged", "engage", "summary", "interpretation",
+    "report", "ready", "sentence", "publication", "methods", "result", "inconclusive", "sparse",
+    "consistent", "significant", "significance", "limitation", "limitations", "construct",
+    "constructs", "default", "control",
 }
 
 def load_dotenv_manually() -> None:
@@ -78,25 +80,29 @@ def check_narrative_terms(narrative: str, evidence: Dict[str, Any]) -> List[str]
     words = set(re.findall(r'\b[a-zA-Z]{3,}\b', narrative.lower()))
     
     allow_list = set()
-    
-    # 1. Decoded terms
+
+    def add(text: Any) -> None:
+        allow_list.update(re.findall(r'\b[a-zA-Z]{3,}\b', str(text or "").lower()))
+
+    # 1. BrainMap terms and domains of the endpoint regions
     for t in evidence.get("terms", []):
-        allow_list.update(re.findall(r'\b[a-zA-Z]{3,}\b', t.get("term", "").lower()))
-        allow_list.update(re.findall(r'\b[a-zA-Z]{3,}\b', t.get("roi_name", "").lower()))
-        allow_list.update(re.findall(r'\b[a-zA-Z]{3,}\b', t.get("network", "").lower()))
-        
-    # 2. Network pair names
-    for np_pair in evidence.get("query", {}).get("network_pairs", []):
-        allow_list.update(re.findall(r'\b[a-zA-Z]{3,}\b', np_pair.get("source", "").lower()))
-        allow_list.update(re.findall(r'\b[a-zA-Z]{3,}\b', np_pair.get("target", "").lower()))
-        
-    # 3. Method configuration
-    decoder = evidence.get("decoder", {})
-    allow_list.update(re.findall(r'\b[a-zA-Z]{3,}\b', decoder.get("backend", "").lower()))
-    allow_list.update(re.findall(r'\b[a-zA-Z]{3,}\b', decoder.get("dataset", "").lower()))
-    allow_list.update(re.findall(r'\b[a-zA-Z]{3,}\b', decoder.get("method", "").lower()))
-    allow_list.update(re.findall(r'\b[a-zA-Z]{3,}\b', decoder.get("scoring", "").lower()))
-    
+        add(t.get("term", "").replace(".", " ").replace("_", " "))
+        add(t.get("domain"))
+        add(t.get("region"))
+    # 2. Endpoint anatomy
+    for r in evidence.get("rois", []):
+        for k in ("roi_name", "assigned", "region", "lobe", "structure", "description", "yeo7", "domains"):
+            add(r.get(k))
+    # 3. Region pairs and relation categories
+    for pair in evidence.get("query", {}).get("region_pairs", []):
+        add(pair.get("source"))
+        add(pair.get("target"))
+    for rel in evidence.get("relations", []):
+        add(rel.get("category"))
+    # 4. Reference description
+    for v in evidence.get("reference", {}).values():
+        add(v)
+
     # Add structure words
     allow_list.update(SAFE_STRUCTURAL_WORDS)
     
@@ -301,24 +307,29 @@ class LLMNarrator:
         return (prompt_tokens * input_rate) + (completion_tokens * output_rate)
             
     def _mock_response(self, evidence: Dict[str, Any]) -> str:
-        """Generate a deterministic mock narrative for testing and keyless fallback."""
-        top_terms = [t['term'] for t in evidence['terms'][:3]]
-        terms_str = ", ".join([f"'{t['term']}' (score: {t['score']:.2f})" for t in evidence['terms'][:3]])
-        atlas = evidence['query']['atlas']
-        caveat = evidence['caveats'][0]
-        
-        return f"""### Decoding summary
-NiMARE decoding of the contrast '{evidence['query']['contrast']}' using the {atlas} atlas identified significant spatial literature associations.
+        """Deterministic narrative for tests and keyless fallback (uses only packet content)."""
+        from .evidence import describe_coverage, summarize_terms
 
-### Main associated terms
-The top terms associated with the input regions are: {terms_str}.
+        q = evidence["query"]
+        cov = describe_coverage(evidence)
+        summ = summarize_terms(evidence)
+        hubs = ", ".join(f"{h['roi_name']} ({h['assigned']}, {h['n_detected_edges']} connections)"
+                         for h in summ["top_endpoint_rois"][:3])
+        domains = ", ".join(f"{d['domain']} ({d['n_rois']} ROIs)" for d in summ["domains"] if d["n_rois"])
+        rels = "; ".join(f"{r['category']}: {r['n_detected']} detected of {r['n_tested']} tested"
+                         for r in evidence.get("relations", []) if r["relation"] == "circuit")
+        return f"""### Anatomical summary
+For the contrast '{q['contrast']}', {cov['report_sentence']}
 
-### Network-level interpretation
-The queried regions span the following networks: {", ".join(sorted(list(set(t['network'] for t in evidence['terms']))))}.
+### Endpoint regions
+Most connected endpoints: {hubs or 'none'}.
+
+### Connection classes
+{rels or 'Relation counts were not provided.'}
+
+### BrainMap context
+Endpoint regions carry published BrainMap domains: {domains or 'none'}. These are forward-inference associations from the activation literature.
 
 ### Cautions
-{caveat}
-
-### Report-ready sentence
-NiMARE decoding of the selected ConnInfPy regions in the {atlas} atlas showed strongest literature associations with {", ".join([f"'{t}'" for t in top_terms])}. These terms should be interpreted as spatial literature associations rather than mechanistic evidence for the contrast.
+{evidence['caveats'][0]}
 """

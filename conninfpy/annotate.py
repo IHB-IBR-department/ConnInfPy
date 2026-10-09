@@ -421,7 +421,8 @@ def annotate_edges(edges: Any, rois: RoiAnnotation, *, smoothing_fwhm_mm: Option
     ``result.significant_edges(...)``; its columns (statistics, p-values) are
     kept unchanged. Added columns:
 
-    * ``i_bna`` / ``j_bna`` (assignment at the finest pure level), ``i_lobe``,
+    * ``i_roi`` / ``j_roi`` (ROI names), ``i_bna`` / ``j_bna`` (assignment at
+      the finest pure level), ``i_lobe``,
       ``j_lobe``, ``i_yeo7``, ``j_yeo7``, ``i_domains``, ``j_domains``;
     * ``hemispheric_relation``: left / right intrahemispheric, homotopic
       (homologous subregions), homotopic gyrus, heterotopic, or
@@ -450,6 +451,7 @@ def annotate_edges(edges: Any, rois: RoiAnnotation, *, smoothing_fwhm_mm: Option
     i = df["roi_i"].to_numpy(int)
     j = df["roi_j"].to_numpy(int)
     for side, idx in (("i", i), ("j", j)):
+        df[f"{side}_roi"] = t["roi"].to_numpy()[idx]
         df[f"{side}_bna"] = t["assigned"].to_numpy()[idx]
         df[f"{side}_lobe"] = t["lobe"].to_numpy()[idx]
         df[f"{side}_yeo7"] = t["yeo7"].to_numpy()[idx]

@@ -17,10 +17,10 @@ def render_narrative_report_view():
     if is_stale:
         st.error("❌ **Stale Results:** The dataset configuration has changed. You must re-run inference in Tab 2 before generating the narrative report.")
     elif st.session_state.evidence_packet is None:
-        st.warning("⚠️ **Narrative is waiting for decoding results.**")
-        st.info("Please run NiMARE decoding first to map literature associations.")
-        if st.button("Go to Decoding ➡️", key="go_to_decoding_btn", type="primary"):
-            st.session_state.active_tab = "4. Meta-Analytic Decoding"
+        st.warning("⚠️ **Narrative is waiting for the Brainnetome annotation.**")
+        st.info("Annotate the detected connections first (Tab 4).")
+        if st.button("Go to Annotation ➡️", key="go_to_annotation_btn", type="primary"):
+            st.session_state.active_tab = "4. Brainnetome Annotation"
             st.rerun()
     else:
         # Collapsible LLM Config
@@ -68,7 +68,7 @@ def render_narrative_report_view():
             st.session_state.llm_model = model_val
             st.session_state.llm_api_key = api_key
 
-        st.info("💡 **Scientific Citation Note**: NiMARE/Neurosynth meta-analytic decoding maps literature associations and represents literature spatial frequency, not direct mechanistic causal claims (Yarkoni et al., 2011; Wager & Lindquist, 2016).")
+        st.info("💡 **Scientific note**: anatomy comes from the Brainnetome atlas (Fan et al., 2016). BrainMap terms are forward-inference associations from published activation studies (Fox & Laird, 2012): which tasks activate a region, not what a region or a connection does.")
         
         # Validate evidence
         try:
@@ -140,7 +140,7 @@ def render_narrative_report_view():
                             # Term guardrails warning check
                             unsupported = check_narrative_terms(m_data["text"], st.session_state.evidence_packet)
                             if unsupported:
-                                st.warning(f"⚠️ **Term Guardrail Warning**: The generated answer contains cognitive terms not present in the NiMARE evidence: `{', '.join(unsupported)}`.")
+                                st.warning(f"⚠️ **Term Guardrail Warning**: The generated answer contains cognitive terms not present in the evidence packet: `{', '.join(unsupported)}`.")
                             
                             st.markdown('<div class="custom-card">', unsafe_allow_html=True)
                             st.markdown(m_data["text"])
@@ -160,7 +160,7 @@ def render_narrative_report_view():
                             report_block = f"""# Neuroimaging Decoding Report
 Contrast: {st.session_state.evidence_packet['query']['contrast']}
 Atlas: {st.session_state.evidence_packet['query']['atlas']}
-Method: {st.session_state.evidence_packet['decoder']['method']}
+Reference: {st.session_state.evidence_packet['reference']['atlas']}
 Model: {m_name}
 
 {m_data["text"]}
@@ -171,7 +171,7 @@ Model: {m_name}
                             st.download_button(
                                 f"Export Markdown Report ({m_name.split('/')[-1]})",
                                 data=report_block.encode('utf-8'),
-                                file_name=f"nimare_narrative_{m_name.split('/')[-1]}_{safe_filename_part(current_contrast_name())}.md",
+                                file_name=f"narrative_{m_name.split('/')[-1]}_{safe_filename_part(current_contrast_name())}.md",
                                 mime="text/markdown",
                                 key=f"download_{m_name}"
                             )
