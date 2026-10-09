@@ -134,6 +134,7 @@ def apply_ni_tfnbs(
     n: int = DEFAULT_N_THRESHOLDS,
     start_thres: float = DEFAULT_START_THRESHOLD,
     normalization: str = "sqrt",
+    edge_mask: Optional[npt.NDArray[np.bool_]] = None,
     **kwargs,
 ) -> TailResult:
     """Apply network-informed TFNBS (block-density weighted) to each direction."""
@@ -141,7 +142,7 @@ def apply_ni_tfnbs(
         stat_dict,
         lambda arr: get_network_informed_tfnbs_score(
             arr, net_labels, e, h, n,
-            start_thres=start_thres, normalization=normalization,
+            start_thres=start_thres, normalization=normalization, edge_mask=edge_mask,
         ),
     )
 

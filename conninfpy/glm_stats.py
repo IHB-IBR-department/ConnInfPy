@@ -908,6 +908,7 @@ def compute_p_val_glm(
             stat_type=stat_type_str, strata_provided=strata is not None,
             e_grid=e_grid, h_grid=h_grid, missing_report=report,
             block_report=block_report,
+            two_tailed=two_tailed,
         )
 
     # An exact fit with a nonzero contrast has an infinite t (or F)
@@ -926,7 +927,7 @@ def compute_p_val_glm(
         XtX_inv=XtX_inv,
     )
     # Keep the raw (pre-enhancement) stat dict so InferenceResult can
-    # surface the t/β/F effect map even when the enhanced score is a
+    # surface the t/β/F statistic map even when the enhanced score is a
     # multi-(E, H) tensor.
     raw_stat_dict = emp_stat_dict
     if enhance_func is not None:
@@ -1014,7 +1015,7 @@ def compute_p_val_glm(
         from ._cnbs import block_p_values
         result, block_report = block_p_values(
             emp_stat_dict, max_null_dict, net_labels, N,
-            correction=cnbs_correction, acceleration=acceleration,
+            correction=cnbs_correction, acceleration=acceleration, two_tailed=two_tailed,
         )
     elif acceleration is not None:
         result = compute_p_values_accelerated(
@@ -1038,6 +1039,7 @@ def compute_p_val_glm(
             e_grid=e_grid,
             h_grid=h_grid,
             block_report=block_report,
+            two_tailed=two_tailed,
         )
     # F-stat path: single 'omnibus' map → OmnibusInferenceResult
     return OmnibusInferenceResult(
@@ -1406,7 +1408,7 @@ def compute_p_val_glm_multi(
         if method_enum == StatMethod.CNBS:
             from ._cnbs import block_p_values
             res, block_report = block_p_values(emp, null, net_labels, N, correction=cnbs_correction,
-                                               acceleration=acceleration)
+                                               acceleration=acceleration, two_tailed=two_tailed)
         elif acceleration is not None:
             res = compute_p_values_accelerated(emp, null, method=acceleration)
         else:
@@ -1422,6 +1424,7 @@ def compute_p_val_glm_multi(
             stat_type=stat_type_str,
             strata_provided=strata is not None,
             block_report=block_report,
+            two_tailed=two_tailed,
         )
     return out
 

@@ -278,6 +278,7 @@ def available_case_p_val(
     acceleration: Optional[str],
     min_coverage: float = DEFAULT_MIN_COVERAGE,
     block_inference: Optional[Dict[str, Any]] = None,
+    two_tailed: bool = False,
 ):
     """p-values, raw t maps and the coverage report for one available-case run.
 
@@ -317,11 +318,15 @@ def available_case_p_val(
         p_values = {}
         for key, t in (("positive", t_pos), ("negative", t_neg)):
             p = np.full(t.shape, np.nan)
-            raw = stats.t.sf(t[d.tested], df[d.tested])
+            raw = stats.t.sf((t_pos + t_neg if two_tailed else t)[d.tested], df[d.tested])
+            if two_tailed:
+                raw *= 2
             if method == "parametric_bonferroni":
                 p[d.tested] = np.minimum(raw * d.tested.sum(), 1.0)
             else:
                 p[d.tested] = _bh_fdr_correction(raw)
+            if two_tailed:
+                p[d.tested & (t == 0)] = 1.0
             p_values[key] = _matrix(p)
         return p_values, raw_t, report
 
@@ -339,17 +344,21 @@ def available_case_p_val(
         for key, t in (("positive", t_pos), ("negative", t_neg)):
             count = np.zeros(t.shape)
             for r in perm:
-                count += r[key] >= t
+                count += ((r["positive"] + r["negative"] >= t_pos + t_neg)
+                          if two_tailed else (r[key] >= t))
             per_edge = (count + 1.0) / (n_permutations + 1.0)
             p = np.full(t.shape, np.nan)
             p[d.tested] = _bh_fdr_correction(per_edge[d.tested])
+            if two_tailed:
+                p[d.tested & (t == 0)] = 1.0
             p_values[key] = _matrix(p)
         return p_values, raw_t, report
 
-    if block_inference is not None:
-        tested_mat = np.zeros((d.N, d.N), dtype=bool)
-        tested_mat[d.triu] = d.tested
-        tested_mat = tested_mat | tested_mat.T
+    tested_mat = np.zeros((d.N, d.N), dtype=bool)
+    tested_mat[d.triu] = d.tested
+    tested_mat = tested_mat | tested_mat.T
+    from .enhance import apply_ni_tfnbs
+    if block_inference is not None or enhance_func is apply_ni_tfnbs:
         enhance_kwargs = {**enhance_kwargs, "edge_mask": tested_mat}
     emp = raw_t if enhance_func is None else enhance_func(raw_t, **enhance_kwargs)
     results = run_permutations(
@@ -357,12 +366,15 @@ def available_case_p_val(
         use_mp=_use_mp, n_processes=n_processes, verbose=verbose, desc="available_case",
     )
     null = _collect_results_to_arrays(results, n_permutations)
+    if two_tailed and block_inference is None:
+        joint = np.maximum(null["positive"], null["negative"])
+        null = {"positive": joint, "negative": joint}
     if block_inference is not None:
         from ._cnbs import block_p_values
         p_values, report["block_report"] = block_p_values(
             emp, null, block_inference["net_labels"], d.N,
             correction=block_inference["correction"], edge_mask=tested_mat,
-            acceleration=acceleration,
+            acceleration=acceleration, two_tailed=two_tailed,
         )
     elif acceleration is not None:
         from .acceleration import compute_p_values_accelerated

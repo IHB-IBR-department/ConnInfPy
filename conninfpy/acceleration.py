@@ -49,6 +49,12 @@ def _empirical_p(
     observed: npt.NDArray[np.float64],
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.int64]]:
     """Tie-inclusive max-statistic p-values (Phipson-Smyth +1) and counts."""
+    null_dist = np.asarray(null_dist, dtype=np.float64)
+    observed = np.asarray(observed, dtype=np.float64)
+    if null_dist.ndim != 1 or not null_dist.size:
+        raise ValueError("null_dist must be a nonempty one-dimensional permutation null.")
+    if not np.isfinite(null_dist).all() or not np.isfinite(observed).all():
+        raise ValueError("Tail approximation requires finite observed and null statistics.")
     count = np.sum(observed[..., np.newaxis] <= null_dist, axis=-1)
     return (count + 1.0) / (len(null_dist) + 1.0), count
 
@@ -59,18 +65,27 @@ def _replace_sparse_tail(
     tail_p: npt.NDArray[np.float64],
     J: int,
     min_exceedances: int,
+    replacement_mask: Optional[npt.NDArray[np.bool_]] = None,
 ) -> npt.NDArray[np.float64]:
     """Use the fitted tail only where the permutation count is too coarse.
 
     ``tail_p`` holds fitted p-values for the statistics with
-    ``count < min_exceedances`` (in that order). They are clipped to
-    ``[1/J, (min_exceedances + 1)/(J + 1)]`` so that p-values stay
-    non-increasing in the statistic across the switch.
+    ``count < min_exceedances`` intersected with ``replacement_mask`` when
+    supplied (in that order). Model estimates can fall below 1/J. The upper
+    cap keeps the switch from increasing p-values; float64's smallest normal
+    positive value is only an underflow guard, not a statistical resolution
+    or accuracy claim. Invalid fitted values retain their empirical p-values.
     """
     p = np.copy(p_empirical)
     sparse = count < min_exceedances
-    upper = (min_exceedances + 1.0) / (J + 1.0)
-    p[sparse] = np.clip(tail_p, 1.0 / J, upper)
+    if replacement_mask is not None:
+        sparse &= replacement_mask
+    upper = min(1.0, (min_exceedances + 1.0) / (J + 1.0))
+    tail_p = np.asarray(tail_p, dtype=np.float64)
+    valid = np.isfinite(tail_p) & (tail_p >= 0) & (tail_p <= 1)
+    replacement = p[sparse].copy()
+    replacement[valid] = np.clip(tail_p[valid], np.finfo(float).tiny, upper)
+    p[sparse] = replacement
     return p
 
 
@@ -141,14 +156,7 @@ def _gpd_sf(
     """
     x = np.asarray(x, dtype=np.float64)
 
-    if abs(xi) < 1e-10:
-        # Exponential case (xi → 0)
-        return np.exp(-x / sigma)
-
-    z = 1 + xi * x / sigma
-    # Ensure z > 0 for valid domain
-    z = np.maximum(z, 0.0)
-    return np.power(z, -1.0 / xi)
+    return stats.genpareto.sf(x, c=xi, scale=sigma)
 
 
 def _anderson_darling_gpd(
@@ -231,8 +239,19 @@ def fit_gpd_tail(
     p_values : ndarray of same shape as observed
         Permutation p-values (tie-inclusive, Phipson-Smyth +1), with GPD
         values in the sparse tail when a good fit is found.
+
+    Notes
+    -----
+    Fitted values may be smaller than 1/J and are approximate. Observations
+    below the fitted threshold retain empirical p-values. Fits whose finite
+    upper endpoint excludes any candidate observation are rejected. Failed
+    fits fall back to counting; the positive numerical floor guards underflow.
     """
     J = len(null_dist)
+    if not isinstance(min_exceedances, (int, np.integer)) or min_exceedances < 1:
+        raise ValueError("min_exceedances must be a positive integer.")
+    if not isinstance(n_thresholds, (int, np.integer)) or n_thresholds < 1:
+        raise ValueError("n_thresholds must be a positive integer.")
     null_sorted = np.sort(null_dist)
     p_empirical, count = _empirical_p(null_dist, observed)
 
@@ -253,18 +272,27 @@ def fit_gpd_tail(
 
         # Check fit quality
         ad_stat = _anderson_darling_gpd(exceedances, sigma, xi)
-        if ad_stat > ad_threshold:
+        if not np.isfinite(ad_stat) or ad_stat > ad_threshold:
             continue
 
         # Good fit found: P(T > u) times the GPD survival above u
         k = len(exceedances)
-        tail_p = (k / J) * _gpd_sf(np.maximum(observed[sparse] - u, 0.0), sigma, xi)
+        eligible = sparse & (observed >= u)
+        if not np.any(eligible):
+            continue
+        if xi < 0 and np.any(observed[eligible] - u >= -sigma / xi):
+            # A fitted finite endpoint is not evidence of an impossible
+            # permutation statistic. Try another fit, otherwise use counting.
+            logger.debug("GPD bounded endpoint excludes observed statistics; rejecting fit")
+            continue
+        tail_p = (k / J) * _gpd_sf(observed[eligible] - u, sigma, xi)
 
         logger.debug(
             f"GPD fit: u={u:.3f} (q={q:.2f}), k={k}, xi={xi:.4f}, "
             f"sigma={sigma:.4f}, AD={ad_stat:.3f}, sparse={int(sparse.sum())}"
         )
-        return _replace_sparse_tail(p_empirical, count, tail_p, J, min_exceedances)
+        return _replace_sparse_tail(p_empirical, count, tail_p, J, min_exceedances,
+                                    replacement_mask=eligible)
 
     # No good fit found — fall back to empirical
     logger.debug("GPD fit failed at all thresholds, using empirical p-values")
@@ -303,6 +331,8 @@ def fit_gamma_tail(
     """
 
     J = len(null_dist)
+    if not isinstance(min_exceedances, (int, np.integer)) or min_exceedances < 1:
+        raise ValueError("min_exceedances must be a positive integer.")
     p_empirical, count = _empirical_p(null_dist, observed)
     sparse = count < min_exceedances
     if not np.any(sparse):
@@ -312,7 +342,7 @@ def fit_gamma_tail(
     var = np.var(null_dist, ddof=1)
     skew_val = float(stats.skew(null_dist))
 
-    if var <= 0 or skew_val < 1e-10:
+    if not np.isfinite(var) or not np.isfinite(skew_val) or var <= 0 or skew_val < 1e-10:
         # A gamma with positive scale is always right-skewed (skewness
         # 2 / sqrt(a) > 0): it cannot represent a symmetric or left-skewed
         # null, so keep the permutation p-values.
