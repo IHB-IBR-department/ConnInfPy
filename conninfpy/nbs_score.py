@@ -45,9 +45,18 @@ from .defaults import DEFAULT_NBS_STAT, DEFAULT_NBS_THRESHOLD, DEFAULT_N_PERMUTA
 ArrayF = npt.NDArray[np.float64]
 
 
-def _is_symmetric(matrix: npt.NDArray[np.floating], rtol: float = 1e-10) -> bool:
-    """True when the matrix equals its transpose."""
-    return np.allclose(matrix, matrix.T, rtol=rtol, atol=0)
+def _is_symmetric(matrix: npt.NDArray[np.floating], rtol: float = 1e-8) -> bool:
+    """True when the matrix equals its transpose up to rounding.
+
+    The tolerance scales with the largest magnitude (as in the input check):
+    a purely relative test fails on near-zero statistics, whose two triangles
+    can differ by ~1e-14 in absolute terms, and the map would then be scored
+    as directed (each undirected edge counted twice).
+    """
+    m = np.asarray(matrix, dtype=np.float64)
+    with np.errstate(invalid="ignore"):
+        scale = max(1.0, float(np.nanmax(np.abs(m))) if np.isfinite(m).any() else 1.0)
+    return bool(np.allclose(m, m.T, rtol=0.0, atol=rtol * scale, equal_nan=True))
 
 
 def _get_edges(
