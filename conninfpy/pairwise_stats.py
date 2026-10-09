@@ -977,6 +977,38 @@ def _compute_parametric_p_values(
     return p_values, t_dict
 
 
+def _with_estimates(fn):
+    """Attach the equivalent-design coefficient maps (``beta`` / ``design``) to the result.
+
+    Two-sample: [group-1 mean, group 2 - group 1]; paired: [condition-A mean,
+    B - A]; one-sample: [mean] (NaN-aware). Computed after ``fn`` validated
+    its inputs, from the same validated stacks.
+    """
+    import functools
+    import inspect
+
+    sig = inspect.signature(fn)
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        res = fn(*args, **kwargs)
+        if getattr(res, "beta", None) is None:
+            from ._estimates import pairwise_estimates
+
+            b = sig.bind(*args, **kwargs)
+            b.apply_defaults()
+            tt = b.arguments["test_type"]
+            tt = tt.value if isinstance(tt, TestType) else tt
+            g1 = check_connectivity(b.arguments["group1"], "group1", allow_missing=True)
+            g2 = b.arguments["group2"]
+            g2 = None if g2 is None else check_connectivity(g2, "group2", allow_missing=True)
+            res.beta, res.design = pairwise_estimates(g1, g2, tt)
+        return res
+
+    return wrapper
+
+
+@_with_estimates
 def compute_p_val(
     group1: npt.NDArray[np.float64],
     group2: Optional[npt.NDArray[np.float64]] = None,

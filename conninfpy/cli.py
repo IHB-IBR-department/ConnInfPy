@@ -6,7 +6,10 @@ settings. ``run`` loads the data, calls :func:`conninfpy.analyze`, and
 writes three files to the output directory:
 
 - ``edges.csv`` — significant edges (atlas-annotated when an atlas is known)
-- ``pvals.npz`` — ``positive`` / ``negative`` p-value maps and ``stat_signed``
+- ``pvals.npz`` — ``positive`` / ``negative`` p-value maps, ``stat_signed``,
+  and the coefficient maps of the tested model: ``beta`` (p, N, N) with
+  ``beta_columns``, ``effect`` (the contrast c' beta) and the predicted
+  connectivity at the two compared profiles (``fc[<profile>]``)
 - ``provenance.json`` — package version, the analysis file, data and design
   summary, resolved tail/correction/native-unit policy, warnings (``flags``),
   and run time
@@ -283,6 +286,15 @@ def run(
         arrays = {"positive": inf.positive, "negative": inf.negative}
         if getattr(inf, "stat_signed", None) is not None:
             arrays["stat_signed"] = inf.stat_signed
+        design = getattr(inf, "design", None)
+        if getattr(inf, "beta", None) is not None and design is not None:
+            arrays["beta"] = inf.beta                                  # (p, N, N), response scale
+            arrays["beta_columns"] = np.array(design["columns"])
+            eff = inf.effect_map()
+            if eff is not None:
+                arrays["effect"] = eff                                 # c' beta
+            for label in design.get("comparison") or []:
+                arrays[f"fc[{label}]"] = inf.predicted(label)
         np.savez_compressed(pvals_path, **arrays)
         written[f"edges{suffix}"] = edges_path
         written[f"pvals{suffix}"] = pvals_path
@@ -296,6 +308,10 @@ def run(
             "acceleration": inf.acceleration,
             "flags": list(res.flags),
             "combat_diagnostics": res.combat_diagnostics,
+            "design": None if design is None else {
+                k: design.get(k) for k in ("kind", "columns", "contrast", "column_means", "profiles",
+                                           "comparison", "interest", "scale", "estimable_columns")
+            },
         }
 
     provenance = {

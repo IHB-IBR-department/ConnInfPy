@@ -31,7 +31,7 @@ APIs (``result.positive``, ``result.stat_signed``, ``result.method``,
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -166,6 +166,15 @@ class InferenceResult(TailResult):
     two_tailed : bool
         Whether positive and negative directions form one two-sided family.
         Each enhancement parameter setting and contrast is corrected separately.
+    beta : ndarray of shape (p, N, N) or None
+        Coefficient maps of the tested model on the response scale (GLM
+        coefficients; for pairwise tests the equivalent design: group-1
+        mean and group difference, condition-A mean and B - A, or the mean).
+        Independent of the enhancement settings.
+    design : dict or None
+        Columns, column means, contrast, named covariate profiles and the
+        comparison used for coupling changes (see :meth:`predicted`,
+        :meth:`coupling`), and the response ``scale``.
     """
 
     method: str
@@ -185,6 +194,8 @@ class InferenceResult(TailResult):
     missing_report: Optional[Dict[str, Any]]
     block_report: Optional[Dict[str, Any]]
     two_tailed: bool
+    beta: Optional[npt.NDArray[np.float64]]
+    design: Optional[Dict[str, Any]]
 
     def __new__(
         cls,
@@ -208,6 +219,8 @@ class InferenceResult(TailResult):
         missing_report: Optional[Dict[str, Any]] = None,
         block_report: Optional[Dict[str, Any]] = None,
         two_tailed: bool = False,
+        beta: Optional[npt.NDArray[np.float64]] = None,
+        design: Optional[Dict[str, Any]] = None,
     ) -> "InferenceResult":
         instance = super().__new__(cls)
         TailResult.__init__(
@@ -230,6 +243,8 @@ class InferenceResult(TailResult):
         instance.missing_report = missing_report
         instance.block_report = block_report
         instance.two_tailed = two_tailed
+        instance.beta = beta
+        instance.design = design
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
@@ -353,6 +368,8 @@ class InferenceResult(TailResult):
             missing_report=self.missing_report,
             block_report=self.block_report,
             two_tailed=getattr(self, "two_tailed", False),
+            beta=getattr(self, "beta", None),
+            design=getattr(self, "design", None),
         )
 
     def n_significant(
@@ -387,6 +404,65 @@ class InferenceResult(TailResult):
                     out[tail] = [int(np.sum(sub[:, k] <= alpha))
                                  for k in range(arr.shape[-1])]
         return out
+
+    def predicted(self, profile: Union[str, Sequence[float]] = "mean") -> npt.NDArray[np.float64]:
+        """Predicted connectivity ``x' beta`` (N, N) at a named or explicit covariate profile.
+
+        ``'mean'`` gives the sample mean connectivity for a GLM (the
+        prediction at the column means); ``design['profiles']`` lists the
+        named profiles (adjusted group means, interest at mean -/+ 1 SD,
+        condition means). Never read baselines from the intercept map alone:
+        with uncentred covariates it is the connectivity at covariates = 0.
+        """
+        from ._estimates import predict
+
+        beta, design = getattr(self, "beta", None), getattr(self, "design", None)
+        if beta is None or design is None:
+            raise ValueError("this result carries no coefficient maps (beta).")
+        x = design["profiles"][profile] if isinstance(profile, str) else profile
+        return predict(beta, x)
+
+    def effect_map(self) -> Optional[npt.NDArray[np.float64]]:
+        """Contrast effect ``c' beta`` (N, N) in response units, or None.
+
+        The unstandardised effect (e.g. Δz per unit of the predictor, or the
+        group difference in Fisher z), not the test statistic.
+        """
+        from ._estimates import effect
+
+        beta, design = getattr(self, "beta", None), getattr(self, "design", None)
+        if beta is None or design is None:
+            return None
+        return effect(beta, design["contrast"])
+
+    def coupling(
+        self,
+        profiles: Optional[Sequence[str]] = None,
+        *,
+        near_zero: float = 0.0,
+    ) -> Dict[str, Any]:
+        """How coupling changes between two profiles (default: ``design['comparison']``).
+
+        Returns ``{'profiles', 'a', 'b', 'delta', 'classes'}``: the two
+        predicted maps on the analysis scale, their difference in r units
+        when the scale is Fisher z (``tanh(b) - tanh(a)``; native units
+        otherwise), and the class of each edge: stronger / weaker positive
+        coupling, stronger / weaker anticorrelation, sign change, or, with a
+        prespecified ``near_zero`` band, emerges from / returns to ~0.
+        Negative baselines depend on preprocessing (global-signal regression
+        induces anticorrelations).
+        """
+        from ._estimates import coupling_change
+
+        design = getattr(self, "design", None)
+        if design is None:
+            raise ValueError("this result carries no design / coefficient maps.")
+        names = list(profiles) if profiles is not None else design.get("comparison")
+        if not names or len(names) != 2:
+            raise ValueError("give two profile names; this design defines no comparison.")
+        a, b = self.predicted(names[0]), self.predicted(names[1])
+        classes, delta = coupling_change(a, b, scale=design.get("scale", "unknown"), near_zero=near_zero)
+        return {"profiles": names, "a": a, "b": b, "delta": delta, "classes": classes}
 
     def significant_edges(
         self,
@@ -455,7 +531,7 @@ class InferenceResult(TailResult):
             pickled pre-v2.1 results), or if ``sort='network_pair'``
             without an atlas.
         """
-        return build_tailed_dataframe(
+        df = build_tailed_dataframe(
             self._project_2d(self["positive"], param_idx),
             self._project_2d(self["negative"], param_idx),
             stat_signed=self.stat_signed,
@@ -466,6 +542,11 @@ class InferenceResult(TailResult):
             include_nonsig=include_nonsig,
             top_k=top_k,
         )
+        eff = self.effect_map()
+        if eff is not None and not df.empty:
+            col = list(df.columns).index("t_signed") + 1 if "t_signed" in df.columns else len(df.columns)
+            df.insert(col, "effect", eff[df["roi_i"].to_numpy(int), df["roi_j"].to_numpy(int)])
+        return df
 
     def network_summary(
         self,
@@ -547,7 +628,17 @@ class InferenceResult(TailResult):
             raise ValueError(f"rois has {len(rois)} ROIs but the result has {len(self['positive'])}.")
         edges = self.significant_edges(alpha=alpha, tail=tail, sort=sort, include_nonsig=include_nonsig,
                                        top_k=top_k, param_idx=param_idx)
-        return annotate_edges(edges, rois, smoothing_fwhm_mm=smoothing_fwhm_mm)
+        out = annotate_edges(edges, rois, smoothing_fwhm_mm=smoothing_fwhm_mm)
+        design = getattr(self, "design", None)
+        if design is not None and design.get("comparison") and not out.empty:
+            c = self.coupling()
+            i, j = out["roi_i"].to_numpy(int), out["roi_j"].to_numpy(int)
+            a_name, b_name = c["profiles"]
+            out[f"fc[{a_name}]"] = c["a"][i, j]
+            out[f"fc[{b_name}]"] = c["b"][i, j]
+            out["delta_r" if design.get("scale") == "fisher_z" else "delta"] = c["delta"][i, j]
+            out["coupling_change"] = c["classes"][i, j]
+        return out
 
     def decoded_edges(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
         """Removed: Neurosynth/NiMARE decoding was replaced by Brainnetome annotation."""
@@ -620,6 +711,8 @@ class OmnibusInferenceResult(TailResult):
         combat_diagnostics: Optional[Dict[str, Any]] = None,
         missing_report: Optional[Dict[str, Any]] = None,
         block_report: Optional[Dict[str, Any]] = None,
+        beta: Optional[npt.NDArray[np.float64]] = None,
+        design: Optional[Dict[str, Any]] = None,
     ) -> "OmnibusInferenceResult":
         instance = super().__new__(cls)
         # Don't go through TailResult's positive/negative initializer —
@@ -638,6 +731,8 @@ class OmnibusInferenceResult(TailResult):
         instance.combat_diagnostics = combat_diagnostics
         instance.missing_report = missing_report
         instance.block_report = block_report
+        instance.beta = beta
+        instance.design = design
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
