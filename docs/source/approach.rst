@@ -141,12 +141,16 @@ can be directed to expect effects that respect those blocks:
   effects such as within-network hypoconnectivity; it can miss effects that
   are small parts of large blocks. With K blocks and Bonferroni the
   smallest attainable p-value is K/(B+1), so use enough permutations.
-- ``ni_tfnbs`` (network-informed, **soft** prior) — applies TFNBS but reweights
-  an edge's component by the activation density of its own block, favouring
-  clusters concentrated within a known network. It attains the lowest
-  false-discovery rate in our benchmarks, at the cost of reduced power when the
-  effect does not follow the partition; it degrades toward plain TFNBS rather
-  than inverting when the partition is misspecified.
+- ``ni_tfnbs`` (network-informed, **soft** prior) — integrates an edge-level
+  block-density score over thresholds, without connected-component clustering.
+  At threshold h, k_b(h) eligible edges are active in block b and the extent
+  weight is k_b(h)/sqrt(M_b) by default (``normalization='linear'`` uses
+  k_b(h)/M_b; ``'none'`` uses k_b(h)). M_b is the fixed number of eligible
+  undirected opportunities: n_a*n_b between networks and n_a*(n_a-1)/2 within
+  a network when all pairs are eligible. Available-case inference excludes
+  untested pairs from both capacity and active counts. The same capacity is
+  used for observed and permuted maps. Its behavior depends on the partition;
+  a misspecified partition does not generally reproduce plain TFNBS.
 - ``fbc_tfnbs`` (functional-block-clustering, **hard** prior) — treats each
   block as a single atomic cluster and requires a minimum number of active
   edges per block. It targets diffuse, block-confined effects that are spread
@@ -357,11 +361,24 @@ count is too coarse. ``acceleration='gpd'`` fits a generalized Pareto
 distribution to the upper quartile of the null-maximum distribution and uses
 it for those statistics only — every other p-value stays the exact
 permutation p-value (Winkler et al., 2016; Knijnenburg et al., 2009). Fitted
-p-values are kept between 1/J and the smallest permutation p-value they
-replace, and a goodness-of-fit check falls back to the permutation p-values
-when the fit is poor. With ~200 instead of ~5000 permutations (~25× faster)
-this suits exploration; use exact p-values from a large run for the final
-result.
+p-values can be smaller than 1/J: these are model-based tail estimates, not
+exact permutation counts. Replacement requires an observation at or above
+the fitted threshold, an acceptable fit, and compatible fitted support. A
+fit with a finite endpoint below an observation is rejected; unsuccessful
+fits retain the tie-inclusive (b+1)/(J+1) permutation p-value. Float64's
+smallest positive normal value only guards numerical underflow. Gamma
+approximation uses the same resolution policy. Extreme-tail accuracy depends
+on the model and is not established by the number of permutations alone.
+
+**Directional families.** ``two_tailed=True`` declares one two-sided family
+for pairwise and GLM inference. Max-statistic methods pool positive/negative
+null maxima, cNBS tests absolute block means before across-block correction,
+and pairwise BH methods correct two-sided marginal p-values across eligible
+edges. Directional maps retain the p-value in the observed direction and 1
+in the opposite direction. The default ``False`` keeps separate one-sided
+families; use alpha/2 per directional family for combined-direction FWER.
+Each enhancement setting and contrast is corrected separately; selecting
+among settings or contrasts requires an additional declared correction.
 
 
 End-to-end example

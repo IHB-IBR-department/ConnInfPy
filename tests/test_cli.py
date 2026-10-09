@@ -91,6 +91,19 @@ class TestRun(unittest.TestCase):
         self.assertEqual(prov["data"]["n_subjects_used"], 24)
         self.assertEqual(prov["data"]["input"], "r")      # from the manifest's data_kind
         self.assertIn("flags", prov["results"]["result"])
+        self.assertEqual(prov["results"]["result"]["tail_policy"], "two-sided")
+        self.assertEqual(prov["results"]["result"]["correction"], "permutation_max")
+        self.assertEqual(prov["results"]["result"]["inference_unit"], "edge")
+
+    def test_explicit_one_sided_config_preserves_directional_family(self):
+        study = _Study(self.tmp, _pheno(12), _correlations(12))
+        cfg = study.analysis({"type": "glm", "interest": "age"})
+        config = yaml.safe_load(cfg.read_text())
+        config["inference"]["two_tailed"] = False
+        cfg.write_text(yaml.safe_dump(config))
+        written = self._quiet_run(cfg)
+        prov = json.loads(written["provenance"].read_text())
+        self.assertEqual(prov["results"]["result"]["tail_policy"], "separate-one-sided")
 
     def test_rows_with_missing_values_are_dropped(self):
         pheno = _pheno(24)

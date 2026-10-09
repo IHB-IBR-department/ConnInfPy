@@ -881,6 +881,7 @@ def _precompute_block_metadata(
     edge_rows: npt.NDArray[np.intp],
     edge_cols: npt.NDArray[np.intp],
     node_labels: npt.NDArray[np.integer],
+    edge_mask: Optional[npt.NDArray[np.bool_]] = None,
 ) -> Tuple[npt.NDArray[np.intp], npt.NDArray[np.floating]]:
     """
     Pre-compute canonical block assignments and capacity factors.
@@ -898,6 +899,8 @@ def _precompute_block_metadata(
         Column indices of all potential suprathreshold edges.
     node_labels : ndarray
         Normalized network labels (0..K-1) for each node.
+    edge_mask : ndarray, optional
+        Fixed eligible undirected opportunities used to count capacity.
         
     Returns
     -------
@@ -920,10 +923,15 @@ def _precompute_block_metadata(
     # Total number of possible blocks
     n_blocks_total = n_nets * n_nets
     
-    # Calculate Capacity (M_total) for each block based on the provided edges.
-    # If we are working with just upper triangle edges, this counts the 
-    # capacity of the upper triangle block, which is correct for the density formula.
-    block_capacities = np.bincount(edge_block_ids, minlength=n_blocks_total).astype(np.float64)
+    # Capacity counts fixed eligible opportunities, independently of the
+    # observed/permuted statistics and the integration thresholds.
+    rows, cols = np.triu_indices(len(node_labels), k=1)
+    if edge_mask is not None:
+        eligible = edge_mask[rows, cols]
+        rows, cols = rows[eligible], cols[eligible]
+    potential_blocks = (np.minimum(node_labels[rows], node_labels[cols]) * n_nets
+                        + np.maximum(node_labels[rows], node_labels[cols]))
+    block_capacities = np.bincount(potential_blocks, minlength=n_blocks_total).astype(np.float64)
     
     # Pre-calculate sqrt(Capacity) for the weighting formula: W = k / sqrt(M)
     # Avoid division by zero
@@ -1002,14 +1010,16 @@ def get_network_informed_tfnbs_score(
     n: int,
     start_thres: float = DEFAULT_START_THRESHOLD,
     normalization: str = "sqrt",
+    edge_mask: Optional[npt.NDArray[np.bool_]] = None,
 ) -> npt.NDArray[np.floating]:
     """
     Transform connectivity matrix using Network-Informed TFNBS (Edge-Level Weighting).
 
     This method uses Edge-Level Weighting: each edge's support depends only on
     the density of its functional block, with NO topological clustering.
-    This prevents "signal bleeding" where noise edges inherit scores from
-    signal clusters they happen to connect to.
+    Capacity M_b counts fixed eligible undirected edges, regardless of the
+    observed/permuted statistic. Suprathreshold noise can still contribute
+    to a block's density; this is not a guarantee that noise is excluded.
 
     Weighting Logic (depends on normalization):
         - ``'sqrt'``: S_edge = k / sqrt(M_b) (default)
@@ -1036,6 +1046,9 @@ def get_network_informed_tfnbs_score(
         Initial threshold for cluster formation.
     normalization : {'sqrt', 'linear', 'none'}, default='sqrt'
         Block density normalization variant for ablation study.
+    edge_mask : ndarray of shape (N, N), optional
+        Symmetric fixed eligibility mask. Ineligible edges contribute neither
+        scores nor capacity. Defaults to all off-diagonal undirected pairs.
 
     Returns
     -------
@@ -1047,6 +1060,15 @@ def get_network_informed_tfnbs_score(
     nroi = t_stats.shape[0]
     
     normalized_net_labels = _validate_net_labels(np.asarray(net_labels), nroi)
+    if normalization not in ("sqrt", "linear", "none"):
+        raise ValueError("normalization must be 'sqrt', 'linear', or 'none'.")
+    if not _is_symmetric(t_stats):
+        raise ValueError("NI-TFNBS requires symmetric undirected statistics.")
+    if edge_mask is not None:
+        edge_mask = np.asarray(edge_mask, dtype=bool)
+        if edge_mask.shape != t_stats.shape or not np.array_equal(edge_mask, edge_mask.T):
+            raise ValueError("edge_mask must be symmetric and match the statistic matrix.")
+        t_stats = np.where(edge_mask, t_stats, 0.0)
     
     # Round to avoid float precision issues at threshold boundaries
     t_stats = np.round(t_stats, decimals=10)
@@ -1075,7 +1097,7 @@ def get_network_informed_tfnbs_score(
     # Pre-compute Block Metadata for these specific edges
     # This gives us the Block ID for every edge in our list and the Capacity of blocks
     edge_block_ids, sqrt_capacities = _precompute_block_metadata(
-        edge_rows, edge_cols, normalized_net_labels
+        edge_rows, edge_cols, normalized_net_labels, edge_mask
     )
 
     # Prepare broadcasting parameters
@@ -1190,7 +1212,7 @@ def get_fbc_tfnbs_score(
         - FBC-TFNBS: edges cluster if they're in the same functional block
 
     Key difference from NI-TFNBS:
-        - NI-TFNBS: topological clustering with density weighting (spreads to noise)
+        - NI-TFNBS: edge-level density weighting within predefined blocks
         - FBC-TFNBS: no topological clustering, isolated edges are suppressed
 
     Parameters

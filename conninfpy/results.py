@@ -132,7 +132,7 @@ class InferenceResult(TailResult):
     stat_positive, stat_negative : ndarray or None
         Observed one-tail-clipped (non-negative) test statistic maps.
         ``stat_positive[i, j]`` equals ``max(t_ij, 0)``; ``stat_negative``
-        equals ``max(-t_ij, 0)``. The original signed effect map is
+        equals ``max(-t_ij, 0)``. The original signed statistic map is
         recoverable as ``stat_signed`` (= positive − negative). Populated
         by the pipeline since v2.1; ``None`` on older pickled results.
     stat_type : {'tstat', 'beta'}
@@ -163,6 +163,9 @@ class InferenceResult(TailResult):
         every within/between-network block with its edge count, mean signed
         statistic, and uncorrected and corrected p-values per tail; each
         edge's p-value is its block's corrected p-value.
+    two_tailed : bool
+        Whether positive and negative directions form one two-sided family.
+        Each enhancement parameter setting and contrast is corrected separately.
     """
 
     method: str
@@ -181,6 +184,7 @@ class InferenceResult(TailResult):
     h_grid: Optional[npt.NDArray[np.float64]]
     missing_report: Optional[Dict[str, Any]]
     block_report: Optional[Dict[str, Any]]
+    two_tailed: bool
 
     def __new__(
         cls,
@@ -203,6 +207,7 @@ class InferenceResult(TailResult):
         h_grid: Optional[npt.NDArray[np.float64]] = None,
         missing_report: Optional[Dict[str, Any]] = None,
         block_report: Optional[Dict[str, Any]] = None,
+        two_tailed: bool = False,
     ) -> "InferenceResult":
         instance = super().__new__(cls)
         TailResult.__init__(
@@ -210,7 +215,7 @@ class InferenceResult(TailResult):
         )
         instance.method = method
         instance.n_permutations = n_permutations
-        instance.acceleration = acceleration
+        instance.acceleration = None if method == "cnbs" else acceleration
         instance.wall_time_s = wall_time_s
         instance.null_max_dist = null_max_dist
         instance.stat_positive = stat_positive
@@ -224,6 +229,7 @@ class InferenceResult(TailResult):
         instance.h_grid = h_grid
         instance.missing_report = missing_report
         instance.block_report = block_report
+        instance.two_tailed = two_tailed
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
@@ -234,17 +240,17 @@ class InferenceResult(TailResult):
 
     @property
     def positive(self) -> npt.NDArray[np.float64]:
-        """FWER-corrected p-values, positive tail."""
+        """Corrected p-values, positive tail (FWER or FDR by method)."""
         return self["positive"]
 
     @property
     def negative(self) -> npt.NDArray[np.float64]:
-        """FWER-corrected p-values, negative tail."""
+        """Corrected p-values, negative tail (FWER or FDR by method)."""
         return self["negative"]
 
     @property
     def stat_signed(self) -> Optional[npt.NDArray[np.float64]]:
-        """Recovered signed effect map (``stat_positive − stat_negative``).
+        """Recovered signed statistic map (``stat_positive − stat_negative``).
 
         Both tail arrays are non-negative one-tail clips of the original
         signed statistic; for any edge exactly one of them is zero, so
@@ -256,6 +262,25 @@ class InferenceResult(TailResult):
         if self.stat_positive is None or self.stat_negative is None:
             return None
         return self.stat_positive - self.stat_negative
+
+    @property
+    def tail_policy(self) -> str:
+        """The declared directional family; legacy results default to separate tails."""
+        return "two-sided" if getattr(self, "two_tailed", False) else "separate-one-sided"
+
+    @property
+    def correction(self) -> str:
+        """Multiplicity procedure at the method's native inference unit."""
+        if self.method == "cnbs":
+            return (self.block_report or {}).get("correction", "bonferroni")
+        if self.method in ("bh_fdr", "bh_fdr_perm"):
+            return "bh_fdr"
+        return "bonferroni" if self.method == "bonferroni" else "permutation_max"
+
+    @property
+    def inference_unit(self) -> str:
+        """Unit of the null hypothesis represented by the projected edge map."""
+        return {"cnbs": "block", "nbs": "component"}.get(self.method, "edge")
 
     @property
     def is_grid(self) -> bool:
@@ -325,6 +350,9 @@ class InferenceResult(TailResult):
             combat_diagnostics=self.combat_diagnostics,
             e_grid=e_sel,
             h_grid=h_sel,
+            missing_report=self.missing_report,
+            block_report=self.block_report,
+            two_tailed=getattr(self, "two_tailed", False),
         )
 
     def n_significant(
@@ -386,9 +414,11 @@ class InferenceResult(TailResult):
             either ``p_positive`` or ``p_negative`` falls below
             ``alpha``; the per-row ``tail`` column reports which
             tail(s) actually hit significance for that edge.
-        sort : {'p', 'effect_size', 'network_pair'}, default 'p'
+        sort : {'p', 'statistic', 'network_pair'}, default 'p'
             Sort key. ``'p'`` — ascending ``min(p_positive, p_negative)``.
-            ``'effect_size'`` — descending ``|t_signed|``.
+            ``'statistic'`` — descending absolute signed t/beta statistic.
+            ``'effect_size'`` remains a deprecated alias for ``'statistic'``;
+            a t-statistic is not a standardized effect size.
             ``'network_pair'`` — group by canonical network pair,
             then by ``p`` ascending within group; requires ``atlas``.
         include_nonsig : bool, default False
@@ -408,9 +438,12 @@ class InferenceResult(TailResult):
 
         Notes
         -----
-        Significance is an FWER/FDR-controlled claim about edge-wise
-        null rejection; it does not by itself establish that an edge
-        corresponds to a specific cognitive or biological mechanism.
+        Interpret detections at ``inference_unit``: cNBS rows project block
+        p-values and NBS rows represent component detections; neither gives
+        an individual edge localization claim. With separate one-sided
+        families, filtering both tails at alpha does not imply joint FWER
+        at alpha. Statistical detection alone does not establish a biological
+        mechanism.
         For reporting, prefer block-level patterns
         (``roi_i_network`` × ``roi_j_network``) over individual edges
         — use ``sort='network_pair'`` to group them.
@@ -573,7 +606,7 @@ class OmnibusInferenceResult(TailResult):
         dict.__init__(instance, [("omnibus", omnibus)])
         instance.method = method
         instance.n_permutations = n_permutations
-        instance.acceleration = acceleration
+        instance.acceleration = None if method == "cnbs" else acceleration
         instance.wall_time_s = wall_time_s
         instance.null_max_dist = null_max_dist
         instance.stat_omnibus = stat_omnibus
@@ -591,8 +624,20 @@ class OmnibusInferenceResult(TailResult):
 
     @property
     def omnibus(self) -> npt.NDArray[np.float64]:
-        """FWER-corrected p-values of the omnibus test."""
+        """Corrected p-values of the omnibus test (FWER or FDR by method)."""
         return self["omnibus"]
+
+    @property
+    def tail_policy(self) -> str:
+        return "omnibus"
+
+    @property
+    def correction(self) -> str:
+        return InferenceResult.correction.fget(self)
+
+    @property
+    def inference_unit(self) -> str:
+        return InferenceResult.inference_unit.fget(self)
 
     def n_significant(self, alpha: float = 0.05) -> Dict[str, int]:
         """Edge counts below ``alpha`` per tail."""
@@ -616,13 +661,14 @@ class OmnibusInferenceResult(TailResult):
         Same conventions as
         :meth:`InferenceResult.significant_edges` but with a single
         unsigned ``F`` / ``p_omnibus`` pair instead of the tail split.
-        ``sort='effect_size'`` ranks by ``F`` descending.
+        ``sort='statistic'`` ranks by ``F`` descending; ``'effect_size'`` is
+        a deprecated alias. F is a test statistic, not an effect size.
 
         Notes
         -----
-        Significance is an FWER/FDR-controlled claim about edge-wise
-        null rejection; it does not by itself establish that an edge
-        corresponds to a specific cognitive or biological mechanism.
+        Interpret p-values at ``inference_unit``: a projected block or
+        component detection is not an individual edge localization claim.
+        Detection alone does not establish a biological mechanism.
         """
         return build_omnibus_dataframe(
             self["omnibus"],
@@ -707,6 +753,7 @@ def make_inference_result(
     combat_diagnostics: Optional[Dict[str, Any]] = None,
     e_grid: Optional[npt.NDArray[np.float64]] = None,
     h_grid: Optional[npt.NDArray[np.float64]] = None,
+    two_tailed: bool = False,
 ) -> InferenceResult:
     """Promote a :class:`TailResult` into a metadata-enriched
     :class:`InferenceResult` without copying the p-value arrays."""
@@ -727,6 +774,7 @@ def make_inference_result(
         combat_diagnostics=combat_diagnostics,
         e_grid=e_grid,
         h_grid=h_grid,
+        two_tailed=two_tailed,
     )
 
 

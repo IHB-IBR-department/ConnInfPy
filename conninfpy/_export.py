@@ -20,6 +20,7 @@ conventions.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
+import warnings
 
 import numpy as np
 import numpy.typing as npt
@@ -30,7 +31,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 
 _VALID_TAILS = ("both", "positive", "negative")
-_VALID_SORTS = ("p", "effect_size", "network_pair")
+_VALID_SORTS = ("p", "statistic", "effect_size", "network_pair")
 
 
 def _check_square(arr: npt.NDArray, name: str) -> None:
@@ -309,12 +310,16 @@ def _sort_dataframe(
     by: str,
     effect_col: str = "t_signed",
 ) -> pd.DataFrame:
-    """Sort an edge table by p, effect size, or network pair."""
+    """Sort an edge table by p, test statistic, or network pair."""
+    if sort == "effect_size":
+        warnings.warn("sort='effect_size' ranks a test statistic; use sort='statistic'.",
+                      DeprecationWarning, stacklevel=3)
+        sort = "statistic"
     if df.empty:
         return df
     if sort == "p":
         return df.sort_values(by=by, ascending=True, kind="mergesort")
-    if sort == "effect_size":
+    if sort == "statistic":
         if effect_col == "t_signed":
             key = df[effect_col].abs()
         else:

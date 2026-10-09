@@ -718,6 +718,7 @@ def _compute_bh_fdr_perm_p_values(
     n_processes: Optional[int],
     verbose: bool = False,
     strata: Optional[npt.NDArray[Any]] = None,
+    two_tailed: bool = False,
 ) -> Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]]]:
     """
     Compute BH-FDR corrected p-values using permutation-based per-edge nulls.
@@ -792,6 +793,20 @@ def _compute_bh_fdr_perm_p_values(
     # Compute per-edge p-values (with +1 correction — Phipson & Smyth 2010)
     # and apply BH-FDR correction
     p_values = {}
+    if two_tailed:
+        observed = (emp_t_dict["positive"] + emp_t_dict["negative"])[triu_idx]
+        count = sum(
+            (r["positive"] + r["negative"] >= observed).astype(float)
+            for r in perm_results
+        )
+        corrected = _bh_fdr_correction((count + 1.0) / (n_permutations + 1.0))
+        for key in ("positive", "negative"):
+            p_mat = np.ones((N, N), dtype=np.float64)
+            directional = np.where(emp_t_dict[key][triu_idx] > 0, corrected, 1.0)
+            p_mat[triu_idx] = directional
+            p_mat[(triu_idx[1], triu_idx[0])] = directional
+            p_values[key] = p_mat
+        return p_values, emp_t_dict
     for key in ("positive", "negative"):
         emp_upper = emp_t_dict[key][triu_idx]
 
@@ -873,6 +888,7 @@ def _compute_parametric_p_values(
     test_type_str: str,
     method_enum: "StatMethod",
     alpha: float = 0.05,
+    two_tailed: bool = False,
 ) -> Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]]]:
     """
     Compute parametric p-values with Bonferroni or BH-FDR correction.
@@ -911,6 +927,21 @@ def _compute_parametric_p_values(
         df = _compute_welch_degrees_of_freedom(group1, group2)
     else:
         raise ValueError(f"Invalid test_type: '{test_type_str}'")
+
+    if two_tailed:
+        signed = t_dict["positive"] - t_dict["negative"]
+        triu_idx = np.triu_indices(signed.shape[0], k=1)
+        raw = (2 * stats.t.sf(np.abs(signed), df))[triu_idx]
+        corrected = (np.minimum(raw * raw.size, 1.0)
+                     if method_enum == StatMethod.BONFERRONI else _bh_fdr_correction(raw))
+        p_values = {}
+        for key in ("positive", "negative"):
+            p = np.ones_like(signed)
+            directional = np.where(t_dict[key][triu_idx] > 0, corrected, 1.0)
+            p[triu_idx] = directional
+            p[(triu_idx[1], triu_idx[0])] = directional
+            p_values[key] = p
+        return p_values, t_dict
 
     p_values = {}
     for key in ("negative", "positive"):
@@ -972,7 +1003,7 @@ def compute_p_val(
     missing: str = "raise",
     min_coverage: float = 0.8,
     cnbs_correction: str = "bonferroni",
-    **kwargs
+    two_tailed: bool = False,
 ) -> InferenceResult:
     """
     Compute p-values using permutation testing with various network-based methods.
@@ -1088,8 +1119,15 @@ def compute_p_val(
     cnbs_correction : {'bonferroni', 'bh'}, default='bonferroni'
         For ``method='cnbs'``: correction of the block p-values across blocks
         (Bonferroni: FWER over blocks; 'bh': FDR over blocks).
-    **kwargs
-        Additional keyword arguments (for future extensions).
+    two_tailed : bool, default=False
+        Correct one two-sided family. Max-statistic methods pool positive
+        and negative null maxima; cNBS uses absolute block means; BH methods
+        correct two-sided marginal p-values once across eligible edges.
+        Directional maps report the corrected p-value in the observed
+        direction and 1 in the opposite direction. Each (E, H) setting is
+        corrected separately; selecting settings is not jointly corrected.
+        False keeps separate one-sided families (use alpha/2 per tail for
+        combined-direction FWER). Unsupported keyword arguments raise.
 
     Returns
     -------
@@ -1210,7 +1248,7 @@ def compute_p_val(
             n_permutations=n_permutations, random_state=random_state,
             use_mp=use_mp, n_processes=n_processes, verbose=verbose,
             strata=strata, acceleration=acceleration if mode == "max" else None,
-            min_coverage=min_coverage,
+            min_coverage=min_coverage, two_tailed=two_tailed,
             block_inference=(dict(net_labels=net_labels, correction=cnbs_correction)
                              if method_enum == StatMethod.CNBS else None),
         )
@@ -1225,12 +1263,13 @@ def compute_p_val(
             stat_type="tstat", strata_provided=strata is not None,
             e_grid=e_grid, h_grid=h_grid, missing_report=report,
             block_report=report.pop("block_report", None),
+            two_tailed=two_tailed,
         )
 
     # Parametric methods: compute p-values directly from t-distribution
     if method_enum in PARAMETRIC_METHODS:
         result, obs_t_dict = _compute_parametric_p_values(
-            group1, group2, test_type_str, method_enum
+            group1, group2, test_type_str, method_enum, two_tailed=two_tailed
         )
         return InferenceResult(
             result["positive"], result["negative"],
@@ -1239,6 +1278,7 @@ def compute_p_val(
             stat_positive=obs_t_dict["positive"],
             stat_negative=obs_t_dict["negative"],
             stat_type="tstat",
+            two_tailed=two_tailed,
         )
 
     # BH-FDR with permutation p-values: separate code path
@@ -1251,6 +1291,7 @@ def compute_p_val(
             n_processes=n_processes,
             verbose=verbose,
             strata=strata,
+            two_tailed=two_tailed,
         )
         return InferenceResult(
             result["positive"], result["negative"],
@@ -1261,6 +1302,7 @@ def compute_p_val(
             stat_negative=obs_t_dict["negative"],
             stat_type="tstat",
             strata_provided=strata is not None,
+            two_tailed=two_tailed,
         )
 
     # Compute observed t-stat once, then apply enhancement (if any)
@@ -1279,7 +1321,7 @@ def compute_p_val(
 
     # Keep a reference to the raw (pre-enhancement) t-stat dict for
     # InferenceResult.stat_positive/stat_negative — the user-facing
-    # effect map should be the t-statistic, not the enhanced score.
+    # test-statistic map is kept independently of the enhanced score.
     raw_t_dict = emp_t_dict
     if enhance_func is not None:
         emp_t_dict = enhance_func(emp_t_dict, **enhance_kwargs)
@@ -1318,11 +1360,14 @@ def compute_p_val(
         )
 
     block_report = None
+    if two_tailed and method_enum != StatMethod.CNBS:
+        joint = np.maximum(max_null_dict["positive"], max_null_dict["negative"])
+        max_null_dict = {"positive": joint, "negative": joint}
     if method_enum == StatMethod.CNBS:
         from ._cnbs import block_p_values
         result, block_report = block_p_values(
             emp_t_dict, max_null_dict, net_labels, group1.shape[1],
-            correction=cnbs_correction, acceleration=acceleration,
+            correction=cnbs_correction, acceleration=acceleration, two_tailed=two_tailed,
         )
     elif acceleration is not None:
         result = compute_p_values_accelerated(
@@ -1345,6 +1390,7 @@ def compute_p_val(
         e_grid=e_grid,
         h_grid=h_grid,
         block_report=block_report,
+        two_tailed=two_tailed,
     )
 
 

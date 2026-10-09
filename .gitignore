@@ -43,6 +43,7 @@ Desktop.ini
 
 # Local agent state
 .claude/
+/AGENTS.md
 
 # Local dev TODOs (not for publication)
 TODO.md

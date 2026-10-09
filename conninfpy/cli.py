@@ -8,7 +8,11 @@ writes three files to the output directory:
 - ``edges.csv`` — significant edges (atlas-annotated when an atlas is known)
 - ``pvals.npz`` — ``positive`` / ``negative`` p-value maps and ``stat_signed``
 - ``provenance.json`` — package version, the analysis file, data and design
-  summary, warnings (``flags``), and run time
+  summary, resolved tail/correction/native-unit policy, warnings (``flags``),
+  and run time
+
+Both directions are reported, so ``inference.two_tailed`` defaults to True.
+Set it explicitly to False for separate prespecified one-sided families.
 
 Example analysis file: ``examples/configs/abide_mini_age.yaml``.
 """
@@ -251,6 +255,9 @@ def run(
     dataset = load(base / cfg["data"])
     kwargs, summary = build_analysis(dataset, cfg)
     inference = dict(cfg.get("inference") or {})
+    # CSV/report output includes both signs: declare one two-sided family.
+    # A prespecified one-sided analysis can explicitly request False.
+    inference.setdefault("two_tailed", True)
     if n_permutations is not None:
         inference["n_permutations"] = n_permutations
     if use_mp is not None:
@@ -281,6 +288,12 @@ def run(
         written[f"pvals{suffix}"] = pvals_path
         per_result[name or "result"] = {
             "n_significant": inf.n_significant(alpha),
+            "method": inf.method,
+            "tail_policy": inf.tail_policy,
+            "correction": inf.correction,
+            "inference_unit": inf.inference_unit,
+            "n_permutations": inf.n_permutations,
+            "acceleration": inf.acceleration,
             "flags": list(res.flags),
             "combat_diagnostics": res.combat_diagnostics,
         }

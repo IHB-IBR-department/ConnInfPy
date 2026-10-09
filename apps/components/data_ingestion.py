@@ -860,7 +860,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                         c = np.corrcoef(ts.T)
                                     else:
                                         c = pd.DataFrame(ts).corr(method='spearman').values
-                                    c = np.nan_to_num(c)
+                                    # Undefined correlations remain missing for validation.
                                     
                                     # Always set diagonal to zero to avoid infinity during Fisher z-transform
                                     np.fill_diagonal(c, 0.0)
@@ -877,7 +877,8 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                     np.fill_diagonal(loaded.data[i], 0.0)
                                     
                                 if apply_fisher:
-                                    loaded.data = np.arctanh(loaded.data)
+                                    from conninfpy.utils import fisher_r_to_z
+                                    loaded.data = fisher_r_to_z(loaded.data)
                                     loaded.data_kind = "fisher_z"
                                 
                             # 3. Final Inference-Ready Validation
