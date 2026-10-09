@@ -25,7 +25,7 @@ import warnings
 from enum import Enum
 from functools import partial
 from multiprocessing import Pool
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -48,7 +48,7 @@ from .enhance import (
     apply_ni_tfnbs,
     apply_tfnbs,
 )
-from . import _degenerate
+from . import _degenerate, _estimates
 from ._engine import (
     _collect_results_to_arrays,
     _compute_p_values_from_null,
@@ -660,6 +660,7 @@ def compute_p_val_glm(
     min_coverage: float = 0.8,
     scheme: str = "auto",
     cnbs_correction: str = "bonferroni",
+    design_columns: Optional[Sequence[str]] = None,
 ) -> Union[InferenceResult, OmnibusInferenceResult]:
     """
     Compute p-values for connectivity data using GLM with Freedman-Lane permutation.
@@ -750,6 +751,11 @@ def compute_p_val_glm(
         For ``method='cnbs'`` (block-level inference, Noble & Scheinost,
         2020): correction of the block p-values across blocks. With
         ``two_tailed=True`` each block's test is two-sided.
+    design_columns : sequence of str, optional
+        Names of the design columns, stored with the coefficient maps
+        (``result.beta``, ``result.design``). Defaults: ``intercept``,
+        ``confound_1`` ... and ``interest`` for the convenience API, else
+        ``intercept`` / ``x1`` ...
 
     Returns
     -------
@@ -789,6 +795,9 @@ def compute_p_val_glm(
 
     if interest is not None:
         X, contrast_vec = build_design_matrix(interest, confounds)
+        if design_columns is None:
+            design_columns = (["intercept"] + [f"confound_{k + 1}" for k in range(X.shape[1] - 2)]
+                              + ["interest"])
     else:
         X = check_finite_design(design_matrix, "design_matrix")
         if contrast is None:
@@ -890,6 +899,10 @@ def compute_p_val_glm(
             block_inference=block_inference,
         )
         block_report = report.pop("block_report", None)
+        beta_ac = report.pop("beta")
+        design = _estimates.glm_design(X, contrast_vec, design_columns)
+        design["available_case"] = ("each edge fitted with its own subjects; predictions use the "
+                                    "full-sample column means")
         method_str = method.value if hasattr(method, "value") else str(method)
         if stat_type_str == GLMStatType.FSTAT.value:
             return OmnibusInferenceResult(
@@ -897,7 +910,7 @@ def compute_p_val_glm(
                 acceleration=acceleration, wall_time_s=time.perf_counter() - _t0,
                 stat_omnibus=raw_ac["omnibus"], stat_type="fstat",
                 strata_provided=strata is not None, missing_report=report,
-                block_report=block_report,
+                block_report=block_report, beta=beta_ac, design=design,
             )
         e_grid, h_grid = _grid_from_kwargs(method_enum, enhance_kwargs)
         return InferenceResult(
@@ -908,7 +921,7 @@ def compute_p_val_glm(
             stat_type=stat_type_str, strata_provided=strata is not None,
             e_grid=e_grid, h_grid=h_grid, missing_report=report,
             block_report=block_report,
-            two_tailed=two_tailed,
+            two_tailed=two_tailed, beta=beta_ac, design=design,
         )
 
     # An exact fit with a nonzero contrast has an infinite t (or F)
@@ -917,6 +930,9 @@ def compute_p_val_glm(
 
     # ---- Precompute OLS ----
     X_pinv, XtX_inv_diag, XtX_inv = _precompute_ols(X)
+    # Coefficient maps of the observed fit, saved with the p-maps
+    beta = (X_pinv @ Y.reshape(n_subjects, -1)).reshape(X.shape[1], N, N)
+    design = _estimates.glm_design(X, contrast_vec, design_columns)
 
     # ---- Compute observed statistics ----
     emp_stat_dict = compute_glm_stat(
@@ -1040,6 +1056,8 @@ def compute_p_val_glm(
             h_grid=h_grid,
             block_report=block_report,
             two_tailed=two_tailed,
+            beta=beta,
+            design=design,
         )
     # F-stat path: single 'omnibus' map → OmnibusInferenceResult
     return OmnibusInferenceResult(
@@ -1051,6 +1069,8 @@ def compute_p_val_glm(
         stat_type="fstat",
         strata_provided=strata is not None,
         block_report=block_report,
+        beta=beta,
+        design=design,
     )
 
 
@@ -1130,6 +1150,7 @@ def compute_p_val_glm_multi(
     min_coverage: float = 0.8,
     scheme: str = "auto",
     cnbs_correction: str = "bonferroni",
+    design_columns: Optional[Sequence[str]] = None,
 ) -> Dict[str, InferenceResult]:
     """Run several contrasts of one design in a single permutation pass.
 
@@ -1212,7 +1233,7 @@ def compute_p_val_glm_multi(
                 start_thres=start_thres, min_cluster_size=min_cluster_size,
                 normalization=normalization, strata=strata,
                 missing="available_case", min_coverage=min_coverage, scheme=scheme,
-                cnbs_correction=cnbs_correction,
+                cnbs_correction=cnbs_correction, design_columns=design_columns,
             )
             for name, c in contrasts.items()
         }
@@ -1308,6 +1329,7 @@ def compute_p_val_glm_multi(
         marked = np.flatnonzero(np.any(np.atleast_2d(reduced_marker) != 0, axis=0))
         reduced_models = [_compute_reduced_model(X, np.eye(p)[marked])] * len(contrast_arrays)
     X_pinv, XtX_inv_diag, XtX_inv = _precompute_ols(X)
+    beta = (X_pinv @ Y.reshape(n_subjects, -1)).reshape(p, N, N)   # shared by every contrast
 
     # ---- Empirical stats per contrast ----
     emp_dicts: Dict[str, Dict[str, npt.NDArray[np.float64]]] = {}
@@ -1425,6 +1447,8 @@ def compute_p_val_glm_multi(
             strata_provided=strata is not None,
             block_report=block_report,
             two_tailed=two_tailed,
+            beta=beta,
+            design=_estimates.glm_design(X, contrast_arrays[contrast_names.index(name)], design_columns),
         )
     return out
 
@@ -1565,16 +1589,37 @@ def compute_p_val_paired_glm(
     contrast[0] = 1.0  # test the intercept (= mean of Δ_Y)
 
     # Disallow caller from overriding the design; these keys conflict.
-    for forbidden in ("design_matrix", "contrast", "interest", "confounds"):
+    for forbidden in ("design_matrix", "contrast", "interest", "confounds", "design_columns"):
         if forbidden in kwargs:
             raise ValueError(
                 f"compute_p_val_paired_glm builds the design internally; "
                 f"do not pass '{forbidden}'."
             )
 
-    return compute_p_val_glm(
+    q = Delta_C.shape[1]
+    res = compute_p_val_glm(
         Delta_Y,
         design_matrix=X,
         contrast=contrast,
+        design_columns=["delta_intercept"] + [f"delta_confound_{k + 1}" for k in range(q)],
         **kwargs,
     )
+    # Coefficients: [condition-A mean, delta model]. Profile B adds the change
+    # with no confound change (the tested intercept) to the A mean.
+    if getattr(res, "beta", None) is not None:
+        with _estimates._quiet():
+            mean_a = np.nanmean(Y_A, axis=0)
+        res.beta = np.concatenate([mean_a[None], res.beta])
+        zeros = [0.0] * q
+        res.design = {
+            "kind": "paired-glm", "columns": ["condition_A_mean"] + res.design["columns"],
+            "column_means": [1.0] + res.design["column_means"],
+            "contrast": [0.0, 1.0] + zeros,
+            "profiles": {"A": [1.0, 0.0] + zeros, "B (no confound change)": [1.0, 1.0] + zeros,
+                         "B (observed)": [1.0, 1.0] + Delta_C.mean(axis=0).tolist()},
+            "comparison": ["A", "B (no confound change)"],
+            "n_subjects": int(n_subjects), "scale": "unknown", "interest": None,
+            "note": "B - A is modelled as delta_intercept + delta_confounds x (C_B - C_A); "
+                    "the tested effect is the change with no confound change.",
+        }
+    return res

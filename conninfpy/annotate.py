@@ -573,8 +573,9 @@ def summarize_annotation(
     Returns a dict of DataFrames:
 
     * ``relations``: by circuit, hemispheric relation, anatomical relation,
-      distance band and network relation: n_tested, n_detected, share of
-      detections, share of tested, detection rate;
+      distance band, network relation and (when the result carries
+      coefficient maps and a comparison) coupling change: n_tested,
+      n_detected, share of detections, share of tested, detection rate;
     * ``regions``: per group at ``level``: n_rois, tested and detected
       incident connections, detection rate (ROIs not pure at that level are
       grouped as 'mixed');
@@ -603,9 +604,16 @@ def summarize_annotation(
     labels = [f"{int(a)}-{int(b)} mm" if np.isfinite(b) else f">{int(a)} mm" for a, b in zip(bands[:-1], bands[1:])]
     ann["distance_band"] = pd.cut(ann["distance_mm"], bands, labels=labels, right=False).astype(str)
 
+    relation_cols = ["circuit", "hemispheric_relation", "anatomical_relation", "distance_band", "network_relation"]
+    design = getattr(result, "design", None)
+    if design is not None and design.get("comparison") and getattr(result, "beta", None) is not None:
+        classes = result.coupling()["classes"]
+        ann["coupling_change"] = classes[ann["roi_i"].to_numpy(int), ann["roi_j"].to_numpy(int)]
+        ann["coupling_change"] = ann["coupling_change"].fillna("unavailable")
+        relation_cols.append("coupling_change")
     rows = []
     n_tested, n_det = len(ann), int(det.sum())
-    for col in ("circuit", "hemispheric_relation", "anatomical_relation", "distance_band", "network_relation"):
+    for col in relation_cols:
         for value, g in ann.groupby(col):
             k = int(det[g.index].sum())
             rows.append({"relation": col, "category": value, "n_tested": len(g), "n_detected": k,
