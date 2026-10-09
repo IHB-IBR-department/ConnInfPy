@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -160,6 +160,15 @@ def _build_multi_design(
         c[n_nuisance_cols + j] = 1.0
         contrasts[nm] = c
     return X, contrasts
+
+
+def _design_names(confounds: Any, confound_names: Optional[List[str]], interest_names: List[str]) -> List[str]:
+    """Column names of [intercept, confounds, interest] as analyze() builds the design."""
+    q = 0 if confounds is None else _as_2d(confounds).shape[1]
+    names = list(confound_names) if confound_names is not None else [f"confound_{k + 1}" for k in range(q)]
+    if len(names) != q:
+        names = [f"confound_{k + 1}" for k in range(q)]
+    return ["intercept"] + names + list(interest_names)
 
 
 def _site_dummies(
@@ -660,6 +669,7 @@ def analyze(
                 "of their site have them); they are treated as missing."
             )
 
+    confound_names: Optional[List[str]] = None
     # ---- Site dummies → GLM nuisance for the site-GLM strategies ----
     # combat_site_dummies_glm: ComBat harmonized the matrix but did not see interest;
     # site dummies in the GLM still help in case any site-correlated noise
@@ -672,6 +682,9 @@ def analyze(
     ):
         site_dum = _site_dummies(np.asarray(sites))
         if site_dum.shape[1] > 0:
+            n_user = 0 if confounds is None else _as_2d(confounds).shape[1]
+            site_names = [f"site[{u}]" for u in np.unique(np.asarray(sites))[1:]]
+            confound_names = [f"confound_{k + 1}" for k in range(n_user)] + site_names
             if confounds is None:
                 confounds = site_dum
             else:
@@ -733,6 +746,7 @@ def analyze(
         X, contrasts = _build_multi_design(interest, confounds)
         results = compute_p_val_glm_multi(
             Y, design_matrix=X, contrasts=contrasts,
+            design_columns=_design_names(confounds, confound_names, list(interest)),
             method=method, n_permutations=n_permutations,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
@@ -741,6 +755,8 @@ def analyze(
         )
         out: Dict[str, AnalyzeResult] = {}
         for nm, res in results.items():
+            if getattr(res, "design", None) is not None:
+                res.design["scale"] = "fisher_z"
             res.harmonized = (
                 strategy in (COMBAT_ONLY, COMBAT_SITE_DUMMIES_GLM)
                 and sites is not None
@@ -761,6 +777,7 @@ def analyze(
     if glm_mode:
         result = compute_p_val_glm(
             Y, interest=interest, confounds=confounds,
+            design_columns=_design_names(confounds, confound_names, ["interest"]),
             method=method, n_permutations=n_permutations,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
@@ -805,6 +822,8 @@ def analyze(
     )
     result.preserve_provided = preserve is not None
     result.combat_diagnostics = combat_diag
+    if getattr(result, "design", None) is not None:
+        result.design["scale"] = "fisher_z"
     # strata_provided was set inside compute_p_val{,_glm} from the strata=
     # argument; preserved here for clarity.
 

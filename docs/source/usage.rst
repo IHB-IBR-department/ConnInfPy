@@ -536,3 +536,35 @@ The probabilistic and tractography maps (``BNA_PM_4D.nii.gz``,
 ``datasets/atlases/`` or ``$CONNINFPY_BNA_DIR``; derived arrays are cached
 once in ``~/.cache/conninfpy/bna246``. Brainnetome data are for non-commercial
 use with attribution and share-alike (``conninfpy/atlas_data/NOTICE_BRAINNETOME.txt``).
+
+Coefficient maps and baseline coupling — ``result.beta``
+--------------------------------------------------------
+
+Every result keeps the coefficients of the model it tested next to its
+p-values: ``result.beta`` (shape ``(p, N, N)``, response scale) and
+``result.design`` (column names and means, contrast, named covariate
+profiles). Pairwise tests use their equivalent designs: two-sample
+``[group-1 mean, group 2 - group 1]``, paired ``[condition-A mean, B - A]``,
+one-sample ``[mean]``. They do not depend on the enhancement settings.
+
+.. code-block:: python
+
+   r = out.inference
+   r.effect_map()          # c' beta: e.g. Δz per year of age, or the group difference
+   r.predicted("mean")     # connectivity at the covariate means (= the sample mean)
+   r.design["comparison"]  # e.g. ['interest=15.4 (mean-1SD)', 'interest=34.9 (mean+1SD)']
+   c = r.coupling()        # predicted maps at the two profiles, Δr, and the class per edge
+
+Read baselines from predictions, never from the intercept map alone: the
+designs use uncentred covariates and reference-coded sites, so the intercept
+is the connectivity at age 0, sex 0 and the reference site. A positive effect
+on Fisher z can mean stronger positive coupling, weaker anticorrelation or a
+sign change; :meth:`~conninfpy.results.InferenceResult.coupling` names which
+(``stronger / weaker positive coupling``, ``stronger / weaker
+anticorrelation``, ``sign change``, and with a prespecified ``near_zero``
+band, ``emerges from / returns to ~0``) and gives the change in correlation
+units, Δr = tanh(z_b) − tanh(z_a). Negative baselines depend on preprocessing
+(global-signal regression induces anticorrelations). ``annotated_edges`` and
+``summarize_annotation`` add these classes when the result defines a
+comparison, and ``conninfpy run`` writes ``beta``, ``effect`` and the two
+predicted maps to ``pvals.npz``.

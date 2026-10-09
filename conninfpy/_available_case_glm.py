@@ -286,6 +286,15 @@ def available_case_glm(
     report = _report(Y, X, C, present, tested, triu, N, min_coverage, reasons)
     if block_report is not None:
         report["block_report"] = block_report
+    # Coefficient maps, each edge fitted with its own subjects (NaN where untested;
+    # a column absent from an edge's subjects gets the minimum-norm 0)
+    beta_vec = np.full((X.shape[1], n_edges), np.nan)
+    for pat in patterns:
+        beta_vec[:, pat.edges] = pat.pinv @ E[np.ix_(pat.rows, pat.edges)]
+    beta = np.full((X.shape[1], N, N), np.nan)
+    beta[:, triu[0], triu[1]] = beta_vec
+    beta[:, triu[1], triu[0]] = beta_vec
+    report["beta"] = beta
     return p_values, raw, report
 
 
