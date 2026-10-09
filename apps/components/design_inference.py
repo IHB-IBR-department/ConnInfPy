@@ -125,16 +125,17 @@ def _format_runtime(seconds):
 def _method_plan_parameters(method, method_kwargs):
     """Keep only human-readable settings relevant to the selected method."""
     if method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
-        keys = ("e", "h", "m_min", "normalization")
+        keys = ("e", "h", "n", "min_cluster_size", "normalization")
         labels = {
             "e": "E",
             "h": "H",
-            "m_min": "minimum block size",
+            "min_cluster_size": "minimum block size",
+            "n": "integration steps",
             "normalization": "normalization",
         }
     elif method == "nbs":
-        keys = ("start_thres", "nbs_stat")
-        labels = {"start_thres": "tau", "nbs_stat": "component statistic"}
+        keys = ("threshold", "nbs_stat")
+        labels = {"threshold": "tau", "nbs_stat": "component statistic"}
     else:
         return {}
     return {
@@ -212,6 +213,7 @@ def _run_inference_background(
 ):
     """Worker thread body: run the inference and record status."""
     try:
+        input_kind = {"correlation": "r", "fisher_z": "z"}.get(data_kind)
         task.progress_message = f"Executing primary method ({operator_choice.upper()}) permutation loops..."
         from conninfpy import analyze
         res = analyze(
@@ -223,7 +225,8 @@ def _run_inference_background(
             test_type=test_type,
             sites=sites,
             harmonize=harmonization_choice,
-            input="z",  # same as the former fisher_z=False: the app manages Fisher-z itself
+            input=input_kind,
+            two_tailed=True,
             method=operator_choice,
             n_permutations=n_perms,
             rng=seed_val,
@@ -249,7 +252,7 @@ def _run_inference_background(
             elif comp_method == "cnbs":
                 comp_run_kwargs["net_labels"] = sc_net_labels if use_sc_prior else atlas.network_index()
             elif comp_method == "nbs":
-                comp_run_kwargs.setdefault("start_thres", 3.0)
+                comp_run_kwargs.setdefault("threshold", 3.0)
                 comp_run_kwargs.setdefault("nbs_stat", "extent")
                 
             comp_res = analyze(
@@ -261,7 +264,8 @@ def _run_inference_background(
                 test_type=test_type,
                 sites=sites,
                 harmonize=harmonization_choice,
-                input="z",  # same as the former fisher_z=False: the app manages Fisher-z itself
+                input=input_kind,
+                two_tailed=True,
                 method=comp_method,
                 n_permutations=n_perms,
                 rng=seed_val,
@@ -298,6 +302,8 @@ def _run_inference_background(
             "site_col": site_col,
             "active_atlas_signature": active_atlas_signature,
             "data_kind": data_kind,
+            "input": input_kind,
+            "tail_policy": "two-sided",
             "seed": seed_val,
             "method_parameters": _method_plan_parameters(operator_choice, op_kwargs),
             "companion_method": comp_method if run_sensitivity else None,
@@ -623,7 +629,7 @@ def render_design_inference_view(base_atlas, tabs_list):
             if operator_choice == "tfnbs":
                 st.info("⚡ **Active Enhancement Operator:** `TFNBS` (Threshold-Free Network-Based Statistics)\n\n*Combines edge-level strength with topological support from neighbouring edges. Ideal for broad, cluster-like effects without needing a hard threshold.*")
             elif operator_choice == "ni_tfnbs":
-                st.info("⚡ **Active Enhancement Operator:** `NI-TFNBS` (Network-Informed TFNBS)\n\n*Incorporates structural connectivity (SC-Prior) weights directly into the statistical enhancement, favoring anatomically supported pathways.*")
+                st.info("⚡ **Active Enhancement Operator:** `NI-TFNBS` (Network-Informed TFNBS)\n\n*Weights each suprathreshold edge by the activation density of its predefined network block, using fixed eligible block capacity. No connected-component clustering is used.*")
             elif operator_choice == "fbc_tfnbs":
                 st.info("⚡ **Active Enhancement Operator:** `FBC-TFNBS` (Focus Block Cluster TFNBS)\n\n*Specially optimized for dense, block-like/modular network alterations (within or between modules).*")
             elif operator_choice == "cnbs":
@@ -647,14 +653,14 @@ def render_design_inference_view(base_atlas, tabs_list):
 
                     if operator_choice == "fbc_tfnbs":
                         m_min = st.number_input("Minimum block size (m_min)", 5, 100, 20)
-                        op_kwargs["m_min"] = m_min
+                        op_kwargs["min_cluster_size"] = m_min
                     elif operator_choice == "ni_tfnbs":
                         ni_norm = st.selectbox("Normalization", ["sqrt", "none"], index=0)
                         op_kwargs["normalization"] = ni_norm
 
                 elif operator_choice == "nbs":
                     tau = st.number_input("Cluster-forming threshold (tau)", 1.0, 10.0, 3.0, 0.1)
-                    op_kwargs["start_thres"] = tau
+                    op_kwargs["threshold"] = tau
                     nbs_stat = st.selectbox("NBS statistic", ["extent", "intensity"], index=0)
                     op_kwargs["nbs_stat"] = nbs_stat
 
@@ -711,13 +717,13 @@ def render_design_inference_view(base_atlas, tabs_list):
                         comp_kwargs["n"] = comp_n
                         if comp_method == "fbc_tfnbs":
                             comp_m_min = st.number_input("Companion Minimum block size (m_min)", 5, 100, 20, key="comp_m_min")
-                            comp_kwargs["m_min"] = comp_m_min
+                            comp_kwargs["min_cluster_size"] = comp_m_min
                         elif comp_method == "ni_tfnbs":
                             comp_ni_norm = st.selectbox("Companion Normalization", ["sqrt", "none"], index=0, key="comp_ni_norm")
                             comp_kwargs["normalization"] = comp_ni_norm
                     elif comp_method == "nbs":
                         comp_tau = st.number_input("Companion Cluster-forming threshold (tau)", 1.0, 10.0, 3.0, 0.1, key="comp_tau")
-                        comp_kwargs["start_thres"] = comp_tau
+                        comp_kwargs["threshold"] = comp_tau
                         comp_nbs_stat = st.selectbox("Companion NBS statistic", ["extent", "intensity"], index=0, key="comp_nbs_stat")
                         comp_kwargs["nbs_stat"] = comp_nbs_stat
                 

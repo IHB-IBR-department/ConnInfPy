@@ -244,7 +244,8 @@ def available_case_glm(
     tested_mat = np.zeros((N, N), dtype=bool)
     tested_mat[triu] = tested
     tested_mat = tested_mat | tested_mat.T
-    if block_inference is not None:
+    from .enhance import apply_ni_tfnbs
+    if block_inference is not None or enhance_func is apply_ni_tfnbs:
         enhance_kwargs = {**enhance_kwargs, "edge_mask": tested_mat}
     emp = raw if enhance_func is None else enhance_func(raw, **enhance_kwargs)
 
@@ -268,7 +269,7 @@ def available_case_glm(
         p_values, block_report = block_p_values(
             emp, null, block_inference["net_labels"], N,
             correction=block_inference["correction"], edge_mask=tested_mat,
-            acceleration=acceleration,
+            acceleration=acceleration, two_tailed=two_tailed,
         )
     elif acceleration is not None:
         from .acceleration import compute_p_values_accelerated

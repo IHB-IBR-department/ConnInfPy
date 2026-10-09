@@ -111,8 +111,8 @@ class OpenCloseLoader(BaseDataLoader):
             subject_ids = [f"sub_{i:02d}" for i in range(n_sub)]
 
         # Convert both to connectivity first
-        open_corr = np.array([np.nan_to_num(np.corrcoef(ts.T)) for ts in open_data])
-        close_corr = np.array([np.nan_to_num(np.corrcoef(ts.T)) for ts in close_data])
+        open_corr = np.array([np.corrcoef(ts.T) for ts in open_data])
+        close_corr = np.array([np.corrcoef(ts.T) for ts in close_data])
         
         # Combine into long format
         data = np.vstack([open_corr, close_corr]) # shape: (n_sub * 2, n_rois, n_rois)
@@ -658,8 +658,8 @@ class ChinaCloseCloseLoader(BaseDataLoader):
         subject_ids = [sid for idx, sid in enumerate(subject_ids) if keep_mask[idx]]
         n_sub = len(subject_ids)
         
-        run0_corr = np.array([np.nan_to_num(np.corrcoef(ts.T)) for ts in run0_data])
-        run1_corr = np.array([np.nan_to_num(np.corrcoef(ts.T)) for ts in run1_data])
+        run0_corr = np.array([np.corrcoef(ts.T) for ts in run0_data])
+        run1_corr = np.array([np.corrcoef(ts.T) for ts in run1_data])
         
         data = np.vstack([run0_corr, run1_corr])
         pheno = pd.DataFrame({
