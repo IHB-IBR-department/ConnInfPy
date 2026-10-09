@@ -23,6 +23,8 @@ MODULE_EXPORTS = {
     "harmonize": ["combat_harmonize", "combat_fit", "combat_apply",
                   "design_diagnostics"],
     "loaders": ["load", "ManifestLoader", "LoadedDataset"],
+    "annotate": ["annotate_rois", "annotate_edges", "summarize_annotation",
+                 "RoiAnnotation"],
 }
 
 # Top-level names that examples, tests and notebooks import today.
