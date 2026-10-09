@@ -51,8 +51,12 @@ def check_connectivity(
     Returns
     -------
     np.ndarray of shape (n_subjects, N, N)
-        float64 stack with a zero diagonal. The input itself when it is
-        already float64 with a zero diagonal; otherwise a new array.
+        float64 stack with a zero diagonal, exactly symmetric. The input
+        itself when it already is all of that; otherwise a new array. Stacks
+        that are symmetric up to rounding (e.g. from ``np.corrcoef``, whose
+        two triangles can differ in the last bit) get their triangles
+        averaged, so every edge has one value: downstream statistics are then
+        exactly symmetric, and a map is never mistaken for a directed one.
 
     Raises
     ------
@@ -75,6 +79,8 @@ def check_connectivity(
         report = nonfinite_report(arr)
         if report["n_values"]:
             raise ValueError(_format_nonfinite(report, name))
+    if not np.array_equal(arr, arr.transpose(0, 2, 1), equal_nan=True):
+        arr = (arr + arr.transpose(0, 2, 1)) / 2.0   # a new array; x + x halves exactly
     idx = np.arange(arr.shape[-1])
     if np.any(arr[:, idx, idx] != 0):  # NaN != 0, so NaN diagonals are zeroed too
         if isinstance(Y, np.ndarray) and np.shares_memory(arr, Y):

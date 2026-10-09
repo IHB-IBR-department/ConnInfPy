@@ -160,3 +160,41 @@ class TestPipelinesUseTheCheck(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestExactSymmetry(unittest.TestCase):
+    """Undirected stacks are made exactly symmetric; rounding noise never makes a map 'directed'.
+
+    np.corrcoef can leave the two triangles one ulp apart. With a purely
+    relative symmetry test, a near-zero statistic then failed it and the
+    scorers counted every undirected edge twice (~0.4% of simulated maps).
+    """
+
+    def test_rounding_asymmetry_is_averaged_and_exact_input_is_untouched(self):
+        rng = np.random.default_rng(0)
+        Y = rng.normal(size=(3, 5, 5))
+        Y = (Y + Y.transpose(0, 2, 1)) / 2
+        for s in Y:
+            np.fill_diagonal(s, 0)
+        self.assertIs(check_connectivity(Y), Y)            # exact input: same array
+        noisy = Y.copy()
+        noisy[:, 0, 1] += 1e-16
+        out = check_connectivity(noisy)
+        np.testing.assert_array_equal(out, out.transpose(0, 2, 1))
+        self.assertEqual(noisy[0, 0, 1], Y[0, 0, 1] + 1e-16)   # caller's array unchanged
+
+    def test_scorers_treat_near_zero_noise_as_symmetric(self):
+        from conninfpy.nbs_score import _is_symmetric as nbs_sym, get_nbs_score
+        from conninfpy.tfnbs_score import _is_symmetric as tf_sym, get_tfnbs_score
+        t = np.zeros((6, 6))
+        for i, j, v in [(0, 1, 3.0), (1, 2, 2.5), (3, 4, 7.4e-06)]:
+            t[i, j] = t[j, i] = v
+        noisy = t.copy()
+        noisy[4, 3] = 7.4e-06 + 3e-15                       # one-ulp-scale difference at a near-zero value
+        self.assertTrue(tf_sym(noisy) and nbs_sym(noisy))
+        np.testing.assert_allclose(get_tfnbs_score(noisy, e=0.4, h=3.0, n=10, backend="scipy"),
+                                   get_tfnbs_score(t, e=0.4, h=3.0, n=10, backend="scipy"))
+        np.testing.assert_allclose(get_nbs_score(noisy, threshold=2.0), get_nbs_score(t, threshold=2.0))
+        directed = t.copy()
+        directed[1, 0] = 0.0
+        self.assertFalse(tf_sym(directed))
