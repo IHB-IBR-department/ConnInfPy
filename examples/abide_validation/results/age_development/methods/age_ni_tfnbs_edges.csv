@@ -1,62 +1,86 @@
 edge_id,roi_i,roi_i_name,roi_i_network,roi_j,roi_j_name,roi_j_network,network_pair,t_signed,p_positive,p_negative,p_min,tail
-1738,19,7Networks_LH_DorsAttn_Post_5,Dorsal Attention,48,7Networks_LH_Default_pCunPCC_1,Default Mode,Default Mode—Dorsal Attention,4.933328477106013,0.001999600079984003,1.0,0.001999600079984003,positive
-1788,19,7Networks_LH_DorsAttn_Post_5,Dorsal Attention,98,7Networks_RH_Default_pCunPCC_1,Default Mode,Default Mode—Dorsal Attention,4.714976167035231,0.00639872025594881,1.0,0.00639872025594881,positive
-4445,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,91,7Networks_RH_Default_Temp_2,Default Mode,Default Mode—Dorsal Attention,-4.495495521759649,1.0,0.039192161567686463,0.039192161567686463,negative
-3712,49,7Networks_LH_Default_pCunPCC_2,Default Mode,87,7Networks_RH_Cont_PFCmp_1,Frontoparietal Control,Default Mode—Frontoparietal Control,4.49443076247688,0.03679264147170566,1.0,0.03679264147170566,positive
-3204,40,7Networks_LH_Default_Par_2,Default Mode,65,7Networks_RH_SomMot_8,Somatomotor,Default Mode—Somatomotor,-4.4858833444720085,1.0,0.033593281343731254,0.033593281343731254,negative
-2120,24,7Networks_LH_SalVentAttn_FrOperIns_1,Ventral Attention,45,7Networks_LH_Default_PFC_5,Default Mode,Default Mode—Ventral Attention,-4.266020915395688,1.0,0.046990601879624075,0.046990601879624075,negative
-2267,26,7Networks_LH_SalVentAttn_PFCl_1,Ventral Attention,45,7Networks_LH_Default_PFC_5,Default Mode,Default Mode—Ventral Attention,-4.096924672882564,1.0,0.046990601879624075,0.046990601879624075,negative
-2318,26,7Networks_LH_SalVentAttn_PFCl_1,Ventral Attention,96,7Networks_RH_Default_PFCdPFCm_2,Default Mode,Default Mode—Ventral Attention,-3.931503034360434,1.0,0.046990601879624075,0.046990601879624075,negative
-2335,27,7Networks_LH_SalVentAttn_Med_1,Ventral Attention,41,7Networks_LH_Default_PFC_1,Default Mode,Default Mode—Ventral Attention,-3.9673161506712775,1.0,0.046990601879624075,0.046990601879624075,negative
-1598,17,7Networks_LH_DorsAttn_Post_3,Dorsal Attention,69,7Networks_RH_DorsAttn_Post_4,Dorsal Attention,Dorsal Attention—Dorsal Attention,-4.603510773282691,1.0,0.01259748050389922,0.01259748050389922,negative
-1996,22,7Networks_LH_DorsAttn_FEF_1,Dorsal Attention,72,7Networks_RH_DorsAttn_FEF_1,Dorsal Attention,Dorsal Attention—Dorsal Attention,-3.9637591942242447,1.0,0.04359128174365127,0.04359128174365127,negative
-1563,17,7Networks_LH_DorsAttn_Post_3,Dorsal Attention,34,7Networks_LH_Cont_PFCl_1,Frontoparietal Control,Dorsal Attention—Frontoparietal Control,4.279213229866814,0.029994001199760048,1.0,0.029994001199760048,positive
-1608,17,7Networks_LH_DorsAttn_Post_3,Dorsal Attention,79,7Networks_RH_Limbic_TempPole_1,Limbic,Dorsal Attention—Limbic,-3.899842756003041,1.0,0.04059188162367527,0.04059188162367527,negative
-4433,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,79,7Networks_RH_Limbic_TempPole_1,Limbic,Dorsal Attention—Limbic,-3.995668944122919,1.0,0.04059188162367527,0.04059188162367527,negative
-1347,14,7Networks_LH_SomMot_6,Somatomotor,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Somatomotor,3.9993376272769914,0.013597280543891222,1.0,0.013597280543891222,positive
-1509,16,7Networks_LH_DorsAttn_Post_2,Dorsal Attention,62,7Networks_RH_SomMot_5,Somatomotor,Dorsal Attention—Somatomotor,4.094471419950604,0.013597280543891222,1.0,0.013597280543891222,positive
-4251,62,7Networks_RH_SomMot_5,Somatomotor,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Somatomotor,4.020312499426152,0.013597280543891222,1.0,0.013597280543891222,positive
-1127,12,7Networks_LH_SomMot_4,Somatomotor,18,7Networks_LH_DorsAttn_Post_4,Dorsal Attention,Dorsal Attention—Somatomotor,3.9211256228975113,0.033993201359728054,1.0,0.033993201359728054,positive
-1672,18,7Networks_LH_DorsAttn_Post_4,Dorsal Attention,62,7Networks_RH_SomMot_5,Somatomotor,Dorsal Attention—Somatomotor,3.89825391365361,0.033993201359728054,1.0,0.033993201359728054,positive
-1831,20,7Networks_LH_DorsAttn_Post_6,Dorsal Attention,62,7Networks_RH_SomMot_5,Somatomotor,Dorsal Attention—Somatomotor,3.7309420126064685,0.033993201359728054,1.0,0.033993201359728054,positive
-4179,60,7Networks_RH_SomMot_3,Somatomotor,70,7Networks_RH_DorsAttn_Post_5,Dorsal Attention,Dorsal Attention—Somatomotor,3.807510954504725,0.033993201359728054,1.0,0.033993201359728054,positive
-4254,62,7Networks_RH_SomMot_5,Somatomotor,70,7Networks_RH_DorsAttn_Post_5,Dorsal Attention,Dorsal Attention—Somatomotor,3.621310974084582,0.033993201359728054,1.0,0.033993201359728054,positive
-4356,65,7Networks_RH_SomMot_8,Somatomotor,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Somatomotor,3.816522662435513,0.033993201359728054,1.0,0.033993201359728054,positive
-771,8,7Networks_LH_Vis_9,Visual,16,7Networks_LH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Visual,4.512986618765579,0.008998200359928014,1.0,0.008998200359928014,positive
-1504,16,7Networks_LH_DorsAttn_Post_2,Dorsal Attention,57,7Networks_RH_Vis_8,Visual,Dorsal Attention—Visual,4.584857651448635,0.008998200359928014,1.0,0.008998200359928014,positive
-680,7,7Networks_LH_Vis_8,Visual,16,7Networks_LH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Visual,4.248066963828288,0.028194361127774445,1.0,0.028194361127774445,positive
-4056,57,7Networks_RH_Vis_8,Visual,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Visual,4.049600777344561,0.028194361127774445,1.0,0.028194361127774445,positive
-2983,36,7Networks_LH_Cont_Cing_1,Frontoparietal Control,86,7Networks_RH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Frontoparietal Control,-6.1388857971261945,1.0,0.0001999600079984003,0.0001999600079984003,negative
-2870,35,7Networks_LH_Cont_pCun_1,Frontoparietal Control,36,7Networks_LH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Frontoparietal Control,-4.588657923689265,1.0,0.003599280143971206,0.003599280143971206,negative
-2920,35,7Networks_LH_Cont_pCun_1,Frontoparietal Control,86,7Networks_RH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Frontoparietal Control,-4.413971089480796,1.0,0.003599280143971206,0.003599280143971206,negative
-4832,84,7Networks_RH_Cont_PFCl_3,Frontoparietal Control,87,7Networks_RH_Cont_PFCmp_1,Frontoparietal Control,Frontoparietal Control—Frontoparietal Control,-3.9612549737068177,1.0,0.019396120775844832,0.019396120775844832,negative
-4116,58,7Networks_RH_SomMot_1,Somatomotor,86,7Networks_RH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Somatomotor,4.82499976095731,0.003199360127974405,1.0,0.003199360127974405,positive
-2955,36,7Networks_LH_Cont_Cing_1,Frontoparietal Control,58,7Networks_RH_SomMot_1,Somatomotor,Frontoparietal Control—Somatomotor,3.980656357612638,0.023395320935812838,1.0,0.023395320935812838,positive
-2236,25,7Networks_LH_SalVentAttn_FrOperIns_2,Ventral Attention,87,7Networks_RH_Cont_PFCmp_1,Frontoparietal Control,Frontoparietal Control—Ventral Attention,-5.071218584352312,1.0,0.002999400119976005,0.002999400119976005,negative
-2381,27,7Networks_LH_SalVentAttn_Med_1,Ventral Attention,87,7Networks_RH_Cont_PFCmp_1,Frontoparietal Control,Frontoparietal Control—Ventral Attention,-4.672830721887932,1.0,0.007998400319936013,0.007998400319936013,negative
-4661,75,7Networks_RH_SalVentAttn_FrOperIns_1,Ventral Attention,87,7Networks_RH_Cont_PFCmp_1,Frontoparietal Control,Frontoparietal Control—Ventral Attention,-4.761451205739199,1.0,0.007998400319936013,0.007998400319936013,negative
-4367,65,7Networks_RH_SomMot_8,Somatomotor,78,7Networks_RH_Limbic_OFC_1,Limbic,Limbic—Somatomotor,-4.516639014829224,1.0,0.013797240551889621,0.013797240551889621,negative
-2622,31,7Networks_LH_Limbic_TempPole_1,Limbic,50,7Networks_RH_Vis_1,Visual,Limbic—Visual,-4.773914647627619,1.0,0.01919616076784643,0.01919616076784643,negative
+1738,19,7Networks_LH_DorsAttn_Post_5,Dorsal Attention,48,7Networks_LH_Default_pCunPCC_1,Default Mode,Default Mode—Dorsal Attention,4.933328477106011,0.004599080183963208,1.0,0.004599080183963208,positive
+1788,19,7Networks_LH_DorsAttn_Post_5,Dorsal Attention,98,7Networks_RH_Default_pCunPCC_1,Default Mode,Default Mode—Dorsal Attention,4.714976167035232,0.012397520495900819,1.0,0.012397520495900819,positive
+3712,49,7Networks_LH_Default_pCunPCC_2,Default Mode,87,7Networks_RH_Cont_PFCmp_1,Frontoparietal Control,Default Mode—Frontoparietal Control,4.49443076247688,0.03659268146370726,1.0,0.03659268146370726,positive
+3204,40,7Networks_LH_Default_Par_2,Default Mode,65,7Networks_RH_SomMot_8,Somatomotor,Default Mode—Somatomotor,-4.485883344472008,1.0,0.04579084183163367,0.04579084183163367,negative
+1598,17,7Networks_LH_DorsAttn_Post_3,Dorsal Attention,69,7Networks_RH_DorsAttn_Post_4,Dorsal Attention,Dorsal Attention—Dorsal Attention,-4.603510773282692,1.0,0.009798040391921616,0.009798040391921616,negative
+1996,22,7Networks_LH_DorsAttn_FEF_1,Dorsal Attention,72,7Networks_RH_DorsAttn_FEF_1,Dorsal Attention,Dorsal Attention—Dorsal Attention,-3.963759194224241,1.0,0.03139372125574885,0.03139372125574885,negative
+1563,17,7Networks_LH_DorsAttn_Post_3,Dorsal Attention,34,7Networks_LH_Cont_PFCl_1,Frontoparietal Control,Dorsal Attention—Frontoparietal Control,4.279213229866813,0.01919616076784643,1.0,0.01919616076784643,positive
+1608,17,7Networks_LH_DorsAttn_Post_3,Dorsal Attention,79,7Networks_RH_Limbic_TempPole_1,Limbic,Dorsal Attention—Limbic,-3.8998427560030406,1.0,0.028394321135772844,0.028394321135772844,negative
+4433,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,79,7Networks_RH_Limbic_TempPole_1,Limbic,Dorsal Attention—Limbic,-3.9956689441229183,1.0,0.028394321135772844,0.028394321135772844,negative
+1347,14,7Networks_LH_SomMot_6,Somatomotor,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Somatomotor,3.999337627276991,0.007398520295940812,1.0,0.007398520295940812,positive
+1509,16,7Networks_LH_DorsAttn_Post_2,Dorsal Attention,62,7Networks_RH_SomMot_5,Somatomotor,Dorsal Attention—Somatomotor,4.0944714199506045,0.007398520295940812,1.0,0.007398520295940812,positive
+4251,62,7Networks_RH_SomMot_5,Somatomotor,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Somatomotor,4.020312499426151,0.007398520295940812,1.0,0.007398520295940812,positive
+1127,12,7Networks_LH_SomMot_4,Somatomotor,18,7Networks_LH_DorsAttn_Post_4,Dorsal Attention,Dorsal Attention—Somatomotor,3.9211256228975118,0.015996800639872025,1.0,0.015996800639872025,positive
+1672,18,7Networks_LH_DorsAttn_Post_4,Dorsal Attention,62,7Networks_RH_SomMot_5,Somatomotor,Dorsal Attention—Somatomotor,3.8982539136536087,0.015996800639872025,1.0,0.015996800639872025,positive
+1831,20,7Networks_LH_DorsAttn_Post_6,Dorsal Attention,62,7Networks_RH_SomMot_5,Somatomotor,Dorsal Attention—Somatomotor,3.730942012606469,0.015996800639872025,1.0,0.015996800639872025,positive
+4179,60,7Networks_RH_SomMot_3,Somatomotor,70,7Networks_RH_DorsAttn_Post_5,Dorsal Attention,Dorsal Attention—Somatomotor,3.8075109545047248,0.015996800639872025,1.0,0.015996800639872025,positive
+4254,62,7Networks_RH_SomMot_5,Somatomotor,70,7Networks_RH_DorsAttn_Post_5,Dorsal Attention,Dorsal Attention—Somatomotor,3.621310974084583,0.015996800639872025,1.0,0.015996800639872025,positive
+4356,65,7Networks_RH_SomMot_8,Somatomotor,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Somatomotor,3.8165226624355135,0.015996800639872025,1.0,0.015996800639872025,positive
+1039,11,7Networks_LH_SomMot_3,Somatomotor,17,7Networks_LH_DorsAttn_Post_3,Dorsal Attention,Dorsal Attention—Somatomotor,3.318724654312536,0.04939012197560488,1.0,0.04939012197560488,positive
+1092,11,7Networks_LH_SomMot_3,Somatomotor,70,7Networks_RH_DorsAttn_Post_5,Dorsal Attention,Dorsal Attention—Somatomotor,3.3823892302224308,0.04939012197560488,1.0,0.04939012197560488,positive
+1298,14,7Networks_LH_SomMot_6,Somatomotor,18,7Networks_LH_DorsAttn_Post_4,Dorsal Attention,Dorsal Attention—Somatomotor,3.497444383967777,0.04939012197560488,1.0,0.04939012197560488,positive
+1671,18,7Networks_LH_DorsAttn_Post_4,Dorsal Attention,61,7Networks_RH_SomMot_4,Somatomotor,Dorsal Attention—Somatomotor,3.5719809414494237,0.04939012197560488,1.0,0.04939012197560488,positive
+1986,22,7Networks_LH_DorsAttn_FEF_1,Dorsal Attention,62,7Networks_RH_SomMot_5,Somatomotor,Dorsal Attention—Somatomotor,3.508370649116608,0.04939012197560488,1.0,0.04939012197560488,positive
+1989,22,7Networks_LH_DorsAttn_FEF_1,Dorsal Attention,65,7Networks_RH_SomMot_8,Somatomotor,Dorsal Attention—Somatomotor,3.2944977676887297,0.04939012197560488,1.0,0.04939012197560488,positive
+4361,65,7Networks_RH_SomMot_8,Somatomotor,72,7Networks_RH_DorsAttn_FEF_1,Dorsal Attention,Dorsal Attention—Somatomotor,3.4296956359523256,0.04939012197560488,1.0,0.04939012197560488,positive
+1844,20,7Networks_LH_DorsAttn_Post_6,Dorsal Attention,75,7Networks_RH_SalVentAttn_FrOperIns_1,Ventral Attention,Dorsal Attention—Ventral Attention,4.14411605682602,0.03539292141571686,1.0,0.03539292141571686,positive
+4519,70,7Networks_RH_DorsAttn_Post_5,Dorsal Attention,75,7Networks_RH_SalVentAttn_FrOperIns_1,Ventral Attention,Dorsal Attention—Ventral Attention,4.271524988210805,0.03539292141571686,1.0,0.03539292141571686,positive
+771,8,7Networks_LH_Vis_9,Visual,16,7Networks_LH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Visual,4.51298661876558,0.010197960407918417,1.0,0.010197960407918417,positive
+1504,16,7Networks_LH_DorsAttn_Post_2,Dorsal Attention,57,7Networks_RH_Vis_8,Visual,Dorsal Attention—Visual,4.584857651448636,0.010197960407918417,1.0,0.010197960407918417,positive
+680,7,7Networks_LH_Vis_8,Visual,16,7Networks_LH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Visual,4.248066963828288,0.02659468106378724,1.0,0.02659468106378724,positive
+4056,57,7Networks_RH_Vis_8,Visual,67,7Networks_RH_DorsAttn_Post_2,Dorsal Attention,Dorsal Attention—Visual,4.04960077734456,0.02659468106378724,1.0,0.02659468106378724,positive
+2983,36,7Networks_LH_Cont_Cing_1,Frontoparietal Control,86,7Networks_RH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Frontoparietal Control,-6.138885797126199,1.0,0.0001999600079984003,0.0001999600079984003,negative
+2870,35,7Networks_LH_Cont_pCun_1,Frontoparietal Control,36,7Networks_LH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Frontoparietal Control,-4.588657923689264,1.0,0.0057988402319536095,0.0057988402319536095,negative
+2920,35,7Networks_LH_Cont_pCun_1,Frontoparietal Control,86,7Networks_RH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Frontoparietal Control,-4.413971089480794,1.0,0.0057988402319536095,0.0057988402319536095,negative
+4832,84,7Networks_RH_Cont_PFCl_3,Frontoparietal Control,87,7Networks_RH_Cont_PFCmp_1,Frontoparietal Control,Frontoparietal Control—Frontoparietal Control,-3.9612549737068194,1.0,0.028594281143771244,0.028594281143771244,negative
+4116,58,7Networks_RH_SomMot_1,Somatomotor,86,7Networks_RH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Somatomotor,4.82499976095731,0.003999200159968006,1.0,0.003999200159968006,positive
+2955,36,7Networks_LH_Cont_Cing_1,Frontoparietal Control,58,7Networks_RH_SomMot_1,Somatomotor,Frontoparietal Control—Somatomotor,3.9806563576126366,0.01919616076784643,1.0,0.01919616076784643,positive
+881,9,7Networks_LH_SomMot_1,Somatomotor,36,7Networks_LH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Somatomotor,3.6564371543842498,0.04439112177564487,1.0,0.04439112177564487,positive
+929,9,7Networks_LH_SomMot_1,Somatomotor,84,7Networks_RH_Cont_PFCl_3,Frontoparietal Control,Frontoparietal Control—Somatomotor,3.7429106142141193,0.04439112177564487,1.0,0.04439112177564487,positive
+931,9,7Networks_LH_SomMot_1,Somatomotor,86,7Networks_RH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Somatomotor,3.7981387135307147,0.04439112177564487,1.0,0.04439112177564487,positive
+933,9,7Networks_LH_SomMot_1,Somatomotor,88,7Networks_RH_Cont_pCun_1,Frontoparietal Control,Frontoparietal Control—Somatomotor,3.634166344248822,0.04439112177564487,1.0,0.04439112177564487,positive
+4114,58,7Networks_RH_SomMot_1,Somatomotor,84,7Networks_RH_Cont_PFCl_3,Frontoparietal Control,Frontoparietal Control—Somatomotor,3.8155738341801757,0.04439112177564487,1.0,0.04439112177564487,positive
+4156,59,7Networks_RH_SomMot_2,Somatomotor,86,7Networks_RH_Cont_Cing_1,Frontoparietal Control,Frontoparietal Control—Somatomotor,3.715546120892162,0.04439112177564487,1.0,0.04439112177564487,positive
+2236,25,7Networks_LH_SalVentAttn_FrOperIns_2,Ventral Attention,87,7Networks_RH_Cont_PFCmp_1,Frontoparietal Control,Frontoparietal Control—Ventral Attention,-5.071218584352314,1.0,0.003999200159968006,0.003999200159968006,negative
+2381,27,7Networks_LH_SalVentAttn_Med_1,Ventral Attention,87,7Networks_RH_Cont_PFCmp_1,Frontoparietal Control,Frontoparietal Control—Ventral Attention,-4.672830721887933,1.0,0.010197960407918417,0.010197960407918417,negative
+4661,75,7Networks_RH_SalVentAttn_FrOperIns_1,Ventral Attention,87,7Networks_RH_Cont_PFCmp_1,Frontoparietal Control,Frontoparietal Control—Ventral Attention,-4.761451205739199,1.0,0.010197960407918417,0.010197960407918417,negative
+4367,65,7Networks_RH_SomMot_8,Somatomotor,78,7Networks_RH_Limbic_OFC_1,Limbic,Limbic—Somatomotor,-4.516639014829224,1.0,0.01759648070385923,0.01759648070385923,negative
+2622,31,7Networks_LH_Limbic_TempPole_1,Limbic,50,7Networks_RH_Vis_1,Visual,Limbic—Visual,-4.7739146476276195,1.0,0.033193361327734455,0.033193361327734455,negative
+1258,13,7Networks_LH_SomMot_5,Somatomotor,63,7Networks_RH_SomMot_6,Somatomotor,Somatomotor—Somatomotor,4.650927663677945,0.0001999600079984003,1.0,0.0001999600079984003,positive
 1170,12,7Networks_LH_SomMot_4,Somatomotor,61,7Networks_RH_SomMot_4,Somatomotor,Somatomotor—Somatomotor,-5.9207825230100415,1.0,0.0003999200159968006,0.0003999200159968006,negative
-1258,13,7Networks_LH_SomMot_5,Somatomotor,63,7Networks_RH_SomMot_6,Somatomotor,Somatomotor—Somatomotor,4.650927663677945,0.0003999200159968006,1.0,0.0003999200159968006,positive
-1122,12,7Networks_LH_SomMot_4,Somatomotor,13,7Networks_LH_SomMot_5,Somatomotor,Somatomotor—Somatomotor,4.452321680292992,0.0007998400319936012,1.0,0.0007998400319936012,positive
-1123,12,7Networks_LH_SomMot_4,Somatomotor,14,7Networks_LH_SomMot_6,Somatomotor,Somatomotor—Somatomotor,4.281869306860253,0.0007998400319936012,1.0,0.0007998400319936012,positive
-1173,12,7Networks_LH_SomMot_4,Somatomotor,64,7Networks_RH_SomMot_7,Somatomotor,Somatomotor—Somatomotor,4.309253483179302,0.0007998400319936012,1.0,0.0007998400319936012,positive
-1174,12,7Networks_LH_SomMot_4,Somatomotor,65,7Networks_RH_SomMot_8,Somatomotor,Somatomotor—Somatomotor,4.320400739424736,0.0007998400319936012,1.0,0.0007998400319936012,positive
-1341,14,7Networks_LH_SomMot_6,Somatomotor,61,7Networks_RH_SomMot_4,Somatomotor,Somatomotor—Somatomotor,4.328810332980242,0.0007998400319936012,1.0,0.0007998400319936012,positive
-4248,62,7Networks_RH_SomMot_5,Somatomotor,64,7Networks_RH_SomMot_7,Somatomotor,Somatomotor—Somatomotor,4.286114492314869,0.0007998400319936012,1.0,0.0007998400319936012,positive
-1172,12,7Networks_LH_SomMot_4,Somatomotor,63,7Networks_RH_SomMot_6,Somatomotor,Somatomotor—Somatomotor,4.091942297282849,0.003999200159968006,1.0,0.003999200159968006,positive
-1256,13,7Networks_LH_SomMot_5,Somatomotor,61,7Networks_RH_SomMot_4,Somatomotor,Somatomotor—Somatomotor,4.0162315242877265,0.003999200159968006,1.0,0.003999200159968006,positive
-4210,61,7Networks_RH_SomMot_4,Somatomotor,63,7Networks_RH_SomMot_6,Somatomotor,Somatomotor—Somatomotor,3.8291284185191943,0.020995800839832032,1.0,0.020995800839832032,positive
-4212,61,7Networks_RH_SomMot_4,Somatomotor,65,7Networks_RH_SomMot_8,Somatomotor,Somatomotor—Somatomotor,3.899379555817497,0.020995800839832032,1.0,0.020995800839832032,positive
-1307,14,7Networks_LH_SomMot_6,Somatomotor,27,7Networks_LH_SalVentAttn_Med_1,Ventral Attention,Somatomotor—Ventral Attention,4.064155423406842,0.01899620075984803,1.0,0.01899620075984803,positive
-4364,65,7Networks_RH_SomMot_8,Somatomotor,75,7Networks_RH_SalVentAttn_FrOperIns_1,Ventral Attention,Somatomotor—Ventral Attention,3.954234118170133,0.01899620075984803,1.0,0.01899620075984803,positive
-4366,65,7Networks_RH_SomMot_8,Somatomotor,77,7Networks_RH_SalVentAttn_Med_2,Ventral Attention,Somatomotor—Ventral Attention,3.961714149433314,0.01899620075984803,1.0,0.01899620075984803,positive
-2176,25,7Networks_LH_SalVentAttn_FrOperIns_2,Ventral Attention,27,7Networks_LH_SalVentAttn_Med_1,Ventral Attention,Ventral Attention—Ventral Attention,-5.29397837193367,1.0,0.0005998800239952009,0.0005998800239952009,negative
-2178,25,7Networks_LH_SalVentAttn_FrOperIns_2,Ventral Attention,29,7Networks_LH_SalVentAttn_Med_3,Ventral Attention,Ventral Attention—Ventral Attention,-4.034967742788484,1.0,0.03719256148770246,0.03719256148770246,negative
-2369,27,7Networks_LH_SalVentAttn_Med_1,Ventral Attention,75,7Networks_RH_SalVentAttn_FrOperIns_1,Ventral Attention,Ventral Attention—Ventral Attention,-3.919195300052387,1.0,0.03719256148770246,0.03719256148770246,negative
-807,8,7Networks_LH_Vis_9,Visual,52,7Networks_RH_Vis_3,Visual,Visual—Visual,4.59822871615063,0.003999200159968006,1.0,0.003999200159968006,positive
-3823,52,7Networks_RH_Vis_3,Visual,54,7Networks_RH_Vis_5,Visual,Visual—Visual,4.44584988054488,0.003999200159968006,1.0,0.003999200159968006,positive
-3824,52,7Networks_RH_Vis_3,Visual,55,7Networks_RH_Vis_6,Visual,Visual—Visual,4.49181205888375,0.003999200159968006,1.0,0.003999200159968006,positive
-531,5,7Networks_LH_Vis_6,Visual,52,7Networks_RH_Vis_3,Visual,Visual—Visual,4.267784772658443,0.014597080583883223,1.0,0.014597080583883223,positive
-580,6,7Networks_LH_Vis_7,Visual,8,7Networks_LH_Vis_9,Visual,Visual—Visual,4.067600085788553,0.014597080583883223,1.0,0.014597080583883223,positive
+1122,12,7Networks_LH_SomMot_4,Somatomotor,13,7Networks_LH_SomMot_5,Somatomotor,Somatomotor—Somatomotor,4.452321680292992,0.0005998800239952009,1.0,0.0005998800239952009,positive
+1123,12,7Networks_LH_SomMot_4,Somatomotor,14,7Networks_LH_SomMot_6,Somatomotor,Somatomotor—Somatomotor,4.281869306860252,0.0005998800239952009,1.0,0.0005998800239952009,positive
+1173,12,7Networks_LH_SomMot_4,Somatomotor,64,7Networks_RH_SomMot_7,Somatomotor,Somatomotor—Somatomotor,4.309253483179302,0.0005998800239952009,1.0,0.0005998800239952009,positive
+1174,12,7Networks_LH_SomMot_4,Somatomotor,65,7Networks_RH_SomMot_8,Somatomotor,Somatomotor—Somatomotor,4.320400739424735,0.0005998800239952009,1.0,0.0005998800239952009,positive
+1341,14,7Networks_LH_SomMot_6,Somatomotor,61,7Networks_RH_SomMot_4,Somatomotor,Somatomotor—Somatomotor,4.328810332980242,0.0005998800239952009,1.0,0.0005998800239952009,positive
+4248,62,7Networks_RH_SomMot_5,Somatomotor,64,7Networks_RH_SomMot_7,Somatomotor,Somatomotor—Somatomotor,4.286114492314869,0.0005998800239952009,1.0,0.0005998800239952009,positive
+1172,12,7Networks_LH_SomMot_4,Somatomotor,63,7Networks_RH_SomMot_6,Somatomotor,Somatomotor—Somatomotor,4.091942297282849,0.002599480103979204,1.0,0.002599480103979204,positive
+1256,13,7Networks_LH_SomMot_5,Somatomotor,61,7Networks_RH_SomMot_4,Somatomotor,Somatomotor—Somatomotor,4.016231524287726,0.002599480103979204,1.0,0.002599480103979204,positive
+4210,61,7Networks_RH_SomMot_4,Somatomotor,63,7Networks_RH_SomMot_6,Somatomotor,Somatomotor—Somatomotor,3.8291284185191947,0.010197960407918417,1.0,0.010197960407918417,positive
+4212,61,7Networks_RH_SomMot_4,Somatomotor,65,7Networks_RH_SomMot_8,Somatomotor,Somatomotor—Somatomotor,3.8993795558174975,0.010197960407918417,1.0,0.010197960407918417,positive
+1036,11,7Networks_LH_SomMot_3,Somatomotor,14,7Networks_LH_SomMot_6,Somatomotor,Somatomotor—Somatomotor,3.304347406573958,0.041391721655668866,1.0,0.041391721655668866,positive
+1087,11,7Networks_LH_SomMot_3,Somatomotor,65,7Networks_RH_SomMot_8,Somatomotor,Somatomotor—Somatomotor,3.3142862162736986,0.041391721655668866,1.0,0.041391721655668866,positive
+1260,13,7Networks_LH_SomMot_5,Somatomotor,65,7Networks_RH_SomMot_8,Somatomotor,Somatomotor—Somatomotor,3.6158935765413522,0.041391721655668866,1.0,0.041391721655668866,positive
+1340,14,7Networks_LH_SomMot_6,Somatomotor,60,7Networks_RH_SomMot_3,Somatomotor,Somatomotor—Somatomotor,3.36887869157636,0.041391721655668866,1.0,0.041391721655668866,positive
+1342,14,7Networks_LH_SomMot_6,Somatomotor,62,7Networks_RH_SomMot_5,Somatomotor,Somatomotor—Somatomotor,3.4755955557474825,0.041391721655668866,1.0,0.041391721655668866,positive
+4174,60,7Networks_RH_SomMot_3,Somatomotor,65,7Networks_RH_SomMot_8,Somatomotor,Somatomotor—Somatomotor,3.390622117021068,0.041391721655668866,1.0,0.041391721655668866,positive
+4211,61,7Networks_RH_SomMot_4,Somatomotor,64,7Networks_RH_SomMot_7,Somatomotor,Somatomotor—Somatomotor,3.4910644780992803,0.041391721655668866,1.0,0.041391721655668866,positive
+4249,62,7Networks_RH_SomMot_5,Somatomotor,65,7Networks_RH_SomMot_8,Somatomotor,Somatomotor—Somatomotor,3.433778405556116,0.041391721655668866,1.0,0.041391721655668866,positive
+1307,14,7Networks_LH_SomMot_6,Somatomotor,27,7Networks_LH_SalVentAttn_Med_1,Ventral Attention,Somatomotor—Ventral Attention,4.064155423406841,0.013397320535892822,1.0,0.013397320535892822,positive
+4364,65,7Networks_RH_SomMot_8,Somatomotor,75,7Networks_RH_SalVentAttn_FrOperIns_1,Ventral Attention,Somatomotor—Ventral Attention,3.954234118170133,0.013397320535892822,1.0,0.013397320535892822,positive
+4366,65,7Networks_RH_SomMot_8,Somatomotor,77,7Networks_RH_SalVentAttn_Med_2,Ventral Attention,Somatomotor—Ventral Attention,3.9617141494333152,0.013397320535892822,1.0,0.013397320535892822,positive
+960,10,7Networks_LH_SomMot_2,Somatomotor,26,7Networks_LH_SalVentAttn_PFCl_1,Ventral Attention,Somatomotor—Ventral Attention,3.625317773145056,0.03719256148770246,1.0,0.03719256148770246,positive
+1355,14,7Networks_LH_SomMot_6,Somatomotor,75,7Networks_RH_SalVentAttn_FrOperIns_1,Ventral Attention,Somatomotor—Ventral Attention,3.924511271633255,0.03719256148770246,1.0,0.03719256148770246,positive
+1357,14,7Networks_LH_SomMot_6,Somatomotor,77,7Networks_RH_SalVentAttn_Med_2,Ventral Attention,Somatomotor—Ventral Attention,3.743907600257915,0.03719256148770246,1.0,0.03719256148770246,positive
+2176,25,7Networks_LH_SalVentAttn_FrOperIns_2,Ventral Attention,27,7Networks_LH_SalVentAttn_Med_1,Ventral Attention,Ventral Attention—Ventral Attention,-5.293978371933669,1.0,0.0005998800239952009,0.0005998800239952009,negative
+4600,73,7Networks_RH_SalVentAttn_TempOccPar_1,Ventral Attention,75,7Networks_RH_SalVentAttn_FrOperIns_1,Ventral Attention,Ventral Attention—Ventral Attention,4.177829444131547,0.027594481103779243,1.0,0.027594481103779243,positive
+2178,25,7Networks_LH_SalVentAttn_FrOperIns_2,Ventral Attention,29,7Networks_LH_SalVentAttn_Med_3,Ventral Attention,Ventral Attention—Ventral Attention,-4.034967742788483,1.0,0.03139372125574885,0.03139372125574885,negative
+2369,27,7Networks_LH_SalVentAttn_Med_1,Ventral Attention,75,7Networks_RH_SalVentAttn_FrOperIns_1,Ventral Attention,Ventral Attention—Ventral Attention,-3.919195300052386,1.0,0.03139372125574885,0.03139372125574885,negative
+807,8,7Networks_LH_Vis_9,Visual,52,7Networks_RH_Vis_3,Visual,Visual—Visual,4.59822871615063,0.004199160167966407,1.0,0.004199160167966407,positive
+3823,52,7Networks_RH_Vis_3,Visual,54,7Networks_RH_Vis_5,Visual,Visual—Visual,4.445849880544879,0.004199160167966407,1.0,0.004199160167966407,positive
+3824,52,7Networks_RH_Vis_3,Visual,55,7Networks_RH_Vis_6,Visual,Visual—Visual,4.491812058883751,0.004199160167966407,1.0,0.004199160167966407,positive
+531,5,7Networks_LH_Vis_6,Visual,52,7Networks_RH_Vis_3,Visual,Visual—Visual,4.267784772658443,0.01259748050389922,1.0,0.01259748050389922,positive
+580,6,7Networks_LH_Vis_7,Visual,8,7Networks_LH_Vis_9,Visual,Visual—Visual,4.067600085788553,0.01259748050389922,1.0,0.01259748050389922,positive
+246,2,7Networks_LH_Vis_3,Visual,52,7Networks_RH_Vis_3,Visual,Visual—Visual,3.8502840382849546,0.04439112177564487,1.0,0.04439112177564487,positive
+3826,52,7Networks_RH_Vis_3,Visual,57,7Networks_RH_Vis_8,Visual,Visual—Visual,3.8905092321131636,0.04439112177564487,1.0,0.04439112177564487,positive

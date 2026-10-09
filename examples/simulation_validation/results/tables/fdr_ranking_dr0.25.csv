@@ -1,7 +1,7 @@
 method,FDR_mean,FDR_strict_mean,TPR_mean
 bonferroni,0.002,0.002,0.68
 tstat,0.002,0.002,0.687
-ni_tfnbs,0.004,0.004,0.79
+ni_tfnbs,0.004,0.004,0.786
 tfnbs,0.019,0.019,0.829
 fbc_tfnbs,0.02,0.021,0.834
 bh_fdr,0.047,0.048,0.856

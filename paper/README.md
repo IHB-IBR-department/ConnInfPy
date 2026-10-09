@@ -124,7 +124,7 @@ datasets per cell, n ∈ {10, 30, 50, 100}, 11 methods = 44 cells).
 |---|---|---|---|
 | One direction, α per tail | 0.047 | 0.025–0.065 | smallest exact binomial p = 0.021; Bonferroni over 88 tail-cells: 1.0 → pass |
 | Two-sided, α/2 per tail | 0.046 | 0.027–0.061 | smallest p = 0.067; Bonferroni over 44 cells: 1.0 → pass |
-| Either tail at α (no correction) | 0.092 | 0.059–0.109 | expected ≈ 2α — not a valid two-sided procedure |
+| Either tail at α (no correction) | 0.093 | 0.059–0.110 | expected ≈ 2α — not a valid two-sided procedure |
 
 One of the 88 directional intervals lies above 0.05 (FBC-TFNBS, n = 30,
 negative tail, 0.065 [0.051, 0.082]) — about two are expected by chance.
@@ -142,7 +142,7 @@ E = 0.4, H = 3; max-t is the permutation max-statistic test).
 | NBS-ext | 0.73 | 0.69 | 0.24 | 0.27 | 0.35 | 0.14 | 0.07 | 0.19 | 0.16 | 0.21 |
 | FBC-TFNBS | 0.56 | 0.48 | 0.24 | 0.20 | 0.16 | 0.08 | 0.09 | 0.36 | 0.18 | 0.47 |
 | TFNBS | 0.42 | 0.35 | 0.23 | 0.27 | 0.18 | 0.11 | 0.04 | 0.20 | 0.10 | 0.30 |
-| NI-TFNBS | 0.37 | 0.27 | 0.16 | 0.16 | 0.15 | 0.13 | 0.04 | 0.19 | 0.13 | 0.30 |
+| NI-TFNBS | 0.45 | 0.36 | 0.15 | 0.14 | 0.13 | 0.11 | 0.05 | 0.20 | 0.12 | 0.34 |
 | max-t | 0.17 | 0.10 | 0.11 | 0.12 | 0.12 | 0.11 | 0.02 | 0.10 | 0.10 | 0.16 |
 
 The pattern of the old table holds (it was run at the same realised effect),
@@ -214,16 +214,17 @@ E ≈ H/10, (0.6, 6) … (0.9, 9), have about the same FDP and mean TPR
 | Mean over topologies | Δr | correct (4 blocks) | 7 blocks | 2 blocks |
 |---|---|---|---|---|
 | cNBS FDP | 0.125 / 0.25 | 0.07 / 0.13 | 0.11 / 0.23 | 0.24 / 0.31 |
-| NI-TFNBS FDP | 0.125 / 0.25 | 0.012 / 0.004 | 0.008 / 0.003 | 0.020 / 0.011 |
+| NI-TFNBS FDP | 0.125 / 0.25 | 0.013 / 0.005 | 0.012 / 0.003 | 0.023 / 0.013 |
 | FBC-TFNBS FDP | 0.125 / 0.25 | 0.066 / 0.027 | 0.072 / 0.037 | 0.074 / 0.043 |
 | FBC-TFNBS TPR | 0.125 / 0.25 | 0.25 / 0.83 | 0.21 / 0.66 | 0.32 / 0.90 |
 
 - FBC-TFNBS m_min ∈ {1, 2, 3, 5, 10}, mean TPR / FDP at Δr = 0.125:
   0.19/0.014, 0.25/0.045, 0.25/0.066, 0.24/0.084, 0.20/0.093. So m_min = 2
   is as sensitive as 3 with lower FDP, and FDP grows with m_min.
-- NI-TFNBS normalization (√|B| / 1/|B| / none) changes TPR by ≤ 0.04 and FDP
-  by ≤ 0.01, except on between-module dense (TPR 0.27 / 0.17 / 0.37 at
-  Δr = 0.125). FDP ≤ 0.022 in every variant.
+- NI-TFNBS normalization (√|B| / 1/|B| / none) changes TPR by ≤ 0.02 at
+  Δr = 0.125 (between-module dense 0.36 / 0.35 / 0.37); FDP ≤ 0.022 in every
+  variant. (With the old data-dependent capacity 1/|B| fell to 0.17 on
+  between-module dense; see "NI-TFNBS" below.)
 - Permutation BH-FDR at 1,000 permutations has low power (TPR 0.09 vs 0.29
   for parametric BH at Δr = 0.125). Its smallest attainable p (~0.001) is
   above BH's first thresholds over 1,770 edges. It is not used in the
@@ -316,6 +317,38 @@ changed with it (all other selectors are identical). `delta_auc.csv`,
 `ml/openclose_ml_transfer_from_pvals.py` (not in the manuscript) and were
 not regenerated.
 
+## NI-TFNBS: fixed block capacity (2026-10-09)
+
+NI-TFNBS weights an edge by the activation density of its block, k_b(h)/√M_b.
+The capacity M_b used to be the number of the map's own suprathreshold edges
+in the block (data-dependent, different for every permuted map); it is now the
+fixed number of eligible pairs in the block, as the method describes
+(user decision 2026-10-09). All NI-TFNBS results were recomputed (NI rows
+removed and resumed; other methods untouched):
+
+| Result | Old | New |
+|---|---|---|
+| Null FWER per tail (n = 10–100) | 0.036–0.057 | 0.037–0.056 |
+| Mean TPR / FDP at Δr = 0.125 (E = 0.4, H = 3) | 0.190 / 0.013 | 0.205 / 0.012 |
+| TPR within- / between-module dense, Δr = 0.125 | 0.37 / 0.27 | 0.45 / 0.36 |
+| Mean TPR / FDP at Δr = 0.25 | 0.790 / 0.004 | 0.786 / 0.004 |
+| Prior misspecification FDP, correct / 7 / 2 blocks (Δr 0.125 / 0.25) | 0.012/0.004, 0.008/0.003, 0.020/0.011 | 0.013/0.005, 0.012/0.003, 0.023/0.013 |
+| Normalization √|B| / 1/|B| / none, between-module dense TPR | 0.27 / 0.17 / 0.37 | 0.36 / 0.35 / 0.37 |
+| ABIDE age map (`tab:method-spread`) | 61 (38 + 23) | 85 (67 + 18) |
+| Open-Close selector, IHB / Beijing (+ / −) | 629 / 620, 1,130 / 777 | 798 / 614, 1,153 / 828 |
+| Open-Close retest, Beijing (+ / −) | 211 / 104 | 267 / 114 |
+| ML transfer AUC, α = 0.05, IHB→Beijing / Beijing→IHB | 0.944 / 0.818 | 0.943 / 0.823 |
+
+The TFNBS multiverse summary (`tab:tfnbs-multiverse`) is unchanged.
+
+**Symmetry fix (`c27debd`, no effect on reported results).** Inputs from
+`np.corrcoef` are symmetric only to ~4e-16, and the scorers' purely relative
+symmetry test then classed ~0.5% of maps (those with a near-zero statistic)
+as directed, counting their undirected edges twice. Inputs are now averaged
+over the two triangles and the test is scale-aware. Re-running the 19
+affected calibration datasets for TFNBS, NBS (4 variants) and FBC-TFNBS
+changed no false-positive flag, and the ABIDE age map is identical.
+
 ## Manuscript text to update
 
 Simulation section (`sec:evaluation`):
@@ -357,13 +390,14 @@ Simulation section (`sec:evaluation`):
 7. **Robustness (l. 572–573).** Supported; numbers above. Add that m_min = 2
    performed as well as 3 with lower FDP.
 8. **Appendix, NI normalization rationale (l. 709).** Not supported by the
-   ablation. The "no normalization" variant does not show elevated FDP;
-   1/|B| does not approach plain TFNBS. NI-TFNBS (any normalization) is less
-   sensitive than plain TFNBS on the module-aligned dense topologies
-   (between-module dense 0.27 vs 0.35, within-module dense 0.37 vs 0.42),
-   so the block prior does not add sensitivity there. Rewrite as "the
-   normalization has little effect in the tested regimes; √|B| is kept as
-   the default", or drop the paragraph.
+   ablation: the three normalizations give nearly the same TPR (≤ 0.02 apart)
+   and FDP (≤ 0.022). With the fixed block capacity (see "NI-TFNBS" below)
+   NI-TFNBS is now at least as sensitive as plain TFNBS on the module-aligned
+   dense topologies (within-module dense 0.45 vs 0.42, between-module dense
+   0.36 vs 0.35 at Δr = 0.125) and less sensitive on hub and rich club (0.15
+   vs 0.23, 0.14 vs 0.27), with lower FDP (0.004 vs 0.019 at Δr = 0.25).
+   Rewrite as "the normalization has little effect in the tested regimes;
+   √|B| is kept as the default", and state the block-aligned trade-off.
 
 ABIDE section:
 
@@ -371,7 +405,7 @@ ABIDE section:
    "adjusting for sex and head motion". Age and diagnosis are separate
    analyses. The reported 170 + 86 edges and the seven-method comparison use
    this model and are unchanged, except cNBS (440 → 195 with the published
-   statistic).
+   statistic) and NI-TFNBS (61 → 85 with the fixed block capacity).
 10. **Diagnosis, ComBat-only arm (l. 300, `tab:abide-dx`).** 177 (53 + 124) →
     315 (53 + 262). The other three arms are unchanged. The count is
     fragile: 138 of the 262 negative edges form one TFNBS cluster with a
@@ -396,6 +430,14 @@ ABIDE section:
     text and `tab:method-spread` with the values above. Its edge-level FDP is
     high only where blocks are partly affected — a property of block-level
     inference, not an error-control failure.
+14. **NI-TFNBS (methods and every NI-TFNBS number).** Define the block
+    capacity as the fixed number of eligible pairs in a block (n_a·n_b
+    between networks, n_a(n_a−1)/2 within), the same for the observed and
+    every permuted map; k_b(h) is the number of active edges of block b at
+    height h and the weight is k_b(h)/√M_b; there is no connected-component
+    step. Replace the NI-TFNBS rows of `tab:tpr-matrix`, the robustness text,
+    the normalization appendix and `tab:method-spread` with the values in
+    "NI-TFNBS" above.
 
 ## Issues still open
 
@@ -485,3 +527,4 @@ the GLM changes: identical (256 edges, max |Δp| = 0).
 | fMRIPrep loader ignored the censoring mask | ABIDE / Open-Close loaders |
 | Legacy `generate_fc_matrices` not a null at effect 0 | simulations use `TopologyDatasetGenerator` |
 | Multi-contrast GLM used one joint null | no multi-predictor analysis |
+| Rounding asymmetry scored ~0.5% of maps as directed | re-checked: no flag or map changed |
