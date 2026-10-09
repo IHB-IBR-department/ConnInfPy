@@ -25,7 +25,6 @@ Optional extras
 Extra              Adds
 =================  ==============================================================
 ``[app]``          Streamlit interface (``streamlit``, ``nilearn``, ``nibabel``, ...)
-``[decode]``       NiMARE meta-analytic decoding of significant edges
 ``[full]``         ``networkx``
 ``[notebooks]``    Jupyter, for the tutorials in ``examples/notebooks/``
 ``[dev]``          ``pytest``, Sphinx and the other tools used to test and build the docs

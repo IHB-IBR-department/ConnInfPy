@@ -519,21 +519,42 @@ class InferenceResult(TailResult):
         )
         df.to_csv(path, index=index, **to_csv_kwargs)
 
-    def decoded_edges(self, atlas: Any, *, top_n: int = 5, **kwargs: Any) -> pd.DataFrame:
-        """Decode significant edges using Neurosynth/NiMARE meta-analytic decoding.
-        
-        Convenience wrapper that calls ``significant_edges`` first, and then annotates
-        it with decoded terms using ``annotate_edge_table``.
-        """
-        # Split kwargs between significant_edges and annotate_edge_table
-        sig_keys = {'alpha', 'tail', 'sort', 'include_nonsig', 'top_k', 'param_idx'}
-        sig_kwargs = {k: v for k, v in kwargs.items() if k in sig_keys}
-        decode_kwargs = {k: v for k, v in kwargs.items() if k not in sig_keys}
-        
-        from .decode import annotate_edge_table  # decoding is optional; load on use
+    def annotated_edges(
+        self,
+        rois: Any,
+        *,
+        alpha: float = 0.05,
+        tail: str = "both",
+        sort: str = "p",
+        include_nonsig: bool = False,
+        top_k: Optional[int] = None,
+        param_idx: Optional[int] = None,
+        smoothing_fwhm_mm: Optional[float] = None,
+    ) -> pd.DataFrame:
+        """Significant edges with Brainnetome endpoint anatomy and endpoint relations.
 
-        edges = self.significant_edges(atlas=atlas, **sig_kwargs)
-        return annotate_edge_table(edges, atlas, top_n=top_n, **decode_kwargs)
+        ``rois`` is a :class:`~conninfpy.annotate.RoiAnnotation` for the
+        result's ROIs, in matrix order (:func:`conninfpy.annotate.annotate_rois`).
+        Adds the columns described in :func:`conninfpy.annotate.annotate_edges`
+        (anatomy of both endpoints, hemispheric relation, circuit class,
+        distance, sphere overlap, structural connectivity, network relation,
+        shared BrainMap domains) to :meth:`significant_edges`. Description only:
+        the p-values and their correction are unchanged.
+        """
+        from .annotate import annotate_edges
+
+        if len(rois) != len(self["positive"]):
+            raise ValueError(f"rois has {len(rois)} ROIs but the result has {len(self['positive'])}.")
+        edges = self.significant_edges(alpha=alpha, tail=tail, sort=sort, include_nonsig=include_nonsig,
+                                       top_k=top_k, param_idx=param_idx)
+        return annotate_edges(edges, rois, smoothing_fwhm_mm=smoothing_fwhm_mm)
+
+    def decoded_edges(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
+        """Removed: Neurosynth/NiMARE decoding was replaced by Brainnetome annotation."""
+        raise NotImplementedError(
+            "decoded_edges (Neurosynth/NiMARE decoding) was removed. Annotate the ROIs with "
+            "conninfpy.annotate.annotate_rois(...) and call result.annotated_edges(rois)."
+        )
 
     def __repr__(self) -> str:  # pragma: no cover (cosmetic)
         nsig = self.n_significant(0.05)

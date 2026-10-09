@@ -88,9 +88,7 @@ def clear_downstream_results():
         "companion_inference_result",
         "companion_edges_df",
         "companion_method",
-        "decoded_df",
-        "decoding_summary",
-        "decoding_score",
+        "annotation",
         "evidence_packet",
         "narrative_text",
         "narrative_results",
@@ -102,7 +100,7 @@ def clear_downstream_results():
     # session state lets Tab 2 republish an old result after a dataset reload.
     # A still-running thread cannot be safely killed, but removing its task
     # handle prevents its stale payload from being promoted into this session.
-    for task_key in ("inference_task", "decoding_task"):
+    for task_key in ("inference_task",):
         task = st.session_state.get(task_key)
         if task is not None and getattr(task, "status", None) == "running":
             task.status = "invalidated"
@@ -407,33 +405,20 @@ This is a paired null/control comparison of two Eyes-Closed runs from the same C
 - Interactive network graphs show the enhanced subnetworks.
 - Node summary lists anatomical regions sorted by degree burden.
 """,
-    "meta_analytic_decoding": """
-**Meta-Analytic Decoding (NiMARE)**
-Connects the coordinates of your significant functional subnetwork to public cognitive databases to associate brain patterns with specific literature terms.
+    "bna_annotation": """
+**Brainnetome Annotation**
+Describes the ROIs and the detected connections with the Brainnetome atlas (BNA-246; Fan et al., 2016).
 
-### 📚 Databases
-*   **[NeuroQuery](https://neuroquery.org/) (Recommended Default):**
-    *   Uses a predictive machine-learning model mapping text semantic concepts to spatial activity.
-    *   Excellent for **network-level functional profiling** because it handles synonyms, smooths over sparse literature, and generates coherent concept maps.
-*   **[Neurosynth](https://neurosynth.org/):**
-    *   The classic approach using exact keyword-association meta-analysis.
-    *   Excellent for **high-specificity reverse inference** (e.g., finding exact localized regions uniquely active for a single cognitive task), but can be noisy or fragmented for whole networks.
-
-### 🧠 Strategies
-*   **Combined Region Decoding:**
-    Merges all coordinates of nodes in the significant network into a single spatial pattern. Highly recommended for interpreting global network functional profiles.
-*   **Discrete ROI Overlap:**
-    Decodes each individual ROI independently, allowing a region-by-region audit of the subnetwork nodes.
-
-### 💡 Usage Advice
-1. Use **NeuroQuery + Combined Region Decoding** as your starting point to get a smooth, concept-level description of what your network is doing.
-2. Cross-reference with **Neurosynth** to test for exact, highly specific literature associations for your top high-burden nodes.
-3. Be cautious: meta-analytic associations are correlation-based context, not causal explanations.
+- **Support**: each ROI is described by the tissue it sampled (its parcel, or a sphere around its coordinate), as shares of Brainnetome regions. A label is given at the finest level (subregion, gyrus, lobe) holding at least the purity threshold; otherwise the ROI is *mixed*. Cerebellum, brainstem and white matter are *unassigned* (not covered by BNA-246).
+- **Connections**: hemispheric relation (homotopic or not), anatomical level, circuit class (cortico-cortical, thalamo-cortical, ...), distance, sphere overlap, population structural connectivity (when the Brainnetome tractography maps are available) and Yeo network relation.
+- **BrainMap domains**: published forward-inference associations (which tasks activate a region in the literature). They are not the function of a region or of a connection; a region without terms has too few BrainMap studies.
+- **Summaries** put the detections next to the tested opportunities; nothing is tested and the correction is unchanged.
+- **Distance QC**: a contrast that covaries with head motion often shows short-range increases and long-range decreases.
 """,
     "narrative_report": """
 **Narrative Report**
-- Generates a clinical-grade narrative report constrained by the meta-analytic and statistical evidence.
-- Highlights key network hubs and cognitive associations.
+- Generates a cautious narrative constrained by the statistical results and their Brainnetome annotation.
+- Describes where the connections are before any BrainMap literature context.
 """,
     "workspace_documentation": """
 **Workspace Documentation**

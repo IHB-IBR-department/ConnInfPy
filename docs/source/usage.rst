@@ -485,3 +485,54 @@ For raw p-value maps (e.g. loaded from disk) use
 :func:`conninfpy.plot.plot_network_summary` (``signed_proportion``), and
 :func:`conninfpy.harmonize.block_mass` returns the significant-edge counts.
 
+
+Anatomical annotation — :mod:`conninfpy.annotate`
+--------------------------------------------------
+
+:func:`conninfpy.annotate.annotate_rois` describes each ROI with the
+Brainnetome atlas (BNA-246; Fan et al., 2016) by the tissue its signal came
+from, and :meth:`~conninfpy.results.InferenceResult.annotated_edges` adds
+endpoint anatomy and endpoint relations to the significant-edge table:
+
+.. code-block:: python
+
+   from conninfpy.annotate import annotate_rois, summarize_annotation
+
+   rois = annotate_rois(coords, names=names, support="sphere", radius_mm=6)
+   # or: annotate_rois(support="parcel", parcel_image=img, parcel_labels=ids)
+   edges = out.inference.annotated_edges(rois)
+   summary = summarize_annotation(out.inference, rois, level="lobe")
+
+- **Support, not points.** A 6 mm sphere usually covers 2–4 Brainnetome
+  regions, and a parcel's centroid can lie outside the parcel, so each ROI
+  gets its overlap with every region (``rois.weights``) and, with the
+  probabilistic maps, its membership probability. A label is given at the
+  finest level (subregion → gyrus → lobe) holding at least ``purity`` of the
+  labelled tissue; otherwise the ROI is ``mixed``. Cerebellum, brainstem and
+  white matter are ``unassigned``. Coordinates need a declared ``space``
+  (MNI variants other than FSL MNI152 are flagged approximate; Talairach is
+  refused).
+- **Identity first.** Each ROI carries its subregion, gyrus, lobe, hemisphere,
+  cytoarchitectonic description, Yeo-7/17 network (cortex only) and BrainMap
+  behavioural domains. BrainMap terms are published forward-inference
+  associations (which tasks activate a region in the literature), kept per
+  region with their likelihood ratios and never combined into a "top term";
+  a region without terms has too few BrainMap studies.
+- **Connections as relations.** ``annotated_edges`` adds the hemispheric
+  relation (homotopic, heterotopic, intrahemispheric), anatomical level,
+  circuit class (cortico-cortical, thalamo-cortical, cortico-basal ganglia,
+  ...), centre distance, sphere overlap (overlapping spheres share voxels),
+  population structural connectivity and Yeo network relation.
+- **Descriptive summaries.** :func:`~conninfpy.annotate.summarize_annotation`
+  puts the detections next to the tested opportunities by relation, region
+  group and BrainMap domain, and reports the distance dependence of the
+  statistic (a motion-confound check). It adds no test and leaves the
+  correction and the inference unit (edge, component or block) unchanged.
+  ``rois.to_atlas(level)`` gives an :class:`~conninfpy.atlas.AtlasInfo` for
+  :meth:`~conninfpy.results.InferenceResult.network_summary`.
+
+The probabilistic and tractography maps (``BNA_PM_4D.nii.gz``,
+``BNA_SC_3D_246.zip``, from atlas.brainnetome.org) are optional and read from
+``datasets/atlases/`` or ``$CONNINFPY_BNA_DIR``; derived arrays are cached
+once in ``~/.cache/conninfpy/bna246``. Brainnetome data are for non-commercial
+use with attribution and share-alike (``conninfpy/atlas_data/NOTICE_BRAINNETOME.txt``).
