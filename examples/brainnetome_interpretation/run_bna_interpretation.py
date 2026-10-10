@@ -26,9 +26,17 @@ abide_dx          ABIDE, ASD (1) vs control (0), Strategy D, age / sex / motion 
 openclose_ihb     IHB, eyes closed vs open (paired; positive = closed > open)
 openclose_china   Beijing, eyes closed (run 1) vs open (paired; positive = closed > open)
 
+Sensitivity (not in the default set): Beijing scan 1 is always eyes closed and
+precedes eyes open; scans 2 and 3 are eyes open / eyes closed in random order.
+The close run 1 used here is the counterbalanced one.
+
+openclose_china_run1       eyes closed (counterbalanced run) vs open, 47 subjects
+                           (sub-3258811 has an incomplete second close run)
+openclose_china_run0_n47   openclose_china on the same 47 subjects
+
 Usage
 -----
-    python examples/brainnetome_interpretation/run_bna_interpretation.py [--quick] [--analyses ...]
+    python examples/brainnetome_interpretation/run_bna_interpretation.py [--quick] [--analyses ...] [--report NAME]
 
 Outputs go to ``examples/brainnetome_interpretation/results/<analysis>/`` plus
 ``results/rois_<dataset>.csv`` and ``results/report.md``.
@@ -63,6 +71,13 @@ STORED = {
     "openclose_china": ROOT / "examples/openclose_validation/results/china_paired_tfnbs_run0.npz",
 }
 TFNBS = dict(method="tfnbs", e=0.4, h=3.0, n=10, acceleration=None, rng=42, use_mp=True)
+# name -> (experiment, close run, restrict to subjects with both close runs)
+OPENCLOSE = {
+    "openclose_ihb": ("ihb", 0, False),
+    "openclose_china": ("china", 0, False),
+    "openclose_china_run1": ("china", 1, True),
+    "openclose_china_run0_n47": ("china", 0, True),
+}
 
 
 # ----------------------------------------------------------------------
@@ -131,8 +146,11 @@ def run_abide_dx(data, n_perm):
                    n_permutations=n_perm, **TFNBS)
 
 
-def run_paired(ds, n_perm):
-    open_z, close_z = ds.connectivity_z(run=0)
+def run_paired(ds, n_perm, run=0, both_runs_only=False):
+    open_z, close_z = ds.connectivity_z(run=run)
+    if both_runs_only:
+        keep = ds.retest_subject_mask()
+        open_z, close_z = open_z[keep], close_z[keep]
     return analyze(group1=open_z, group2=close_z, test_type="paired", fisher_z=False,
                    n_permutations=n_perm, **TFNBS)
 
@@ -213,6 +231,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="500 permutations (smoke test)")
     ap.add_argument("--analyses", nargs="+", default=["abide_age", "abide_dx", "openclose_ihb", "openclose_china"])
+    ap.add_argument("--report", default="report.md", help="report file name inside results/")
     args = ap.parse_args()
     n_perm = 500 if args.quick else 5000
     OUT.mkdir(parents=True, exist_ok=True)
@@ -243,13 +262,15 @@ def main():
             else:
                 labels = {"interest=0": "control", "interest=1": "ASD"}
         else:
-            exp = "ihb" if name == "openclose_ihb" else "china"
+            exp, run, both_runs_only = OPENCLOSE[name]
             ds = _openclose(exp)
             if "openclose" not in roi_cache:
                 roi_cache["openclose"] = _rois_openclose(ref, ds)
                 roi_cache["openclose"].table.to_csv(OUT / "rois_openclose_schaefer200.csv", index=False)
-            rois, dataset = roi_cache["openclose"], f"Open-Close {exp}, Schaefer-200 (182 parcels)"
-            out = run_paired(ds, n_perm)
+            n_sub = int(ds.retest_subject_mask().sum()) if both_runs_only else ds.n_subjects
+            rois, dataset = (roi_cache["openclose"],
+                             f"Open-Close {exp}, close run {run}, {n_sub} subjects, Schaefer-200 (182 parcels)")
+            out = run_paired(ds, n_perm, run, both_runs_only)
             labels = {"A": "eyes open", "B": "eyes closed"}
         repro = _reproduction(name, out.inference)
         edges, s, by_tail, sentence = describe(name, out, rois, labels, dataset)
@@ -276,8 +297,8 @@ def main():
         lv = rois.table["level"].value_counts().to_dict()
         report.append(f"\n## ROI annotation: {key}\n\nAssignment level of the {len(rois)} parcels: {lv}. "
                       f"Median subregion purity {rois.table['region_purity'].median():.2f}.\n")
-    (OUT / "report.md").write_text("".join(report))
-    print(f"report: {OUT / 'report.md'}")
+    (OUT / args.report).write_text("".join(report))
+    print(f"report: {OUT / args.report}")
 
 
 if __name__ == "__main__":
