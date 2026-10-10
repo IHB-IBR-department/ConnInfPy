@@ -1036,6 +1036,7 @@ def compute_p_val(
     min_coverage: float = 0.8,
     cnbs_correction: str = "bonferroni",
     two_tailed: bool = False,
+    edge_mask: Optional[npt.ArrayLike] = None,
 ) -> InferenceResult:
     """
     Compute p-values using permutation testing with various network-based methods.
@@ -1127,6 +1128,14 @@ def compute_p_val(
         Minimum cluster size for FBC-TFNBS (only used when method='fbc_tfnbs').
     normalization : {'sqrt', 'linear', 'none'}, default='sqrt'
         Block density normalization for NI-TFNBS (only used when method='ni_tfnbs').
+    edge_mask : (N, N) bool array, optional
+        Restrict inference to the marked edges (a declared tested family, e.g.
+        structurally connected pairs). Statistics outside the mask are set to 0
+        in the observed map and in every permutation, so those edges join no
+        TFNBS / NBS cluster, count toward no NI-TFNBS block density or capacity,
+        and never set the null maximum: FWER is controlled over the masked
+        family. Their p-values are NaN (untested). Supported for 'tfnbs',
+        'ni_tfnbs', 'nbs' and 'tstat'; must be symmetric.
     strata : array-like of shape (n,), optional
         Exchangeability-block labels per subject (e.g. site IDs after ComBat
         harmonization). When provided, the two-sample group-label permutation
@@ -1264,6 +1273,18 @@ def compute_p_val(
             enhance_kwargs["normalization"] = normalization
     elif method_enum == StatMethod.CNBS:
         enhance_kwargs = {"net_labels": net_labels}
+
+    # Declared tested family (edge_mask): mask the statistic before any enhancement
+    family = None
+    if edge_mask is not None:
+        family = _check_edge_mask(edge_mask, group1.shape[1])
+        if method_enum not in (StatMethod.TFNBS, StatMethod.NI_TFNBS, StatMethod.NBS, StatMethod.TSTAT):
+            raise NotImplementedError(f"edge_mask is supported for tfnbs, ni_tfnbs, nbs and tstat; got {method_str!r}.")
+        if allow_missing and (np.isnan(group1).any() or (group2 is not None and np.isnan(group2).any())):
+            raise NotImplementedError("edge_mask cannot be combined with missing='available_case' yet.")
+        from .enhance import apply_edge_mask
+        enhance_kwargs = {**enhance_kwargs, "edge_mask": family, "inner": enhance_func}
+        enhance_func = apply_edge_mask
 
     # Missing values (NaN), allowed only under missing='available_case'
     if allow_missing and (np.isnan(group1).any() or (group2 is not None and np.isnan(group2).any())):
@@ -1407,6 +1428,11 @@ def compute_p_val(
         )
     else:
         result = _compute_p_values_from_null(emp_t_dict, max_null_dict)
+    if family is not None:
+        # Edges outside the declared family are untested: NaN, never "not significant"
+        outside = ~family & ~np.eye(family.shape[0], dtype=bool)
+        result = {k: np.where(outside, np.nan, np.asarray(result[k], dtype=np.float64))
+                  for k in ("positive", "negative")}
     # Capture the (E, H) grid for TFNBS-family methods so the result
     # carries the parameter axis labels when an array was passed.
     e_grid, h_grid = _grid_from_kwargs(method_enum, enhance_kwargs)
@@ -1424,6 +1450,21 @@ def compute_p_val(
         block_report=block_report,
         two_tailed=two_tailed,
     )
+
+
+def _check_edge_mask(edge_mask: npt.ArrayLike, n_nodes: int) -> npt.NDArray[np.bool_]:
+    """Validate a tested-family mask: (N, N), symmetric, at least one edge; diagonal ignored."""
+    m = np.asarray(edge_mask)
+    if m.shape != (n_nodes, n_nodes):
+        raise ValueError(f"edge_mask must have shape {(n_nodes, n_nodes)}; got {m.shape}.")
+    m = m.astype(bool)
+    if not np.array_equal(m, m.T):
+        raise ValueError("edge_mask must be symmetric.")
+    m = m.copy()
+    np.fill_diagonal(m, False)
+    if not m.any():
+        raise ValueError("edge_mask selects no edge.")
+    return m
 
 
 # =============================================================================

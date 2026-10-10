@@ -48,6 +48,7 @@ __all__ = [
     "apply_cnbs",
     "apply_ni_tfnbs",
     "apply_fbc_tfnbs",
+    "apply_edge_mask",
     # raw scoring (no permutation)
     "get_tfnbs_score",
     "get_network_informed_tfnbs_score",
@@ -165,3 +166,24 @@ def apply_fbc_tfnbs(
             start_thres=start_thres, min_cluster_size=min_cluster_size,
         ),
     )
+
+
+def apply_edge_mask(
+    stat_dict: Dict[str, npt.NDArray[np.float64]],
+    edge_mask: npt.NDArray[np.bool_],
+    inner=None,
+    **kwargs,
+) -> TailResult:
+    """Restrict an enhancement to the edges of ``edge_mask`` (the tested family).
+
+    Statistics outside the mask are set to 0 before ``inner`` runs, so those
+    edges cannot join a TFNBS / NBS cluster or count toward an NI-TFNBS block
+    density; their score is 0 and never sets a permutation maximum, which
+    makes the max-statistic FWER apply to the masked family. ``edge_mask`` is
+    also passed to ``inner`` (NI-TFNBS counts block capacity over it). With
+    ``inner=None`` the raw statistic is masked (``method='tstat'``).
+    Module-level so it pickles to worker processes.
+    """
+    mask = np.asarray(edge_mask, dtype=bool)
+    masked = _wrap(stat_dict, lambda arr: np.where(mask, arr, 0.0))
+    return masked if inner is None else inner(masked, edge_mask=mask, **kwargs)
