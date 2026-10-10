@@ -22,6 +22,17 @@ ROIs (IDs 5, 55–59, 64, 75, 86, 159–164, 168, 186, 191) fail coverage in
 IHB and are dropped from both cohorts so edges are index-aligned across
 sites. See ``schaefer_labels.csv`` for the 182 retained ROIs.
 
+Brainnetome-246 series (``atlas="brainnetome"``)
+------------------------------------------------
+``{experiment}_{open,close}_Brainnetome_strategy-4_{GSR,noGSR}.npy`` hold the
+same participants (same subject order) parcellated with BNA-246, with and
+without global-signal regression; China close again has two runs on the last
+axis. Labels come from ``conninfpy/atlas_data/bna246_hierarchy.csv`` (network =
+the Brainnetome Yeo-7 crosswalk; subcortical regions are "Subcortical").
+``drop_missing_rois`` removes :data:`BNA_DROPOUT_IDS`, regions with no signal in
+the no-GSR products (inferior temporal / parahippocampal susceptibility
+dropout; their GSR series carry unrelated noise), leaving 242 regions.
+
 Known data-quality issue
 ------------------------
 China subject ``sub-3258811`` has run-3 (close second run) incomplete —
@@ -45,6 +56,7 @@ __all__ = [
     "OpenCloseDataset",
     "DATA_DIR",
     "MISSED_ROI_IDS",
+    "BNA_DROPOUT_IDS",
     "bad_retest_subjects",
 ]
 
@@ -58,6 +70,20 @@ MISSED_ROI_IDS: Tuple[int, ...] = (
     5, 55, 56, 57, 58, 59, 64, 75, 86,
     159, 160, 161, 162, 163, 164, 168, 186, 191,
 )
+
+
+# BNA-246 IDs without signal in the no-GSR products (flat in some or all subjects):
+# A20cv_L, A20cv_R, A35/36r_L, TI_R. Provisional until voxel coverage is available.
+BNA_DROPOUT_IDS: Tuple[int, ...] = (101, 102, 109, 118)
+
+_ATLAS_STEMS = {"schaefer200": "Schaefer200", "brainnetome": "Brainnetome"}
+
+
+def _bna_labels() -> pd.DataFrame:
+    """(id, name, network) for the 246 BNA regions, network = Yeo-7 crosswalk."""
+    h = pd.read_csv(Path(__file__).resolve().parents[2] / "conninfpy" / "atlas_data" / "bna246_hierarchy.csv")
+    net = h["yeo7"].where(h["structure"] == "cortex", "Subcortical")
+    return pd.DataFrame({"id": h["roi_id"], "name": h["name"], "network": net})
 
 
 def _missed_col_indices() -> np.ndarray:
@@ -100,6 +126,8 @@ class OpenCloseDataset:
     atlas_df: pd.DataFrame
     net_labels: np.ndarray
     subject_ids: list
+    atlas: str = "schaefer200"
+    gsr: bool = True
     n_rois: int = field(init=False)
 
     def __post_init__(self) -> None:
@@ -115,23 +143,34 @@ class OpenCloseDataset:
         experiment: Literal["ihb", "china"],
         drop_missing_rois: bool = True,
         data_dir: Optional[Path] = None,
+        atlas: Literal["schaefer200", "brainnetome"] = "schaefer200",
+        gsr: bool = True,
     ) -> "OpenCloseDataset":
         """Load time-series data + labels + subject IDs for one experiment.
 
         Parameters
         ----------
         experiment : "ihb" or "china"
-        drop_missing_rois : if True (default), drop the 18 low-coverage ROIs
-            so both cohorts are index-aligned at 182 ROIs.
+        drop_missing_rois : if True (default), drop the low-coverage ROIs: the
+            18 Schaefer parcels (182 kept, both cohorts index-aligned) or the
+            4 BNA dropout regions (242 kept).
         data_dir : override the default ``datasets/open_close/`` path.
+        atlas : "schaefer200" (default) or "brainnetome" (BNA-246).
+        gsr : global-signal-regressed products (default). No-GSR series exist
+            for Brainnetome only.
         """
         base = Path(data_dir) if data_dir is not None else DATA_DIR
         if experiment not in ("ihb", "china"):
             raise ValueError(f"experiment must be 'ihb' or 'china', got {experiment!r}")
+        if atlas not in _ATLAS_STEMS:
+            raise ValueError(f"atlas must be one of {tuple(_ATLAS_STEMS)}, got {atlas!r}")
+        if atlas == "schaefer200" and not gsr:
+            raise ValueError("No-GSR series exist for atlas='brainnetome' only.")
 
         # -- time series ---------------------------------------------
-        open_path = base / f"{experiment}_open_Schaefer200_strategy-4_GSR.npy"
-        close_path = base / f"{experiment}_close_Schaefer200_strategy-4_GSR.npy"
+        stem = f"{_ATLAS_STEMS[atlas]}_strategy-4_{'GSR' if gsr else 'noGSR'}"
+        open_path = base / f"{experiment}_open_{stem}.npy"
+        close_path = base / f"{experiment}_close_{stem}.npy"
         open_ts = np.load(open_path).astype(np.float64, copy=False)
         close_raw = np.load(close_path).astype(np.float64, copy=False)
 
@@ -148,7 +187,14 @@ class OpenCloseDataset:
             close_ts_run1 = None
 
         # -- coverage drop -------------------------------------------
-        if drop_missing_rois:
+        if atlas == "brainnetome":
+            keep = np.ones(open_ts.shape[-1], dtype=bool)
+            if drop_missing_rois:
+                keep[[i - 1 for i in BNA_DROPOUT_IDS]] = False
+            open_ts, close_ts = open_ts[..., keep], close_ts[..., keep]
+            if close_ts_run1 is not None:
+                close_ts_run1 = close_ts_run1[..., keep]
+        elif drop_missing_rois:
             keep = _keep_col_mask(open_ts.shape[-1])
             open_ts = open_ts[..., keep]
             close_ts = close_ts[..., keep]
@@ -161,8 +207,11 @@ class OpenCloseDataset:
         # TS arrays have 200 columns but labels are still only for 182 —
         # net_labels length will mismatch n_rois. That mode is for diagnostic
         # inspection only; normal use is drop_missing_rois=True.
-        atlas_df = pd.read_csv(base / "schaefer_labels.csv")
-        if drop_missing_rois and len(atlas_df) != 182:
+        if atlas == "brainnetome":
+            atlas_df = _bna_labels()[keep].reset_index(drop=True)
+        else:
+            atlas_df = pd.read_csv(base / "schaefer_labels.csv")
+        if atlas == "schaefer200" and drop_missing_rois and len(atlas_df) != 182:
             raise RuntimeError(
                 f"schaefer_labels.csv has {len(atlas_df)} rows, expected 182. "
                 f"If the file was updated, re-verify MISSED_ROI_IDS."
@@ -187,6 +236,8 @@ class OpenCloseDataset:
             atlas_df=atlas_df,
             net_labels=net_labels,
             subject_ids=subject_ids,
+            atlas=atlas,
+            gsr=gsr,
         )
 
     # -----------------------------------------------------------------

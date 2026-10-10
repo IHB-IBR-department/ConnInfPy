@@ -11,6 +11,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from examples.openclose_validation.openclose_loader import (
+    BNA_DROPOUT_IDS,
     OpenCloseDataset,
     MISSED_ROI_IDS,
     bad_retest_subjects,
@@ -98,6 +99,36 @@ class TestOpenCloseLoader(unittest.TestCase):
     def test_ihb_retest_mask_is_all_true(self) -> None:
         ds = OpenCloseDataset.load("ihb")
         self.assertTrue(np.all(ds.retest_subject_mask()))
+
+
+_BNA_FILES = [Path(__file__).resolve().parents[1] / "datasets" / "open_close" / f"{e}_{c}_Brainnetome_strategy-4_{g}.npy"
+              for e in ("ihb", "china") for c in ("open", "close") for g in ("GSR", "noGSR")]
+
+
+@unittest.skipUnless(all(f.exists() for f in _BNA_FILES), "Brainnetome Open-Close series not present")
+class TestBrainnetomeSeries(unittest.TestCase):
+    """BNA-246 products: same participants, 4 dropout regions removed by default."""
+
+    def test_shapes_labels_and_dropouts(self) -> None:
+        for exp, n_sub, T in (("ihb", 84, 120), ("china", 48, 240)):
+            for gsr in (True, False):
+                ds = OpenCloseDataset.load(exp, atlas="brainnetome", gsr=gsr)
+                self.assertEqual(ds.open_ts.shape, (n_sub, T, 242))
+                self.assertEqual(len(ds.atlas_df), 242)
+                self.assertFalse(set(BNA_DROPOUT_IDS) & set(ds.atlas_df["id"]))
+                self.assertEqual((ds.atlas_df["network"] == "Subcortical").sum(), 36)
+                self.assertEqual((ds.atlas, ds.gsr), ("brainnetome", gsr))
+        full = OpenCloseDataset.load("china", atlas="brainnetome", drop_missing_rois=False)
+        self.assertEqual(full.close_ts_run1.shape, (48, 240, 246))
+
+    def test_same_subject_order_as_schaefer(self) -> None:
+        s = OpenCloseDataset.load("ihb")
+        b = OpenCloseDataset.load("ihb", atlas="brainnetome")
+        self.assertEqual(s.subject_ids, b.subject_ids)
+
+    def test_schaefer_without_gsr_is_refused(self) -> None:
+        with self.assertRaisesRegex(ValueError, "brainnetome"):
+            OpenCloseDataset.load("ihb", gsr=False)
 
 
 if __name__ == "__main__":
