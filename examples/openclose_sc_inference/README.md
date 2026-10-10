@@ -30,3 +30,22 @@ python examples/openclose_sc_inference/run_sc_inference.py --stage e0,e2
 
 Outputs go to `results/` (git-ignored): `report.md`, CSV tables per stage, and
 p-maps for the primary runs.
+
+## NI-TFNBS with SC blocks (`run_sc_blocks.py`)
+
+NI-TFNBS takes any partition as its prior (the paper's analyses used Yeo-7 as an
+example). Here the blocks come from structural connectivity: Louvain modules of
+the cortical SC (medoid of 50 seeds) at every resolution gamma = 0.8-2.0
+(5-12 cortical modules; identical partitions run once), with subcortex as one
+module. Every edge belongs to a block, so every edge stays tested. References:
+standard TFNBS and NI-TFNBS with the Yeo-7 crosswalk.
+
+`draw_sc_block_connectograms.py` draws gyrus-level connectograms per prior and
+cohort, plus one overview per cohort and tail across resolutions.
+
+```
+python examples/openclose_sc_inference/run_sc_blocks.py                 # ~3 min
+python examples/openclose_sc_inference/draw_sc_block_connectograms.py
+```
+
+Outputs go to `results_blocks/` (git-ignored).
