@@ -11,7 +11,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from conninfpy.annotate import _lens_share, annotate_edges, annotate_rois, summarize_annotation
+from conninfpy.annotate import (_lens_share, aggregate_connections, annotate_edges, annotate_rois,
+                                 summarize_annotation)
 from conninfpy.atlas import get_bna_246_nifti_path
 from conninfpy.brainnetome import BrainnetomeReference
 from conninfpy.results import InferenceResult
@@ -188,6 +189,78 @@ class TestSummary(unittest.TestCase):
         self.assertEqual(hom["n_detected"], 1)
         self.assertEqual(s["meta"]["n_detected"], 1)
         self.assertEqual(s["distance_qc"].loc[0, "share_detections_short"], 0.0)   # 84 mm apart
+
+
+class TestAggregateConnections(unittest.TestCase):
+    """Connections summed over BNA units and networks, and the connectogram drawn from them."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rois = annotate_rois(list(POINTS.values()), names=list(POINTS), reference=_reference(),
+                                 support="sphere", radius_mm=6)
+        names, n = list(POINTS), len(POINTS)
+        p = {"positive": np.ones((n, n)), "negative": np.ones((n, n))}
+        for tail, x, y in (("positive", "L dlPFC", "R dlPFC"), ("positive", "L dlPFC", "L M1 hand"),
+                           ("positive", "L amygdala", "L putamen"), ("negative", "R dlPFC", "L M1 hand")):
+            a, b = names.index(x), names.index(y)
+            p[tail][a, b] = p[tail][b, a] = 0.01
+        stat = np.where(p["positive"] < 1, 4.0, 0.0) - np.where(p["negative"] < 1, 4.0, 0.0)
+        cls.res = InferenceResult(p["positive"], p["negative"], method="tstat",
+                                  stat_positive=np.clip(stat, 0, None), stat_negative=np.clip(-stat, 0, None))
+        # the cerebellum point has no labelled support and drops out
+        cls.nets = ["Frontoparietal", "Frontoparietal", "Limbic", "Somatomotor", "Limbic", "none", "Frontoparietal"]
+
+    def test_weighted_assignment_conserves_connections(self):
+        a = aggregate_connections(self.res, self.rois, networks=self.nets, nonzero_only=False)
+        self.assertAlmostEqual(a["detected"].sum(), 3.0)
+        self.assertAlmostEqual(a["tested"].sum(), 15.0)             # 6 labelled ROIs
+        self.assertTrue(((a["rate"] >= 0) & (a["rate"] <= 1)).all())
+        neg = aggregate_connections(self.res, self.rois, tail="negative", networks=self.nets)
+        self.assertAlmostEqual(neg["detected"].sum(), 1.0)
+
+    def test_dominant_assignment_splits_by_unit_and_network(self):
+        a = aggregate_connections(self.res, self.rois, assign="dominant", networks=self.nets)
+        got = {(frozenset({(r.unit_a, r.network_a), (r.unit_b, r.network_b)}), r.detected) for r in a.itertuples()}
+        self.assertEqual(got, {
+            (frozenset({("MFG_L", "Frontoparietal"), ("MFG_R", "Frontoparietal")}), 1.0),
+            (frozenset({("MFG_L", "Frontoparietal"), ("PrG_L", "Somatomotor")}), 1.0),
+            (frozenset({("Amyg_L", "Limbic"), ("BG_L", "Limbic")}), 1.0),
+        })
+        sub = aggregate_connections(self.res, self.rois, level="subregion", assign="dominant", networks=self.nets)
+        self.assertIn("A9/46v_L", set(sub["unit_a"]) | set(sub["unit_b"]))
+        with self.assertRaisesRegex(ValueError, "labels"):
+            aggregate_connections(self.res, self.rois, networks=self.nets[:3])
+
+    def test_dominant_unit_is_chosen_at_the_requested_level(self):
+        from conninfpy.annotate import RoiAnnotation, _unit_weights
+
+        w = np.zeros((1, 246))
+        w[0, [0, 14, 16]] = [0.3, 0.25, 0.25]       # A8m_L (SFG) is the largest subregion; MFG_L holds 50 %
+        roi = RoiAnnotation(table=self.rois.table.iloc[:1], weights=w, membership=None,
+                            reference=self.rois.reference)
+        sub, sub_units = _unit_weights(roi, "subregion", "dominant")
+        gyr, gyr_units = _unit_weights(roi, "gyrus", "dominant")
+        self.assertEqual(sub_units[int(sub[0].argmax())], "A8m_L")
+        self.assertEqual(gyr_units[int(gyr[0].argmax())], "MFG_L")
+        self.assertEqual(gyr.sum(), 1.0)
+
+    def test_connectogram_draws_one_chord_per_unit_pair(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.collections import LineCollection
+
+        from conninfpy.plot import plot_connectogram
+
+        ax = plot_connectogram(self.res, self.rois, assign="dominant", networks=self.nets)
+        chords = [c for c in ax.collections if isinstance(c, LineCollection)]
+        self.assertEqual(len(chords), 1)
+        self.assertEqual(len(chords[0].get_segments()) % 3, 0)      # 3 chords of equal length
+        self.assertIn("3 connections", ax.get_title())
+        self.assertTrue(any("carry 3 of 3 connections" in t.get_text() for t in ax.texts))
+        with self.assertRaisesRegex(ValueError, "one connectogram per tail"):
+            plot_connectogram(self.res, self.rois, tail="both")
+        plt.close("all")
 
 
 if __name__ == "__main__":

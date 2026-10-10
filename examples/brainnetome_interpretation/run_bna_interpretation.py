@@ -39,7 +39,10 @@ Usage
     python examples/brainnetome_interpretation/run_bna_interpretation.py [--quick] [--analyses ...] [--report NAME]
 
 Outputs go to ``examples/brainnetome_interpretation/results/<analysis>/`` plus
-``results/rois_<dataset>.csv`` and ``results/report.md``.
+``results/rois_<dataset>.csv`` and ``results/report.md``. Each analysis also
+gets Brainnetome-style connectograms (``connectogram_{gyrus,subregion}.{png,pdf}``:
+each parcel in the gyrus or subregion holding most of it), one panel per tail,
+chords coloured by the endpoints' Yeo networks.
 """
 from __future__ import annotations
 
@@ -169,6 +172,23 @@ def _reproduction(name, inf):
     return f"max |Δp| = {d:.3g}; same detections at α = 0.05: {same}"
 
 
+def connectograms(name, inf, rois):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from conninfpy.plot import plot_connectogram
+
+    for level in ("gyrus", "subregion"):
+        fig, axes = plt.subplots(1, 2, figsize=(18, 9.2))
+        for ax, tail in zip(axes, ("positive", "negative")):
+            plot_connectogram(inf, rois, tail=tail, level=level, labels=level, ax=ax)
+        fig.subplots_adjust(left=0.01, right=0.99, top=0.93, bottom=0.01, wspace=0.04)
+        fig.suptitle(f"{name}: Brainnetome {level} connectogram (α = 0.05 per tail)", fontsize=13)
+        for ext in ("png", "pdf"):
+            fig.savefig(OUT / name / f"connectogram_{level}.{ext}", dpi=150, bbox_inches="tight")
+        plt.close(fig)
+
+
 def describe(name, out, rois, labels, dataset):
     inf = out.inference
     if labels and inf.design is not None:
@@ -274,10 +294,12 @@ def main():
             labels = {"A": "eyes open", "B": "eyes closed"}
         repro = _reproduction(name, out.inference)
         edges, s, by_tail, sentence = describe(name, out, rois, labels, dataset)
+        connectograms(name, out.inference, rois)
         print(f"{name}: {time.time() - t0:.0f}s; {len(edges)} detections; reproduction: {repro}")
 
         rel = s["by_tail"]
-        report.append(f"\n## {name}\n\n{dataset}. Reproduction against the stored map: {repro}.\n\n{sentence}\n")
+        report.append(f"\n## {name}\n\n{dataset}. Reproduction against the stored map: {repro}.\n\n{sentence}\n"
+                      f"\nConnectograms: `{name}/connectogram_gyrus.pdf`, `{name}/connectogram_subregion.pdf`.\n")
         for col, title in (("circuit", "Circuit class"), ("hemispheric_relation", "Hemispheric relation"),
                            ("anatomical_relation", "Anatomical level"), ("distance_band", "Distance"),
                            ("network_relation", "Yeo relation (source labels)")):
