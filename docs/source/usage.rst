@@ -530,6 +530,25 @@ endpoint anatomy and endpoint relations to the significant-edge table:
   correction and the inference unit (edge, component or block) unchanged.
   ``rois.to_atlas(level)`` gives an :class:`~conninfpy.atlas.AtlasInfo` for
   :meth:`~conninfpy.results.InferenceResult.network_summary`.
+- **Connectogram.** :func:`~conninfpy.annotate.aggregate_connections` sums the
+  detected and tested connections over Brainnetome units (subregions, gyri or
+  lobes per hemisphere), split by the endpoints' networks: each ROI is spread
+  over the units its support covers (``assign="weighted"``, so a connection
+  contributes 1 in total) or placed in the unit holding most of it
+  (``"dominant"``). :func:`conninfpy.plot.plot_connectogram` draws one tail in
+  the layout of the Brainnetome atlas connectogram (left hemisphere left, lobes
+  from frontal to subcortical; rings for subregions, gyri and each unit's
+  network make-up) with chords coloured by the endpoint networks. It places
+  ROIs by default (whole connections per chord); weighted assignment splits a
+  connection between large parcels into many fractional chords:
+
+  .. code-block:: python
+
+     from conninfpy.plot import plot_connectogram
+
+     plot_connectogram(out.inference, rois, tail="positive", level="gyrus")
+     plot_connectogram(out.inference, rois, tail="negative", level="subregion",
+                       labels="subregion")
 
 The probabilistic and tractography maps (``BNA_PM_4D.nii.gz``,
 ``BNA_SC_3D_246.zip``, from atlas.brainnetome.org) are optional and read from

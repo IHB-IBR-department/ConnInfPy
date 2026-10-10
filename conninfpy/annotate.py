@@ -666,4 +666,104 @@ def summarize_annotation(
             "edges": ann, "meta": meta}
 
 
-__all__ = ["RoiAnnotation", "annotate_rois", "annotate_edges", "summarize_annotation"]
+def _unit_weights(rois: RoiAnnotation, level: str, assign: str):
+    """(n_rois, n_units) share of each ROI's labelled support in each BNA unit at ``level``.
+
+    Units are subregions (BNA names) or gyri / lobes per hemisphere ('SFG_L').
+    ``assign='dominant'`` puts all of an ROI in the unit holding most of it at
+    that level (a gyrus can hold most of an ROI whose largest subregion lies
+    elsewhere). ROIs without labelled support get a zero row.
+    """
+    if level not in _LEVELS:
+        raise ValueError(f"level must be one of {_LEVELS}; got {level!r}.")
+    if assign not in ("weighted", "dominant"):
+        raise ValueError("assign must be 'weighted' or 'dominant'.")
+    w = np.nan_to_num(rois.labelled_weights(), nan=0.0)
+    regions = rois.reference.regions
+    if level == "subregion":
+        units = list(regions["name"])
+    else:
+        keys = [f"{g}_{h}" for g, h in zip(regions["gyrus" if level == "gyrus" else "lobe"], regions["hemisphere"])]
+        units = list(dict.fromkeys(keys))
+        P = np.zeros((N_REGIONS, len(units)))
+        P[np.arange(N_REGIONS), [units.index(k) for k in keys]] = 1.0
+        w = w @ P
+    if assign == "dominant":
+        top = np.zeros_like(w)
+        has = w.sum(axis=1) > 0
+        top[np.flatnonzero(has), w[has].argmax(axis=1)] = 1.0
+        w = top
+    return w, units
+
+
+def aggregate_connections(
+    result: Any,
+    rois: RoiAnnotation,
+    *,
+    level: str = "gyrus",
+    tail: str = "positive",
+    alpha: float = 0.05,
+    assign: str = "weighted",
+    networks: Optional[Sequence[str]] = None,
+    param_idx: Optional[int] = None,
+    nonzero_only: bool = True,
+) -> Any:
+    """Detected and tested connections summed over Brainnetome units, split by network.
+
+    A connection between ROIs i and j adds ``w_i[a] * w_j[b]`` to the unit pair
+    (a, b), where ``w`` is each ROI's share of labelled support per unit
+    (``assign='weighted'``) or 1 for the unit holding most of it
+    (``'dominant'``). With weighted assignment one connection contributes 1 in
+    total, so ``detected`` reads as an expected number of connections. Each
+    contribution is also labelled by the network of each endpoint ROI
+    (``networks``, default ``rois.table['yeo7']``), giving one row per
+    (unit_a, network_a, unit_b, network_b). ``tested`` is the same sum over
+    every tested connection, so ``rate = detected / tested`` compares unit
+    pairs sampled by different numbers of ROIs.
+
+    Descriptive only: the result's correction and inference unit are unchanged.
+    """
+    import pandas as pd
+
+    if tail not in ("positive", "negative", "both"):
+        raise ValueError("tail must be 'positive', 'negative' or 'both'.")
+    W, units = _unit_weights(rois, level, assign)
+    nets = [str(x) for x in (rois.table["yeo7"] if networks is None else networks)]
+    if len(nets) != len(rois):
+        raise ValueError(f"networks has {len(nets)} labels for {len(rois)} ROIs.")
+    net_names = list(dict.fromkeys(nets))
+    net_idx = np.array([net_names.index(x) for x in nets])
+    n, U, K = W.shape[0], len(units), len(net_names)
+    V = np.zeros((n, U * K))                      # columns: (unit, network) nodes, unit-major
+    for k in range(K):
+        V[net_idx == k, k::K] = W[net_idx == k]
+
+    edges = result.significant_edges(alpha=alpha, tail="both", include_nonsig=True, param_idx=param_idx)
+    edges = edges[np.isfinite(edges["p_min"].to_numpy(float))]
+    i, j = edges["roi_i"].to_numpy(int), edges["roi_j"].to_numpy(int)
+    if tail == "both":
+        det = (edges["p_positive"].to_numpy(float) <= alpha) | (edges["p_negative"].to_numpy(float) <= alpha)
+    else:
+        det = edges[f"p_{tail}"].to_numpy(float) <= alpha
+
+    def pair_sums(mask):
+        S = np.zeros((n, n))
+        S[i[mask], j[mask]] = S[j[mask], i[mask]] = 1.0
+        T = V.T @ S @ V                           # off-diagonal: both orientations; diagonal counted twice
+        T[np.diag_indices_from(T)] /= 2.0
+        return T
+
+    D, T = pair_sums(det), pair_sums(np.ones(len(i), bool))
+    p, q = np.triu_indices(U * K)
+    keep = T[p, q] > 0
+    if nonzero_only:
+        keep &= D[p, q] > 0
+    p, q = p[keep], q[keep]
+    return pd.DataFrame({
+        "unit_a": [units[x // K] for x in p], "network_a": [net_names[x % K] for x in p],
+        "unit_b": [units[x // K] for x in q], "network_b": [net_names[x % K] for x in q],
+        "detected": D[p, q], "tested": T[p, q], "rate": D[p, q] / T[p, q],
+    }).sort_values("detected", ascending=False).reset_index(drop=True)
+
+
+__all__ = ["RoiAnnotation", "annotate_rois", "annotate_edges", "summarize_annotation", "aggregate_connections"]

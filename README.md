@@ -249,6 +249,9 @@ from conninfpy.annotate import annotate_rois, summarize_annotation
 rois = annotate_rois(coords, names=names, support="sphere", radius_mm=6)  # or support="parcel"
 edges = out.inference.annotated_edges(rois)       # endpoint anatomy + relations
 summary = summarize_annotation(out.inference, rois, level="lobe")
+
+from conninfpy.plot import plot_connectogram   # Brainnetome-style circular plot, one tail
+plot_connectogram(out.inference, rois, tail="positive", level="gyrus")
 ```
 
 Each ROI is described by the tissue it sampled (overlap of its sphere or
@@ -328,6 +331,7 @@ acceleration and the permutation count all change absolute runtimes.
 | [examples/simulation_validation/](examples/simulation_validation/) | Simulation validation (FPR + power) backing the validation paper |
 | [examples/abide_validation/](examples/abide_validation/) | Real-data validation on ABIDE (age, diagnosis, motion, within-site replication) |
 | [examples/openclose_validation/](examples/openclose_validation/) | Open-Close bidirectional ML transfer (IHB ↔ China) |
+| [examples/openclose_prediction/](examples/openclose_prediction/) | EO/EC prediction: edge versus anatomical/functional aggregation, participant bootstrap stability, with/without training-only ComBat |
 
 ## Documentation
 
