@@ -127,6 +127,30 @@ dropout) has undefined correlations. ConnInfPy never treats them as zero.
   affected subjects on loading (listed in the dataset warnings); the bundled
   ABIDE manifests do.
 
+Declared edge family — ``edge_mask``
+------------------------------------
+
+``compute_p_val(..., edge_mask=mask)`` (and ``analyze``, which passes it
+through) restricts inference to the edges of a symmetric boolean ``(N, N)``
+mask, for example structurally connected pairs:
+
+.. code-block:: python
+
+   sc = BrainnetomeReference.load().structural_connectivity()   # (246, 246), BNA ID order
+   rows = np.asarray(bna_ids) - 1                                 # the analysed BNA regions
+   mask = np.nan_to_num(sc[np.ix_(rows, rows)]) >= 0.05
+   out = analyze(group1=eo, group2=ec, test_type="paired", method="tfnbs", edge_mask=mask)
+
+Statistics outside the mask are set to 0 in the observed map and in every
+permutation. Those edges join no TFNBS / NBS cluster, count toward no
+NI-TFNBS block density or capacity, and never set the null maximum, so FWER is
+controlled over the masked family; their p-values are NaN (untested). The mask
+must be fixed before the data are seen. Supported for ``tfnbs``,
+``ni_tfnbs``, ``nbs`` and ``tstat``; not yet combined with
+``missing='available_case'``. A smaller family gains power by itself, so
+compare a structural mask with random masks matched in density and distance
+(``examples/openclose_sc_inference``).
+
 t-test pipeline — :func:`compute_p_val`
 ---------------------------------------
 
