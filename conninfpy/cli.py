@@ -17,7 +17,7 @@ writes three files to the output directory:
 Both directions are reported, so ``inference.two_tailed`` defaults to True.
 Set it explicitly to False for separate prespecified one-sided families.
 
-Example analysis file: ``examples/configs/abide_mini_age.yaml``.
+Example analysis file: ``examples/abide/configs/abide_mini_age.yaml``.
 """
 from __future__ import annotations
 
@@ -370,7 +370,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     p_run = sub.add_parser("run", help="run an analysis file (YAML)")
-    p_run.add_argument("config", help="analysis file, e.g. examples/configs/abide_mini_age.yaml")
+    p_run.add_argument("config", help="analysis file, e.g. examples/abide/configs/abide_mini_age.yaml")
     p_run.add_argument("--out", help="output directory (default: 'output' in the file)")
     p_run.add_argument("--n-permutations", type=int, help="override inference.n_permutations")
     p_run.add_argument("--no-mp", action="store_true", help="run in a single process")
