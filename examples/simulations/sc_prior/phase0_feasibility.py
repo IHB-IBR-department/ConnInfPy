@@ -18,6 +18,14 @@ Run from the repo root with the `conninfpy` env active.
 """
 from __future__ import annotations
 
+
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
+
+from examples._shared.paths import ROOT, config_path
 import sys
 from pathlib import Path
 
@@ -25,7 +33,7 @@ import numpy as np
 
 
 def _root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return ROOT
 
 
 def _ou_steady_state_cov(
@@ -70,7 +78,7 @@ def _louvain(W: np.ndarray, seed: int = 0) -> tuple[np.ndarray, float, list[int]
 
 
 def main() -> int:
-    sc_path = _root() / "datasets" / "sc" / "sc_schaefer100_hcp.npy"
+    sc_path = _root() / "datasets" / "atlases" / "sc" / "sc_schaefer100_hcp.npy"
     print(f"[1/4] Loading SC from {sc_path.relative_to(_root())}")
     sc = np.load(sc_path)
     print(f"      shape={sc.shape}, "

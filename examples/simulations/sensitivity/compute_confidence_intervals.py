@@ -12,6 +12,14 @@ Usage:
 
 from __future__ import annotations
 
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
+
+from examples._shared.paths import ROOT, config_path
+
 import argparse
 from pathlib import Path
 
@@ -75,12 +83,12 @@ def main():
     parser = argparse.ArgumentParser(description="Compute CIs for power analysis results")
     parser.add_argument(
         "--results-dir", type=Path,
-        default=Path("examples/simulations/results/power_analysis_1000_30"),
+        default=(ROOT / "examples/simulations/results/power_analysis_1000_30"),
         help="Directory containing per_scenario/ CSVs",
     )
     parser.add_argument(
         "--output-dir", type=Path,
-        default=Path("examples/simulations/results/confidence_intervals"),
+        default=(ROOT / "examples/simulations/results/confidence_intervals"),
         help="Output directory for CI tables",
     )
     args = parser.parse_args()

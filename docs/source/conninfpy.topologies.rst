@@ -21,11 +21,8 @@ Public surface:
 - :func:`get_scenarios` — return all scenario specs
 - :func:`get_scenario` — look up a specific scenario by name
 
-The MICCAI 2026 power benchmark
-(``examples/miccai_paper_reproducing/``) sweeps all enhancement methods
-across all 19 topologies; its findings are summarized in the
-"no-method-dominates-across-topologies" empirical message of the
-ConnInfPy paper.
+Power benchmarks (``examples/simulations/power/``) compare methods across
+the topologies selected in each YAML configuration.
 
 .. automodule:: conninfpy.topologies
    :members:

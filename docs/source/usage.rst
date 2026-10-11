@@ -149,7 +149,7 @@ must be fixed before the data are seen. Supported for ``tfnbs``,
 ``ni_tfnbs``, ``nbs`` and ``tstat``; not yet combined with
 ``missing='available_case'``. A smaller family gains power by itself, so
 compare a structural mask with random masks matched in density and distance
-(``examples/open_close/sc_inference``).
+(``examples/open_close/structural_prior``).
 
 t-test pipeline — :func:`compute_p_val`
 ---------------------------------------

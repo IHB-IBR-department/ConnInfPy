@@ -23,15 +23,15 @@ simulations and benchmarks need no data.
 | Manuscript | Produced file | Script(s) |
 |---|---|---|
 | Fig `fig:pipeline` | `pipeline_firsted.pdf` — hand-drawn diagram, no data | — |
-| Fig `fig:abide-global-alignment` + `fig:abide-site-effects` | `abide/plot1_combat_site_variance.png` (one figure; the manuscript splits it into two) | `abide/plot_paper_figures.py` |
-| Fig `fig:abide-age-networks` | `abide/plot3_network_block_mass.png` | `run_age_strategy_d.py --variant age` → `plot_paper_figures.py` |
-| Table `tab:abide-dx`, Fig `fig:abide-dx` | `abide/plot6_diagnosis_methodology.png`; counts from `results/diagnosis/*_edges.csv` | `run_naive_baseline.py`, `run_dx_combat_only.py`, `run_dx_strategy_e.py`, `run_dx_site_glm.py` → `plot_diagnosis_quadrant.py` |
-| Table `tab:method-spread` | `results/age_development/methods/*.npz` | `run_age_method_comparison.py` (+ `plot_method_sensitivity.py`) |
-| Table `tab:tfnbs-multiverse`, Fig `fig:abide-multiverse` | `results/age_development/sensitivity/eh/multiverse_summary.csv` (+ pairwise matrices); `abide/plot5_tfnbs_grid_sensitivity.png` (counts per cell; the manuscript figure shows a Spearman matrix, which no script plots) | `run_eh_sensitivity.py` |
-| Table `tab:oc-within` | `results/{ihb,china}_paired_tfnbs*_edges.csv` | `open_close/run_paired_tfnbs.py` |
+| Fig `fig:abide-global-alignment` + `fig:abide-site-effects` | `abide/plot1_combat_site_variance.png` (one figure; the manuscript splits it into two) | `abide/plots/plot_paper_figures.py` |
+| Fig `fig:abide-age-networks` | `abide/plot3_network_block_mass.png` | `age/run_age_strategy_d.py --variant age` → `plots/plot_paper_figures.py` |
+| Table `tab:abide-dx`, Fig `fig:abide-dx` | `abide/plot6_diagnosis_methodology.png`; counts from `results/diagnosis/*_edges.csv` | `diagnosis/run_naive_baseline.py`, `diagnosis/run_dx_combat_only.py`, `diagnosis/run_dx_strategy_e.py`, `diagnosis/run_dx_site_glm.py` → `plots/plot_diagnosis_quadrant.py` |
+| Table `tab:method-spread` | `results/age_development/methods/*.npz` | `age/run_age_method_comparison.py` (+ `plots/plot_method_sensitivity.py`) |
+| Table `tab:tfnbs-multiverse`, Fig `fig:abide-multiverse` | `results/age_development/sensitivity/eh/multiverse_summary.csv` (+ pairwise matrices); `abide/plot5_tfnbs_grid_sensitivity.png` (counts per cell; the manuscript figure shows a Spearman matrix, which no script plots) | `age/run_eh_sensitivity.py` |
+| Table `tab:oc-within` | `results/{ihb,china}_paired_tfnbs*_edges.csv` | `open_close/paper_validation/run_paired_tfnbs.py` |
 | Table `tab:oc-cross`, Fig `fig:oc-replication` | `results/audit/openclose_agreement.csv`, `openclose/plot2_block_mass_convergence.png` | `audit_openclose_agreement.py` |
-| Fig `fig:oc-specificity` | `openclose/plot5_retest_specificity.png` | `ml/run_ml_feature_selection.py`, `run_retest_methods.py` → `plot5_retest_specificity.py` |
-| Table `tab:timing`, Fig `fig:timing` | `res_benchmarks/timing_benchmark.csv`, `figures/timing_benchmark.png` | `benchmarks/timing_benchmark.py` → `plot_results.py` |
+| Fig `fig:oc-specificity` | `openclose/plot5_retest_specificity.png` | `paper_validation/run_state_methods.py`, `paper_validation/run_retest_methods.py` → `paper_validation/plots/plot5_retest_specificity.py` |
+| Table `tab:timing`, Fig `fig:timing` | `res_benchmarks/timing_benchmark.csv`, `figures/timing_benchmark.png` | `benchmarks/performance/timing_benchmark.py` → `benchmarks/performance/plot_results.py` |
 | Fig `fig:fwer` | `simulation/fig1_fwer_calibration.png`; verdict in `results/fpr_calibration/fpr_summary.txt` | `fpr/fpr_calibration.py` → `regenerate_paper_figures.py` |
 | Fig `fig:topologies` | `simulation/topologies_gallery_dr0.125_n30.png` | `regenerate_paper_figures.py` |
 | Table `tab:tpr-matrix` | `tables/tpr_matrix_dr0.125.csv` | `power/power_analysis.py` → `regenerate_paper_figures.py` |
@@ -499,7 +499,7 @@ ABIDE section:
     p/true 0.86–1.04 over 200 runs).
 11. **Package default E = 0.3 vs the paper's E = 0.4.** The paper scripts now
     pass E explicitly; decide whether the package default should match the
-    setting the paper recommends. `open_close/run_eh_sensitivity.py`
+    setting the paper recommends. `open_close/paper_validation/run_eh_sensitivity.py`
     (not in the manuscript) still uses GPD with 200 permutations.
 
 Resolved by this revision: null calibration design and size, per-direction
@@ -528,3 +528,5 @@ the GLM changes: identical (256 edges, max |Δp| = 0).
 | Legacy `generate_fc_matrices` not a null at effect 0 | simulations use `TopologyDatasetGenerator` |
 | Multi-contrast GLM used one joint null | no multi-predictor analysis |
 | Rounding asymmetry scored ~0.5% of maps as directed | re-checked: no flag or map changed |
+
+The refactored Open-Close `openclose` stage generates paired maps and plots without fitting classifiers. The existing transfer experiment is the separate `mltransfer` stage; `all` includes it. Atlas contrast stability remains an independent example.
