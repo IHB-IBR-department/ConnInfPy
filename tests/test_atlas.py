@@ -163,8 +163,18 @@ class TestBundledAtlases(unittest.TestCase):
         self.assertEqual(atlas.coords.shape, (400, 3))
         self.assertTrue(np.isfinite(atlas.coords).all())
 
-    def test_bna_246(self):
+    def test_bna_246_brainnetome_division_by_default(self):
         atlas = AtlasInfo.bna_246()
+        self.assertEqual(set(atlas.networks), {"Visual", "Somatomotor", "Dorsal Attention", "Ventral Attention",
+                                               "Limbic", "Frontoparietal", "Default", "Subcortical"})
+        self.assertEqual(atlas.networks[0], "Frontoparietal")        # A8m_L in bna246_hierarchy.csv
+        self.assertEqual(atlas.networks[245], "Subcortical")
+        self.assertEqual(len(set(AtlasInfo.bna_246(networks="yeo17").networks)), 18)
+        with self.assertRaises(ValueError):
+            AtlasInfo.bna_246(networks="schaefer")
+
+    def test_bna_246(self):
+        atlas = AtlasInfo.bna_246(networks="lobe")
         self.assertEqual(len(atlas), 246)
         # BNA seven-lobe grouping.
         unique_networks = set(atlas.networks)

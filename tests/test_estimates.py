@@ -135,7 +135,7 @@ class TestAnnotationUsesCoupling(unittest.TestCase):
     def test_summary_and_edges_report_coupling_change(self):
         import tempfile
 
-        from conninfpy.annotate import annotate_rois, summarize_annotation
+        from conninfpy.interpret.annotate import annotate_rois, summarize_annotation
         from conninfpy.brainnetome import BrainnetomeReference
 
         coords = [(-42, 36, 24), (42, 36, 24), (-22, -4, -18), (-38, -22, 56), (-6, -52, 28), (-8, -84, 4)]

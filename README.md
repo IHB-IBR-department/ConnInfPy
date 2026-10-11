@@ -239,20 +239,22 @@ table; `conninfpy.plot.plot_network_summary` draws the signed proportion.
 `conninfpy.AtlasInfo` ships Schaefer-100/200/400 (Yeo-7) and Brainnetome-246;
 `AtlasInfo.from_csv()` reads any other atlas.
 
-**Anatomical interpretation (Brainnetome).** `conninfpy.annotate` describes
+**Anatomical interpretation (Brainnetome).** `conninfpy.interpret` describes
 ROIs and detected connections with the Brainnetome atlas (BNA-246, Fan et al.
 2016):
 
 ```python
-from conninfpy.annotate import annotate_rois, summarize_annotation
+from conninfpy.interpret import annotate_bna_regions, annotate_rois, interpret_result
 
-rois = annotate_rois(coords, names=names, support="sphere", radius_mm=6)  # or support="parcel"
-edges = out.inference.annotated_edges(rois)       # endpoint anatomy + relations
-summary = summarize_annotation(out.inference, rois, level="lobe")
-
-from conninfpy.plot import plot_connectogram   # Brainnetome-style circular plot, one tail
-plot_connectogram(out.inference, rois, tail="positive", level="gyrus")
+rois = annotate_rois(coords, names=names, support="sphere", radius_mm=6)    # or support="parcel"; networks=own labels
+# rois = annotate_bna_regions(bna_ids)            # data parcellated with the Brainnetome atlas itself
+report = interpret_result(out.inference, rois, name="age")
+report.save("results/age")                         # tables, evidence packet, connectograms
 ```
+
+Network labels follow the atlas: Schaefer parcels keep their Yeo-7 labels
+(`networks=`), Brainnetome regions take the Brainnetome division
+(`bna246_hierarchy.csv`).
 
 Each ROI is described by the tissue it sampled (overlap of its sphere or
 parcel with BNA regions; a hard label only at the finest level holding at
