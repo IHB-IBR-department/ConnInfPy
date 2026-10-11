@@ -1,0 +1,15 @@
+{
+  "method": "Schaefer parcel overlap with Brainnetome; finest assignment holding >=50%",
+  "space": "generic MNI152, approximate FSL MNI152 correspondence",
+  "target_labels_used": false,
+  "input_sha256": {
+    "Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm.nii.gz": "474accdd951ecf80624cd445a1cb07a3caf93bb581bf55588da6f6e63189f2e7",
+    "schaefer_labels.csv": "1f46f3c5b3a3523c15664a215a0cba3081ee8009ad5b30725613e58f67ddcb23",
+    "bna246_hierarchy.csv": "97dcb98cc0cf1d08df54280f9e7bfb8e669ae1c02982a47479109a3d305d02e8",
+    "annotate.py": "0cb8da65a09f10862fc748803136c1e32dd597f0dd0e72f5262dee3d79f07629",
+    "brainnetome.py": "3f1b7db3e1c802514f9d6c02e5e0c779d9ab63c92361ee4f01d1043bccc67ff4"
+  },
+  "label_image": "BN_Atlas_246_1mm.nii.gz (FSL MNI152 grid, 1 mm)",
+  "label_image_sha256": "0d90d084952bdbddf417abb457f4eec016cbb95dfd53a4801713806da5646ba3",
+  "output_sha256": "523a10562416b69b514a951c7c632464fbe5cd14111fe762670d791068340293"
+}
