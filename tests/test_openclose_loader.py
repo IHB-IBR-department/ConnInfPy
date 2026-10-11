@@ -1,4 +1,4 @@
-"""Unit tests for examples.openclose_validation.openclose_loader."""
+"""Unit tests for examples.open_close.openclose_loader."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from examples.openclose_validation.openclose_loader import (
+from examples.open_close.openclose_loader import (
     BNA_DROPOUT_IDS,
     OpenCloseDataset,
     MISSED_ROI_IDS,

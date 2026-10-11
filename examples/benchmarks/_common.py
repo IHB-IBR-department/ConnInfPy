@@ -8,7 +8,7 @@ signal structure.
 
 The **four canonical topologies** below span the meaningful structural
 regimes for method comparison and are used across the simulation
-validation suite (``examples/simulation_validation/``):
+validation suite (``examples/simulations/``):
 
     - ``within_module_dense``     — block-aligned effect; cNBS/FBC-TFNBS win
     - ``hub``                     — star topology spanning blocks; stress test for cNBS

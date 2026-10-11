@@ -37,7 +37,7 @@ strictly speaking only validates one of them at this resolution:
   literature endorses ``n=10`` for this path; the choice is a
   pragmatic compromise between integration resolution and permutation
   budget. ConnInfPy's simulation calibration grid in
-  ``examples/simulation_validation/`` is the empirical regression check
+  ``examples/simulations/`` is the empirical regression check
   for this choice; users with budget for ``n=30+`` permutation-time
   integration steps can pass ``n=30`` to ``compute_p_val(...)`` /
   ``compute_p_val_glm(...)`` without changing any other default.
@@ -53,7 +53,7 @@ bound) at each integration step. Smith & Nichols (2009) define the
 TFCE indicator as ``e(h) = 1 if t > h``, i.e. strict inequality. The
 inclusive convention is mathematically equivalent under continuous
 ``t``-statistics and computationally simpler. We retain ``>=`` and use
-the production FPR/FWER calibration in ``examples/simulation_validation/``
+the production FPR/FWER calibration in ``examples/simulations/``
 as the regression check. A future release may switch to ``>`` to match
 the literal Smith & Nichols formula and rerun calibration.
 
