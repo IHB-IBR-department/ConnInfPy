@@ -1,0 +1,139 @@
+# FWER Calibration - Full Validation Configuration
+#
+# Validates that all methods maintain nominal directional FWER under null
+# hypothesis. Edge-wise FPR is reported only as a secondary diagnostic.
+#
+# Usage (from the repository root):
+#   python examples/simulations/fpr/fpr_calibration.py \
+#       --config examples/simulations/configs/fpr_config_1000.yaml
+#   # add --resume to continue an interrupted run, --n-null 100 for a quick pass
+#
+# Run time: ~40 min on an Apple M5 Pro (4,000 datasets x 11 methods).
+# Results are checkpointed, so an interrupted run can be resumed.
+
+# =============================================================================
+# METHODS TO TEST
+# =============================================================================
+
+# All available methods for comprehensive validation
+methods:
+  - tstat           # Baseline: uncorrected t-statistics (edge-wise)
+  - tfnbs           # Threshold-Free NBS (standard; E=0.4, H=3.0)
+  - ni_tfnbs        # Network-Informed TFNBS (E=0.4, H=3.0)
+  - fbc_tfnbs       # FBC-weighted TFNBS (E=0.4, H=3.0)
+  - nbs_extent_2.0      # Classical NBS extent, threshold=2.0
+  - nbs_intensity_2.0   # Classical NBS intensity, threshold=2.0
+  - nbs_extent_3.0      # Classical NBS extent, threshold=3.0
+  - nbs_intensity_3.0   # Classical NBS intensity, threshold=3.0
+  - cnbs            # Constrained NBS (block-based)
+  - bonferroni      # Parametric Bonferroni correction
+  - bh_fdr          # Parametric Benjamini-Hochberg FDR
+
+# =============================================================================
+# NULL SIMULATION PARAMETERS
+# =============================================================================
+
+# Number of null datasets per sample size. With 1000, the 95% Clopper-Pearson
+# interval around a true FWER of 0.05 is about [0.037, 0.065].
+n_null: 1000
+
+# Permutations per null test
+# Higher = more accurate p-values, slower execution
+n_permutations: 1000
+
+# Significance threshold for each directional family. For a two-sided
+# positive-or-negative family, use alpha/2 per tail when interpreting results.
+alpha: 0.05
+
+# =============================================================================
+# DATA GENERATION PARAMETERS
+# =============================================================================
+
+# Network structure (matches typical fMRI analysis)
+n_nodes: 60        # Typical for Schaefer 60-parcel or similar
+n_modules: 4       # 4 major networks
+
+# Subjects per group — sweep over multiple sizes
+n_samples: 30      # default fallback if sample_sizes is unset
+sample_sizes: [10, 30, 50, 100]   # full sample-size sweep, matches prior run
+
+# Correlation structure (realistic for resting-state fMRI)
+intra_corr: 0.3    # Within-module correlation (moderate)
+inter_corr: 0.05   # Between-module correlation (weak)
+noise_level: 0.05  # Noise added to correlations
+time_points: 30    # Time points per simulated subject (as in the power simulations)
+
+# =============================================================================
+# TFNBS PARAMETERS
+# =============================================================================
+
+# Same TFNBS settings as the empirical analyses (ABIDE, Open-Close) and the
+# power simulations: E=0.4, H=3.0, 10 thresholds from 1.65.
+tfnbs_e: 0.4
+tfnbs_h: 3.0
+tfnbs_n: 10               # Number of threshold integration steps
+tfnbs_start_thres: 1.65   # Starting threshold (p < 0.05 one-tailed)
+
+# =============================================================================
+# NBS PARAMETERS
+# =============================================================================
+
+# Fallback threshold for legacy method names nbs_extent / nbs_intensity.
+# The method list above explicitly includes threshold=2.0 and threshold=3.0
+# variants, matching the real-data method comparisons.
+nbs_threshold: 2.0
+
+# =============================================================================
+# FBC PARAMETERS
+# =============================================================================
+
+# Minimum cluster size for FBC scoring
+fbc_min_cluster: 3
+
+# =============================================================================
+# EXECUTION OPTIONS
+# =============================================================================
+
+# Random seed for reproducibility
+seed: 42
+
+# Multiprocessing for permutations WITHIN each test
+# Keep false; outer-level n_jobs=-1 already saturates cores. Nested mp.Pool
+# adds overhead and oversubscribes the CPU.
+use_mp: false
+
+# Parallel jobs for null runs ACROSS tests
+# -1 = use all available cores
+# 1 = sequential execution (slow but easier debugging)
+n_jobs: -1
+
+# Checkpoint frequency (save every N runs)
+# Lower = more frequent saves, slightly more I/O overhead
+# Higher = less frequent saves, more work lost on interruption
+checkpoint_every: 20
+
+# =============================================================================
+# OUTPUT
+# =============================================================================
+
+output_dir: examples/simulations/results/fpr_calibration
+
+# =============================================================================
+# EXPECTED RESULTS
+# =============================================================================
+#
+# For a well-calibrated directional FWER method at alpha=0.05 with n_null=1000:
+#   - Expected directional FWER: <= 0.050
+#   - 95% Clopper-Pearson interval at a true FWER of 0.05: about [0.037, 0.065]
+#
+# Methods should pass if the lower bound of their 95% CI does not exceed
+# alpha=0.05. Values below alpha are conservative, not invalid. The same
+# holds for the two-sided FWER with alpha/2 per tail.
+#
+# Common issues:
+#   - Directional FWER > alpha: Method may be LIBERAL (too many null runs
+#     with at least one false-positive edge)
+#   - Directional FWER < alpha: Method is CONSERVATIVE (valid, less powerful)
+#   - Large variance: Unstable method, may need more permutations
+#
+# =============================================================================

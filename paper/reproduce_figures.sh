@@ -25,44 +25,44 @@ step() { printf '\n=== %s ===\n' "$*"; }
 
 abide() {
   step "ABIDE: QC + connectivity (764 subjects, 15 sites)"
-  $PY examples/abide_validation/prepare_data.py
+  $PY examples/abide/prepare_data.py
   # Age and diagnosis are separate analyses: the age model adjusts for sex and
   # motion only (not diagnosis).
   step "ABIDE: age (sex + motion covariates), ComBat + site dummies, 5000 permutations"
-  $PY examples/abide_validation/run_age_strategy_d.py --variant age
+  $PY examples/abide/run_age_strategy_d.py --variant age
   step "ABIDE: diagnosis under four site strategies, 5000 permutations each"
-  $PY examples/abide_validation/run_naive_baseline.py
-  $PY examples/abide_validation/run_dx_combat_only.py
-  $PY examples/abide_validation/run_dx_strategy_e.py
-  $PY examples/abide_validation/run_dx_site_glm.py
+  $PY examples/abide/run_naive_baseline.py
+  $PY examples/abide/run_dx_combat_only.py
+  $PY examples/abide/run_dx_strategy_e.py
+  $PY examples/abide/run_dx_site_glm.py
   # Every TFNBS-family call passes (E, H, n) = (0.4, 3, 10) explicitly: the
   # package default E is 0.3 since 2026-05-25. All p-values are exact
   # permutation p-values (no GPD tail approximation).
   step "ABIDE: seven-method comparison on age, 5000 permutations each"
-  $PY examples/abide_validation/run_age_method_comparison.py
+  $PY examples/abide/run_age_method_comparison.py
   step "ABIDE: TFNBS (E,H) multiverse, 36 cells x 3 methods, same design as the age map, 5000 permutations"
-  $PY examples/abide_validation/run_eh_sensitivity.py
+  $PY examples/abide/run_eh_sensitivity.py
   step "ABIDE: figures"
-  $PY examples/abide_validation/plot_paper_figures.py
-  $PY examples/abide_validation/plot_method_sensitivity.py
-  $PY examples/abide_validation/plot_diagnosis_quadrant.py   # last: owns plot6
+  $PY examples/abide/plot_paper_figures.py
+  $PY examples/abide/plot_method_sensitivity.py
+  $PY examples/abide/plot_diagnosis_quadrant.py   # last: owns plot6
 }
 
 openclose() {
   step "Open-Close: paired TFNBS (IHB, Beijing, Beijing EC-run retest), 5000 permutations"
-  $PY examples/openclose_validation/run_paired_tfnbs.py --analyses ihb china china_retest
+  $PY examples/open_close/run_paired_tfnbs.py --analyses ihb china china_retest
   step "Open-Close: selector p-maps (8 methods x 2 cohorts, 5000 permutations) + ML transfer"
-  $PY examples/openclose_validation/ml/run_ml_feature_selection.py
+  $PY examples/open_close/ml/run_ml_feature_selection.py
   step "Open-Close: retest maps for all methods, 1000 permutations"
-  $PY examples/openclose_validation/run_retest_methods.py
+  $PY examples/open_close/run_retest_methods.py
   step "Open-Close: cross-cohort agreement (Table oc-cross) + block-mass figure"
-  $PY examples/openclose_validation/audit_openclose_agreement.py
+  $PY examples/open_close/audit_openclose_agreement.py
   step "Open-Close: specificity figure"
-  $PY examples/openclose_validation/plot5_retest_specificity.py
+  $PY examples/open_close/plot5_retest_specificity.py
 }
 
 simulation() {
-  local SV=examples/simulation_validation
+  local SV=examples/simulations
   step "Simulation: FWER calibration, ${FPR_N_NULL} nulls x n in {${FPR_SAMPLE_SIZES}} x 11 methods, 1000 permutations"
   $PY $SV/fpr/fpr_calibration.py --config $SV/configs/fpr_config_1000.yaml \
       --n-null "$FPR_N_NULL" --sample-sizes $FPR_SAMPLE_SIZES --resume
@@ -77,7 +77,7 @@ simulation() {
 }
 
 sensitivity() {
-  local SV=examples/simulation_validation
+  local SV=examples/simulations
   local P=$SV/power/power_analysis.py C=$SV/configs R=$SV/results/sensitivity
   step "Sensitivity: prior misspecification (true / 7 / 2 blocks)"
   for L in true 7blocks 2blocks; do
@@ -123,8 +123,8 @@ copy() {  # copy SRC DEST_DIR [NEW_NAME]
 
 collect() {
   step "Collect figures into paper/figures (manuscript names)"
-  local A=examples/abide_validation/results/plots O=examples/openclose_validation/results/plots
-  local S=examples/simulation_validation/results/plots F=paper/figures
+  local A=examples/abide/results/plots O=examples/open_close/results/plots
+  local S=examples/simulations/results/plots F=paper/figures
   mkdir -p "$F"/{abide,openclose,simulation,figures}
   # Manuscript plot1a/plot1b are two panels of this one figure (split not scripted)
   copy "$A/plot1_combat_site_variance.png"   "$F/abide"
@@ -141,7 +141,7 @@ collect() {
   copy "$S/fig5_prior_misspecification.png"    "$F/simulation"
   copy "$S/mmin_sensitivity.png"               "$F/simulation"
   mkdir -p "$F/tables"
-  for t in examples/simulation_validation/results/tables/*.csv; do copy "$t" "$F/tables"; done
+  for t in examples/simulations/results/tables/*.csv; do copy "$t" "$F/tables"; done
   copy examples/benchmarks/res_benchmarks/timing_benchmark.png "$F/figures"
 }
 

@@ -149,7 +149,7 @@ must be fixed before the data are seen. Supported for ``tfnbs``,
 ``ni_tfnbs``, ``nbs`` and ``tstat``; not yet combined with
 ``missing='available_case'``. A smaller family gains power by itself, so
 compare a structural mask with random masks matched in density and distance
-(``examples/openclose_sc_inference``).
+(``examples/open_close/sc_inference``).
 
 t-test pipeline — :func:`compute_p_val`
 ---------------------------------------
@@ -474,7 +474,7 @@ data summary, warnings, run time):
 
 .. code-block:: bash
 
-   conninfpy run examples/configs/abide_mini_age.yaml [--out DIR] [--n-permutations N] [--no-mp]
+   conninfpy run examples/abide/configs/abide_mini_age.yaml [--out DIR] [--n-permutations N] [--no-mp]
    conninfpy info
 
 Two-sample designs use ``group:`` and ``levels: [group1, group2]``

@@ -154,11 +154,11 @@ The same analysis without writing Python: an analysis file names the data
 manifest, the design (phenotype columns) and the inference settings.
 
 ```bash
-conninfpy run examples/configs/abide_mini_age.yaml   # writes edges.csv, pvals.npz, provenance.json
+conninfpy run examples/abide/configs/abide_mini_age.yaml   # writes edges.csv, pvals.npz, provenance.json
 conninfpy info                                       # versions, TFNBS backend, cores
 ```
 
-See [`examples/configs/abide_mini_age.yaml`](examples/configs/abide_mini_age.yaml)
+See [`examples/abide/configs/abide_mini_age.yaml`](examples/abide/configs/abide_mini_age.yaml)
 for every option; designs are `glm`, `two-sample`, `paired` and `one-sample`.
 `provenance.json` records the package version, the analysis file, the data
 used and any warnings, so a result can be traced back to how it was made.
@@ -328,10 +328,9 @@ acceleration and the permutation count all change absolute runtimes.
 |---|---|
 | [examples/notebooks/](examples/notebooks/) | Tutorial series: quickstart, enhancement methods, GLM, acceleration, parameter sweeps, topology gallery, EEG, results export, and ABIDE |
 | [examples/benchmarks/](examples/benchmarks/) | Timing / GLM / acceleration benchmarks and external validation (PALM, scipy, statsmodels, nilearn) |
-| [examples/simulation_validation/](examples/simulation_validation/) | Simulation validation (FPR + power) backing the validation paper |
-| [examples/abide_validation/](examples/abide_validation/) | Real-data validation on ABIDE (age, diagnosis, motion, within-site replication) |
-| [examples/openclose_validation/](examples/openclose_validation/) | Open-Close bidirectional ML transfer (IHB ↔ China) |
-| [examples/openclose_prediction/](examples/openclose_prediction/) | EO/EC prediction: edge versus anatomical/functional aggregation, participant bootstrap stability, with/without training-only ComBat |
+| [examples/simulations/](examples/simulations/) | Simulation validation (FPR + power) backing the validation paper |
+| [examples/abide/](examples/abide/) | Real-data validation on ABIDE (age, diagnosis, motion, within-site replication), CLI analysis files (`configs/`) and the Brainnetome interpretation |
+| [examples/open_close/](examples/open_close/) | Open-Close (eyes closed vs open; IHB and Beijing): paired validation, bidirectional ML transfer (IHB ↔ China), the Brainnetome interpretation, and the experiments `atlas_stability/` (Schaefer vs native Brainnetome), `sc_inference/` (structural connectivity as an edge mask and as NI-TFNBS blocks) and `prediction/` (edge-only EO/EC models: post-fit feature importance and overlap at edge/anatomical/functional levels, with/without training-only ComBat) |
 
 ## Documentation
 

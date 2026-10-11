@@ -177,7 +177,7 @@ class TestCommand(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             proc = subprocess.run(
                 [sys.executable, "-m", "conninfpy", "run",
-                 "examples/configs/abide_mini_age.yaml", "--out", tmp,
+                 "examples/abide/configs/abide_mini_age.yaml", "--out", tmp,
                  "--n-permutations", "50"],
                 cwd=REPO, capture_output=True, text=True, timeout=600,
             )

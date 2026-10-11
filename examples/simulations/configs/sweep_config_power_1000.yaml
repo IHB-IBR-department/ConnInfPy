@@ -1,0 +1,120 @@
+# TFNBS Power Analysis — Local Configuration
+#
+# Uses numba-accelerated TFNBS scoring (auto backend) and batched 3D mode
+# for the full (e,h) parameter grid (176 combos in a single call).
+#
+# Effect sizes are shifts of the population correlation on the planted edges
+# (Delta r), not Cohen's d. Each subject's matrix is a sample correlation of
+# 30 time points, so on the subject-level Fisher-z values of a planted edge
+# Delta r = 0.075 / 0.125 / 0.25 is about Cohen's d = 0.4 / 0.7 / 1.4.
+#
+# Power is scored on the g2>g1 map (all planted effects are positive) with
+# significance p <= alpha; edges moved by the positive-definite projection
+# are not scored (see power_analysis.py, LEAK_TOL).
+#
+# power_analysis.py prints a runtime estimate before launching.
+#
+# Usage:
+#   python examples/simulations/power/power_analysis.py \
+#     --config examples/simulations/configs/sweep_config_power_1000.yaml
+
+# =============================================================================
+# EFFECT SIZE ANALYSIS
+# =============================================================================
+
+effect_sizes:
+  - 0.075  # Weak — methods start to diverge here
+  - 0.125  # Moderate — key comparison point (Fig. power heatmap, (E,H) sweep)
+  - 0.25   # Strong — FDR ranking table
+
+n_samples: 30
+
+# =============================================================================
+# SAMPLE SIZE ANALYSIS
+# =============================================================================
+
+sample_sizes:
+  - 10     # Minimal
+  - 30     # Moderate
+  - 50     # Large
+  - 100    # Very large (server config, included for comparison)
+
+effect_size: 0.125
+
+# =============================================================================
+# SCENARIOS — 10 representative topologies
+# =============================================================================
+
+# Representative scenarios covering different topologies
+scenarios:
+  - within_module_dense
+  - between_modules_dense
+  - partial_bipartite_between_modules
+  - gradient_core_periphery_within_module
+  - scattered_cross_block
+  - hub
+  - rich_club
+  - cross_block_connected_chain
+  - chain
+  - fragmented_within_module
+
+
+# =============================================================================
+# METHODS
+# =============================================================================
+
+methods:
+  - tstat          # Baseline (no enhancement)
+  - bonferroni
+  - bh_fdr
+  - tfnbs          # Standard TFNBS
+  - ni_tfnbs       # Network-Informed TFNBS
+  - fbc_tfnbs      # Functional Block Clustering TFNBS
+  - nbs_extent_2.0     # Classical NBS (extent, tau=2)
+  - nbs_intensity_2.0  # NBS (intensity, tau=2)
+  - nbs_extent_3.0     # Classical NBS (extent, tau=3)
+  - nbs_intensity_3.0  # NBS (intensity, tau=3)
+  - cnbs           # Constrained NBS
+
+# =============================================================================
+# TFNBS PARAMETER GRID (batched — does NOT multiply runtime)
+# =============================================================================
+
+tfnbs_options:
+  e: [0.05, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30, 1.40, 1.50]
+  h: [0.50, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+  # Computed in a single batched call per task. Threshold settings match the
+  # empirical analyses and the FWER calibration.
+  n_thresholds: 10
+  start_thres: 1.65
+  fbc_min_cluster_size: 3
+
+nbs_options:
+  threshold: [2.0, 3.0]
+
+# =============================================================================
+# SIMULATION
+# =============================================================================
+
+n_repeats: 100         # simulated datasets per (topology, effect size)
+n_permutations: 1000    # permutations per test
+alpha: 0.05
+
+# =============================================================================
+# NETWORK STRUCTURE (same as server)
+# =============================================================================
+
+n_nodes: 60
+n_modules: 4
+intra_corr: 0.3
+inter_corr: 0.05
+noise_level: 0.05
+time_points: 30        # time points per simulated subject
+
+# =============================================================================
+# EXECUTION
+# =============================================================================
+
+seed: 42
+use_mp: false          # mp.Pool at outer level only, not inside permutations
+output_dir: examples/simulations/results/power/power_analysis_1000_30

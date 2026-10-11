@@ -12,17 +12,25 @@ This directory contains the tutorials, paper validation pipelines, and performan
 
 The validation of `conninfpy` is organized by the strength of the statistical design, moving from controlled simulations to observational multi-site data:
 
-1.  **[simulation_validation/](./simulation_validation/)**: **Null Calibration (FPR)** and Power. The foundation of belief; demonstrates that the package controls Type I error under null data.
-2.  **[abide_validation/](./abide_validation/)**: **Positive Controls (Age, Motion)**. Demonstrates that the pipeline reliably detects strong, well-replicated developmental and artifactual signals in real fMRI data.
-3.  **[openclose_validation/](./openclose_validation/)**: **Paired Within-Subject (Open vs. Closed Eyes)**. The strongest causal-adjacent real-data design, utilizing exact sign-flip permutations.
-4.  **[abide_validation/](./abide_validation/)**: **Observational Case-Control (ASD vs. HC)**. The final stress test involving multi-site harmonization (ComBat Strategy D) and stratified permutations.
+1.  **[simulations/](./simulations/)**: **Null Calibration (FPR)** and Power. The foundation of belief; demonstrates that the package controls Type I error under null data.
+2.  **[abide/](./abide/)**: **Positive Controls (Age, Motion)**. Demonstrates that the pipeline reliably detects strong, well-replicated developmental and artifactual signals in real fMRI data.
+3.  **[open_close/](./open_close/)**: **Paired Within-Subject (Open vs. Closed Eyes)**. The strongest causal-adjacent real-data design, utilizing exact sign-flip permutations.
+4.  **[abide/](./abide/)**: **Observational Case-Control (ASD vs. HC)**. The final stress test involving multi-site harmonization (ComBat Strategy D) and stratified permutations.
 
 ---
 
 ## Directory Overview
 
-- `abide_validation/`: Multi-site GLM validation on the ABIDE I cohort.
-- `openclose_validation/`: Paired-design validation on IHB and Beijing cohorts.
-- `simulation_validation/`: FPR calibration, power analysis, and sensitivity audits.
-- `notebooks/`: Jupyter tutorials for getting started.
-- `benchmarks/`: Scalability and timing benchmarks.
+One folder per dataset or purpose:
+
+| Folder | Contents |
+|---|---|
+| `abide/` | ABIDE I multi-site GLM validation (age, diagnosis, motion, within-site replication); `configs/` (CLI analysis files); `brainnetome_interpretation.py` |
+| `open_close/` | Open-Close (eyes closed vs open; IHB and Beijing) paired validation: loader, paired TFNBS, retest, ML transfer (`ml/`), `brainnetome_interpretation.py`, and the experiments `atlas_stability/` (Schaefer vs native Brainnetome), `sc_inference/` (structural-connectivity mask and NI-TFNBS blocks), `prediction/` (edge-model feature reproducibility) |
+| `simulations/` | FPR calibration, power analysis, sensitivity audits, structural-prior simulations |
+| `benchmarks/` | Scalability, timing and external-validation benchmarks |
+| `notebooks/` | Jupyter tutorials for getting started |
+
+`_bna_interpretation.py` holds the steps shared by the two `brainnetome_interpretation.py`
+scripts. Every folder writes regenerable outputs to its own `results/` (git-ignored, except
+the paper plots).

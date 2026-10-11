@@ -125,7 +125,7 @@ __all__ = [
 
 
 # =============================================================================
-# Flat <-> matrix conversions (promoted from examples/abide_validation)
+# Flat <-> matrix conversions (promoted from examples/abide)
 # =============================================================================
 
 def flatten_upper(
@@ -855,7 +855,7 @@ def design_diagnostics(
 
 
 # =============================================================================
-# Block-mass aggregation (promoted from examples/abide_validation)
+# Block-mass aggregation (promoted from examples/abide)
 # =============================================================================
 
 def block_mass(
