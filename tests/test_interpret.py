@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from conninfpy.annotate import annotate_rois, summarize_annotation
+from conninfpy.interpret.annotate import annotate_rois, summarize_annotation
 from conninfpy.brainnetome import BrainnetomeReference
 from conninfpy.interpret.evidence import (
     build_annotation_evidence,

@@ -614,15 +614,15 @@ class InferenceResult(TailResult):
     ) -> pd.DataFrame:
         """Significant edges with Brainnetome endpoint anatomy and endpoint relations.
 
-        ``rois`` is a :class:`~conninfpy.annotate.RoiAnnotation` for the
-        result's ROIs, in matrix order (:func:`conninfpy.annotate.annotate_rois`).
-        Adds the columns described in :func:`conninfpy.annotate.annotate_edges`
+        ``rois`` is a :class:`~conninfpy.interpret.annotate.RoiAnnotation` for the
+        result's ROIs, in matrix order (:func:`conninfpy.interpret.annotate.annotate_rois`).
+        Adds the columns described in :func:`conninfpy.interpret.annotate.annotate_edges`
         (anatomy of both endpoints, hemispheric relation, circuit class,
         distance, sphere overlap, structural connectivity, network relation,
         shared BrainMap domains) to :meth:`significant_edges`. Description only:
         the p-values and their correction are unchanged.
         """
-        from .annotate import annotate_edges
+        from .interpret.annotate import annotate_edges
 
         if len(rois) != len(self["positive"]):
             raise ValueError(f"rois has {len(rois)} ROIs but the result has {len(self['positive'])}.")
@@ -644,7 +644,7 @@ class InferenceResult(TailResult):
         """Removed: Neurosynth/NiMARE decoding was replaced by Brainnetome annotation."""
         raise NotImplementedError(
             "decoded_edges (Neurosynth/NiMARE decoding) was removed. Annotate the ROIs with "
-            "conninfpy.annotate.annotate_rois(...) and call result.annotated_edges(rois)."
+            "conninfpy.interpret.annotate.annotate_rois(...) and call result.annotated_edges(rois)."
         )
 
     def __repr__(self) -> str:  # pragma: no cover (cosmetic)

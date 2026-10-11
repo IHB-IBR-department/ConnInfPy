@@ -10,7 +10,7 @@ from apps.utils.helpers import (
     result_is_stale,
     safe_filename_part,
 )
-from conninfpy.annotate import annotate_rois, summarize_annotation
+from conninfpy.interpret.annotate import annotate_bna_regions, annotate_rois, bna_region_ids, summarize_annotation
 from conninfpy.brainnetome import BrainnetomeReference
 from conninfpy.interpret.evidence import build_annotation_evidence, describe_coverage, summarize_terms
 
@@ -69,8 +69,15 @@ def render_bna_annotation_view(base_atlas):
     if submitted:
         with st.spinner("Annotating ROIs and connections ..."):
             ref = _reference()
-            common = dict(reference=ref, names=list(atlas.labels), purity=purity)
-            if support == "parcel":
+            # Network labels follow the atlas: Brainnetome regions take the Brainnetome
+            # division, other atlases their own labels (Schaefer: Yeo-7) when they have them.
+            bna_ids = bna_region_ids(atlas.labels, reference=ref)
+            own = list(getattr(atlas, "networks", None) or [])
+            networks = own if own and own != list(atlas.labels) else None   # labels-as-networks = no division
+            common = dict(reference=ref, names=list(atlas.labels), purity=purity, networks=networks)
+            if bna_ids is not None:
+                rois = annotate_bna_regions(bna_ids, reference=ref, names=list(atlas.labels))
+            elif support == "parcel":
                 rois = annotate_rois(support="parcel", parcel_image=atlas.image,
                                      parcel_labels=list(atlas.label_ids), **common)
             else:

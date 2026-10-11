@@ -1,8 +1,8 @@
 """Connectograms of the NI-TFNBS results with structural-connectivity blocks (``run_sc_blocks.py``).
 
-Native BNA-246 regions are annotated exactly (each region is its own parcel, on the
-atlas's own label image). Chords are coloured by the endpoints' Yeo-7 networks
-(Brainnetome crosswalk; subcortex grey).
+Native BNA-246 regions are annotated with ``annotate_bna_regions`` (each ROI is its
+Brainnetome region). Chords are coloured by the Brainnetome division
+(``bna246_hierarchy.csv``, Yeo-7 columns; subcortex grey).
 
 Outputs in ``results/blocks/connectograms/``:
 
@@ -31,8 +31,7 @@ ROOT = HERE.parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "examples" / "open_close"))
 
-from conninfpy.annotate import annotate_rois  # noqa: E402
-from conninfpy.atlas import get_bna_246_nifti_path  # noqa: E402
+from conninfpy.interpret import annotate_bna_regions  # noqa: E402
 from conninfpy.brainnetome import BrainnetomeReference  # noqa: E402
 from conninfpy.plot import plot_connectogram  # noqa: E402
 from conninfpy.results import InferenceResult  # noqa: E402
@@ -56,10 +55,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     ref = BrainnetomeReference.load(data_dir=ROOT / "datasets" / "atlases", profiles=False)
     ds = OpenCloseDataset.load("ihb", atlas="brainnetome")
-    ids = [int(i) for i in ds.atlas_df["id"]]
-    nets = list(ds.atlas_df["network"])
-    rois = annotate_rois(reference=ref, names=list(ds.atlas_df["name"]), support="parcel", space="MNI152NLin6Asym",
-                         parcel_image=get_bna_246_nifti_path(1), parcel_labels=ids)
+    rois = annotate_bna_regions(ds.atlas_df["id"], reference=ref)
     table = pd.read_csv(RES / "sc_block_priors.csv")
     order = ["tfnbs", "yeo"] + [p for p in dict.fromkeys(table["prior"]) if p.startswith("sc_")]
 
@@ -73,7 +69,7 @@ def main():
 
     def draw(ax, inf, tail, title, labels="gyrus"):
         n = int(np.nansum(np.asarray(inf.positive if tail == "positive" else inf.negative) < 0.05) // 2)
-        plot_connectogram(inf, rois, tail=tail, level="gyrus", networks=nets, labels=labels, ax=ax,
+        plot_connectogram(inf, rois, tail=tail, level="gyrus", labels=labels, ax=ax,
                           title=f"{title}\n{TAILS[tail]}: {n} connections")
 
     for (cohort, prior), (inf, k) in results.items():

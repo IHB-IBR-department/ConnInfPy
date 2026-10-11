@@ -9,6 +9,11 @@ covered by ConnInfPy's MIT licence (which applies to the code only):
   bna246_hierarchy.csv                              hierarchy built from BNA_subregions.xlsx
                                                     (Fan et al. 2016, Table 1) and
                                                     subregion_func_network_Yeo_updated.csv
+  BDf_FDR05.json, PCf_FDR05.json                    BrainMap behavioral-domain and
+                                                    paradigm-class profiles of each region
+                                                    (forward-inference likelihood ratios,
+                                                    FDR q < 0.05), as published on
+                                                    atlas.brainnetome.org
 
 Source: Brainnetome Center, Institute of Automation, Chinese Academy of Sciences,
 https://atlas.brainnetome.org (download page: /download.html).
@@ -26,7 +31,6 @@ Cite:
   atlas based on connectional architecture. Cerebral Cortex 26(8):3508-3526.
   doi:10.1093/cercor/bhw157
 
-The BrainMap behavioral-domain / paradigm-class profiles used for annotation are
-not stored here; they are downloaded on first use (BDf_FDR05.json, PCf_FDR05.json).
-Cite also: Fox PT, Laird AR (2012). BrainMap: the social evolution of a human
-brain mapping database. NeuroImage 62(2):807-812.
+For the BrainMap profiles (BDf_FDR05.json, PCf_FDR05.json) cite also:
+Fox PT, Laird AR (2012). BrainMap: the social evolution of a human brain
+mapping database. NeuroImage 62(2):807-812.

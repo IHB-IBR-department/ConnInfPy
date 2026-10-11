@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "examples" / "open_close"))
 
-from conninfpy.annotate import _unit_weights, annotate_rois  # noqa: E402
+from conninfpy.interpret.annotate import _unit_weights, annotate_rois  # noqa: E402
 from conninfpy.atlas import get_bna_246_nifti_path  # noqa: E402
 from conninfpy.brainnetome import BrainnetomeReference  # noqa: E402
 from openclose_loader import BNA_DROPOUT_IDS, MISSED_ROI_IDS, OpenCloseDataset  # noqa: E402

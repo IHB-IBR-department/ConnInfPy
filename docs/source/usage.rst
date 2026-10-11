@@ -510,22 +510,39 @@ For raw p-value maps (e.g. loaded from disk) use
 :func:`conninfpy.harmonize.block_mass` returns the significant-edge counts.
 
 
-Anatomical annotation — :mod:`conninfpy.annotate`
---------------------------------------------------
+Anatomical interpretation — :mod:`conninfpy.interpret`
+------------------------------------------------------
 
-:func:`conninfpy.annotate.annotate_rois` describes each ROI with the
+Everything that interprets a result lives in :mod:`conninfpy.interpret`.
+:func:`~conninfpy.interpret.annotate.annotate_rois` describes each ROI with the
 Brainnetome atlas (BNA-246; Fan et al., 2016) by the tissue its signal came
-from, and :meth:`~conninfpy.results.InferenceResult.annotated_edges` adds
-endpoint anatomy and endpoint relations to the significant-edge table:
+from; :func:`~conninfpy.interpret.annotate.annotate_bna_regions` annotates data
+parcellated with the Brainnetome atlas itself; and
+:func:`~conninfpy.interpret.interpret_result` describes a result in one call
+(annotated connections, relations, groups, coupling change, BrainMap domains,
+distance check, evidence packet, connectograms):
 
 .. code-block:: python
 
-   from conninfpy.annotate import annotate_rois, summarize_annotation
+   from conninfpy.interpret import annotate_bna_regions, annotate_rois, interpret_result
 
-   rois = annotate_rois(coords, names=names, support="sphere", radius_mm=6)
-   # or: annotate_rois(support="parcel", parcel_image=img, parcel_labels=ids)
-   edges = out.inference.annotated_edges(rois)
-   summary = summarize_annotation(out.inference, rois, level="lobe")
+   # Schaefer parcels: anatomy from the Brainnetome tissue they cover, networks = their own Yeo-7 labels
+   rois = annotate_rois(support="parcel", parcel_image=img, parcel_labels=ids, networks=yeo_labels)
+   # or spheres: annotate_rois(coords, names=names, support="sphere", radius_mm=6)
+   # Brainnetome regions: identity and networks from the Brainnetome division (bna246_hierarchy.csv)
+   # rois = annotate_bna_regions(bna_ids, division="yeo7")
+   report = interpret_result(out.inference, rois, name="EC vs EO", source_atlas="Schaefer-200")
+   report.save("results/ec_vs_eo")          # CSV tables, evidence.json, connectograms
+   print(report.markdown())
+
+- **Network labels follow the atlas.** The ``network`` column used for network
+  relations, network groups and connectogram colours is the source atlas's own
+  division when it has one (Schaefer: Yeo-7, ``networks=``), the Brainnetome
+  division for Brainnetome regions (``annotate_bna_regions``; ``yeo7`` or
+  ``yeo17`` columns of ``bna246_hierarchy.csv``, subcortex 'Subcortical'), and
+  otherwise the Brainnetome division of the tissue each ROI covers. ``yeo7``
+  keeps the Brainnetome crosswalk for reference. ``AtlasInfo.bna_246()`` carries
+  the same Brainnetome division (``networks='lobe'`` for the lobe grouping).
 
 - **Support, not points.** A 6 mm sphere usually covers 2–4 Brainnetome
   regions, and a parcel's centroid can lie outside the parcel, so each ROI
@@ -546,15 +563,15 @@ endpoint anatomy and endpoint relations to the significant-edge table:
   relation (homotopic, heterotopic, intrahemispheric), anatomical level,
   circuit class (cortico-cortical, thalamo-cortical, cortico-basal ganglia,
   ...), centre distance, sphere overlap (overlapping spheres share voxels),
-  population structural connectivity and Yeo network relation.
-- **Descriptive summaries.** :func:`~conninfpy.annotate.summarize_annotation`
+  population structural connectivity and network relation.
+- **Descriptive summaries.** :func:`~conninfpy.interpret.annotate.summarize_annotation`
   puts the detections next to the tested opportunities by relation, region
   group and BrainMap domain, and reports the distance dependence of the
   statistic (a motion-confound check). It adds no test and leaves the
   correction and the inference unit (edge, component or block) unchanged.
   ``rois.to_atlas(level)`` gives an :class:`~conninfpy.atlas.AtlasInfo` for
   :meth:`~conninfpy.results.InferenceResult.network_summary`.
-- **Connectogram.** :func:`~conninfpy.annotate.aggregate_connections` sums the
+- **Connectogram.** :func:`~conninfpy.interpret.annotate.aggregate_connections` sums the
   detected and tested connections over Brainnetome units (subregions, gyri or
   lobes per hemisphere), split by the endpoints' networks: each ROI is spread
   over the units its support covers (``assign="weighted"``, so a connection

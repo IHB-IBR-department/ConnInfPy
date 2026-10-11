@@ -880,8 +880,9 @@ def plot_connectogram(
     share of its sampled tissue that comes from ROIs of each network).
 
     Connections are aggregated with
-    :func:`conninfpy.annotate.aggregate_connections`, split by each ROI's
-    network label (``networks``, default ``rois.table['yeo7']``). By default
+    :func:`conninfpy.interpret.annotate.aggregate_connections`, split by each ROI's
+    network label (``networks``, default ``rois.table['network']``: the source
+    atlas's division, see :func:`conninfpy.interpret.annotate.annotate_rois`). By default
     each ROI is placed in the unit holding most of its tissue
     (``assign='dominant'``), so every chord is a whole number of connections
     and none is dropped. ``assign='weighted'`` spreads each ROI over the units
@@ -901,7 +902,7 @@ def plot_connectogram(
     from matplotlib.lines import Line2D
     from matplotlib.patches import Wedge
 
-    from .annotate import _unit_weights, aggregate_connections
+    from .interpret.annotate import _unit_weights, aggregate_connections
 
     if tail not in ("positive", "negative"):
         raise ValueError("tail must be 'positive' or 'negative' (draw one connectogram per tail).")
@@ -911,7 +912,7 @@ def plot_connectogram(
         raise ValueError("labels must be 'gyrus', 'subregion' or 'none'.")
     regions = rois.reference.regions
     lay = _connectogram_layout(regions)
-    nets = [str(x) for x in (rois.table["yeo7"] if networks is None else networks)]
+    nets = [str(x) for x in (rois.grouping("network") if networks is None else networks)]
     W, units = _unit_weights(rois, level, assign)
     agg = aggregate_connections(result, rois, level=level, tail=tail, alpha=alpha, assign=assign,
                                 networks=nets, param_idx=param_idx)

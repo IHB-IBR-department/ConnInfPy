@@ -61,7 +61,7 @@ def build_annotation_evidence(
         Detected connections with ``roi_i`` / ``roi_j`` (matrix indices),
         e.g. ``result.significant_edges(...)`` or ``annotate_edges(...)``.
     rois : RoiAnnotation
-        From :func:`conninfpy.annotate.annotate_rois`, in matrix order.
+        From :func:`conninfpy.interpret.annotate.annotate_rois`, in matrix order.
     contrast_name, source : str
         Labels for the query.
     source_atlas : str, optional
@@ -69,7 +69,7 @@ def build_annotation_evidence(
     inference_unit : {'edge', 'component', 'block'}
         Unit of the corrected inference (``result.inference_unit``).
     summary : dict, optional
-        Output of :func:`conninfpy.annotate.summarize_annotation`; its
+        Output of :func:`conninfpy.interpret.annotate.summarize_annotation`; its
         relation counts are added.
     caveats : list of str, optional
         Replaces :data:`DEFAULT_CAVEATS`.

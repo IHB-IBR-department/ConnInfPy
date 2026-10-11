@@ -43,7 +43,7 @@ sys.path.insert(0, str(HERE))
 import adapter as A  # noqa: E402
 
 from conninfpy import analyze  # noqa: E402
-from conninfpy.annotate import aggregate_connections, summarize_annotation  # noqa: E402
+from conninfpy.interpret.annotate import aggregate_connections, summarize_annotation  # noqa: E402
 from conninfpy.results import InferenceResult  # noqa: E402
 
 OUT = HERE / "results"

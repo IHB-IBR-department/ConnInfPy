@@ -1,4 +1,4 @@
-"""Brainnetome annotation of ROIs and connections (conninfpy.annotate).
+"""Brainnetome annotation of ROIs and connections (conninfpy.interpret.annotate).
 
 Uses the bundled BNA-246 label image; no network access (BrainMap profiles are
 injected where needed). Checks that need the local probabilistic or
@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from conninfpy.annotate import (_lens_share, aggregate_connections, annotate_edges, annotate_rois,
+from conninfpy.interpret.annotate import (_lens_share, aggregate_connections, annotate_edges, annotate_rois,
                                  summarize_annotation)
 from conninfpy.atlas import get_bna_246_nifti_path
 from conninfpy.brainnetome import BrainnetomeReference
@@ -232,7 +232,7 @@ class TestAggregateConnections(unittest.TestCase):
             aggregate_connections(self.res, self.rois, networks=self.nets[:3])
 
     def test_dominant_unit_is_chosen_at_the_requested_level(self):
-        from conninfpy.annotate import RoiAnnotation, _unit_weights
+        from conninfpy.interpret.annotate import RoiAnnotation, _unit_weights
 
         w = np.zeros((1, 246))
         w[0, [0, 14, 16]] = [0.3, 0.25, 0.25]       # A8m_L (SFG) is the largest subregion; MFG_L holds 50 %
@@ -261,6 +261,49 @@ class TestAggregateConnections(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "one connectogram per tail"):
             plot_connectogram(self.res, self.rois, tail="both")
         plt.close("all")
+
+
+class TestNetworkDivision(unittest.TestCase):
+    """Network labels follow the atlas: the source atlas's own, or the Brainnetome division."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.ref = _reference()
+
+    def test_source_atlas_labels_drive_network_relations(self):
+        nets = ["A", "A", "B", "C", "B", "D", "A"]
+        rois = annotate_rois(list(POINTS.values()), names=list(POINTS), reference=self.ref,
+                             support="sphere", radius_mm=6, networks=nets)
+        self.assertEqual(list(rois.table["network"]), nets)
+        self.assertEqual(rois.grouping("network"), nets)
+        edges = pd.DataFrame({"roi_i": [0, 0], "roi_j": [1, 2]})
+        e = annotate_edges(edges, rois)
+        self.assertEqual(list(e["network_relation"]), ["within A", "between"])
+        self.assertEqual(list(e["i_network"]), ["A", "A"])
+        self.assertIn("i_yeo7", e)                                    # Brainnetome crosswalk kept
+        default = annotate_rois(list(POINTS.values()), reference=self.ref, support="sphere", radius_mm=6)
+        self.assertEqual(list(default.table["network"]), list(default.table["yeo7"]))
+        with self.assertRaisesRegex(ValueError, "networks"):
+            annotate_rois(list(POINTS.values()), reference=self.ref, support="sphere", radius_mm=6, networks=["A"])
+
+    def test_brainnetome_regions_take_the_brainnetome_division(self):
+        from conninfpy.interpret.annotate import annotate_bna_regions, bna_region_ids
+
+        rois = annotate_bna_regions([1, 2, 242], reference=self.ref)
+        t = rois.table
+        self.assertEqual(list(t["assigned"]), ["A8m_L", "A8m_R", "Otha_R"])
+        self.assertEqual(set(t["level"]), {"subregion"})
+        np.testing.assert_allclose(t["region_purity"], 1.0)
+        self.assertEqual(list(t["network"]), ["Frontoparietal", "Ventral Attention", "Subcortical"])
+        y17 = annotate_bna_regions([1, 2, 242], reference=self.ref, division="yeo17")
+        self.assertEqual(list(y17.table["network"]), ["Default B", "Salience", "Subcortical"])
+        self.assertIn("Brainnetome division", rois.settings["network_source"])
+        with self.assertRaises(ValueError):
+            annotate_bna_regions([0, 247], reference=self.ref)
+        with self.assertRaises(ValueError):
+            annotate_bna_regions([1], reference=self.ref, division="schaefer")
+        self.assertEqual(bna_region_ids(["A8m_L", "Otha_R"], reference=self.ref), [1, 242])
+        self.assertIsNone(bna_region_ids(["7Networks_LH_Vis_1"], reference=self.ref))
 
 
 if __name__ == "__main__":

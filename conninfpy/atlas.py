@@ -40,6 +40,7 @@ import urllib.error
 import urllib.request
 import warnings
 from dataclasses import dataclass, field
+import dataclasses
 from importlib import resources
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
@@ -453,34 +454,50 @@ class AtlasInfo:
         return _load_bundled("schaefer400_yeo7.csv", source=_SCHAEFER_SRC)
 
     @classmethod
-    def bna_246(cls, with_image: bool = False) -> "AtlasInfo":
+    def bna_246(cls, with_image: bool = False, networks: str = "yeo7") -> "AtlasInfo":
         """Brainnetome Atlas (Fan et al. 2016) 246-region parcellation.
 
-        Names follow ``BN_Atlas_246_LUT.txt``. The ``network`` column
-        carries the BNA seven-lobe grouping (Frontal / Temporal /
-        Parietal / Insular / Limbic / Occipital / Subcortical). MNI
-        coordinates are voxel-mass centroids computed from the
-        ``BN_Atlas_246_1mm.nii.gz`` parcellation (atlas.brainnetome.org).
+        Names follow ``BN_Atlas_246_LUT.txt``. MNI coordinates are voxel-mass
+        centroids computed from the ``BN_Atlas_246_1mm.nii.gz`` parcellation
+        (atlas.brainnetome.org).
+
+        ``networks`` selects the grouping carried in ``networks``: the
+        Brainnetome division of the regions (``'yeo7'``, default, or
+        ``'yeo17'``; from ``bna246_hierarchy.csv``, i.e. the Brainnetome
+        Center's subregion-to-network table; subcortical regions, which the
+        division leaves unassigned, are 'Subcortical'), or ``'lobe'`` (the
+        seven-lobe grouping Frontal / Temporal / Parietal / Insular / Limbic /
+        Occipital / Subcortical).
 
         ``with_image=True`` also attaches the bundled 1 mm label image, so
         :meth:`from_coordinates` can place coordinates voxel-exactly.
         """
+        if networks not in ("yeo7", "yeo17", "lobe"):
+            raise ValueError(f"networks must be 'yeo7', 'yeo17' or 'lobe'; got {networks!r}.")
+        grouping = ("BNA seven-lobe grouping" if networks == "lobe"
+                    else f"Brainnetome division ({networks}, bna246_hierarchy.csv)")
         if with_image:
             data_pkg = resources.files("conninfpy.atlas_data")
             with resources.as_file(data_pkg / "bna246.csv") as lut_path:
-                return cls.from_nifti(
+                atlas = cls.from_nifti(
                     get_bna_246_nifti_path(1), lut=lut_path,
-                    source="Fan et al. 2016 Brainnetome Atlas (BN_Atlas_246_1mm.nii.gz); "
-                           "networks = BNA seven-lobe grouping.",
+                    source=f"Fan et al. 2016 Brainnetome Atlas (BN_Atlas_246_1mm.nii.gz); networks = {grouping}.",
                 )
-        return _load_bundled(
-            "bna246.csv",
-            source=(
-                "Fan et al. 2016 Brainnetome Atlas; networks = "
-                "BNA seven-lobe grouping by ROI-id range; centroids "
-                "from BN_Atlas_246_1mm.nii.gz."
-            ),
-        )
+        else:
+            atlas = _load_bundled(
+                "bna246.csv",
+                source=(f"Fan et al. 2016 Brainnetome Atlas; networks = {grouping}; centroids "
+                        "from BN_Atlas_246_1mm.nii.gz."),
+            )
+        if networks == "lobe":
+            return atlas
+        import pandas as pd
+
+        with resources.as_file(resources.files("conninfpy.atlas_data") / "bna246_hierarchy.csv") as path:
+            h = pd.read_csv(path).set_index("name")
+        division = [str(h.at[lab, networks]) if h.at[lab, "structure"] == "cortex" else "Subcortical"
+                    for lab in atlas.labels]
+        return dataclasses.replace(atlas, networks=division)
 
 
 _SCHAEFER_SRC = (
@@ -507,16 +524,26 @@ _BNA_BD_URL = "https://atlas.brainnetome.org/js/bnatlasviewer/BDf_FDR05.json"
 _BNA_PC_URL = "https://atlas.brainnetome.org/js/bnatlasviewer/PCf_FDR05.json"
 
 
+def bna_profile_paths() -> Tuple[Path, Path]:
+    """Paths of the bundled BrainMap profiles of BNA-246 (BDf_FDR05.json, PCf_FDR05.json)."""
+    pkg = resources.files("conninfpy.atlas_data")
+    return Path(pkg / "BDf_FDR05.json"), Path(pkg / "PCf_FDR05.json")
+
+
 def fetch_bna_behavioral_decoding(
     cache_dir: Optional[Union[str, Path]] = None,
     force_download: bool = False,
     as_dataframe: bool = False,
 ) -> Union[Tuple[Dict[str, Dict[str, float]], Dict[str, Dict[str, float]]], Any]:
-    """Fetch Brainnetome Atlas (BNA-246) BrainMap behavioral decoding data.
+    """Brainnetome Atlas (BNA-246) BrainMap behavioral decoding data.
 
-    Downloads and locally caches the forward-inference Behavioral Domain (BD) and
-    Paradigm Class (PC) association scores (thresholded at FDR < 0.05) from the
-    official Brainnetome Atlas repository (`atlas.brainnetome.org`).
+    The forward-inference Behavioral Domain (BD) and Paradigm Class (PC)
+    association scores (thresholded at FDR < 0.05) published with the
+    Brainnetome Atlas (`atlas.brainnetome.org`) are bundled with the package
+    (``conninfpy/atlas_data``, under the Brainnetome terms in
+    ``NOTICE_BRAINNETOME.txt``) and read without network access by default.
+    With ``cache_dir`` or ``force_download=True`` they are downloaded from the
+    official repository instead and cached.
 
     Data attribution & licensing
     ----------------------------
@@ -533,10 +560,12 @@ def fetch_bna_behavioral_decoding(
     Parameters
     ----------
     cache_dir : str or Path, optional
-        Local directory where downloaded JSON files are cached. If None,
-        defaults to ``$CONNINFPY_CACHE/bna246`` or ``~/.cache/conninfpy/bna246``.
+        Download into (and read from) this directory instead of using the
+        bundled files.
     force_download : bool, default=False
-        If True, re-downloads the files even if they already exist in the cache.
+        Download a fresh copy even when bundled or cached files exist (into
+        ``cache_dir``, default ``$CONNINFPY_CACHE/bna246`` or
+        ``~/.cache/conninfpy/bna246``).
     as_dataframe : bool, default=False
         If True, returns a consolidated ``pandas.DataFrame`` merged with
         BNA-246 parcel names and ROI IDs.
@@ -549,6 +578,14 @@ def fetch_bna_behavioral_decoding(
         ``{term: score}``.
         If ``as_dataframe=True``, returns a DataFrame indexed by ``roi_id`` (1..246).
     """
+    if cache_dir is None and not force_download:
+        bd_file, pc_file = bna_profile_paths()
+        with open(bd_file, "r", encoding="utf-8") as f:
+            bd_data = json.load(f)
+        with open(pc_file, "r", encoding="utf-8") as f:
+            pc_data = json.load(f)
+        return _bna_decoding_output(bd_data, pc_data, as_dataframe)
+
     if cache_dir is None:
         base_cache = os.environ.get(
             "CONNINFPY_CACHE",
@@ -595,7 +632,10 @@ def fetch_bna_behavioral_decoding(
         bd_data = json.load(f)
     with open(pc_file, "r", encoding="utf-8") as f:
         pc_data = json.load(f)
+    return _bna_decoding_output(bd_data, pc_data, as_dataframe)
 
+
+def _bna_decoding_output(bd_data, pc_data, as_dataframe):
     if not as_dataframe:
         return bd_data, pc_data
 
