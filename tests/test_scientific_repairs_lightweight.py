@@ -193,7 +193,7 @@ def test_available_case_ni_uses_the_same_tested_capacity_in_every_map(glm):
     _, edges = _data()
     edges[:6, 2] = np.nan
     y = _matrices(edges)
-    with patch("conninfpy.tfnbs_score._precompute_block_metadata",
+    with patch("conninfpy.enhance.ni_tfnbs._precompute_block_metadata",
                wraps=_precompute_block_metadata) as metadata:
         opts = dict(method="ni_tfnbs", net_labels=[0, 0, 0], n=4, start_thres=0,
                     missing="available_case", min_coverage=0.5, two_tailed=True,

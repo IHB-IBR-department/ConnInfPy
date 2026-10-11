@@ -28,8 +28,10 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from .annotate import RoiAnnotation, summarize_annotation
-from .evidence import build_annotation_evidence, describe_coverage
+from conninfpy.interpret.annotate import RoiAnnotation
+from conninfpy.interpret.annotate import summarize_annotation
+from conninfpy.interpret.evidence import build_annotation_evidence
+from conninfpy.interpret.evidence import describe_coverage
 
 _RELATIONS = ("circuit", "hemispheric_relation", "distance_band", "network_relation", "anatomical_relation")
 _TITLES = (("circuit", "Circuit class"), ("hemispheric_relation", "Hemispheric relation"),
@@ -103,7 +105,7 @@ class InterpretationReport:
             matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        from ..plot import plot_connectogram
+        from conninfpy.plot import plot_connectogram
 
         with _display_labels(self.result, self.labels):
             for level in levels:

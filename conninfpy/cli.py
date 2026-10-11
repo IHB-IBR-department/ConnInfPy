@@ -211,7 +211,7 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
 
 
 def _atlas(spec: Any, dataset: Any, base: Path, n_regions: int) -> Any:
-    from .atlas import AtlasInfo
+    from conninfpy.atlas.metadata import AtlasInfo
 
     if spec is None:
         atlas = getattr(dataset, "atlas", None)
@@ -246,9 +246,9 @@ def run(
     use_mp: Optional[bool] = None,
 ) -> Dict[str, Path]:
     """Run one analysis file; return the paths written, keyed by name."""
-    from . import __version__
-    from .analysis import analyze
-    from .loaders import load
+    from conninfpy import __version__
+    from conninfpy.analysis import analyze
+    from conninfpy.loaders import load
 
     config_path = Path(config_path).resolve()
     cfg = load_config(config_path)
@@ -343,7 +343,7 @@ def run(
 
 def info() -> None:
     """Print versions, the TFNBS backend and the CPU / BLAS setup."""
-    from . import __version__
+    from conninfpy import __version__
 
     lines = [f"conninfpy  {__version__}", f"python     {platform.python_version()}",
              f"numpy      {np.__version__}"]
@@ -353,6 +353,10 @@ def info() -> None:
     except ImportError:
         lines.append("numba      not installed (SciPy TFNBS backend)")
     lines.append(f"cpu cores  {os.cpu_count()}")
+    from conninfpy.stats._engine import get_available_cores
+
+    lines.append(f"cpu usable {get_available_cores()} (default worker budget)")
+    lines.append("workers    1 BLAS/OpenMP thread per process; parent settings below")
     try:
         from threadpoolctl import threadpool_info
         for pool in threadpool_info():

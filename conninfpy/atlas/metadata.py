@@ -15,9 +15,9 @@ Two bundled atlases ship with v2.1:
   parcellations at three resolutions with Yeo 7-network labels and
   MNI152 centroid coordinates.
 * :meth:`AtlasInfo.bna_246` — Brainnetome Atlas (Fan et al. 2016) 246
-  cortical + subcortical regions, with the BNA seven-lobe grouping in
-  the ``network`` column and MNI152-1mm centroids derived from
-  ``BN_Atlas_246_1mm.nii.gz``.
+  cortical + subcortical regions, with the Brainnetome Yeo-7 crosswalk by
+  default (Yeo-17 or anatomical lobes can also be selected), and MNI152-1mm
+  centroids derived from ``BN_Atlas_246_1mm.nii.gz``.
 
 Custom CSVs can be loaded via :meth:`AtlasInfo.from_csv`, any integer
 label image via :meth:`AtlasInfo.from_nifti`, and nilearn's deterministic
@@ -30,24 +30,25 @@ the nearest one) and that region's network, so edge tables and
 ``result.network_summary(atlas)`` aggregate coordinate-based ROIs by network
 or by atlas region.
 """
+
 from __future__ import annotations
 
 import csv
-import json
-import os
+import dataclasses
 import re
-import urllib.error
-import urllib.request
 import warnings
 from dataclasses import dataclass, field
-import dataclasses
-from importlib import resources
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 
+from conninfpy.atlas.resources import (
+    bundled_path,
+    get_bna_246_nifti_path,
+    read_bna_hierarchy,
+)
 
 _NetworkIndex = npt.NDArray[np.int_]
 
@@ -92,7 +93,9 @@ class AtlasInfo:
     hemisphere: Optional[List[str]] = None
     source: Optional[str] = None
     image: Optional[Any] = field(default=None, repr=False, compare=False)
-    label_ids: Optional[npt.NDArray[np.int64]] = field(default=None, repr=False, compare=False)
+    label_ids: Optional[npt.NDArray[np.int64]] = field(
+        default=None, repr=False, compare=False
+    )
     assignment: Optional[Any] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -110,8 +113,7 @@ class AtlasInfo:
                 )
         if self.hemisphere is not None and len(self.hemisphere) != n:
             raise ValueError(
-                f"hemisphere must have length {n}; "
-                f"got {len(self.hemisphere)}."
+                f"hemisphere must have length {n}; got {len(self.hemisphere)}."
             )
         if self.label_ids is not None:
             self.label_ids = np.asarray(self.label_ids, dtype=np.int64)
@@ -164,22 +166,16 @@ class AtlasInfo:
         if not rows:
             raise ValueError(f"{path}: no rows found.")
         if label_col not in rows[0]:
-            raise ValueError(
-                f"{path}: missing required column {label_col!r}."
-            )
+            raise ValueError(f"{path}: missing required column {label_col!r}.")
         if network_col not in rows[0]:
-            raise ValueError(
-                f"{path}: missing required column {network_col!r}."
-            )
+            raise ValueError(f"{path}: missing required column {network_col!r}.")
 
         labels = [r[label_col] for r in rows]
         networks = [r[network_col] for r in rows]
 
         coords: Optional[np.ndarray] = None
         if coord_cols is not None and all(c in rows[0] for c in coord_cols):
-            raw = np.array(
-                [[r[c].strip() for c in coord_cols] for r in rows]
-            )
+            raw = np.array([[r[c].strip() for c in coord_cols] for r in rows])
             if (raw == "").all():
                 coords = None
             else:
@@ -258,7 +254,9 @@ class AtlasInfo:
             data = np.where(np.isin(data, ids[~keep]), 0, data)
             ids = ids[keep]
             names = [n for n, k in zip(names, keep) if k]
-            nib_img = type(nib_img)(data.astype(np.int32), nib_img.affine, nib_img.header)
+            nib_img = type(nib_img)(
+                data.astype(np.int32), nib_img.affine, nib_img.header
+            )
             nib_img.set_data_dtype(np.int32)
 
         if not len(ids):
@@ -271,7 +269,8 @@ class AtlasInfo:
             networks=nets,
             coords=coords,
             hemisphere=_hemisphere(coords[:, 0]),
-            source=source or (str(img) if isinstance(img, (str, Path)) else "label image"),
+            source=source
+            or (str(img) if isinstance(img, (str, Path)) else "label image"),
             image=nib_img,
             label_ids=ids,
         )
@@ -299,7 +298,11 @@ class AtlasInfo:
         >>> ho = datasets.fetch_atlas_harvard_oxford("cort-maxprob-thr25-2mm", symmetric_split=True)
         >>> atlas = AtlasInfo.from_nilearn(ho)
         """
-        get = (lambda k: atlas.get(k)) if isinstance(atlas, Mapping) else (lambda k: getattr(atlas, k, None))
+        get = (
+            (lambda k: atlas.get(k))
+            if isinstance(atlas, Mapping)
+            else (lambda k: getattr(atlas, k, None))
+        )
         if get("atlas_type") == "probabilistic":
             raise ValueError(
                 "probabilistic atlases (maps of weights) are not label images; "
@@ -316,7 +319,10 @@ class AtlasInfo:
             networks = _schaefer_networks(list(lut["name"].astype(str)))
         template = get("template")
         return cls.from_nifti(
-            get("maps"), lut=lut, networks=networks, exclude=exclude,
+            get("maps"),
+            lut=lut,
+            networks=networks,
+            exclude=exclude,
             source=f"nilearn atlas{f' ({template})' if template else ''}: {get('maps')}",
         )
 
@@ -395,7 +401,12 @@ class AtlasInfo:
         table = None
         groups: List[str]
         if reference is not None:
-            refs = [_as_atlas(r) for r in (reference if isinstance(reference, (list, tuple)) else [reference])]
+            refs = [
+                _as_atlas(r)
+                for r in (
+                    reference if isinstance(reference, (list, tuple)) else [reference]
+                )
+            ]
             table = assign_coordinates(coords, refs, max_distance=max_distance)
             table.insert(0, "roi", names)
             mode = group_by
@@ -410,14 +421,20 @@ class AtlasInfo:
             if table is not None:
                 table["network"] = groups
 
-        ref_src = (" + ".join(str(r.source) for r in refs) if reference is not None else None)
+        ref_src = (
+            " + ".join(str(r.source) for r in refs) if reference is not None else None
+        )
         return cls(
             labels=names,
             networks=groups,
             coords=coords,
             hemisphere=_hemisphere(coords[:, 0]),
-            source=source or (f"{n} coordinates placed in {ref_src}" if ref_src
-                              else f"{n} coordinates"),
+            source=source
+            or (
+                f"{n} coordinates placed in {ref_src}"
+                if ref_src
+                else f"{n} coordinates"
+            ),
             assignment=table,
         )
 
@@ -473,30 +490,38 @@ class AtlasInfo:
         :meth:`from_coordinates` can place coordinates voxel-exactly.
         """
         if networks not in ("yeo7", "yeo17", "lobe"):
-            raise ValueError(f"networks must be 'yeo7', 'yeo17' or 'lobe'; got {networks!r}.")
-        grouping = ("BNA seven-lobe grouping" if networks == "lobe"
-                    else f"Brainnetome division ({networks}, bna246_hierarchy.csv)")
+            raise ValueError(
+                f"networks must be 'yeo7', 'yeo17' or 'lobe'; got {networks!r}."
+            )
+        grouping = (
+            "BNA seven-lobe grouping"
+            if networks == "lobe"
+            else f"Brainnetome division ({networks}, bna246_hierarchy.csv)"
+        )
         if with_image:
-            data_pkg = resources.files("conninfpy.atlas_data")
-            with resources.as_file(data_pkg / "bna246.csv") as lut_path:
-                atlas = cls.from_nifti(
-                    get_bna_246_nifti_path(1), lut=lut_path,
-                    source=f"Fan et al. 2016 Brainnetome Atlas (BN_Atlas_246_1mm.nii.gz); networks = {grouping}.",
-                )
+            atlas = cls.from_nifti(
+                get_bna_246_nifti_path(1),
+                lut=bundled_path("bna246.csv"),
+                source=f"Fan et al. 2016 Brainnetome Atlas (BN_Atlas_246_1mm.nii.gz); networks = {grouping}.",
+            )
         else:
             atlas = _load_bundled(
                 "bna246.csv",
-                source=(f"Fan et al. 2016 Brainnetome Atlas; networks = {grouping}; centroids "
-                        "from BN_Atlas_246_1mm.nii.gz."),
+                source=(
+                    f"Fan et al. 2016 Brainnetome Atlas; networks = {grouping}; centroids "
+                    "from BN_Atlas_246_1mm.nii.gz."
+                ),
             )
         if networks == "lobe":
             return atlas
-        import pandas as pd
 
-        with resources.as_file(resources.files("conninfpy.atlas_data") / "bna246_hierarchy.csv") as path:
-            h = pd.read_csv(path).set_index("name")
-        division = [str(h.at[lab, networks]) if h.at[lab, "structure"] == "cortex" else "Subcortical"
-                    for lab in atlas.labels]
+        h = read_bna_hierarchy(index="name")
+        division = [
+            str(h.at[lab, networks])
+            if h.at[lab, "structure"] == "cortex"
+            else "Subcortical"
+            for lab in atlas.labels
+        ]
         return dataclasses.replace(atlas, networks=division)
 
 
@@ -508,162 +533,7 @@ _SCHAEFER_SRC = (
 
 def _load_bundled(filename: str, *, source: str) -> AtlasInfo:
     """Load a packaged CSV via ``importlib.resources``."""
-    data_pkg = resources.files("conninfpy.atlas_data")
-    csv_path = data_pkg / filename
-    with resources.as_file(csv_path) as path:
-        return AtlasInfo.from_csv(path, source=source)
-
-
-def get_bna_246_nifti_path(resolution_mm: int = 2) -> Path:
-    """Get the file system path of the bundled Brainnetome 246 NIfTI atlas image."""
-    filename = f"BN_Atlas_246_{resolution_mm}mm.nii.gz"
-    return Path(resources.files("conninfpy.atlas_data") / filename)
-
-
-_BNA_BD_URL = "https://atlas.brainnetome.org/js/bnatlasviewer/BDf_FDR05.json"
-_BNA_PC_URL = "https://atlas.brainnetome.org/js/bnatlasviewer/PCf_FDR05.json"
-
-
-def bna_profile_paths() -> Tuple[Path, Path]:
-    """Paths of the bundled BrainMap profiles of BNA-246 (BDf_FDR05.json, PCf_FDR05.json)."""
-    pkg = resources.files("conninfpy.atlas_data")
-    return Path(pkg / "BDf_FDR05.json"), Path(pkg / "PCf_FDR05.json")
-
-
-def fetch_bna_behavioral_decoding(
-    cache_dir: Optional[Union[str, Path]] = None,
-    force_download: bool = False,
-    as_dataframe: bool = False,
-) -> Union[Tuple[Dict[str, Dict[str, float]], Dict[str, Dict[str, float]]], Any]:
-    """Brainnetome Atlas (BNA-246) BrainMap behavioral decoding data.
-
-    The forward-inference Behavioral Domain (BD) and Paradigm Class (PC)
-    association scores (thresholded at FDR < 0.05) published with the
-    Brainnetome Atlas (`atlas.brainnetome.org`) are bundled with the package
-    (``conninfpy/atlas_data``, under the Brainnetome terms in
-    ``NOTICE_BRAINNETOME.txt``) and read without network access by default.
-    With ``cache_dir`` or ``force_download=True`` they are downloaded from the
-    official repository instead and cached.
-
-    Data attribution & licensing
-    ----------------------------
-    The Behavioral Domain and Paradigm Class taxonomy and coordinate data are
-    derived from the BrainMap database (Fox & Laird, 2012; Laird et al., 2011)
-    and computed for the Brainnetome Atlas by Fan et al. (2016). When publishing
-    analyses that use these decodings, please cite:
-
-    1. Fan L, Li H, Zhuo J, et al. (2016). The Human Brainnetome Atlas: A New Brain
-       Atlas Based on Connectional Architecture. Cerebral Cortex, 26(8):3508–3526.
-    2. Fox PT, Laird AR (2012). BrainMap: The social evolution of a human brain mapping
-       database. NeuroImage, 62(2):807–812.
-
-    Parameters
-    ----------
-    cache_dir : str or Path, optional
-        Download into (and read from) this directory instead of using the
-        bundled files.
-    force_download : bool, default=False
-        Download a fresh copy even when bundled or cached files exist (into
-        ``cache_dir``, default ``$CONNINFPY_CACHE/bna246`` or
-        ``~/.cache/conninfpy/bna246``).
-    as_dataframe : bool, default=False
-        If True, returns a consolidated ``pandas.DataFrame`` merged with
-        BNA-246 parcel names and ROI IDs.
-
-    Returns
-    -------
-    tuple of (dict, dict) or pandas.DataFrame
-        If ``as_dataframe=False``, returns ``(behavioral_domains, paradigm_classes)``
-        where each is a dict mapping string ROI ID (``"1"`` to ``"246"``) to
-        ``{term: score}``.
-        If ``as_dataframe=True``, returns a DataFrame indexed by ``roi_id`` (1..246).
-    """
-    if cache_dir is None and not force_download:
-        bd_file, pc_file = bna_profile_paths()
-        with open(bd_file, "r", encoding="utf-8") as f:
-            bd_data = json.load(f)
-        with open(pc_file, "r", encoding="utf-8") as f:
-            pc_data = json.load(f)
-        return _bna_decoding_output(bd_data, pc_data, as_dataframe)
-
-    if cache_dir is None:
-        base_cache = os.environ.get(
-            "CONNINFPY_CACHE",
-            str(Path.home() / ".cache" / "conninfpy"),
-        )
-        cache_path = Path(base_cache) / "bna246"
-    else:
-        cache_path = Path(cache_dir)
-
-    cache_path.mkdir(parents=True, exist_ok=True)
-    bd_file = cache_path / "BDf_FDR05.json"
-    pc_file = cache_path / "PCf_FDR05.json"
-
-    def _download_if_needed(url: str, target: Path) -> None:
-        if force_download or not target.exists() or target.stat().st_size == 0:
-            req = urllib.request.Request(
-                url,
-                headers={"User-Agent": "conninfpy/2.0"},
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    content = resp.read()
-                tmp_target = target.with_suffix(".tmp")
-                with open(tmp_target, "wb") as f:
-                    f.write(content)
-                tmp_target.replace(target)
-            except Exception as exc:
-                if target.exists() and target.stat().st_size > 0:
-                    warnings.warn(
-                        f"Failed to refresh {target.name} from {url}: {exc}. "
-                        "Using existing cached copy.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                else:
-                    raise IOError(
-                        f"Failed to download Brainnetome decoding data from {url}: {exc}"
-                    ) from exc
-
-    _download_if_needed(_BNA_BD_URL, bd_file)
-    _download_if_needed(_BNA_PC_URL, pc_file)
-
-    with open(bd_file, "r", encoding="utf-8") as f:
-        bd_data = json.load(f)
-    with open(pc_file, "r", encoding="utf-8") as f:
-        pc_data = json.load(f)
-    return _bna_decoding_output(bd_data, pc_data, as_dataframe)
-
-
-def _bna_decoding_output(bd_data, pc_data, as_dataframe):
-    if not as_dataframe:
-        return bd_data, pc_data
-
-    import pandas as pd
-
-    atlas = AtlasInfo.bna_246()
-    rows = []
-    for roi_id in range(1, len(atlas) + 1):
-        s_id = str(roi_id)
-        name = atlas.labels[roi_id - 1]
-        network = atlas.networks[roi_id - 1]
-        roi_bd = bd_data.get(s_id, {})
-        roi_pc = pc_data.get(s_id, {})
-
-        top_bd = max(roi_bd.items(), key=lambda x: x[1])[0] if roi_bd else None
-        top_pc = max(roi_pc.items(), key=lambda x: x[1])[0] if roi_pc else None
-
-        rows.append({
-            "roi_id": roi_id,
-            "name": name,
-            "network": network,
-            "behavioral_domains": roi_bd,
-            "paradigm_classes": roi_pc,
-            "top_behavioral_domain": top_bd,
-            "top_paradigm_class": top_pc,
-        })
-    return pd.DataFrame(rows).set_index("roi_id")
-
+    return AtlasInfo.from_csv(bundled_path(filename), source=source)
 
 
 # ----------------------------------------------------------------------
@@ -678,7 +548,9 @@ def _load_label_image(img: Any) -> Tuple[Any, npt.NDArray[np.int64]]:
     try:
         import nibabel as nib
     except ImportError as exc:  # pragma: no cover - nibabel is a core dependency
-        raise ImportError("reading label images needs nibabel (pip install nibabel).") from exc
+        raise ImportError(
+            "reading label images needs nibabel (pip install nibabel)."
+        ) from exc
     if isinstance(img, (str, Path)):
         img = nib.load(str(img))
     data = np.asarray(img.dataobj)
@@ -706,7 +578,10 @@ def _read_lut(lut: Any) -> Dict[int, Dict[str, str]]:
         out: Dict[int, Dict[str, str]] = {}
         for k, v in lut.items():
             if isinstance(v, (tuple, list)):
-                out[int(k)] = {"name": str(v[0]), **({"network": str(v[1])} if len(v) > 1 else {})}
+                out[int(k)] = {
+                    "name": str(v[0]),
+                    **({"network": str(v[1])} if len(v) > 1 else {}),
+                }
             else:
                 out[int(k)] = {"name": str(v)}
         return out
@@ -721,7 +596,11 @@ def _read_lut(lut: Any) -> Dict[int, Dict[str, str]]:
             out = {}
             for line in path.read_text().splitlines():
                 parts = line.split()
-                if len(parts) >= 2 and not parts[0].startswith("#") and parts[0].lstrip("-").isdigit():
+                if (
+                    len(parts) >= 2
+                    and not parts[0].startswith("#")
+                    and parts[0].lstrip("-").isdigit()
+                ):
                     out[int(parts[0])] = {"name": parts[1]}
             return out
     if not isinstance(lut, pd.DataFrame):
@@ -729,7 +608,9 @@ def _read_lut(lut: Any) -> Dict[int, Dict[str, str]]:
     cols = {c.lower(): c for c in lut.columns}
     id_col = next((cols[c] for c in _ID_COLUMNS if c in cols), None)
     if id_col is None or "name" not in cols:
-        raise ValueError(f"lut needs an id column ({', '.join(_ID_COLUMNS)}) and a 'name' column.")
+        raise ValueError(
+            f"lut needs an id column ({', '.join(_ID_COLUMNS)}) and a 'name' column."
+        )
     net_col = cols.get("network")
     out = {}
     for _, row in lut.iterrows():
@@ -754,10 +635,15 @@ def _resolve_networks(
     if callable(networks):
         return [str(networks(n)) for n in names]
     if isinstance(networks, Mapping):
-        return [str(networks.get(int(i), networks.get(n, "unassigned"))) for i, n in zip(ids, names)]
+        return [
+            str(networks.get(int(i), networks.get(n, "unassigned")))
+            for i, n in zip(ids, names)
+        ]
     nets = [str(x) for x in networks]
     if len(nets) != len(ids):
-        raise ValueError(f"networks must have one entry per region ({len(ids)}); got {len(nets)}.")
+        raise ValueError(
+            f"networks must have one entry per region ({len(ids)}); got {len(nets)}."
+        )
     return nets
 
 
@@ -766,8 +652,10 @@ def _schaefer_networks(names: List[str]) -> Optional[List[str]]:
     matches = [_SCHAEFER_RE.match(n) for n in names]
     if not names or not all(matches):
         return None
-    return [_YEO7_NAMES.get(m.group(3), m.group(3)) if m.group(1) == "7" else m.group(3)
-            for m in matches]
+    return [
+        _YEO7_NAMES.get(m.group(3), m.group(3)) if m.group(1) == "7" else m.group(3)
+        for m in matches
+    ]
 
 
 def _label_centroids(
@@ -778,13 +666,18 @@ def _label_centroids(
     """Voxel-mass centroid of each label, in world (mm) coordinates."""
     from scipy import ndimage
 
-    vox = np.asarray(ndimage.center_of_mass(np.ones_like(data, dtype=np.float64), data, ids))
+    vox = np.asarray(
+        ndimage.center_of_mass(np.ones_like(data, dtype=np.float64), data, ids)
+    )
     return vox @ affine[:3, :3].T + affine[:3, 3]
 
 
 def _hemisphere(x: npt.NDArray[np.float64], midline_mm: float = 2.0) -> List[str]:
     """'L' / 'R' from the x coordinate (MNI: negative = left); 'M' near the midline."""
-    return ["M" if abs(v) < midline_mm else ("L" if v < 0 else "R") for v in np.asarray(x, float)]
+    return [
+        "M" if abs(v) < midline_mm else ("L" if v < 0 else "R")
+        for v in np.asarray(x, float)
+    ]
 
 
 def _as_atlas(reference: Any) -> AtlasInfo:
@@ -817,13 +710,18 @@ def assign_coordinates(
     inside a region, then the first that assigns it within ``max_distance``.
     """
     if isinstance(reference, (list, tuple)):
-        tables = [assign_coordinates(coords, r, max_distance=max_distance) for r in reference]
+        tables = [
+            assign_coordinates(coords, r, max_distance=max_distance) for r in reference
+        ]
         out = tables[0].copy()
         out["atlas"] = np.where(out["method"] == "unassigned", -1, 0)
         for rank in ("voxel", "nearest voxel", "centroid"):
             for k, t in enumerate(tables):
-                take = (out["method"] != "voxel") & (t["method"] == rank) & (
-                    (out["method"] == "unassigned") | (rank == "voxel"))
+                take = (
+                    (out["method"] != "voxel")
+                    & (t["method"] == rank)
+                    & ((out["method"] == "unassigned") | (rank == "voxel"))
+                )
                 out.loc[take, t.columns] = t.loc[take]
                 out.loc[take, "atlas"] = k
         return out
@@ -846,7 +744,9 @@ def _assign_one(coords: Any, reference: Any, *, max_distance: float) -> "Any":
         _, data = _load_label_image(ref.image)
         affine = ref.image.affine
         pos = {int(v): k for k, v in enumerate(ref.label_ids)}
-        vox = np.rint((coords - affine[:3, 3]) @ np.linalg.inv(affine[:3, :3]).T).astype(int)
+        vox = np.rint(
+            (coords - affine[:3, 3]) @ np.linalg.inv(affine[:3, :3]).T
+        ).astype(int)
         in_box = np.all((vox >= 0) & (vox < np.array(data.shape)), axis=1)
         lab = np.zeros(n, dtype=np.int64)
         lab[in_box] = data[tuple(vox[in_box].T)]
@@ -869,25 +769,43 @@ def _assign_one(coords: Any, reference: Any, *, max_distance: float) -> "Any":
             "the reference atlas has no label image; each coordinate is assigned "
             "to the nearest region centroid (see distance_mm). Use "
             "AtlasInfo.from_nifti / from_nilearn for voxel-exact placement.",
-            UserWarning, stacklevel=2,
+            UserWarning,
+            stacklevel=2,
         )
         d = np.linalg.norm(coords[:, None, :] - ref.coords[None, :, :], axis=2)
         idx = np.nanargmin(d, axis=1)
         dist = d[np.arange(n), idx]
         method[:] = "centroid"
     else:
-        raise ValueError("the reference atlas has neither a label image nor coordinates.")
+        raise ValueError(
+            "the reference atlas has neither a label image nor coordinates."
+        )
 
     ok = idx >= 0
-    region = np.where(ok, np.array(ref.labels, dtype=object)[np.maximum(idx, 0)], "unassigned")
-    network = np.where(ok, np.array(ref.networks, dtype=object)[np.maximum(idx, 0)], "unassigned")
-    label_id = (np.where(ok, ref.label_ids[np.maximum(idx, 0)], 0)
-                if ref.label_ids is not None else np.full(n, 0))
-    return pd.DataFrame({
-        "x": coords[:, 0], "y": coords[:, 1], "z": coords[:, 2],
-        "region": region, "network": network, "label_id": label_id,
-        "inside": inside, "distance_mm": dist, "method": method,
-    })
+    region = np.where(
+        ok, np.array(ref.labels, dtype=object)[np.maximum(idx, 0)], "unassigned"
+    )
+    network = np.where(
+        ok, np.array(ref.networks, dtype=object)[np.maximum(idx, 0)], "unassigned"
+    )
+    label_id = (
+        np.where(ok, ref.label_ids[np.maximum(idx, 0)], 0)
+        if ref.label_ids is not None
+        else np.full(n, 0)
+    )
+    return pd.DataFrame(
+        {
+            "x": coords[:, 0],
+            "y": coords[:, 1],
+            "z": coords[:, 2],
+            "region": region,
+            "network": network,
+            "label_id": label_id,
+            "inside": inside,
+            "distance_mm": dist,
+            "method": method,
+        }
+    )
 
 
 __all__ = ["AtlasInfo", "assign_coordinates"]

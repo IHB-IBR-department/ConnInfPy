@@ -34,111 +34,10 @@ FWER-corrected p-values. Everything else is grouped by module:
 Names imported directly from ``conninfpy`` in earlier versions remain
 importable; ``__all__`` lists the recommended surface.
 """
+
 __version__ = "2.0.0"
 
-from .analysis import AnalyzeResult, analyze
-from ._compat import TailResult
-from .results import InferenceResult, OmnibusInferenceResult
-from .atlas import AtlasInfo, get_bna_246_nifti_path, fetch_bna_behavioral_decoding
-from .brainnetome import BrainnetomeReference
-from .interpret.annotate import (RoiAnnotation, annotate_bna_regions, annotate_edges, annotate_rois,
-                                 summarize_annotation)
-from .defaults import (
-    DEFAULT_EXTENT_EXPONENT,
-    DEFAULT_HEIGHT_EXPONENT,
-    DEFAULT_START_THRESHOLD,
-    DEFAULT_N_THRESHOLDS_SCORING,
-    DEFAULT_N_THRESHOLDS_PERMUTATION,
-    DEFAULT_N_PERMUTATIONS,
-    DEFAULT_NBS_THRESHOLD,
-    DEFAULT_NBS_STAT,
-    DEFAULT_MIN_CLUSTER_SIZE,
-)
-
-from .synth_datasets import (
-    generate_fc_matrices,
-    generate_multisite_glm_dataset,
-    ModularDatasetGenerator,
-)
-from .topologies import (
-    TopologyDataset,
-    TopologyDatasetGenerator,
-    TopologyScenario,
-    get_scenario,
-    get_scenarios,
-    list_scenarios,
-)
-
-from .eeg_utils import (
-    read_from_eeg_dataframe,
-    reshape_eeg_data,
-    inverse_reshape_eeg_data,
-    EEGData,
-    Electrodes,
-    Bands,
-    PairsElectrodes1020,
-)
-from .nbs_score import nbs_bct
-from .pairwise_stats import (
-    compute_p_val,
-    compute_null_dist,
-    compute_t_stat,
-    compute_t_stat_diff,
-    StatMethod,
-    TestType,
-)
-
-from .enhance import (
-    apply_tfnbs,
-    apply_nbs,
-    apply_cnbs,
-    apply_ni_tfnbs,
-    apply_fbc_tfnbs,
-)
-
-from .tfnbs_score import (
-    get_tfnbs_score,
-    get_network_informed_tfnbs_score,
-    get_fbc_tfnbs_score,
-)
-from .utils import (
-    fisher_r_to_z,
-    fisher_z_to_r,
-    get_components,
-    binarize,
-    create_prior_weights,
-)
-
-from .glm_stats import (
-    GLMStatType,
-    compute_glm_stat,
-    compute_p_val_glm,
-    compute_p_val_glm_multi,
-    compute_p_val_paired_glm,
-    build_design_matrix,
-)
-
-from .harmonize import (
-    ComBatModel,
-    CombatResult,
-    combat_harmonize,
-    combat_fit,
-    combat_apply,
-    compute_vif,
-    design_diagnostics,
-    flatten_upper,
-    unflatten_upper,
-    block_mass,
-)
-
-from .acceleration import (
-    fit_gpd_tail,
-    fit_gamma_tail,
-    compute_p_values_accelerated,
-)
-
-from . import (
-    acceleration,
+from conninfpy import (
     defaults,
     eeg_utils,
     enhance,
@@ -148,8 +47,108 @@ from . import (
     sim,
     stats,
 )
-from .loaders import load
-
+from conninfpy._compat import TailResult
+from conninfpy._shared.arrays import (
+    binarize,
+    create_prior_weights,
+    fisher_r_to_z,
+    fisher_z_to_r,
+    get_components,
+)
+from conninfpy.analysis import AnalyzeResult, analyze
+from conninfpy.atlas.brainnetome import BrainnetomeReference
+from conninfpy.atlas.metadata import AtlasInfo
+from conninfpy.atlas.resources import (
+    fetch_bna_behavioral_decoding,
+    get_bna_246_nifti_path,
+)
+from conninfpy.defaults import (
+    DEFAULT_EXTENT_EXPONENT,
+    DEFAULT_HEIGHT_EXPONENT,
+    DEFAULT_MIN_CLUSTER_SIZE,
+    DEFAULT_N_PERMUTATIONS,
+    DEFAULT_N_THRESHOLDS_PERMUTATION,
+    DEFAULT_N_THRESHOLDS_SCORING,
+    DEFAULT_NBS_STAT,
+    DEFAULT_NBS_THRESHOLD,
+    DEFAULT_START_THRESHOLD,
+)
+from conninfpy.eeg_utils import (
+    Bands,
+    EEGData,
+    Electrodes,
+    PairsElectrodes1020,
+    inverse_reshape_eeg_data,
+    read_from_eeg_dataframe,
+    reshape_eeg_data,
+)
+from conninfpy.enhance import (
+    apply_cnbs,
+    apply_fbc_tfnbs,
+    apply_nbs,
+    apply_ni_tfnbs,
+    apply_tfnbs,
+)
+from conninfpy.enhance.nbs import nbs_bct
+from conninfpy.enhance.tfnbs import (
+    get_fbc_tfnbs_score,
+    get_network_informed_tfnbs_score,
+    get_tfnbs_score,
+)
+from conninfpy.harmonize import (
+    ComBatModel,
+    CombatResult,
+    block_mass,
+    combat_apply,
+    combat_fit,
+    combat_harmonize,
+    compute_vif,
+    design_diagnostics,
+    flatten_upper,
+    unflatten_upper,
+)
+from conninfpy.interpret.annotate import (
+    RoiAnnotation,
+    annotate_bna_regions,
+    annotate_edges,
+    annotate_rois,
+    summarize_annotation,
+)
+from conninfpy.loaders import load
+from conninfpy.results import InferenceResult, OmnibusInferenceResult
+from conninfpy.sim.datasets import (
+    ModularDatasetGenerator,
+    generate_fc_matrices,
+    generate_multisite_glm_dataset,
+)
+from conninfpy.sim.topologies import (
+    TopologyDataset,
+    TopologyDatasetGenerator,
+    TopologyScenario,
+    get_scenario,
+    get_scenarios,
+    list_scenarios,
+)
+from conninfpy.stats import acceleration as acceleration
+from conninfpy.stats._design import build_design_matrix
+from conninfpy.stats._types import GLMStatType, StatMethod, TestType
+from conninfpy.stats.acceleration import (
+    compute_p_values_accelerated,
+    fit_gamma_tail,
+    fit_gpd_tail,
+)
+from conninfpy.stats.glm import (
+    compute_glm_stat,
+    compute_p_val_glm,
+    compute_p_val_glm_multi,
+    compute_p_val_paired_glm,
+)
+from conninfpy.stats.pairwise import (
+    compute_null_dist,
+    compute_p_val,
+    compute_t_stat,
+    compute_t_stat_diff,
+)
 
 # The recommended public surface. Everything imported above stays
 # importable from ``conninfpy`` for backward compatibility, but new code

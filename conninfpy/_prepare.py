@@ -29,7 +29,7 @@ from typing import Optional
 import numpy as np
 import numpy.typing as npt
 
-from .utils import fisher_r_to_z
+from conninfpy._shared.arrays import fisher_r_to_z
 
 # Subjects scanned per block in infer_input_kind, so large stacks don't
 # allocate a full-size |Y| temporary.

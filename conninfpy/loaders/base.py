@@ -6,7 +6,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
-from conninfpy.atlas import AtlasInfo
+from conninfpy.atlas.metadata import AtlasInfo
 
 @dataclass
 class LoadedDataset:

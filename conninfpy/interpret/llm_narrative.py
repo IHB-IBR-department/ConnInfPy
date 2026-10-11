@@ -3,8 +3,9 @@ import re
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .evidence import validate_evidence
-from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
+from conninfpy.interpret.evidence import validate_evidence
+from conninfpy.interpret.prompts import SYSTEM_PROMPT
+from conninfpy.interpret.prompts import USER_PROMPT_TEMPLATE
 
 COGNITIVE_TERMS_TO_GUARD = {
     "memory", "attention", "executive", "motor", "visual", "auditory", "pain", "language",
@@ -308,7 +309,8 @@ class LLMNarrator:
             
     def _mock_response(self, evidence: Dict[str, Any]) -> str:
         """Deterministic narrative for tests and keyless fallback (uses only packet content)."""
-        from .evidence import describe_coverage, summarize_terms
+        from conninfpy.interpret.evidence import describe_coverage
+        from conninfpy.interpret.evidence import summarize_terms
 
         q = evidence["query"]
         cov = describe_coverage(evidence)

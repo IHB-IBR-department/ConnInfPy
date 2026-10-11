@@ -76,6 +76,7 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from conninfpy.pairwise_stats import compute_p_val, get_available_cores
+from conninfpy.stats._workers import _limit_worker_threads
 from conninfpy.synth_datasets import ModularDatasetGenerator
 
 
@@ -472,8 +473,8 @@ def run_fpr_calibration(
         return pd.DataFrame([asdict(r) for r in results])
 
     total_runs = len(tasks)
-    n_cores = config.n_jobs if config.n_jobs > 0 else get_available_cores()
-    use_parallel = config.n_jobs != 1 and total_runs > 1
+    n_cores = min(config.n_jobs if config.n_jobs > 0 else get_available_cores(), total_runs)
+    use_parallel = n_cores > 1
 
     print(f"=== Null FWER Calibration Test ===")
     print(f"Methods: {config.methods}")
@@ -490,7 +491,7 @@ def run_fpr_calibration(
 
     if use_parallel:
         ctx = mp.get_context('spawn')
-        with ctx.Pool(processes=n_cores) as pool:
+        with ctx.Pool(processes=n_cores, initializer=_limit_worker_threads) as pool:
             pbar = tqdm(
                 pool.imap_unordered(_run_null_test_wrapper, tasks),
                 total=total_runs,

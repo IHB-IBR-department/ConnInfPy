@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 from typing import Any
 
-from conninfpy.loaders.base import LoadedDataset, DataValidationReport
+from conninfpy.loaders.base import LoadedDataset
+from conninfpy.loaders.base import DataValidationReport
 
 def validate_loaded_dataset(dataset: LoadedDataset, check_inference_ready: bool = False) -> DataValidationReport:
     """Validate a LoadedDataset object for structural coherence and mathematical validity.
@@ -58,7 +59,8 @@ def validate_loaded_dataset(dataset: LoadedDataset, check_inference_ready: bool 
         )
     elif not np.isfinite(data).all():
         if data.ndim == 3 and data.shape[1] == data.shape[2]:
-            from .._prepare import _format_nonfinite, nonfinite_report
+            from conninfpy._prepare import _format_nonfinite
+            from conninfpy._prepare import nonfinite_report
 
             report = nonfinite_report(data)
             errors.append(_format_nonfinite(report, "Connectivity data") if report["n_values"]

@@ -91,6 +91,7 @@ os.environ["NUMBA_NUM_THREADS"] = _SINGLE_THREAD
 import argparse
 import sys
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -109,6 +110,7 @@ from tqdm import tqdm
 
 from conninfpy import topologies as topo
 from conninfpy.pairwise_stats import compute_p_val, get_available_cores
+from conninfpy.stats._workers import _limit_worker_threads
 
 
 import multiprocessing as mp
@@ -752,7 +754,7 @@ def run_power_vs_effect_size(
     print()
 
     n_conditions = len(scenarios) * len(effect_sizes) * n_repeats
-    n_cores = get_available_cores()
+    n_cores = min(get_available_cores(), len(tasks))
     print_time_estimate("effect-size", batched_groups, n_conditions,
                         len(tasks), n_permutations, n_cores)
 
@@ -768,9 +770,14 @@ def run_power_vs_effect_size(
 
     ctx = mp.get_context('spawn')
 
-    with ctx.Pool(processes=n_cores) as pool:
+    pool_context = (
+        ctx.Pool(processes=n_cores, initializer=_limit_worker_threads)
+        if n_cores > 1 else nullcontext(None)
+    )
+    with pool_context as pool:
         pbar = tqdm(
-            pool.imap_unordered(_parallel_worker_batched, full_tasks),
+            (pool.imap_unordered(_parallel_worker_batched, full_tasks)
+             if pool is not None else map(_parallel_worker_batched, full_tasks)),
             total=len(full_tasks),
             desc="Effect-size",
             unit="task",
@@ -879,7 +886,7 @@ def run_power_vs_sample_size(
     print()
 
     n_conditions = len(scenarios) * len(sample_sizes) * n_repeats
-    n_cores = get_available_cores()
+    n_cores = min(get_available_cores(), len(tasks))
     print_time_estimate("sample-size", batched_groups, n_conditions,
                         len(tasks), n_permutations, n_cores)
 
@@ -895,9 +902,14 @@ def run_power_vs_sample_size(
 
     ctx = mp.get_context('spawn')
 
-    with ctx.Pool(processes=n_cores) as pool:
+    pool_context = (
+        ctx.Pool(processes=n_cores, initializer=_limit_worker_threads)
+        if n_cores > 1 else nullcontext(None)
+    )
+    with pool_context as pool:
         pbar = tqdm(
-            pool.imap_unordered(_parallel_worker_batched, full_tasks),
+            (pool.imap_unordered(_parallel_worker_batched, full_tasks)
+             if pool is not None else map(_parallel_worker_batched, full_tasks)),
             total=len(full_tasks),
             desc="Sample-size",
             unit="task",

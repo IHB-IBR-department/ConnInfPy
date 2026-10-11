@@ -55,6 +55,7 @@ from tqdm import tqdm
 from conninfpy import topologies as topo
 from conninfpy.glm_stats import compute_p_val_glm
 from conninfpy.pairwise_stats import get_available_cores
+from conninfpy.stats._workers import _limit_worker_threads
 
 SIM_ROOT = Path(__file__).resolve().parents[1]
 if str(SIM_ROOT) not in sys.path:
@@ -443,7 +444,7 @@ def _run_tasks(tasks: List[tuple], worker, cfg: GLMConfig, desc: str) -> list:
     n_jobs = get_available_cores() if cfg.n_jobs < 0 else cfg.n_jobs
     n_jobs = min(n_jobs, len(tasks))
     ctx = mp.get_context("spawn")
-    with ctx.Pool(processes=n_jobs) as pool:
+    with ctx.Pool(processes=n_jobs, initializer=_limit_worker_threads) as pool:
         return list(tqdm(pool.imap_unordered(worker, tasks), total=len(tasks), desc=desc, unit="run"))
 
 
