@@ -31,6 +31,6 @@ One folder per dataset or purpose:
 | `benchmarks/` | Scalability, timing and external-validation benchmarks |
 | `notebooks/` | Jupyter tutorials for getting started |
 
-`_bna_interpretation.py` holds the steps shared by the two `brainnetome_interpretation.py`
-scripts. Every folder writes regenerable outputs to its own `results/` (git-ignored, except
-the paper plots).
+The `brainnetome_interpretation.py` scripts call `conninfpy.interpret.interpret_result`.
+Every folder writes regenerable outputs to its own `results/` (git-ignored, except the paper
+plots).

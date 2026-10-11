@@ -41,7 +41,8 @@ from ._compat import TailResult
 from .results import InferenceResult, OmnibusInferenceResult
 from .atlas import AtlasInfo, get_bna_246_nifti_path, fetch_bna_behavioral_decoding
 from .brainnetome import BrainnetomeReference
-from .annotate import RoiAnnotation, annotate_edges, annotate_rois, summarize_annotation
+from .interpret.annotate import (RoiAnnotation, annotate_bna_regions, annotate_edges, annotate_rois,
+                                 summarize_annotation)
 from .defaults import (
     DEFAULT_EXTENT_EXPONENT,
     DEFAULT_HEIGHT_EXPONENT,
@@ -142,6 +143,7 @@ from . import (
     eeg_utils,
     enhance,
     harmonize,
+    interpret,
     loaders,
     sim,
     stats,
@@ -168,7 +170,7 @@ __all__ = [
     "fisher_z_to_r",
     # modules
     "stats",
-    "annotate",
+    "interpret",
     "enhance",
     "harmonize",
     "acceleration",

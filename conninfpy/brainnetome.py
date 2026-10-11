@@ -11,8 +11,8 @@ What is bundled and what is loaded
 ----------------------------------
 * bundled: maximum-probability label images (1 and 2 mm, FSL MNI152 grid) and
   the hierarchy table ``bna246_hierarchy.csv``;
-* downloaded on first use and cached: the BrainMap profiles
-  (:func:`conninfpy.atlas.fetch_bna_behavioral_decoding`);
+* bundled: the BrainMap profiles (BDf_FDR05.json, PCf_FDR05.json;
+  :func:`conninfpy.atlas.fetch_bna_behavioral_decoding`);
 * local files, optional, looked up in ``data_dir``: ``BNA_PM_4D.nii.gz``
   (probabilistic maps, 40 subjects) and ``BNA_SC_3D_246.zip`` (population
   tractography maps), from atlas.brainnetome.org/download.html.
@@ -119,7 +119,7 @@ class BrainnetomeReference:
         import nibabel as nib
         import pandas as pd
 
-        from .atlas import fetch_bna_behavioral_decoding, get_bna_246_nifti_path
+        from .atlas import bna_profile_paths, fetch_bna_behavioral_decoding, get_bna_246_nifti_path
 
         pkg = resources.files("conninfpy.atlas_data")
         with resources.as_file(pkg / "bna246_hierarchy.csv") as p:
@@ -137,15 +137,16 @@ class BrainnetomeReference:
         }
         if profiles:
             try:
-                bd, pc = fetch_bna_behavioral_decoding(cache_dir=cache)
+                bd, pc = fetch_bna_behavioral_decoding()
                 ref.profiles = {
                     "BD": {int(k): dict(v) for k, v in bd.items()},
                     "PC": {int(k): dict(v) for k, v in pc.items()},
                 }
                 ref.provenance["profiles"] = {
                     "source": "BrainMap forward inference, FDR q<0.05 (BDf_FDR05.json, PCf_FDR05.json)",
-                    "BD_sha256": _sha256(cache / "BDf_FDR05.json"),
-                    "PC_sha256": _sha256(cache / "PCf_FDR05.json"),
+                    "files": "bundled (conninfpy/atlas_data)",
+                    "BD_sha256": _sha256(bna_profile_paths()[0]),
+                    "PC_sha256": _sha256(bna_profile_paths()[1]),
                 }
             except (IOError, OSError) as exc:
                 logger.warning("BrainMap profiles unavailable (%s); annotating without them.", exc)
