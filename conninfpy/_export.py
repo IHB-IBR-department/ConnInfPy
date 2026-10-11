@@ -27,7 +27,7 @@ import numpy.typing as npt
 import pandas as pd
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from .atlas import AtlasInfo
+    from conninfpy.atlas.metadata import AtlasInfo
 
 
 _VALID_TAILS = ("both", "positive", "negative")

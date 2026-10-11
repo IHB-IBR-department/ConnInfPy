@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from ..brainnetome import BD_DOMAINS
+from conninfpy.atlas.brainnetome import BD_DOMAINS
 
 DEFAULT_CAVEATS = [
     "BrainMap profiles are forward-inference associations from published activation studies: "

@@ -17,6 +17,7 @@ across a range of thresholds via TFCE-style enhancement.
 
    installation
    usage
+   architecture
    approach
    workflows
    conninfpy

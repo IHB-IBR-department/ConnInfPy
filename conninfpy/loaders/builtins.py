@@ -11,8 +11,10 @@ import pandas as pd
 from typing import Any, Literal
 from pathlib import Path
 
-from conninfpy.atlas import AtlasInfo
-from conninfpy.loaders.base import BaseDataLoader, LoadedDataset, DatasetPreview
+from conninfpy.atlas.metadata import AtlasInfo
+from conninfpy.loaders.base import BaseDataLoader
+from conninfpy.loaders.base import LoadedDataset
+from conninfpy.loaders.base import DatasetPreview
 from conninfpy.loaders.validation import validate_loaded_dataset
 
 logger = logging.getLogger(__name__)
@@ -31,14 +33,6 @@ def compute_dir_hash(files: list[str], extra_params: dict) -> str:
     return h.hexdigest()
 
 
-def _load_atlas_if_present(path: "str | None") -> "AtlasInfo | None":
-    """Load an :class:`AtlasInfo` from ``path``; None if absent or unreadable."""
-    if path and os.path.exists(path):
-        try:
-            return AtlasInfo.from_csv(path)
-        except Exception:
-            return None
-    return None
 
 
 def _load_atlas_if_present(path: "str | None") -> "AtlasInfo | None":
