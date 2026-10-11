@@ -21,26 +21,32 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Union
 
-import numpy.typing as npt
 import numpy as np
+import numpy.typing as npt
 
-from ._compat import TailResult, make_tail_result, normalize_keys
-from .defaults import (
+from conninfpy._compat import TailResult, make_tail_result, normalize_keys
+from conninfpy._shared.arrays import create_prior_weights
+from conninfpy.defaults import (
     DEFAULT_EXTENT_EXPONENT,
     DEFAULT_HEIGHT_EXPONENT,
     DEFAULT_MIN_CLUSTER_SIZE,
     DEFAULT_NBS_STAT,
     DEFAULT_NBS_THRESHOLD,
-    DEFAULT_N_THRESHOLDS_PERMUTATION as DEFAULT_N_THRESHOLDS,
     DEFAULT_START_THRESHOLD,
 )
-from .nbs_score import cnbs_block_means, cnbs_blocks, get_cnbs_score, get_nbs_score, nbs_bct
-from .tfnbs_score import (
+from conninfpy.defaults import DEFAULT_N_THRESHOLDS_PERMUTATION as DEFAULT_N_THRESHOLDS
+from conninfpy.enhance.nbs import (
+    cnbs_block_means,
+    cnbs_blocks,
+    get_cnbs_score,
+    get_nbs_score,
+    nbs_bct,
+)
+from conninfpy.enhance.tfnbs import (
     get_fbc_tfnbs_score,
     get_network_informed_tfnbs_score,
     get_tfnbs_score,
 )
-from .utils import create_prior_weights
 
 __all__ = [
     "apply_tfnbs",
@@ -59,8 +65,7 @@ __all__ = [
 ]
 
 
-def _wrap(stat_dict: Dict[str, npt.NDArray[np.float64]],
-          score_fn) -> TailResult:
+def _wrap(stat_dict: Dict[str, npt.NDArray[np.float64]], score_fn) -> TailResult:
     """Apply ``score_fn`` to each tail and wrap the result in a TailResult.
 
     Accepts legacy keys via :func:`normalize_keys`; always emits canonical keys.
@@ -142,8 +147,14 @@ def apply_ni_tfnbs(
     return _wrap(
         stat_dict,
         lambda arr: get_network_informed_tfnbs_score(
-            arr, net_labels, e, h, n,
-            start_thres=start_thres, normalization=normalization, edge_mask=edge_mask,
+            arr,
+            net_labels,
+            e,
+            h,
+            n,
+            start_thres=start_thres,
+            normalization=normalization,
+            edge_mask=edge_mask,
         ),
     )
 
@@ -162,8 +173,13 @@ def apply_fbc_tfnbs(
     return _wrap(
         stat_dict,
         lambda arr: get_fbc_tfnbs_score(
-            arr, net_labels, e, h, n,
-            start_thres=start_thres, min_cluster_size=min_cluster_size,
+            arr,
+            net_labels,
+            e,
+            h,
+            n,
+            start_thres=start_thres,
+            min_cluster_size=min_cluster_size,
         ),
     )
 

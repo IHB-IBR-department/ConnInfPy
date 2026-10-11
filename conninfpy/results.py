@@ -37,13 +37,12 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from ._compat import TailResult, make_tail_result
-from ._export import (
-    build_network_summary,
-    build_omnibus_dataframe,
-    build_tailed_dataframe,
-    network_summary_matrix,
-)
+from conninfpy._compat import TailResult
+from conninfpy._compat import make_tail_result
+from conninfpy._export import build_network_summary
+from conninfpy._export import build_omnibus_dataframe
+from conninfpy._export import build_tailed_dataframe
+from conninfpy._export import network_summary_matrix
 
 
 def summarize_by_network(
@@ -414,7 +413,7 @@ class InferenceResult(TailResult):
         condition means). Never read baselines from the intercept map alone:
         with uncentred covariates it is the connectivity at covariates = 0.
         """
-        from ._estimates import predict
+        from conninfpy.stats._estimates import predict
 
         beta, design = getattr(self, "beta", None), getattr(self, "design", None)
         if beta is None or design is None:
@@ -428,7 +427,7 @@ class InferenceResult(TailResult):
         The unstandardised effect (e.g. Δz per unit of the predictor, or the
         group difference in Fisher z), not the test statistic.
         """
-        from ._estimates import effect
+        from conninfpy.stats._estimates import effect
 
         beta, design = getattr(self, "beta", None), getattr(self, "design", None)
         if beta is None or design is None:
@@ -452,7 +451,7 @@ class InferenceResult(TailResult):
         Negative baselines depend on preprocessing (global-signal regression
         induces anticorrelations).
         """
-        from ._estimates import coupling_change
+        from conninfpy.stats._estimates import coupling_change
 
         design = getattr(self, "design", None)
         if design is None:
@@ -622,7 +621,7 @@ class InferenceResult(TailResult):
         shared BrainMap domains) to :meth:`significant_edges`. Description only:
         the p-values and their correction are unchanged.
         """
-        from .interpret.annotate import annotate_edges
+        from conninfpy.interpret.annotate import annotate_edges
 
         if len(rois) != len(self["positive"]):
             raise ValueError(f"rois has {len(rois)} ROIs but the result has {len(self['positive'])}.")

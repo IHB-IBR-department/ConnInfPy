@@ -11,8 +11,10 @@ import numpy as np
 import pandas as pd
 from typing import Literal
 
-from conninfpy.atlas import AtlasInfo
-from conninfpy.loaders.base import BaseDataLoader, LoadedDataset, DatasetPreview
+from conninfpy.atlas.metadata import AtlasInfo
+from conninfpy.loaders.base import BaseDataLoader
+from conninfpy.loaders.base import LoadedDataset
+from conninfpy.loaders.base import DatasetPreview
 from conninfpy.loaders.validation import validate_loaded_dataset
 
 class CustomTemplateLoader(BaseDataLoader):

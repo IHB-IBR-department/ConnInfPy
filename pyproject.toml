@@ -49,7 +49,10 @@ dependencies = [
     # conninfpy.sim (generate_fc_matrices, generate_multisite_glm_dataset)
     # and the ML-transfer examples; also pulled in by nilearn for the app.
     "scikit-learn",
-    # Caps BLAS threads inside permutation workers (conninfpy._progress);
+    # Usable CPU count respects affinity/container quotas/LOKY_MAX_CPU_COUNT.
+    # Also required transitively by scikit-learn; used directly by stats._engine.
+    "joblib",
+    # Caps BLAS/OpenMP threads inside permutation workers (stats._workers);
     # without it the pool oversubscribes the CPU.
     "threadpoolctl",
     # conninfpy.loaders.manifest imports yaml at module level, and the
@@ -57,7 +60,7 @@ dependencies = [
     # core install is unusable without it. Keep in core, not an extra.
     "pyyaml",
     # Atlas label images and Brainnetome annotation (conninfpy.atlas,
-    # conninfpy.brainnetome, conninfpy.annotate).
+    # conninfpy.interpret.annotate).
     "nibabel>=3.2",
 ]
 

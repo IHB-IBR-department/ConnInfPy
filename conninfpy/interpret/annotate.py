@@ -32,7 +32,9 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 import numpy as np
 import numpy.typing as npt
 
-from ..brainnetome import BD_DOMAINS, N_REGIONS, BrainnetomeReference
+from conninfpy.atlas.brainnetome import BD_DOMAINS
+from conninfpy.atlas.brainnetome import N_REGIONS
+from conninfpy.atlas.brainnetome import BrainnetomeReference
 
 _EXACT_SPACES = {"MNI152NLin6Asym"}
 _APPROX_SPACES = {"MNI152", "MNI152NLin2009cAsym", "MNI152NLin2009cSym", "ICBM152", "MNI152Lin"}
@@ -106,7 +108,7 @@ class RoiAnnotation:
 
     def to_atlas(self, level: str = "lobe") -> Any:
         """:class:`~conninfpy.AtlasInfo` grouping the ROIs at ``level`` (for network summaries)."""
-        from ..atlas import AtlasInfo
+        from conninfpy.atlas.metadata import AtlasInfo
 
         t = self.table
         return AtlasInfo(
@@ -297,10 +299,9 @@ def bna_region_ids(labels: Sequence[Any], reference: Optional[BrainnetomeReferen
     if reference is not None:
         names = reference.regions["name"]
     else:
-        import pandas as pd
-        from importlib import resources
-        with resources.as_file(resources.files("conninfpy.atlas_data") / "bna246_hierarchy.csv") as path:
-            names = pd.read_csv(path).set_index("roi_id")["name"]
+        from conninfpy.atlas.resources import read_bna_hierarchy
+
+        names = read_bna_hierarchy()["name"]
     index = {str(n): int(i) for i, n in names.items()}
     labels = [str(x) for x in labels]
     return [index[x] for x in labels] if labels and all(x in index for x in labels) else None

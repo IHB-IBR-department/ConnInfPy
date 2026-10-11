@@ -5,20 +5,20 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Any, Dict, List, Union
-from conninfpy.loaders.base import BaseDataLoader, LoadedDataset, DatasetPreview
-from conninfpy.loaders.builtins import (
-    NumpyLoader,
-    CSVDirectoryLoader,
-    NiftiDirectoryLoader,
-    AbideSchaeferLoader,
-    FmriprepDerivativesLoader,
-    TimeseriesDirectoryLoader,
-    ConnectivityMatrixLoader,
-    ConditionTimeseriesArrayLoader,
-)
+from conninfpy.loaders.base import BaseDataLoader
+from conninfpy.loaders.base import LoadedDataset
+from conninfpy.loaders.base import DatasetPreview
+from conninfpy.loaders.builtins import NumpyLoader
+from conninfpy.loaders.builtins import CSVDirectoryLoader
+from conninfpy.loaders.builtins import NiftiDirectoryLoader
+from conninfpy.loaders.builtins import AbideSchaeferLoader
+from conninfpy.loaders.builtins import FmriprepDerivativesLoader
+from conninfpy.loaders.builtins import TimeseriesDirectoryLoader
+from conninfpy.loaders.builtins import ConnectivityMatrixLoader
+from conninfpy.loaders.builtins import ConditionTimeseriesArrayLoader
 import importlib
 import inspect
-from conninfpy.atlas import AtlasInfo
+from conninfpy.atlas.metadata import AtlasInfo
 
 class DatasetManifest:
     """Parsed dataset manifest: loader name, resolved paths, checks."""
@@ -42,31 +42,10 @@ def resolve_path(p: Any, manifest_dir: Path) -> Any:
         return [resolve_path(x, manifest_dir) for x in p]
     if isinstance(p, str):
         if p.startswith("BUILTIN:"):
-            # Resolve to builtin package directory
-            pkg_dir = Path(__file__).resolve().parent.parent
-            atlas_dir = pkg_dir / "atlas_data"
-            token = p.split(":", 1)[1]
-            if token == "bna_246_2mm":
-                return str(atlas_dir / "BN_Atlas_246_2mm.nii.gz")
-            elif token == "bna_246_1mm":
-                return str(atlas_dir / "BN_Atlas_246_1mm.nii.gz")
-            elif token == "bna246.csv":
-                return str(atlas_dir / "bna246.csv")
-            elif token == "schaefer100":
-                return str(atlas_dir / "schaefer100_yeo7.csv")
-            elif token == "schaefer200":
-                return str(atlas_dir / "schaefer200_yeo7.csv")
-            elif token == "schaefer400":
-                return str(atlas_dir / "schaefer400_yeo7.csv")
-            else:
-                cand = atlas_dir / token
-                if cand.exists():
-                    return str(cand)
-                # Fallback to check datasets/atlases
-                datasets_atlases = pkg_dir / "datasets" / "atlases"
-                if (datasets_atlases / token).exists():
-                    return str(datasets_atlases / token)
-                return p
+            from conninfpy.atlas.resources import builtin_atlas_path
+
+            resolved = builtin_atlas_path(p.split(":", 1)[1])
+            return str(resolved) if resolved is not None else p
         
         path_obj = Path(p)
         if path_obj.is_absolute():
@@ -300,7 +279,7 @@ def drop_subjects_with_missing(dataset: LoadedDataset) -> LoadedDataset:
     every observation of an affected subject is removed so pairs stay
     complete. The removed subjects are listed in ``dataset.warnings``.
     """
-    from .._prepare import nonfinite_report
+    from conninfpy._prepare import nonfinite_report
 
     data = np.asarray(dataset.data)
     if dataset.data_kind == "timeseries" or data.ndim != 3 or data.shape[1] != data.shape[2]:

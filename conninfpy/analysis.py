@@ -19,23 +19,22 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 import numpy as np
 import numpy.typing as npt
 
-from .defaults import (
-    DEFAULT_ACCELERATION,
-    DEFAULT_EXTENT_EXPONENT,
-    DEFAULT_HEIGHT_EXPONENT,
-    DEFAULT_N_PERMUTATIONS,
-    DEFAULT_N_THRESHOLDS_PERMUTATION,
-)
-from .results import InferenceResult, OmnibusInferenceResult
-from ._prepare import infer_input_kind, prepare_connectivity
-from ._rng import RngLike
-from .glm_stats import (
-    compute_p_val_glm,
-    compute_p_val_glm_multi,
-    compute_p_val_paired_glm,
-)
-from .harmonize import combat_harmonize
-from .pairwise_stats import StatMethod, compute_p_val
+from conninfpy.defaults import DEFAULT_ACCELERATION
+from conninfpy.defaults import DEFAULT_EXTENT_EXPONENT
+from conninfpy.defaults import DEFAULT_HEIGHT_EXPONENT
+from conninfpy.defaults import DEFAULT_N_PERMUTATIONS
+from conninfpy.defaults import DEFAULT_N_THRESHOLDS_PERMUTATION
+from conninfpy.results import InferenceResult
+from conninfpy.results import OmnibusInferenceResult
+from conninfpy._prepare import infer_input_kind
+from conninfpy._prepare import prepare_connectivity
+from conninfpy._shared.rng import RngLike
+from conninfpy.stats.glm import compute_p_val_glm
+from conninfpy.stats.glm import compute_p_val_glm_multi
+from conninfpy.stats.glm import compute_p_val_paired_glm
+from conninfpy.harmonize import combat_harmonize
+from conninfpy.stats._types import StatMethod
+from conninfpy.stats.pairwise import compute_p_val
 
 
 COMBAT_ONLY = "combat_only"
@@ -765,7 +764,7 @@ def analyze(
             res.combat_diagnostics = combat_diag
             res_flags = list(flags)
             if getattr(res, "missing_report", None) is not None:
-                from ._available_case import describe
+                from conninfpy.stats._missing_pairwise import describe
                 res_flags.append(describe(res.missing_report))
             out[nm] = AnalyzeResult(
                 inference=res,
@@ -807,7 +806,7 @@ def analyze(
         )
 
     if getattr(result, "missing_report", None) is not None:
-        from ._available_case import describe
+        from conninfpy.stats._missing_pairwise import describe
         flags.append(describe(result.missing_report))
 
     # ---- Provenance threading ----

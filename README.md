@@ -339,6 +339,9 @@ acceleration and the permutation count all change absolute runtimes.
 Full reference at [IHB-IBR-department.github.io/ConnInfPy](https://IHB-IBR-department.github.io/ConnInfPy/).
 The docs auto-build on push to `main`. Contributor setup, tests and the
 release process are in [CONTRIBUTE.md](CONTRIBUTE.md).
+The [package organization guide](docs/source/architecture.rst) maps the
+statistics, enhancement, atlas, interpretation, harmonization, simulation and
+plotting packages, including legacy import compatibility and atlas-data access.
 
 ## Citing the toolbox
 

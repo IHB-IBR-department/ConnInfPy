@@ -3,12 +3,13 @@
 Generators for modular networks with planted effects, used by the
 examples, the simulation validation and the benchmarks.
 """
-from .synth_datasets import (
+
+from conninfpy.sim.datasets import (
     ModularDatasetGenerator,
     generate_fc_matrices,
     generate_multisite_glm_dataset,
 )
-from .topologies import (
+from conninfpy.sim.topologies import (
     TopologyDataset,
     TopologyDatasetGenerator,
     TopologyScenario,
