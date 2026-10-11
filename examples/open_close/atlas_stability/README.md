@@ -31,13 +31,12 @@ and a fixed common cortical support.
 * drop Schaefer parcels mostly inside BNA dropout regions.
 
 **Provenance check** (`adapter.provenance`, blocking): per scan, the median correlation
-of each BNA region with its most-overlapping Schaefer parcel. It confirms that both
-extraction products come from the same scans.
+of each BNA region with its most-overlapping Schaefer parcel. It checks consistency of the extraction products; high correlations alone do not prove scan identity.
 
 ## Analyses
 
 * **Inference:** paired TFNBS with the paper settings (per-tail, E = 0.4, H = 3, n = 10,
-  5,000 permutations, seed 42). The Schaefer full set reproduces the stored paper maps.
+  5,000 permutations, seed 42). The Schaefer full set is checked against matching stored paper maps.
 * **Annotation only:** the Schaefer result's arrays are unchanged by annotation.
   Also reported: attribution levels of the detected edges.
 * **Common-unit summaries:** participant-level weighted mean signed Δz per unit pair
@@ -64,7 +63,17 @@ python examples/open_close/atlas_stability/run_atlas_stability.py --quick     # 
 python examples/open_close/atlas_stability/run_atlas_stability.py --reuse     # reuse saved TFNBS maps
 ```
 
-Outputs go to `results/` (git-ignored): `report.md`, CSV tables, `tfnbs/*.npz`,
+Outputs go to `results/` (git-ignored): CSV tables, `tfnbs/*.npz`,
 `fig_cross_cohort_units.png`, `fig_primary_bootstrap.png`.
 
 Everything is descriptive: no new hypothesis test, and the TFNBS correction is unchanged.
+
+## Implementation and artifact reuse
+
+`adapter.py` defines study inputs, support and reporting memberships; `metrics.py` computes signed effects and bootstrap summaries; `inference.py` handles paired edge inference/cache validation; `reporting.py` creates figures and an optional vault narrative. The runner coordinates these components.
+
+Use `--data-dir`, `--reference-dir`, `--schaefer-image` and `--output` to select inputs and artifact destinations. `--report` accepts an explicit Markdown path in the project vault; no narrative is written by default. Native BNA label images use the package resource resolver.
+
+`--reuse` requires matching FC hashes, participant/ROI order, permutation budget, method settings and library source hashes, with valid map shapes. A quick cache cannot silently serve a full run. Older caches without metadata are rejected; their historical bytes remain unchanged until an explicit recomputation.
+
+Annotation/group summaries leave edge inference unchanged and do not yield new group-level p-values. `bna_gyrus` is explicitly a coarser signal-resolution control. Bootstrap intervals describe resampling uncertainty, and cross-cohort agreement is separate from within-cohort stability. Volume, coverage, support and grouping size can affect comparisons.

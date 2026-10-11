@@ -25,6 +25,14 @@ Usage:
 
 from __future__ import annotations
 
+
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from examples._shared.paths import ROOT, config_path
 import re
 from pathlib import Path
 
@@ -33,14 +41,13 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from fpr.plot_fpr_results import plot_paper_fwer_calibration
-from power.tfnbs_eh_sweep import plot_metric_rows
-from topology_gallery import plot_topology_gallery
+from examples.simulations.fpr.plot_fpr_results import plot_paper_fwer_calibration
+from examples.simulations.power.tfnbs_eh_sweep import plot_metric_rows
+from examples.simulations.topology_gallery import plot_topology_gallery
 
 # Constants & Styling
-RESULTS_DIR = Path("examples/simulations/results")
+RESULTS_DIR = (ROOT / "examples/simulations/results")
 OUTPUT_DIR = RESULTS_DIR / "plots"
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 plt.rcParams.update({
     "font.size": 8,
@@ -611,6 +618,7 @@ def write_power_tables() -> None:
 
 def main() -> None:
     """Regenerate all simulation paper figures from existing result tables."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Regenerating paper figures into {OUTPUT_DIR}...")
     
     plot_topology_gallery_representative()

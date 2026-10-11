@@ -21,6 +21,14 @@ Run the sweeps with:
 
 from __future__ import annotations
 
+
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
+
+from examples._shared.paths import ROOT, config_path
 import argparse
 from pathlib import Path
 
@@ -116,7 +124,7 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze m_min sensitivity")
     parser.add_argument("--results-dirs", type=Path, nargs="+", required=True)
     parser.add_argument("--mmin-values", type=int, nargs="+", required=True)
-    parser.add_argument("--output-dir", type=Path, default=Path("examples/simulations/results/mmin_comparison"))
+    parser.add_argument("--output-dir", type=Path, default=(ROOT / "examples/simulations/results/mmin_comparison"))
     args = parser.parse_args()
 
     if len(args.results_dirs) != len(args.mmin_values):

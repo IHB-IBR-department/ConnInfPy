@@ -31,6 +31,14 @@ Run the sweeps with:
 
 from __future__ import annotations
 
+
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
+
+from examples._shared.paths import ROOT, config_path
 import argparse
 from pathlib import Path
 
@@ -117,7 +125,7 @@ def main():
     parser.add_argument("--true-dir", type=Path, required=True)
     parser.add_argument("--seven-dir", type=Path, required=True)
     parser.add_argument("--two-dir", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, default=Path("examples/simulations/results/prior_misspec_comparison"))
+    parser.add_argument("--output-dir", type=Path, default=(ROOT / "examples/simulations/results/prior_misspec_comparison"))
     args = parser.parse_args()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)

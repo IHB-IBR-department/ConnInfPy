@@ -67,4 +67,4 @@ tfnbs_start_thres: 1.65
 nbs_threshold: 2.0
 fbc_min_cluster: 3
 
-output_dir: examples/simulations/results/calibration/glm_validation_1000
+output_dir: ../results/calibration/glm_validation_1000

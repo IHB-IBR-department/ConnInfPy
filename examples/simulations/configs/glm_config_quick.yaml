@@ -64,4 +64,4 @@ tfnbs_start_thres: 1.65
 nbs_threshold: 2.0
 fbc_min_cluster: 3
 
-output_dir: examples/simulations/results/glm/glm_validation_quick
+output_dir: ../results/glm/glm_validation_quick

@@ -17,6 +17,14 @@ Usage:
 """
 from __future__ import annotations
 
+
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from examples._shared.paths import ROOT, config_path
 import argparse
 import sys
 from pathlib import Path
@@ -24,14 +32,10 @@ from typing import List, Optional
 
 import numpy as np
 
-sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from conninfpy.topologies import TopologyDatasetGenerator
-try:
-    from ._plotting import draw_module_boundaries as _draw_module_boundaries
-except ImportError:  # Support direct execution: python examples/.../topology_gallery.py
-    from _plotting import draw_module_boundaries as _draw_module_boundaries
-from conninfpy.pairwise_stats import compute_t_stat
+from conninfpy.sim.topologies import TopologyDatasetGenerator
+from examples.simulations._plotting import draw_module_boundaries as _draw_module_boundaries
+from conninfpy.stats.pairwise import compute_t_stat
 
 # The 10 scenarios used in power analysis and FPR calibration configs.
 SCENARIOS: List[str] = [
@@ -71,7 +75,7 @@ def plot_topology_gallery(
     effect_size: float = 0.125,
     n_samples: int = 30,
     seed: int = 42,
-    output_dir: Path = Path("examples/output"),
+    output_dir: Path = (ROOT / "examples/output"),
 ) -> Path:
     """Generate a 10x2 gallery figure: ground truth + t-stat for each scenario."""
     import matplotlib

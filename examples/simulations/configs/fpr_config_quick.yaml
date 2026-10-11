@@ -97,4 +97,4 @@ checkpoint_every: 5
 # OUTPUT
 # =============================================================================
 
-output_dir: examples/simulations/results/fpr_calibration_quick
+output_dir: ../results/fpr_calibration_quick

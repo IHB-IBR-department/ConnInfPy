@@ -116,5 +116,5 @@ time_points: 30        # time points per simulated subject
 # =============================================================================
 
 seed: 42
-use_mp: false          # mp.Pool at outer level only, not inside permutations
-output_dir: examples/simulations/results/power/power_analysis_1000_30
+n_jobs: -1            # outer simulation tasks; permutations inside each task are serial
+output_dir: ../results/power/power_analysis_1000_30

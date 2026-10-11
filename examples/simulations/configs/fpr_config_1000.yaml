@@ -116,7 +116,7 @@ checkpoint_every: 20
 # OUTPUT
 # =============================================================================
 
-output_dir: examples/simulations/results/fpr_calibration
+output_dir: ../results/fpr_calibration
 
 # =============================================================================
 # EXPECTED RESULTS

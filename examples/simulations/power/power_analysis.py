@@ -65,6 +65,14 @@ Plotting:
 
 from __future__ import annotations
 
+
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
+
+from examples._shared.paths import ROOT, config_path
 import os
 
 # Pin each worker process to 1 BLAS/LAPACK thread.
@@ -108,8 +116,8 @@ except ImportError:
 
 from tqdm import tqdm
 
-from conninfpy import topologies as topo
-from conninfpy.pairwise_stats import compute_p_val, get_available_cores
+from conninfpy.sim import topologies as topo
+from conninfpy.stats.pairwise import compute_p_val, get_available_cores
 from conninfpy.stats._workers import _limit_worker_threads
 
 
@@ -680,7 +688,7 @@ def run_power_vs_effect_size(
     time_points: int = 30,
     n_permutations: int = 500,
     alpha: float = 0.05,
-    use_mp: bool = False,
+    n_jobs: int = -1,
     seed: int = 42,
     intra_corr: float = 0.3,
     inter_corr: float = 0.05,
@@ -754,7 +762,10 @@ def run_power_vs_effect_size(
     print()
 
     n_conditions = len(scenarios) * len(effect_sizes) * n_repeats
-    n_cores = min(get_available_cores(), len(tasks))
+    if n_jobs == 0 or n_jobs < -1:
+        raise ValueError("n_jobs must be -1 or a positive integer")
+    budget = get_available_cores() if n_jobs == -1 else min(n_jobs, get_available_cores())
+    n_cores = min(budget, len(tasks))
     print_time_estimate("effect-size", batched_groups, n_conditions,
                         len(tasks), n_permutations, n_cores)
 
@@ -812,7 +823,7 @@ def run_power_vs_sample_size(
     time_points: int = 30,
     n_permutations: int = 500,
     alpha: float = 0.05,
-    use_mp: bool = False,
+    n_jobs: int = -1,
     seed: int = 42,
     intra_corr: float = 0.3,
     inter_corr: float = 0.05,
@@ -886,7 +897,10 @@ def run_power_vs_sample_size(
     print()
 
     n_conditions = len(scenarios) * len(sample_sizes) * n_repeats
-    n_cores = min(get_available_cores(), len(tasks))
+    if n_jobs == 0 or n_jobs < -1:
+        raise ValueError("n_jobs must be -1 or a positive integer")
+    budget = get_available_cores() if n_jobs == -1 else min(n_jobs, get_available_cores())
+    n_cores = min(budget, len(tasks))
     print_time_estimate("sample-size", batched_groups, n_conditions,
                         len(tasks), n_permutations, n_cores)
 
@@ -1011,6 +1025,8 @@ def load_yaml_config(path: Path) -> dict:
         data = yaml.safe_load(f)
     if not isinstance(data, dict):
         raise ValueError(f"Expected a dict in {path}, got {type(data).__name__}")
+    if "output_dir" in data:
+        data["output_dir"] = config_path(data["output_dir"], path)
     return data
 
 
@@ -1142,13 +1158,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--seed", type=int, default=42,
         help="Random seed",
     )
-    parser.add_argument(
-        "--use-mp", action="store_true",
-        help="Use multiprocessing",
-    )
+    parser.add_argument("--n-jobs", type=int, default=-1,
+                        help="Parallel simulation tasks (-1=CPU budget, 1=serial); inner permutations stay serial")
     parser.add_argument(
         "--output-dir", type=Path,
-        default=Path(__file__).parent.parent.parent / "results" / "power_analysis",
+        default=Path(__file__).resolve().parents[1] / "results" / "power_analysis",
         help="Output directory",
     )
     parser.add_argument(
@@ -1239,7 +1253,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             time_points=args.time_points,
             n_permutations=args.n_permutations,
             alpha=args.alpha,
-            use_mp=False,
+            n_jobs=args.n_jobs,
             seed=args.seed,
             intra_corr=args.intra_corr,
             inter_corr=args.inter_corr,
@@ -1273,7 +1287,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             time_points=args.time_points,
             n_permutations=args.n_permutations,
             alpha=args.alpha,
-            use_mp=False,
+            n_jobs=args.n_jobs,
             seed=args.seed,
             intra_corr=args.intra_corr,
             inter_corr=args.inter_corr,

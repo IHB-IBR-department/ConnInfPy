@@ -23,6 +23,14 @@ Usage:
 
 from __future__ import annotations
 
+
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
+
+from examples._shared.paths import ROOT, config_path
 import argparse
 import hashlib
 import itertools
@@ -52,15 +60,13 @@ except ImportError:
 
 from tqdm import tqdm
 
-from conninfpy import topologies as topo
-from conninfpy.glm_stats import compute_p_val_glm
-from conninfpy.pairwise_stats import get_available_cores
+from conninfpy.sim import topologies as topo
+from conninfpy.stats.glm import compute_p_val_glm
+from conninfpy.stats.pairwise import get_available_cores
 from conninfpy.stats._workers import _limit_worker_threads
 
 SIM_ROOT = Path(__file__).resolve().parents[1]
-if str(SIM_ROOT) not in sys.path:
-    sys.path.insert(0, str(SIM_ROOT))
-from fpr.fpr_calibration import compute_fpr_summary  # noqa: E402
+from examples.simulations._shared.calibration import compute_fpr_summary  # noqa: E402
 
 
 GLM_METHODS = [
@@ -122,7 +128,7 @@ class GLMConfig:
     nbs_threshold: float = 2.0
     fbc_min_cluster: int = 3
 
-    output_dir: Path = Path("examples/simulations/results/glm/glm_validation")
+    output_dir: Path = (ROOT / "examples/simulations/results/glm/glm_validation")
 
     def __post_init__(self) -> None:
         if self.sample_sizes is None:
@@ -194,7 +200,7 @@ def _load_config(path: Optional[Path]) -> GLMConfig:
     if "methods" not in data:
         data["methods"] = list(GLM_METHODS)
     if "output_dir" in data:
-        data["output_dir"] = Path(data["output_dir"])
+        data["output_dir"] = config_path(data["output_dir"], path)
     return GLMConfig(**data)
 
 

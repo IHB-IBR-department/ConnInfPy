@@ -1,60 +1,30 @@
-# Open-Close Paired Validation Suite
+# Open-Close workflows
 
-This directory contains the production-ready validation suite for `conninfpy` using the IHB and Beijing (China) Open-Close datasets. It demonstrates biological replication, specificity under matched-design nulls, and predictive stability.
+The IHB and Beijing cohorts contain paired eyes-open (EO) and eyes-closed (EC) scans. The current atlas question concerns **EC−EO contrast stability**: how native Brainnetome parcellation and Brainnetome annotation of another atlas change the reproducibility and anatomical interpretation of the contrast.
 
-## 1. Scientific Claims
-
-1.  **Causal-Adjacent Replication**: Canonical brain-state shifts (Visual vs. DMN) replicate at the network level across independent scanners and populations.
-2.  **Test-Retest Specificity**: The pipeline cleanly separates state-dependent signal from matched-design vigilance or scanner drift.
-3.  **Predictive Parsimony**: Topologically selected significant edges capture the predictively stable biological core, maintaining cross-site classification performance with >95% fewer features.
-
-## 2. Core Execution Scripts
-
-| Script | Purpose | Output |
+| Folder | Scientific question | Entry point |
 |---|---|---|
-| `run_paired_tfnbs.py` | Canonical paired sign-flip inference on both cohorts. | `results/{ihb,china}_paired_tfnbs.npz` |
-| `harmonize_pooled_cohorts.py` | Cross-cohort ComBat (Cohort = Batch, State = Preserved). | `results/openclose_harmonized.npz` |
-| `run_pooled_methods.py` | Run all selectors on the joint harmonized pooled dataset. | `results/ml/pmap_pooled_{method}.npz` |
-| `run_retest_methods.py` | Run all selectors on the 'closed-closed' empirical null contrast. | `results/ml/pmap_china_retest_{method}.npz` |
-| `ml/run_ml_feature_selection.py` | Cross-site biomarker transfer evaluation (IHB <-> China). | `results/ml/ml_feature_selection.csv` |
-| `run_eh_sensitivity.py` | Grid sweep of TFNBS (E, H) parameters on the paired China cohort. | `results/plots/plot4_tfnbs_grid_sensitivity.png` |
+| [paper_validation/](paper_validation/) | Paired state contrasts, EC-run control, method and parameter agreement | `run_paired_tfnbs.py`, `run_state_methods.py`, `run_retest_methods.py` |
+| [atlas_stability/](atlas_stability/) | Contrast stability across Schaefer, native BNA and a coarser BNA resolution control | `run_atlas_stability.py` |
+| [interpretation/](interpretation/) | Anatomical attribution of edge inference; native BNA comparison | `brainnetome_interpretation.py` |
+| [structural_prior/](structural_prior/) | SC-restricted edge families versus SC-defined NI-TFNBS blocks | `run_sc_inference.py`, `run_sc_blocks.py` |
+| [ml_transfer/](ml_transfer/) | Existing significant-edge cross-cohort transfer experiment | `run_ml_feature_selection.py` |
+| [feature_stability/](feature_stability/) | Existing edge-model importance and overlap across bootstrap fits, summarized after fitting | `run_feature_stability.py`, `feature_stability.py` |
 
-## 3. Publication Figures
+The atlas-stability workflow contains no classifiers. Feature stability and ML transfer are independent existing studies with different questions; running the atlas study does not invoke them.
 
-**Output Directory:** `results/plots/`
+`_shared/data.py` is the common study adapter. Defaults read `datasets/open_close/`: Schaefer-200 `strategy-4_GSR` arrays, ROI labels and subject order; native Brainnetome workflows additionally need the corresponding BNA arrays and atlas resources. The retained Schaefer set has 182 ROIs; native BNA uses 242 after the documented provisional dropout exclusions. China has 48 participants; workflows requiring both EC runs use 47 complete participants. Each workflow states its run choice.
 
-| Plot # | Filename | Script | Claim / Description |
-|---|---|---|---|
-| **1** | `plot1_combat_impact.png` | `plot1_combat_impact.py` | **Site-Effect Neutralization**: Shows how ComBat aligns pooled scanner variance without erasing signal. |
-| **2** | `plot2_block_mass_convergence.png`| `plot2_block_mass_convergence.py` | **Cohort Replication**: Strong systems-level convergence between independent cohorts. |
-| **3** | `plot3_method_sensitivity_dual.png`| `plot3_method_sensitivity.py` | **Stability & Convergence**: Dual Jaccard/Spearman analysis proving TFNBS robustness. |
-| **4** | `plot4_tfnbs_grid_sensitivity.png` | `run_eh_sensitivity.py` | **Parameter Multiverse**: Proves TFNBS core is insensitive to specific (E, H) choices. |
-| **5** | `plot5_retest_specificity.png` | `plot5_retest_specificity.py` | **Retest Specificity**: Contrasts biological discovery against a matched matched-design baseline. |
-| **6** | `plot6_network_informed_hierarchy.png` | `plot6_network_informed_hierarchy.py` | **Hierarchy of Constraint**: Pruning topological leakage via network-informed priors (Open vs. Close). |
-| **7** | `plot7_ml_transfer_auc.png` | `plot7_ml_transfer_auc.py` | **Predictive Utility**: Confirms that discovery edges define a predictively transferable core. |
-| **8** | `plot8_retest_hierarchy.png` | `plot6_retest_hierarchy.py` | **Null Specificity Hierarchy**: Shows near-zero findings on empirical null across methods. |
+Publication maps and plots remain in `results/`, including the historical `results/ml/` location for method maps. Atlas, structural-prior and feature-stability results reside within their respective workflow directories. Existing result files and provenance are preserved.
 
-## 4. Quick Start
+From the repository root:
 
-To regenerate the entire validation story:
 ```bash
-# Activate environment
-conda activate conninfpy
-
-# 1. Run inference and sweeps
-python run_paired_tfnbs.py
-python harmonize_pooled_cohorts.py
-python run_pooled_methods.py
-python run_retest_methods.py
-python run_eh_sensitivity.py
-python ml/run_ml_feature_selection.py
-
-# 2. Generate all plots
-python plot1_combat_impact.py
-python plot2_block_mass_convergence.py
-python plot3_method_sensitivity.py
-python plot5_retest_specificity.py
-python plot6_network_informed_hierarchy.py
-python plot6_retest_hierarchy.py
-python plot7_ml_transfer_auc.py
+python -m examples.open_close.atlas_stability.run_atlas_stability --help
+python -m examples.open_close.paper_validation.run_paired_tfnbs --help
+python -m examples.open_close.paper_validation.regenerate_validation_results --dry-run
 ```
+
+The regeneration runner defaults to inference and plots. `--scope ml` selects the separate transfer experiment; `--scope all` includes both. It uses the active interpreter. Full inference and sensitivity runs are expensive; `--quick` reduces budgets but still analyzes real data.
+
+Paired sign flips require the stated exchangeability/symmetry assumptions for participant differences. EC-run comparisons are empirical controls, not guaranteed null data: vigilance, order and drift can differ. ComBat diagnostics describe adjusted cohort variation, not proof that scanner effects or confounding have disappeared. Annotation and grouped summaries do not create new group-level p-values or demonstrate biological validity.

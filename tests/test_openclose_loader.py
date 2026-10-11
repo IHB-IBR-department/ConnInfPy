@@ -1,4 +1,4 @@
-"""Unit tests for examples.open_close.openclose_loader."""
+"""Unit tests for examples.open_close._shared.data."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from examples.open_close.openclose_loader import (
+from examples.open_close._shared.data import (
     BNA_DROPOUT_IDS,
     OpenCloseDataset,
     MISSED_ROI_IDS,

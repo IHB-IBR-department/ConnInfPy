@@ -1,36 +1,20 @@
-# ConnInfPy Examples & Validation
+# ConnInfPy examples
 
-This directory contains the tutorials, paper validation pipelines, and performance benchmarks for the `conninfpy` package.
+Runnable examples are organized by purpose. Install the package in the active Python environment (`python -m pip install -e .`). Run the module commands below from the repository root; direct script paths also resolve their defaults independently of the working directory.
 
-## Audience Routing
+| Folder | Purpose | Start here |
+|---|---|---|
+| [notebooks/](notebooks/) | Interactive tutorials | Choose a notebook for paired tests, GLM or enhancement |
+| [open_close/](open_close/) | Paired state contrasts, atlas stability and interpretation; separate existing ML studies | Its workflow table |
+| [abide/](abide/) | Observational multi-site age and diagnosis contrasts | Data preparation, then age/ or diagnosis/ |
+| [simulations/](simulations/) | Calibration, power and sensitivity under specified generative models | Explicit YAML configurations |
+| [benchmarks/performance/](benchmarks/performance/) | Timing and scaling | Benchmark CLI help |
+| [benchmarks/external_validation/](benchmarks/external_validation/) | Agreement with external implementations and bounded validation studies | Optional dependencies listed in each module |
 
-- **New to ConnInfPy?** Start with the **[notebooks/](./notebooks/)** for interactive tutorials on t-tests, GLM inference, and enhancement methods.
-- **Evaluating Paper Claims?** See the validation folders below. We recommend following the **Evidence Hierarchy** order.
-- **Performance Tuning?** See **[benchmarks/](./benchmarks/)** for acceleration and GLM timing tests.
+Each study's `_shared/` contains data adapters and support functions. `examples/_shared/` contains repository paths and small artifact utilities. These are study code, separate from the installed `conninfpy` library.
 
-## Evidence Hierarchy (Validation Folders)
+Generated results remain ignored. Shared publication plots stay at `abide/results/plots/` and `open_close/results/plots/`; benchmark outputs stay at `benchmarks/res_benchmarks/`. Saved configurations and source hashes describe the run that created them and are retained verbatim.
 
-The validation of `conninfpy` is organized by the strength of the statistical design, moving from controlled simulations to observational multi-site data:
+Simulation calibration is conditional on the generative model and tested settings. Paired Open-Close comparisons improve control of between-person variation; they do not establish causality. ABIDE diagnosis contrasts remain observational. Method agreement, bootstrap stability and cross-cohort replication measure different properties.
 
-1.  **[simulations/](./simulations/)**: **Null Calibration (FPR)** and Power. The foundation of belief; demonstrates that the package controls Type I error under null data.
-2.  **[abide/](./abide/)**: **Positive Controls (Age, Motion)**. Demonstrates that the pipeline reliably detects strong, well-replicated developmental and artifactual signals in real fMRI data.
-3.  **[open_close/](./open_close/)**: **Paired Within-Subject (Open vs. Closed Eyes)**. The strongest causal-adjacent real-data design, utilizing exact sign-flip permutations.
-4.  **[abide/](./abide/)**: **Observational Case-Control (ASD vs. HC)**. The final stress test involving multi-site harmonization (ComBat Strategy D) and stratified permutations.
-
----
-
-## Directory Overview
-
-One folder per dataset or purpose:
-
-| Folder | Contents |
-|---|---|
-| `abide/` | ABIDE I multi-site GLM validation (age, diagnosis, motion, within-site replication); `configs/` (CLI analysis files); `brainnetome_interpretation.py` |
-| `open_close/` | Open-Close (eyes closed vs open; IHB and Beijing) paired validation: loader, paired TFNBS, retest, ML transfer (`ml/`), `brainnetome_interpretation.py`, and the experiments `atlas_stability/` (Schaefer vs native Brainnetome), `sc_inference/` (structural-connectivity mask and NI-TFNBS blocks), `prediction/` (edge-model feature reproducibility) |
-| `simulations/` | FPR calibration, power analysis, sensitivity audits, structural-prior simulations |
-| `benchmarks/` | Scalability, timing and external-validation benchmarks |
-| `notebooks/` | Jupyter tutorials for getting started |
-
-The `brainnetome_interpretation.py` scripts call `conninfpy.interpret.interpret_result`.
-Every folder writes regenerable outputs to its own `results/` (git-ignored, except the paper
-plots).
+The maintained paper reproduction entry point is `bash paper/reproduce_figures.sh`. Full research runs can take hours. Inspect `--help` and use bounded synthetic checks for code validation.
