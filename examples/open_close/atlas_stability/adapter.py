@@ -18,7 +18,7 @@ here is fixed before any contrast is examined:
 """
 from __future__ import annotations
 
-import sys
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -28,15 +28,22 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "examples" / "open_close"))
 
 from conninfpy.interpret.annotate import _unit_weights, annotate_rois  # noqa: E402
 from conninfpy.atlas import get_bna_246_nifti_path  # noqa: E402
-from conninfpy.brainnetome import BrainnetomeReference  # noqa: E402
-from openclose_loader import BNA_DROPOUT_IDS, MISSED_ROI_IDS, OpenCloseDataset  # noqa: E402
+from conninfpy.atlas.brainnetome import BrainnetomeReference  # noqa: E402
+from examples.open_close._shared.data import BNA_DROPOUT_IDS, MISSED_ROI_IDS, OpenCloseDataset  # noqa: E402
 
 SCHAEFER_IMG = Path.home() / "nilearn_data" / "schaefer_2018" / "Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm.nii.gz"
+@dataclass(frozen=True)
+class StudyInputs:
+    data_dir: Path = ROOT / "datasets" / "open_close"
+    reference_dir: Path = ROOT / "datasets" / "atlases"
+    schaefer_image: Path = SCHAEFER_IMG
+
+
+DEFAULT_INPUTS = StudyInputs()
+
 # cohort -> (experiment, close run, restrict to the 47 China participants with both EC runs)
 COHORTS = {"ihb": ("ihb", 0, False), "china_ec1": ("china", 1, True), "china_ec0": ("china", 0, True)}
 MATCHED = ("schaefer", "bna", "bna_gyrus")
@@ -65,20 +72,20 @@ class Branch:
 # ----------------------------------------------------------------------
 # Reference, label images and common support
 # ----------------------------------------------------------------------
-def reference() -> BrainnetomeReference:
-    return BrainnetomeReference.load(data_dir=ROOT / "datasets" / "atlases", profiles=False)
+def reference(inputs: StudyInputs = DEFAULT_INPUTS) -> BrainnetomeReference:
+    return BrainnetomeReference.load(data_dir=inputs.reference_dir, profiles=False)
 
 
-def label_images() -> Tuple[np.ndarray, np.ndarray]:
-    s, b = nib.load(str(SCHAEFER_IMG)), nib.load(str(get_bna_246_nifti_path(2)))
+def label_images(inputs: StudyInputs = DEFAULT_INPUTS) -> Tuple[np.ndarray, np.ndarray]:
+    s, b = nib.load(str(inputs.schaefer_image)), nib.load(str(get_bna_246_nifti_path(2)))
     if s.shape != b.shape or not np.allclose(s.affine, b.affine):
         raise RuntimeError("Schaefer and BNA 2 mm label images are not on the same grid.")
     return (np.rint(np.asarray(s.dataobj)).astype(int), np.rint(np.asarray(b.dataobj)).astype(int))
 
 
-def common_support(regions: pd.DataFrame) -> Tuple[Dict[str, List[int]], pd.DataFrame]:
+def common_support(regions: pd.DataFrame, inputs: StudyInputs = DEFAULT_INPUTS) -> Tuple[Dict[str, List[int]], pd.DataFrame]:
     """Fixed common cortical support and the record of every decision."""
-    s_lab, b_lab = label_images()
+    s_lab, b_lab = label_images(inputs)
     sch_kept = sorted(set(range(1, 201)) - set(MISSED_ROI_IDS))
     cortex = [int(r) for r in regions.index[regions["structure"] == "cortex"]]
     rows, bna_keep, sch_keep = [], [], []
@@ -150,10 +157,10 @@ def _yeo_from_regions(W: np.ndarray, regions: pd.DataFrame) -> Tuple[np.ndarray,
     return np.divide(M, tot, out=np.zeros_like(M), where=tot > 0), units
 
 
-def schaefer_annotation(ref: BrainnetomeReference, ds: OpenCloseDataset):
+def schaefer_annotation(ref: BrainnetomeReference, ds: OpenCloseDataset, inputs: StudyInputs = DEFAULT_INPUTS):
     """BNA annotation of the 182 Schaefer parcels (parcel support, as in the interpretation example)."""
     return annotate_rois(reference=ref, names=list(ds.atlas_df["name"]), support="parcel", space="MNI152",
-                         parcel_image=SCHAEFER_IMG, parcel_labels=[int(i) for i in ds.atlas_df["id"]])
+                         parcel_image=inputs.schaefer_image, parcel_labels=[int(i) for i in ds.atlas_df["id"]])
 
 
 def schaefer_members(rois, ids: List[int], all_ids: List[int], networks: List[str], regions: pd.DataFrame):
@@ -197,18 +204,18 @@ def _scans(ds: OpenCloseDataset, run: int, matched: bool):
 
 
 def build_branches(cohort: str, support: Dict[str, List[int]], ref: BrainnetomeReference,
-                   schaefer_rois=None) -> Dict[str, Branch]:
+                   schaefer_rois=None, inputs: StudyInputs = DEFAULT_INPUTS) -> Dict[str, Branch]:
     experiment, run, matched = COHORTS[cohort]
     regions = ref.regions
-    s_lab, b_lab = label_images()
+    s_lab, b_lab = label_images(inputs)
     s_vox = np.bincount(s_lab.ravel(), minlength=201)
     b_vox = np.bincount(b_lab.ravel(), minlength=247)
 
-    sch = OpenCloseDataset.load(experiment)
-    bna = OpenCloseDataset.load(experiment, atlas="brainnetome")
+    sch = OpenCloseDataset.load(experiment, data_dir=inputs.data_dir)
+    bna = OpenCloseDataset.load(experiment, data_dir=inputs.data_dir, atlas="brainnetome")
     if sch.subject_ids != bna.subject_ids:
         raise RuntimeError(f"{experiment}: Schaefer and BNA subject orders differ.")
-    rois = schaefer_rois if schaefer_rois is not None else schaefer_annotation(ref, sch)
+    rois = schaefer_rois if schaefer_rois is not None else schaefer_annotation(ref, sch, inputs)
     s_ids, b_ids = [int(i) for i in sch.atlas_df["id"]], [int(i) for i in bna.atlas_df["id"]]
     s_net = list(sch.atlas_df["network"])
 
@@ -253,11 +260,11 @@ def build_branches(cohort: str, support: Dict[str, List[int]], ref: BrainnetomeR
 # ----------------------------------------------------------------------
 # Provenance: do both extraction products come from the same scans?
 # ----------------------------------------------------------------------
-def provenance(experiment: str, support: Dict[str, List[int]]) -> pd.DataFrame:
+def provenance(experiment: str, support: Dict[str, List[int]], inputs: StudyInputs = DEFAULT_INPUTS) -> pd.DataFrame:
     """Per scan: median correlation of each kept BNA region with its most-overlapping Schaefer parcel."""
-    s_lab, b_lab = label_images()
-    sch = OpenCloseDataset.load(experiment)
-    bna = OpenCloseDataset.load(experiment, atlas="brainnetome")
+    s_lab, b_lab = label_images(inputs)
+    sch = OpenCloseDataset.load(experiment, data_dir=inputs.data_dir)
+    bna = OpenCloseDataset.load(experiment, data_dir=inputs.data_dir, atlas="brainnetome")
     s_ids, b_ids = [int(i) for i in sch.atlas_df["id"]], [int(i) for i in bna.atlas_df["id"]]
     pairs = []
     for r in support["bna"]:

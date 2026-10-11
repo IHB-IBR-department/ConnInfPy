@@ -25,6 +25,14 @@ Run the sweeps with:
 
 from __future__ import annotations
 
+
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
+
+from examples._shared.paths import ROOT, config_path
 import argparse
 from pathlib import Path
 
@@ -138,7 +146,7 @@ def main():
     parser.add_argument("--sqrt-dir", type=Path, required=True)
     parser.add_argument("--linear-dir", type=Path, required=True)
     parser.add_argument("--none-dir", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, default=Path("examples/simulations/results/norm_ablation_comparison"))
+    parser.add_argument("--output-dir", type=Path, default=(ROOT / "examples/simulations/results/norm_ablation_comparison"))
     args = parser.parse_args()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)

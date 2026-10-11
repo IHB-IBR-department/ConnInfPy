@@ -25,6 +25,14 @@ Usage:
 
 from __future__ import annotations
 
+
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
+
+from examples._shared.paths import ROOT, config_path
 import argparse
 import re
 from pathlib import Path
@@ -35,7 +43,7 @@ import pandas as pd
 import seaborn as sns
 
 
-DEFAULT_RESULTS_DIR = Path("examples/simulations/results/power/power_analysis_1000_30")
+DEFAULT_RESULTS_DIR = (ROOT / "examples/simulations/results/power/power_analysis_1000_30")
 TFNBS_METHODS = ("tfnbs", "ni_tfnbs", "fbc_tfnbs")
 METRICS = ("TPR", "FDR", "FDR_strict", "precision", "FPR")
 GROUP_COLS = ["method", "scenario", "effect_size", "n_samples", "e", "h"]

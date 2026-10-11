@@ -9,6 +9,13 @@ Usage:
     python examples/abide/prepare_data.py
 """
 
+
+from pathlib import Path as _Path
+import sys as _sys
+
+if __package__ in (None, ""):
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
 import os
 import re
 import sys

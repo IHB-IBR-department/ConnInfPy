@@ -94,5 +94,5 @@ noise_level: 0.05
 # =============================================================================
 
 seed: 42
-use_mp: false
-output_dir: examples/simulations/results/power/power_analysis_quick
+n_jobs: -1            # outer simulation tasks; permutations inside each task are serial
+output_dir: ../results/power/power_analysis_quick
