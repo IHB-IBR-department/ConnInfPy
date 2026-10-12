@@ -268,7 +268,13 @@ of a region or a connection, and the summaries are descriptive: they put the
 detections next to the tested opportunities and add no test. The optional
 probabilistic and tractography maps (`BNA_PM_4D.nii.gz`,
 `BNA_SC_3D_246.zip` from atlas.brainnetome.org) are read from
-`datasets/atlases/` or `$CONNINFPY_BNA_DIR`. Brainnetome data are for
+`~/conninfpy_data/brainnetome/` by default. Set `$CONNINFPY_DATA` to a data root
+(the maps go in its `brainnetome/` subfolder), use `$CONNINFPY_BNA_DIR` for a
+direct legacy override, or pass `data_dir=`. Originals are checked against the
+bundled SHA256 manifest; they are never downloaded implicitly. Source tables
+for rebuilding live in `brainnetome/sources/`; derived arrays remain in
+`~/.cache/conninfpy/bna246/` (or `$CONNINFPY_CACHE/bna246/`). See
+[atlas resource ownership](docs/source/architecture.rst). Brainnetome data are for
 non-commercial use with attribution and share-alike (see
 `conninfpy/atlas_data/NOTICE_BRAINNETOME.txt`); the MIT licence covers the
 code only.

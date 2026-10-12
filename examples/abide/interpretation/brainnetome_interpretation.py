@@ -28,7 +28,6 @@ if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
 
 import argparse
-import sys
 import time
 from pathlib import Path
 
@@ -67,7 +66,7 @@ def main():
     n_perm = 500 if args.quick else 5000
     OUT.mkdir(parents=True, exist_ok=True)
     data = dict(np.load(ABIDE_FILE, allow_pickle=True))
-    ref = BrainnetomeReference.load(data_dir=HERE.parents[1] / "datasets" / "atlases")
+    ref = BrainnetomeReference.load()
     order = list(data["network_order"])
     rois = annotate_rois(reference=ref, names=[str(x) for x in data["roi_names"]], support="parcel",
                          space="MNI152NLin6Asym", parcel_image=SCHAEFER_100, parcel_labels=list(range(1, 101)),

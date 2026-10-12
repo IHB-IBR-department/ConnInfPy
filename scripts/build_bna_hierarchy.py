@@ -11,10 +11,11 @@ before anything is written. The output is redistributed under the Brainnetome
 terms (see conninfpy/atlas_data/NOTICE_BRAINNETOME.txt).
 
 Usage:
-    python scripts/build_bna_hierarchy.py [datasets/atlases]
+    python scripts/build_bna_hierarchy.py [--source-dir ~/conninfpy_data/brainnetome/sources]
 """
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -22,7 +23,11 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "datasets" / "atlases"
+if __package__ in (None, ""):
+    sys.path.insert(0, str(ROOT))
+
+from conninfpy.atlas.resources import brainnetome_data_dir, bundled_path, verify_brainnetome_resource
+
 OUT = ROOT / "conninfpy" / "atlas_data" / "bna246_hierarchy.csv"
 
 STRUCTURE = {"Amyg": "amygdala", "Hipp": "hippocampus", "BG": "basal_ganglia", "Tha": "thalamus"}
@@ -65,9 +70,17 @@ def _yeo(path: Path) -> pd.DataFrame:
 
 
 def main() -> None:
-    bundled = pd.read_csv(ROOT / "conninfpy" / "atlas_data" / "bna246.csv")
-    t1 = _table1(SRC / "BNA_subregions.xlsx")
-    yeo = _yeo(SRC / "subregion_func_network_Yeo_updated.csv")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("source_dir", nargs="?", type=Path, help="Legacy positional source directory")
+    parser.add_argument("--source-dir", dest="source_override", type=Path, help="Directory containing original hierarchy tables")
+    parser.add_argument("--output", type=Path, default=OUT)
+    args = parser.parse_args()
+    source = (args.source_override or args.source_dir or brainnetome_data_dir() / "sources").expanduser().resolve()
+    bundled = pd.read_csv(bundled_path("bna246.csv"))
+    t1_path = verify_brainnetome_resource(source / "BNA_subregions.xlsx", "sources/BNA_subregions.xlsx")
+    yeo_path = verify_brainnetome_resource(source / "subregion_func_network_Yeo_updated.csv", "sources/subregion_func_network_Yeo_updated.csv")
+    t1 = _table1(t1_path)
+    yeo = _yeo(yeo_path)
     out = bundled[["roi_id", "name", "x", "y", "z"]].merge(t1, on="roi_id", validate="1:1")
     out = out.merge(yeo[["roi_id", "short", "region", "yeo7_id", "yeo7", "yeo17_id", "yeo17"]],
                     on="roi_id", validate="1:1")
@@ -83,8 +96,9 @@ def main() -> None:
 
     cols = ["roi_id", "name", "hemisphere", "homolog_id", "code", "description", "gyrus", "gyrus_name",
             "lobe", "structure", "yeo7_id", "yeo7", "yeo17_id", "yeo17", "x", "y", "z"]
-    out[cols].to_csv(OUT, index=False)
-    print(f"wrote {OUT.relative_to(ROOT)}: {len(out)} regions")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    out[cols].to_csv(args.output, index=False)
+    print(f"wrote {args.output}: {len(out)} regions")
 
 
 if __name__ == "__main__":
