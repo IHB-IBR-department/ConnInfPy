@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "relocated_on": "2026-10-12",
+  "original_sidecars": "Preserved byte-for-byte; their files fields record the original extraction locations.",
+  "files": {
+    "extraction_summary.json": {
+      "current_path": "examples/simulations/sc_prior/data/extraction_summary.json",
+      "original_path": "datasets/atlases/sc/extraction_summary.json",
+      "sha256": "33e34d2ead3e9110f681c7ab18e30c8152665de40624b0784eb8af1b56fa2482"
+    },
+    "sc_schaefer100_hcp.json": {
+      "current_path": "examples/simulations/sc_prior/data/sc_schaefer100_hcp.json",
+      "original_path": "datasets/atlases/sc/sc_schaefer100_hcp.json",
+      "sha256": "e1695b857ecb2ec60bc76150798cbf11e1962f95cfee610300cc48158aa9c590"
+    },
+    "sc_schaefer100_hcp.labels.txt": {
+      "current_path": "examples/simulations/sc_prior/data/sc_schaefer100_hcp.labels.txt",
+      "original_path": "datasets/atlases/sc/sc_schaefer100_hcp.labels.txt",
+      "sha256": "d68df70e2e7e45e4faba1691fe7f714e8d143d46c579ad5fb7e22a0d14946fd2"
+    },
+    "sc_schaefer100_hcp.npy": {
+      "current_path": "examples/simulations/sc_prior/data/sc_schaefer100_hcp.npy",
+      "original_path": "datasets/atlases/sc/sc_schaefer100_hcp.npy",
+      "sha256": "54b47d36c078b5d637249652b75253dd9f33917a7bcb7f036b9167c6198bc8ae"
+    },
+    "sc_schaefer200_hcp.json": {
+      "current_path": "examples/simulations/sc_prior/data/sc_schaefer200_hcp.json",
+      "original_path": "datasets/atlases/sc/sc_schaefer200_hcp.json",
+      "sha256": "2eabcd52fe8de6d3532f0dcb593d96c889c35e49401790f5b6241f73cf7417e9"
+    },
+    "sc_schaefer200_hcp.labels.txt": {
+      "current_path": "examples/simulations/sc_prior/data/sc_schaefer200_hcp.labels.txt",
+      "original_path": "datasets/atlases/sc/sc_schaefer200_hcp.labels.txt",
+      "sha256": "b142eb6fdf9fb4905d0abc5b6e87fd4159a3740d526c3e3cdcf2ad9d1fec9171"
+    },
+    "sc_schaefer200_hcp.npy": {
+      "current_path": "examples/simulations/sc_prior/data/sc_schaefer200_hcp.npy",
+      "original_path": "datasets/atlases/sc/sc_schaefer200_hcp.npy",
+      "sha256": "0139914627cb1084f150a55c032fb2cffa91dbcd38699fc0f2e363ea366ecf19"
+    },
+    "sc_schaefer400_hcp.json": {
+      "current_path": "examples/simulations/sc_prior/data/sc_schaefer400_hcp.json",
+      "original_path": "datasets/atlases/sc/sc_schaefer400_hcp.json",
+      "sha256": "45b8b248d07dd61b6df7928b4efa13056714ee8921dd597a3b415e8097b05831"
+    },
+    "sc_schaefer400_hcp.labels.txt": {
+      "current_path": "examples/simulations/sc_prior/data/sc_schaefer400_hcp.labels.txt",
+      "original_path": "datasets/atlases/sc/sc_schaefer400_hcp.labels.txt",
+      "sha256": "0ec112d544db33abb761b82e788cb5b5c1f184ba623f79b45cb0e11a2a9a2e96"
+    },
+    "sc_schaefer400_hcp.npy": {
+      "current_path": "examples/simulations/sc_prior/data/sc_schaefer400_hcp.npy",
+      "original_path": "datasets/atlases/sc/sc_schaefer400_hcp.npy",
+      "sha256": "b5055af739a63715bd62238292e863f3400718bc19ce5ba6a1d7ec3b69bc9de4"
+    }
+  }
+}

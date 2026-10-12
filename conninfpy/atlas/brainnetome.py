@@ -40,8 +40,9 @@ import numpy.typing as npt
 
 from conninfpy.atlas.resources import (
     _default_cache,
-    _find_data_dir,
     _sha256,
+    brainnetome_data_dir,
+    brainnetome_resource_path,
     read_bna_hierarchy,
 )
 
@@ -88,7 +89,8 @@ class BrainnetomeReference:
         data_dir : path, optional
             Folder holding the optional local files (``BNA_PM_4D.nii.gz``,
             ``BNA_SC_3D_246.zip``). Defaults to ``$CONNINFPY_BNA_DIR`` or
-            ``./datasets/atlases`` when they exist.
+            ``$CONNINFPY_DATA/brainnetome`` (``~/conninfpy_data/brainnetome``).
+            Originals are checked against the bundled source manifest when used.
         resolution_mm : {1, 2}
             Bundled label image to use (1 mm by default: spheres of a few
             millimetres need it).
@@ -114,7 +116,7 @@ class BrainnetomeReference:
         ref = cls(
             regions=regions,
             label_image=img,
-            data_dir=_find_data_dir(data_dir),
+            data_dir=brainnetome_data_dir(data_dir),
             cache_dir=cache,
         )
         ref.provenance = {
@@ -222,12 +224,14 @@ class BrainnetomeReference:
     def _membership_matrix(self):
         if self._pm is not None:
             return self._pm
-        if self.data_dir is None or not (self.data_dir / PM_FILE).exists():
+        if self.data_dir is None:
+            return None
+        path = brainnetome_resource_path(PM_FILE, data_dir=self.data_dir)
+        if path is None:
             return None
         import nibabel as nib
         from scipy import sparse
 
-        path = self.data_dir / PM_FILE
         digest = _sha256(path)
         cache = self.cache_dir / f"pm_sparse_{digest[:16]}.npz"
         img = nib.load(str(path))
@@ -259,11 +263,13 @@ class BrainnetomeReference:
         """
         if self._sc is not None:
             return self._sc
-        if self.data_dir is None or not (self.data_dir / SC_FILE).exists():
+        if self.data_dir is None:
+            return None
+        path = brainnetome_resource_path(SC_FILE, data_dir=self.data_dir)
+        if path is None:
             return None
         import nibabel as nib
 
-        path = self.data_dir / SC_FILE
         digest = _sha256(path)
         cache = self.cache_dir / f"sc_derived_{digest[:16]}.npy"
         if cache.exists():

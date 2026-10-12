@@ -1,7 +1,7 @@
-"""Access to bundled atlas snapshots and existing external BNA resources.
+"""Bundled atlas snapshots, configured external originals and derived caches.
 
-Package resources stay in atlas_data; source-selection behavior is preserved.
-Materialized paths remain alive for lazy image reads until process exit.
+Materialized package paths remain alive for lazy image reads until process exit.
+Optional originals are never located relative to the caller's working directory.
 """
 
 from __future__ import annotations
@@ -77,16 +77,82 @@ def _default_cache() -> Path:
     return Path(base) / "bna246"
 
 
+def brainnetome_data_dir(data_dir: Optional[Union[str, Path]] = None) -> Path:
+    """Directory for optional Brainnetome originals; does not create it.
+
+    Precedence: explicit ``data_dir``, legacy ``CONNINFPY_BNA_DIR``, then
+    ``CONNINFPY_DATA/brainnetome`` (default ``~/conninfpy_data/brainnetome``).
+    An explicit directory is authoritative, even if it does not exist.
+    Derived caches use ``CONNINFPY_CACHE`` separately.
+    """
+    if data_dir is not None:
+        path = Path(data_dir)
+    elif os.environ.get("CONNINFPY_BNA_DIR"):
+        path = Path(os.environ["CONNINFPY_BNA_DIR"])
+    else:
+        base = Path(os.environ.get("CONNINFPY_DATA", str(Path.home() / "conninfpy_data")))
+        path = base / "brainnetome"
+    return path.expanduser().resolve()
+
+
 def _find_data_dir(data_dir: Optional[Union[str, Path]]) -> Optional[Path]:
-    candidates = [
-        data_dir,
-        os.environ.get("CONNINFPY_BNA_DIR"),
-        Path.cwd() / "datasets" / "atlases",
-    ]
-    for c in candidates:
-        if c is not None and Path(c).is_dir():
-            return Path(c)
-    return None
+    """Compatibility helper for optional references without local originals."""
+    path = brainnetome_data_dir(data_dir)
+    return path if path.is_dir() else None
+
+
+@lru_cache(maxsize=32)
+def _original_sha256(path: str, size: int, mtime_ns: int, ctime_ns: int) -> str:
+    """Reuse integrity checks while the original's filesystem identity is stable."""
+    return _sha256(Path(path))
+
+
+def brainnetome_resource_path(
+    filename: str,
+    *,
+    data_dir: Optional[Union[str, Path]] = None,
+    required: bool = False,
+) -> Optional[Path]:
+    """Locate and verify a versioned optional original from the source manifest.
+
+    Missing optional files return ``None``. ``required=True`` gives manual
+    acquisition instructions. A different/corrupt source raises ``ValueError``;
+    no implicit download or fallback to another directory occurs.
+    """
+    manifest = json.loads(bundled_path("brainnetome_external.json").read_text())
+    if filename not in manifest["resources"]:
+        raise ValueError(f"Unknown Brainnetome original: {filename!r}")
+    path = brainnetome_data_dir(data_dir) / filename
+    if not path.is_file():
+        if required:
+            raise FileNotFoundError(
+                f"Missing Brainnetome original: {path}. Obtain {Path(filename).name} "
+                f"from {manifest['source_url']} under the provider's terms and place "
+                "it here, or set data_dir, CONNINFPY_BNA_DIR or CONNINFPY_DATA."
+            )
+        return None
+    return verify_brainnetome_resource(path, filename)
+
+
+def verify_brainnetome_resource(path: Union[str, Path], filename: str) -> Path:
+    """Verify an explicitly located original against its manifest resource ID.
+
+    This also supports rebuilding from source tables in an arbitrary directory.
+    ``filename`` is the manifest key, such as ``sources/BNA_subregions.xlsx``.
+    """
+    manifest = json.loads(bundled_path("brainnetome_external.json").read_text())
+    if filename not in manifest["resources"]:
+        raise ValueError(f"Unknown Brainnetome original: {filename!r}")
+    path = Path(path).expanduser().resolve()
+    stat = path.stat()
+    digest = _original_sha256(str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+    expected = manifest["resources"][filename]["sha256"]
+    if digest != expected:
+        raise ValueError(
+            f"{path}: SHA256 {digest} does not match the versioned Brainnetome "
+            f"original ({expected}). Check the source/version before using it."
+        )
+    return path
 
 
 def get_bna_246_nifti_path(resolution_mm: int = 2) -> Path:

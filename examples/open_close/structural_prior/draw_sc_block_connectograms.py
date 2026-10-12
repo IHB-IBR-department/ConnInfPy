@@ -23,7 +23,6 @@ import sys as _sys
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
 
-import sys
 from pathlib import Path
 
 import matplotlib
@@ -58,7 +57,7 @@ def prior_label(prior: str, n_modules: int) -> str:
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    ref = BrainnetomeReference.load(data_dir=ROOT / "datasets" / "atlases", profiles=False)
+    ref = BrainnetomeReference.load(profiles=False)
     ds = OpenCloseDataset.load("ihb", atlas="brainnetome")
     rois = annotate_bna_regions(ds.atlas_df["id"], reference=ref)
     table = pd.read_csv(RES / "sc_block_priors.csv")

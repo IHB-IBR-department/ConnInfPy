@@ -62,7 +62,7 @@ def fisher_z(ts):
 
 def load(cohorts=None):
     cohorts = COHORTS if cohorts is None else cohorts
-    ref = BrainnetomeReference.load(data_dir=ROOT / "datasets" / "atlases", profiles=False)
+    ref = BrainnetomeReference.load(profiles=False)
     data, ids, nets = {}, None, None
     for cohort, (exp, run, matched) in cohorts.items():
         ds = OpenCloseDataset.load(exp, atlas="brainnetome")
@@ -72,7 +72,8 @@ def load(cohorts=None):
         ids, nets = ds.atlas_df["id"].to_numpy(int), list(ds.atlas_df["network"])
     sc = ref.structural_connectivity()
     if sc is None:
-        raise SystemExit("Brainnetome SC (BNA_SC_3D_246.zip) not found in datasets/atlases.")
+        raise SystemExit(f"Brainnetome SC (BNA_SC_3D_246.zip) not found in {ref.data_dir}; "
+                         "set CONNINFPY_DATA or CONNINFPY_BNA_DIR (see atlas-data documentation).")
     sc = np.nan_to_num(sc[np.ix_(ids - 1, ids - 1)], nan=0.0)
     r = ref.regions.loc[ids]
     xyz = r[["x", "y", "z"]].to_numpy(float)

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "reference_set": "Provider originals present at the 2026-10-12 cleanup; hashes computed locally, not provider-published checksums",
+  "source_url": "https://atlas.brainnetome.org/download.html",
+  "notice": "NOTICE_BRAINNETOME.txt",
+  "resources": {
+    "BNA_PM_4D.nii.gz": {
+      "sha256": "b1318517f61d08f714c25e55ee580eb8a487c0b7ab1ddbcc7eac852e4e97f020",
+      "size_bytes": 8547072
+    },
+    "BNA_SC_3D_246.zip": {
+      "sha256": "a9b844a86964dfcbeaa5bdfb65c4a0c57badd8781c3816e025170afe465ad74d",
+      "size_bytes": 12786781
+    },
+    "sources/BNA_subregions.xlsx": {
+      "sha256": "1067afdc3ff47be923404a2b277eca7a05ecaf70517a3af1ffa85b74046ea6be",
+      "size_bytes": 21911
+    },
+    "sources/subregion_func_network_Yeo_updated.csv": {
+      "sha256": "f3cf6ce93f071cf7cfb6de0df78cead1551ebc879ba8d903eb186505b5eedb70",
+      "size_bytes": 8232
+    },
+    "sources/BN_Atlas_246_LUT.txt": {
+      "sha256": "23e20b1fbd5628962f9bb3fb984b46f13214f7a273efce0fad25c98f06d9ada7",
+      "size_bytes": 5802
+    }
+  }
+}

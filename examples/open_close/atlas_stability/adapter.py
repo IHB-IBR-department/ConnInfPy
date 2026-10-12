@@ -30,7 +30,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[3]
 
 from conninfpy.interpret.annotate import _unit_weights, annotate_rois  # noqa: E402
-from conninfpy.atlas import get_bna_246_nifti_path  # noqa: E402
+from conninfpy.atlas import brainnetome_data_dir, get_bna_246_nifti_path  # noqa: E402
 from conninfpy.atlas.brainnetome import BrainnetomeReference  # noqa: E402
 from examples.open_close._shared.data import BNA_DROPOUT_IDS, MISSED_ROI_IDS, OpenCloseDataset  # noqa: E402
 
@@ -38,7 +38,7 @@ SCHAEFER_IMG = Path.home() / "nilearn_data" / "schaefer_2018" / "Schaefer2018_20
 @dataclass(frozen=True)
 class StudyInputs:
     data_dir: Path = ROOT / "datasets" / "open_close"
-    reference_dir: Path = ROOT / "datasets" / "atlases"
+    reference_dir: Path = field(default_factory=brainnetome_data_dir)
     schaefer_image: Path = SCHAEFER_IMG
 
 
