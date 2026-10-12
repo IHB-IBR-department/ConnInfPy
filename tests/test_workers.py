@@ -3,6 +3,7 @@
 import functools
 from concurrent.futures import ThreadPoolExecutor
 import multiprocessing
+import pickle
 import sys
 from unittest.mock import patch
 
@@ -54,7 +55,7 @@ def test_invalid_worker_count_is_rejected(count):
 
 
 @pytest.mark.parametrize("verbose", [False, True])
-def test_task_is_sent_once_per_worker(worker_context, tmp_path, verbose):
+def test_task_is_serialized_once_for_all_workers(worker_context, tmp_path, verbose):
     log = tmp_path / "pickles.txt"
     out = _workers.run_permutations(
         CountTaskPickles(log),
@@ -63,7 +64,28 @@ def test_task_is_sent_once_per_worker(worker_context, tmp_path, verbose):
         verbose=verbose,
     )
     assert out == [seed * seed for seed in range(32)]
-    assert log.read_text().splitlines() == ["pickle", "pickle"]
+    assert log.read_text().splitlines() == ["pickle"]
+
+
+def test_worker_startup_carries_only_the_task_path(worker_context, tmp_path):
+    # A large task must not travel through the per-worker start-up channel,
+    # which spawn / forkserver serve one worker at a time.
+    payload = np.arange(2_000_000, dtype=np.float64)                  # 16 MB
+    task = functools.partial(np.take, payload)
+    with patch.object(_workers.tempfile, "tempdir", str(tmp_path)):
+        with patch.object(worker_context, "Pool", wraps=worker_context.Pool) as pool:
+            out = _workers.run_permutations(task, [0, 5, 1_999_999], n_processes=2)
+    assert out == [0.0, 5.0, 1_999_999.0]
+    (path,) = pool.call_args.kwargs["initargs"]
+    assert isinstance(path, str) and len(pickle.dumps(pool.call_args.kwargs["initargs"])) < 1024
+    assert list(tmp_path.iterdir()) == []                              # task file removed
+
+
+def test_task_file_is_removed_after_a_worker_failure(worker_context, tmp_path):
+    with patch.object(_workers.tempfile, "tempdir", str(tmp_path)):
+        with pytest.raises(ValueError, match="deliberate worker failure"):
+            _workers.run_permutations(fail_on_seed, [1, 2, 3], n_processes=2)
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_thread_caps_apply_only_in_workers(worker_context):
