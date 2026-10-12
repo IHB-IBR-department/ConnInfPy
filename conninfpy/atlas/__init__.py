@@ -4,6 +4,8 @@ from conninfpy.atlas.brainnetome import BrainnetomeReference
 from conninfpy.atlas.metadata import AtlasInfo, assign_coordinates
 from conninfpy.atlas.resources import (
     bna_profile_paths,
+    brainnetome_data_dir,
+    brainnetome_resource_path,
     fetch_bna_behavioral_decoding,
     get_bna_246_nifti_path,
 )
@@ -14,6 +16,8 @@ __all__ = [
     "BrainnetomeReference",
     "get_bna_246_nifti_path",
     "bna_profile_paths",
+    "brainnetome_data_dir",
+    "brainnetome_resource_path",
     "fetch_bna_behavioral_decoding",
 ]
 

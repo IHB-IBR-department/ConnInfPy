@@ -92,7 +92,7 @@ def main():
     t0 = time.time()
     data, sc, dist, hemi, cortex, nets, yeo_labels, ids = R.load(COHORTS)
     from conninfpy.atlas.brainnetome import BrainnetomeReference
-    regions = BrainnetomeReference.load(data_dir=R.ROOT / "datasets" / "atlases", profiles=False).regions.loc[ids]
+    regions = BrainnetomeReference.load(profiles=False).regions.loc[ids]
     edges = R.edge_table(sc, dist, hemi, cortex, nets)
     parts, scan = sc_partitions(sc, regions)
     scan.to_csv(OUT / "sc_module_scan.csv", index=False)

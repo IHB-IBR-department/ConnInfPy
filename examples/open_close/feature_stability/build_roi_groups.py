@@ -11,14 +11,13 @@ if __package__ in (None, ""):
 import argparse
 import json
 from pathlib import Path
-import sys
 
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[3]
 
 from conninfpy.interpret.annotate import annotate_rois  # noqa: E402
-from conninfpy.atlas.resources import bundled_path
+from conninfpy.atlas.resources import brainnetome_data_dir, bundled_path
 from conninfpy.atlas.brainnetome import BrainnetomeReference  # noqa: E402
 from examples._shared.paths import sha256  # noqa: E402
 
@@ -28,7 +27,7 @@ HERE = Path(__file__).resolve().parent
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--parcel-image", type=Path, default=Path.home() / "nilearn_data/schaefer_2018/Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm.nii.gz")
-    parser.add_argument("--reference-dir", type=Path, default=ROOT / "datasets/atlases")
+    parser.add_argument("--reference-dir", type=Path, default=brainnetome_data_dir())
     parser.add_argument("--labels", type=Path, default=ROOT / "datasets/open_close/schaefer_labels.csv")
     parser.add_argument("--output", type=Path, default=HERE / "roi_groups.csv")
     args = parser.parse_args()

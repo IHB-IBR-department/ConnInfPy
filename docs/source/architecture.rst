@@ -47,11 +47,25 @@ constructors, manifest ``BUILTIN:`` tokens and Brainnetome annotation use
 ``atlas.resources`` for access. Materialized package-resource paths remain
 valid for the process lifetime, including lazy NIfTI image reads.
 
-The existing optional-map ``data_dir`` / ``CONNINFPY_BNA_DIR`` lookup and
-``cache_dir`` / ``CONNINFPY_CACHE`` behavior are preserved. This structural
-refactor does not migrate external PM/SC files or change the profile-refresh
-API. Ordinary profile loading uses bundled snapshots; explicitly specifying
-the existing fetch API's cache directory retains its download/cache behavior.
+Optional originals use ``atlas.resources.brainnetome_data_dir()``. Resolution
+is explicit ``data_dir``, then the direct legacy ``CONNINFPY_BNA_DIR`` override,
+then ``CONNINFPY_DATA/brainnetome`` (default ``~/conninfpy_data/brainnetome``).
+The caller's working directory is not searched. PM/SC maps occupy this directory;
+hierarchy-build tables occupy its ``sources/`` subdirectory. The bundled
+``brainnetome_external.json`` records the reference originals' locally computed
+SHA256 values, not provider-published checksums. Different source versions
+are rejected when used, rather than silently changing an interpretation.
+``brainnetome_resource_path(..., required=True)`` explains manual acquisition
+when a file is missing. No implicit atlas download occurs.
+
+Derived arrays use ``cache_dir`` / ``CONNINFPY_CACHE`` separately, defaulting to
+``~/.cache/conninfpy/bna246``. Ordinary BrainMap profile loading uses bundled
+snapshots; the explicit profile-refresh API retains its download/cache behavior.
+ENIGMA Schaefer SC fixtures belong to ``examples/simulations/sc_prior/data/``.
+``datasets/`` contains study inputs and manifests, not package atlas copies.
+
+``scripts/build_bna_hierarchy.py`` reads configured external sources by default
+and supports ``--source-dir`` and ``--output`` for explicit rebuilds.
 
 ``interpret`` annotates the ROIs/edges of the supplied result. Anatomical
 summaries do not change its parcellation, p-values or inference unit.

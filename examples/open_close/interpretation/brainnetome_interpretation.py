@@ -43,7 +43,6 @@ if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
 
 import argparse
-import sys
 import time
 from pathlib import Path
 
@@ -96,7 +95,7 @@ def main():
     native = args.atlas == "brainnetome"
     out_dir = HERE / "results" / ("brainnetome_native" if native else "brainnetome")
     out_dir.mkdir(parents=True, exist_ok=True)
-    ref = BrainnetomeReference.load(data_dir=HERE.parents[1] / "datasets" / "atlases")
+    ref = BrainnetomeReference.load()
     atlas_name = "BNA-246 (242 regions, native)" if native else "Schaefer-200 (182 parcels)"
     report = [f"# Brainnetome interpretation of the Open-Close results ({atlas_name})\n\n"
               f"`examples/open_close/interpretation/brainnetome_interpretation.py --atlas {args.atlas}`, {n_perm} permutations, "

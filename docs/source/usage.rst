@@ -593,8 +593,13 @@ distance check, evidence packet, connectograms):
 
 The probabilistic and tractography maps (``BNA_PM_4D.nii.gz``,
 ``BNA_SC_3D_246.zip``, from atlas.brainnetome.org) are optional and read from
-``datasets/atlases/`` or ``$CONNINFPY_BNA_DIR``; derived arrays are cached
-once in ``~/.cache/conninfpy/bna246``. Brainnetome data are for non-commercial
+``~/conninfpy_data/brainnetome/``. The configured root is
+``$CONNINFPY_DATA/brainnetome``; ``$CONNINFPY_BNA_DIR`` remains a direct
+legacy override, and explicit ``data_dir=`` takes precedence. Originals
+are SHA256-checked against the bundled reference manifest. Missing optional
+resources leave anatomical annotation available without downloading them.
+Derived arrays are cached separately in ``~/.cache/conninfpy/bna246``
+(or ``$CONNINFPY_CACHE/bna246``). Brainnetome data are for non-commercial
 use with attribution and share-alike (``conninfpy/atlas_data/NOTICE_BRAINNETOME.txt``).
 
 Coefficient maps and baseline coupling — ``result.beta``

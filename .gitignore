@@ -74,6 +74,8 @@ Abide_Validation_Plan.md
 OpenClose_Validation_Plan.md
 
 # Local-only datasets
+# Retired atlas-download location; originals use the configured external data root.
+/datasets/atlases/
 datasets/abide_full.yaml
 datasets/china_close_close.yaml
 datasets/stress_connectivity.yaml
