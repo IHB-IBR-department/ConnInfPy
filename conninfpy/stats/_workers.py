@@ -7,6 +7,13 @@ keep the previous silent behaviour.
 
 The helper handles the multiprocessing decision internally so call
 sites collapse from ten lines to one.
+
+The data-bearing task is serialized once into a private temporary file and
+each worker loads it from there when it starts. Pool initializer arguments
+travel through each worker's start-up channel one worker at a time (spawn /
+forkserver), so a large task passed there serialized worker start-up: about
+0.8 s per worker for an 11.5 MB task, roughly 15 s for 18 workers. A path is
+a few bytes, and the workers read the file from the page cache in parallel.
 """
 
 from __future__ import annotations
@@ -14,8 +21,12 @@ from __future__ import annotations
 import contextlib
 import functools
 import multiprocessing
+import multiprocessing.reduction
 import operator
+import os
+import pickle
 import sys
+import tempfile
 import threading
 from typing import Any, Callable, Iterator, List, Optional, Sequence, TypeVar
 
@@ -50,11 +61,30 @@ def _limit_worker_threads() -> None:
     _worker_thread_limiter = threadpool_limits(limits=1)
 
 
-def _initialize_worker_task(task_func: Callable[[int], Any]) -> None:
-    """Install the data-bearing task once, instead of sending it per chunk."""
+def _initialize_worker_task(task_path: str) -> None:
+    """Load the data-bearing task once per worker from the parent's task file."""
     global _worker_task
     _limit_worker_threads()
-    _worker_task = task_func
+    with open(task_path, "rb") as stream:
+        _worker_task = pickle.load(stream)
+
+
+@contextlib.contextmanager
+def _task_file(task_func: Callable[..., Any]) -> Iterator[str]:
+    """Serialize the task once into a private temporary file; yield its path.
+
+    The file (mode 0600, in ``tempfile.gettempdir()``) is removed when the
+    block exits, after the pool has been shut down, on success or failure.
+    ``ForkingPickler`` keeps multiprocessing's own reducers, as for initargs.
+    """
+    fd, path = tempfile.mkstemp(prefix="conninfpy-task-", suffix=".pkl")
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            multiprocessing.reduction.ForkingPickler(stream, pickle.HIGHEST_PROTOCOL).dump(task_func)
+        yield path
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(path)
 
 
 def _run_worker_seed(seed: int) -> Any:
@@ -194,33 +224,34 @@ def run_permutations(
     # are copied once per worker at startup. Balanced chunks also avoid one
     # queue message per permutation when progress reporting is enabled.
     chunksize = max(1, (n + 4 * workers - 1) // (4 * workers))
-    with _workers_skip_main_script(task_func):
-        pool = ctx.Pool(
-            processes=workers,
-            initializer=_initialize_worker_task,
-            initargs=(task_func,),
-        )
-    with pool as p:
-        if not verbose:
-            return list(p.map(_run_worker_seed, seeds, chunksize=chunksize))
-        if _HAS_TQDM:
-            out2: List[T] = []
-            for r in tqdm(
-                p.imap(_run_worker_seed, seeds, chunksize=chunksize),
-                total=n,
-                desc=desc,
-                leave=False,
+    with _task_file(task_func) as task_path:
+        with _workers_skip_main_script(task_func):
+            pool = ctx.Pool(
+                processes=workers,
+                initializer=_initialize_worker_task,
+                initargs=(task_path,),
+            )
+        with pool as p:
+            if not verbose:
+                return list(p.map(_run_worker_seed, seeds, chunksize=chunksize))
+            if _HAS_TQDM:
+                out2: List[T] = []
+                for r in tqdm(
+                    p.imap(_run_worker_seed, seeds, chunksize=chunksize),
+                    total=n,
+                    desc=desc,
+                    leave=False,
+                ):
+                    out2.append(r)
+                return out2
+            out3: List[T] = []
+            for i, r in enumerate(
+                p.imap(_run_worker_seed, seeds, chunksize=chunksize), start=1
             ):
-                out2.append(r)
-            return out2
-        out3: List[T] = []
-        for i, r in enumerate(
-            p.imap(_run_worker_seed, seeds, chunksize=chunksize), start=1
-        ):
-            out3.append(r)
-            if i % log_every == 0 or i == n:
-                _print_progress(i, n, desc)
-        return out3
+                out3.append(r)
+                if i % log_every == 0 or i == n:
+                    _print_progress(i, n, desc)
+            return out3
 
 
 def _print_progress(i: int, n: int, desc: str) -> None:
