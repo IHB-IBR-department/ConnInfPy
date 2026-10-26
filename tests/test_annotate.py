@@ -93,6 +93,21 @@ class TestRoiAnnotation(unittest.TestCase):
         self.assertEqual(list(t["region"]), ["A8m_L", "A8m_R", "mAmyg_L"])
         self.assertTrue((t["region_purity"] > 0.9).all())
 
+    def test_yeo17_label_needs_its_own_purity(self):
+        import nibabel as nib
+
+        bna = nib.load(str(get_bna_246_nifti_path(2)))
+        lab = np.rint(np.asarray(bna.dataobj)).astype(int)
+        # A8dl_L (Default A) + A9l_L (Default B): one Yeo-7 network, split between two Yeo-17 networks
+        img = nib.Nifti1Image(np.isin(lab, [3, 5]).astype(np.int16), bna.affine)
+        r = annotate_rois(reference=self.ref, support="parcel", parcel_image=img, parcel_labels=[1]).table.iloc[0]
+        self.assertEqual((r["yeo7"], r["yeo7_purity"]), ("Default", 1.0))
+        self.assertTrue(0.5 < r["yeo17_purity"] < 0.6)
+        self.assertEqual(r["yeo17"], "Default A")
+        strict = annotate_rois(reference=self.ref, support="parcel", parcel_image=img, parcel_labels=[1],
+                               purity=0.6).table.iloc[0]
+        self.assertEqual((strict["yeo7"], strict["yeo17"]), ("Default", "mixed"))
+
     def test_space_is_declared_not_guessed(self):
         with self.assertRaises(NotImplementedError):
             annotate_rois([(0, 0, 0)], reference=self.ref, support="point", space="Talairach")

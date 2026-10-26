@@ -107,7 +107,7 @@ class RoiAnnotation:
         return out
 
     def to_atlas(self, level: str = "lobe") -> Any:
-        """:class:`~conninfpy.AtlasInfo` grouping the ROIs at ``level`` (for network summaries)."""
+        """:class:`~conninfpy.atlas.AtlasInfo` grouping the ROIs at ``level`` (for network summaries)."""
         from conninfpy.atlas.metadata import AtlasInfo
 
         t = self.table
@@ -181,8 +181,12 @@ def annotate_rois(
         Template of the coordinates. ``'MNI152NLin6Asym'`` (FSL MNI152, the
         atlas's own grid) is exact; ``'MNI152'``, ``'MNI152NLin2009cAsym'``
         (fMRIPrep) and similar MNI variants differ by about 1-3 mm and are
-        flagged approximate. Talairach coordinates must be converted first
-        (e.g. Lancaster et al. 2007); the space is never guessed from values.
+        flagged approximate. The default assumes FSL MNI152 and adds no flag,
+        so set ``space`` whenever the signals were extracted in another
+        template (fMRIPrep's default output is ``'MNI152NLin2009cAsym'``;
+        ``'MNI152'`` when the variant is unknown). Talairach coordinates must
+        be converted first (e.g. Lancaster et al. 2007); the space is never
+        guessed from values.
     support : {'sphere', 'parcel', 'point'}
         What produced each ROI's signal: a sphere of ``radius_mm`` around the
         centre, the voxels of ``parcel_labels`` in ``parcel_image``, or (when
@@ -223,7 +227,9 @@ def annotate_rois(
         ``table`` columns: roi, x, y, z, support, radius_mm, n_voxels,
         coverage, level, assigned, region, region_purity, gyrus, lobe,
         hemisphere, structure, description, yeo7, yeo7_purity, yeo17,
-        regions, membership, domains, profile_status, flags, network.
+        yeo17_purity, regions, membership, domains, profile_status, flags,
+        network. ``yeo7`` and ``yeo17`` each follow the ``purity`` rule on
+        their own shares (cortex only).
     """
     import pandas as pd
 
@@ -439,7 +445,8 @@ def _describe(r, name, centre, world, w, m, regions, ref, support, radius, space
         "radius_mm": float(radius) if support == "sphere" else np.nan, "n_voxels": len(world),
         "coverage": coverage, "level": "unassigned", "assigned": "unassigned", "region": "",
         "region_purity": np.nan, "gyrus": "", "lobe": "", "hemisphere": "", "structure": "",
-        "description": "", "yeo7": "", "yeo7_purity": np.nan, "yeo17": "", "regions": "",
+        "description": "", "yeo7": "", "yeo7_purity": np.nan, "yeo17": "", "yeo17_purity": np.nan,
+        "regions": "",
         "membership": "", "domains": "", "profile_status": "unassigned",
     }
     if m is not None and m.sum() > 0:
@@ -469,8 +476,8 @@ def _describe(r, name, centre, world, w, m, regions, ref, support, radius, space
     st_key, st_p = _shares(w_lab, list(regions.structure))
     yeo_keys = [y if s == "cortex" else "not applicable" for y, s in zip(regions.yeo7, regions.structure)]
     y_key, y_p = _shares(w_lab, yeo_keys)
-    y17_key, _ = _shares(w_lab, [y if s == "cortex" else "not applicable"
-                                 for y, s in zip(regions.yeo17, regions.structure)])
+    y17_key, y17_p = _shares(w_lab, [y if s == "cortex" else "not applicable"
+                                     for y, s in zip(regions.yeo17, regions.structure)])
 
     if sub_p >= purity:
         level, assigned = "subregion", regions.at[dom, "name"]
@@ -488,7 +495,7 @@ def _describe(r, name, centre, world, w, m, regions, ref, support, radius, space
         "hemisphere": hemi, "structure": st_key if st_p >= purity else "mixed",
         "description": regions.at[dom, "description"] if level == "subregion" else "",
         "yeo7": y_key if y_p >= purity else "mixed", "yeo7_purity": y_p,
-        "yeo17": y17_key if y_p >= purity else "mixed",
+        "yeo17": y17_key if y17_p >= purity else "mixed", "yeo17_purity": y17_p,
     })
     if ref.profiles is not None:
         contrib = [int(k) + 1 for k in np.flatnonzero(w_lab >= min_weight)]

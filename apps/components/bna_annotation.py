@@ -15,9 +15,17 @@ from conninfpy.brainnetome import BrainnetomeReference
 from conninfpy.interpret.evidence import build_annotation_evidence, describe_coverage, summarize_terms
 
 
+# Unknown variant first: an undeclared space is flagged approximate, never assumed exact.
+_SPACES = {
+    "MNI152": "MNI152, variant unknown",
+    "MNI152NLin6Asym": "FSL MNI152 (MNI152NLin6Asym)",
+    "MNI152NLin2009cAsym": "fMRIPrep MNI152NLin2009cAsym",
+}
+
+
 @st.cache_resource(show_spinner=False)
 def _reference():
-    """Brainnetome reference (bundled atlas; BrainMap profiles downloaded once; local maps if present)."""
+    """Brainnetome reference (bundled atlas and BrainMap profiles; local maps if present)."""
     return BrainnetomeReference.load()
 
 
@@ -59,6 +67,11 @@ def render_bna_annotation_view(base_atlas):
                            help="A level (subregion, gyrus, lobe) is assigned when it holds this share of "
                                 "the ROI's labelled tissue; otherwise the ROI is 'mixed'.")
         alpha = c3.number_input("Alpha", 0.001, 0.2, 0.05, 0.005, format="%.3f")
+        space = st.selectbox(
+            "Template the signals were extracted in", list(_SPACES), format_func=_SPACES.get,
+            help="FSL MNI152 is the atlas's own grid (exact); other MNI variants differ by about 1-3 mm and "
+                 "every ROI is flagged approximate. Ignored for Brainnetome regions.",
+        )
         c4, c5 = st.columns(2)
         level = c4.selectbox("Summary level", ["lobe", "gyrus", "subregion", "network"])
         param_idx = None
@@ -74,7 +87,7 @@ def render_bna_annotation_view(base_atlas):
             bna_ids = bna_region_ids(atlas.labels, reference=ref)
             own = list(getattr(atlas, "networks", None) or [])
             networks = own if own and own != list(atlas.labels) else None   # labels-as-networks = no division
-            common = dict(reference=ref, names=list(atlas.labels), purity=purity, networks=networks)
+            common = dict(reference=ref, names=list(atlas.labels), purity=purity, networks=networks, space=space)
             if bna_ids is not None:
                 rois = annotate_bna_regions(bna_ids, reference=ref, names=list(atlas.labels))
             elif support == "parcel":

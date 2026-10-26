@@ -410,7 +410,8 @@ This is a paired null/control comparison of two Eyes-Closed runs from the same C
 Describes the ROIs and the detected connections with the Brainnetome atlas (BNA-246; Fan et al., 2016).
 
 - **Support**: each ROI is described by the tissue it sampled (its parcel, or a sphere around its coordinate), as shares of Brainnetome regions. A label is given at the finest level (subregion, gyrus, lobe) holding at least the purity threshold; otherwise the ROI is *mixed*. Cerebellum, brainstem and white matter are *unassigned* (not covered by BNA-246).
-- **Connections**: hemispheric relation (homotopic or not), anatomical level, circuit class (cortico-cortical, thalamo-cortical, ...), distance, sphere overlap, population structural connectivity (when the Brainnetome tractography maps are available) and Yeo network relation.
+- **Template**: the atlas is on the FSL MNI152 grid. Choose the template the signals were extracted in; other MNI variants (e.g. fMRIPrep's MNI152NLin2009cAsym, or an unknown variant) are flagged approximate.
+- **Connections**: hemispheric relation (homotopic or not), anatomical level, circuit class (cortico-cortical, thalamo-cortical, ...), distance, sphere overlap, population structural connectivity (when the Brainnetome tractography maps are available) and network relation (the atlas's own network labels, e.g. Schaefer Yeo-7; the Brainnetome division for Brainnetome regions).
 - **BrainMap domains**: published forward-inference associations (which tasks activate a region in the literature). They are not the function of a region or of a connection; a region without terms has too few BrainMap studies.
 - **Summaries** put the detections next to the tested opportunities; nothing is tested and the correction is unchanged.
 - **Distance QC**: a contrast that covaries with head motion often shows short-range increases and long-range decreases.
