@@ -184,14 +184,17 @@ def fetch_bna_behavioral_decoding(
     Data attribution & licensing
     ----------------------------
     The Behavioral Domain and Paradigm Class taxonomy and coordinate data are
-    derived from the BrainMap database (Fox & Laird, 2012; Laird et al., 2011)
+    derived from the BrainMap database (Laird et al., 2005, 2011)
     and computed for the Brainnetome Atlas by Fan et al. (2016). When publishing
     analyses that use these decodings, please cite:
 
     1. Fan L, Li H, Zhuo J, et al. (2016). The Human Brainnetome Atlas: A New Brain
        Atlas Based on Connectional Architecture. Cerebral Cortex, 26(8):3508–3526.
-    2. Fox PT, Laird AR (2012). BrainMap: The social evolution of a human brain mapping
-       database. NeuroImage, 62(2):807–812.
+    2. Laird AR, Lancaster JL, Fox PT (2005). BrainMap: The social evolution of a human
+       brain mapping database. Neuroinformatics, 3(1):65–78.
+    3. Laird AR, Eickhoff SB, Fox PM, et al. (2011). The BrainMap strategy for
+       standardization, sharing, and meta-analysis of neuroimaging data. BMC Research
+       Notes, 4:349.
 
     Parameters
     ----------

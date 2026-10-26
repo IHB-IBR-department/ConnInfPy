@@ -24,7 +24,7 @@ without terms has too few BrainMap experiments there, not "no function".
 
 Brainnetome data are distributed for non-commercial use with attribution and
 share-alike (``conninfpy/atlas_data/NOTICE_BRAINNETOME.txt``). Cite Fan et al.
-(2016), and Fox & Laird (2012) for the profiles.
+(2016), and Laird et al. (2005, 2011) for the profiles.
 """
 
 from __future__ import annotations
