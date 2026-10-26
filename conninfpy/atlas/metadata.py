@@ -484,7 +484,8 @@ class AtlasInfo:
         Center's subregion-to-network table; subcortical regions, which the
         division leaves unassigned, are 'Subcortical'), or ``'lobe'`` (the
         seven-lobe grouping Frontal / Temporal / Parietal / Insular / Limbic /
-        Occipital / Subcortical).
+        Occipital / Subcortical). Changed in October 2026: the default was
+        the lobe grouping; pass ``networks='lobe'`` to keep it.
 
         ``with_image=True`` also attaches the bundled 1 mm label image, so
         :meth:`from_coordinates` can place coordinates voxel-exactly.

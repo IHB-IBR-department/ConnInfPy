@@ -410,3 +410,36 @@ within-site Freedman–Lane null on the harmonized data → a family-wise-correc
 p-value from the max-statistic distribution with the ``+1`` correction. See
 :doc:`workflows` for the design variants and :doc:`references` for the
 supporting literature.
+
+
+After inference: anatomical reading
+-----------------------------------
+
+The four steps end with corrected p-values on the parcellation the signals
+were measured with. Reading the result anatomically
+(:mod:`conninfpy.interpret`; :ref:`usage-interpret`) is a descriptive layer
+that changes none of them:
+
+- **The tissue, not the centre point.** Each ROI is described by its overlap
+  with the 246 regions of the Brainnetome atlas (Fan et al., 2016) over the
+  sphere or parcel that produced its signal. A 6 mm sphere usually covers 2–4
+  Brainnetome regions and a Schaefer parcel often spans several subregions,
+  so a label is given only at the finest level of the hierarchy (subregion →
+  gyrus → lobe) that holds at least half of the ROI's labelled tissue; below
+  that the ROI is ``mixed``.
+- **The inference unit stays.** Grouping detections by lobe, gyrus, circuit
+  class, hemispheric or network relation re-describes them. It adds no test,
+  and an edge of a significant component or block does not become
+  individually significant.
+- **Against what was tested.** Detections are shown next to the tested
+  opportunities in each category, because categories differ in size (there
+  are far more cortico-cortical than thalamo-cortical pairs).
+- **Literature context, not function.** BrainMap behavioural-domain terms are
+  forward-inference associations of each region in published activation
+  studies (Laird et al., 2005); they are listed per region and never ranked
+  into "the function" of a region or a connection.
+
+Measuring the signals in Brainnetome regions (native parcellation) is a
+different analysis: it changes the signals and the tested edge family.
+``examples/open_close/atlas_stability`` compares the two on the Open-Close
+contrast.
