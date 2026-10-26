@@ -35,6 +35,12 @@ harmonization, and permutation inference with any of nine methods.
   benchmark), with a SciPy fallback.
 - **20-scenario topology library** of planted effects (hub, rich club, chain,
   gradient, …) for method benchmarking.
+- **Anatomical interpretation with the Brainnetome atlas (BNA-246)** — each
+  ROI is described by the Brainnetome tissue its sphere or parcel covers
+  (subregion → gyrus → lobe, `mixed` below the purity threshold), each
+  connection by its hemispheric relation, circuit class, distance and
+  population structural connectivity, with BrainMap literature context.
+  Descriptive: the p-values and the inference unit are unchanged.
 
 ![ConnInfPy connectivity-inference pipeline](docs/conninfpy.png)
 
@@ -237,7 +243,13 @@ per direction, a signed proportion, and the summed / mean −log₁₀ p.
 table; `conninfpy.plot.plot_network_summary` draws the signed proportion.
 
 `conninfpy.AtlasInfo` ships Schaefer-100/200/400 (Yeo-7) and Brainnetome-246;
-`AtlasInfo.from_csv()` reads any other atlas.
+`AtlasInfo.from_csv()` reads any other atlas. `AtlasInfo.bna_246()` groups its
+regions by the Brainnetome Yeo-7 division (`bna246_hierarchy.csv`; subcortical
+regions are `Subcortical`); pass `networks="yeo17"` or `networks="lobe"` for
+the other groupings. **Changed in October 2026:** it previously grouped by
+lobe, so network-pair summaries, the network columns of edge tables (including
+the CLI's `edges.csv` with `atlas: bna_246`) and network-ordered figures of
+BNA-246 data now follow Yeo-7; use `networks="lobe"` for the old grouping.
 
 **Anatomical interpretation (Brainnetome).** `conninfpy.interpret` describes
 ROIs and detected connections with the Brainnetome atlas (BNA-246, Fan et al.
@@ -246,7 +258,8 @@ ROIs and detected connections with the Brainnetome atlas (BNA-246, Fan et al.
 ```python
 from conninfpy.interpret import annotate_bna_regions, annotate_rois, interpret_result
 
-rois = annotate_rois(coords, names=names, support="sphere", radius_mm=6)    # or support="parcel"; networks=own labels
+rois = annotate_rois(coords, names=names, support="sphere", radius_mm=6,
+                     space="MNI152NLin2009cAsym")   # or support="parcel"; networks=own labels
 # rois = annotate_bna_regions(bna_ids)            # data parcellated with the Brainnetome atlas itself
 report = interpret_result(out.inference, rois, name="age")
 report.save("results/age")                         # tables, evidence packet, connectograms
@@ -260,6 +273,10 @@ Each ROI is described by the tissue it sampled (overlap of its sphere or
 parcel with BNA regions; a hard label only at the finest level holding at
 least half of it, otherwise "mixed"), with its gyrus, lobe, hemisphere,
 cytoarchitectonic description, Yeo network and BrainMap behavioural domains.
+The atlas is on the FSL MNI152 grid, which `space=` assumes by default
+(no flag); declare the template the signals were extracted in
+(`"MNI152NLin2009cAsym"` for fMRIPrep, `"MNI152"` when the variant is
+unknown), and other MNI variants are flagged approximate.
 Each connection gets its hemispheric relation (homotopic or not), circuit
 class (cortico-cortical, thalamo-cortical, ...), distance, sphere overlap and
 population structural connectivity. BrainMap terms are published

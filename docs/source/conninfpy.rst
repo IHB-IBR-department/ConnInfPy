@@ -12,6 +12,15 @@ Main entry point and result types:
    conninfpy.analysis
    conninfpy.results
 
+Atlases, anatomical interpretation and figures:
+
+.. toctree::
+   :maxdepth: 1
+
+   conninfpy.atlas
+   conninfpy.interpret
+   conninfpy.plot
+
 Advanced inference (custom designs, F-contrasts, null distributions):
 
 .. toctree::

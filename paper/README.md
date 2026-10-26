@@ -520,7 +520,7 @@ the GLM changes: identical (256 edges, max |Δp| = 0).
 | Directed (asymmetric) input tested inconsistently → rejected | symmetric matrices |
 | GPD shape sign; gamma fitted to non-right-skewed nulls | exact p-values |
 | Fisher r→z clipping not monotone near ±1 | no |r| ≈ 1 off the diagonal |
-| Decoding ranked by forward p | — |
+| Decoding ranked by forward p (the NiMARE/Neurosynth decoder was later removed and replaced by Brainnetome annotation) | — |
 | GLM reduced model for general contrasts (X null(C)); sign flips for mean tests (paired GLM with confounds) | selection contrasts; paired runs without confounds |
 | Zero-variance edges gave t ≈ 1e16; non-estimable contrasts; paired pseudo-pairs | none in the data |
 | TFNBS at E = 0 scored inactive edges (SciPy backends, FBC) | E grids start at 0.2; Numba backend |
