@@ -501,6 +501,22 @@ Every result is dict-like and carries metadata and exporters:
    fig = summary_figure(out.inference, atlas=atlas, alpha=0.05, top_k=10)
    fig.savefig('summary.pdf', bbox_inches='tight')
 
+   # Brainnetome anatomy of the detected connections (descriptive)
+   from conninfpy.interpret import annotate_rois, interpret_result
+   rois = annotate_rois(support='parcel', parcel_image=schaefer_200_img,
+                        parcel_labels=list(range(1, 201)), networks=atlas.networks,
+                        space='MNI152NLin2009cAsym')   # the template the signals were extracted in
+   report = interpret_result(out.inference, rois, name='contrast', source_atlas='Schaefer-200')
+   report.save('results/contrast')        # tables, evidence.json, connectograms
+
+The Brainnetome report describes where the detected connections lie (endpoint
+subregion, gyrus and lobe; hemispheric relation, circuit class, distance;
+BrainMap domains of the endpoints) next to what was tested. It adds no test:
+the p-values, their correction and the inference unit are unchanged. For data
+parcellated with the Brainnetome atlas itself use ``annotate_bna_regions``.
+See :ref:`usage-interpret` for the rules, and the ABIDE and Open-Close
+examples (``examples/abide/``, ``examples/open_close/``) for complete runs.
+
 Speed vs. publication runs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -8,7 +8,10 @@ networks (fMRI, EEG). It provides permutation-based tests for group comparisons 
 with confound regression (GLM with Freedman-Lane), together with a family of enhancement methods: classical NBS,
 TFNBS (Threshold-Free Network-Based Statistics), cNBS, network-informed TFNBS, and functional-block clustering
 TFNBS. The TFNBS family eliminates the need for an arbitrary statistical threshold by integrating cluster statistics
-across a range of thresholds via TFCE-style enhancement.
+across a range of thresholds via TFCE-style enhancement. Detected connections can then be described
+anatomically with the Brainnetome atlas (BNA-246): the regions each ROI's tissue covers, the hemispheric
+relation, circuit class and distance of each connection, and BrainMap literature context of its endpoints.
+This description adds no test and leaves the inference unchanged.
 
 
 .. toctree::

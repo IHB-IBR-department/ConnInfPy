@@ -58,3 +58,33 @@ Multi-site harmonization
   effects while retaining group differences may lead to exaggerated confidence
   in downstream analyses. *Biostatistics*, 17(1), 29–39. (The label-leak
   motivation for excluding the tested variable in the ComBat arms.)
+
+Atlases and anatomical interpretation
+-------------------------------------
+
+- Fan, L., Li, H., Zhuo, J., et al. (2016). The Human Brainnetome Atlas: a new
+  brain atlas based on connectional architecture. *Cerebral Cortex*, 26(8),
+  3508–3526. doi:10.1093/cercor/bhw157. (BNA-246: label images, hierarchy,
+  Yeo crosswalk, probabilistic and tractography maps, BrainMap profiles.)
+- Laird, A. R., Lancaster, J. L., & Fox, P. T. (2005). BrainMap: the social
+  evolution of a human brain mapping database. *Neuroinformatics*, 3(1),
+  65–78. doi:10.1385/NI:3:1:065.
+- Laird, A. R., Eickhoff, S. B., Fox, P. M., et al. (2011). The BrainMap
+  strategy for standardization, sharing, and meta-analysis of neuroimaging
+  data. *BMC Research Notes*, 4, 349. doi:10.1186/1756-0500-4-349.
+  (Behavioural-domain and paradigm-class taxonomy of the profiles.)
+- Yeo, B. T. T., Krienen, F. M., Sepulcre, J., et al. (2011). The organization
+  of the human cerebral cortex estimated by intrinsic functional connectivity.
+  *Journal of Neurophysiology*, 106(3), 1125–1165. (Yeo-7 / Yeo-17 networks.)
+- Schaefer, A., Kong, R., Gordon, E. M., et al. (2018). Local-global
+  parcellation of the human cerebral cortex from intrinsic functional
+  connectivity MRI. *Cerebral Cortex*, 28(9), 3095–3114. (Bundled
+  Schaefer-100/200/400 with Yeo-7 labels.)
+- Lancaster, J. L., Tordesillas-Gutiérrez, D., Martinez, M., et al. (2007).
+  Bias between MNI and Talairach coordinates analyzed using the ICBM-152 brain
+  template. *Human Brain Mapping*, 28(11), 1194–1205. (Talairach to MNI
+  conversion before annotation.)
+- Power, J. D., Barnes, K. A., Snyder, A. Z., Schlaggar, B. L., & Petersen,
+  S. E. (2012). Spurious but systematic correlations in functional
+  connectivity MRI networks arise from subject motion. *NeuroImage*, 59(3),
+  2142–2154. (The distance check of the annotation summaries.)

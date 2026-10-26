@@ -482,6 +482,9 @@ Two-sample designs use ``group:`` and ``levels: [group1, group2]``
 ``levels:`` and ``subject:`` (default ``subject_id``) and pair rows by subject.
 Rows with a missing value in any column the design uses are dropped and
 counted in ``provenance.json``. ``python -m conninfpy`` is equivalent.
+Built-in atlas names are ``schaefer_100_yeo7``, ``schaefer_200_yeo7``,
+``schaefer_400_yeo7`` and ``bna_246``; ``bna_246`` labels networks with the
+Brainnetome Yeo-7 division (see :ref:`usage-interpret`).
 
 
 Network-level summaries — ``result.network_summary(atlas)``
@@ -510,13 +513,15 @@ For raw p-value maps (e.g. loaded from disk) use
 :func:`conninfpy.harmonize.block_mass` returns the significant-edge counts.
 
 
+.. _usage-interpret:
+
 Anatomical interpretation — :mod:`conninfpy.interpret`
 ------------------------------------------------------
 
 Everything that interprets a result lives in :mod:`conninfpy.interpret`.
-:func:`~conninfpy.interpret.annotate.annotate_rois` describes each ROI with the
+:func:`~conninfpy.interpret.annotate_rois` describes each ROI with the
 Brainnetome atlas (BNA-246; Fan et al., 2016) by the tissue its signal came
-from; :func:`~conninfpy.interpret.annotate.annotate_bna_regions` annotates data
+from; :func:`~conninfpy.interpret.annotate_bna_regions` annotates data
 parcellated with the Brainnetome atlas itself; and
 :func:`~conninfpy.interpret.interpret_result` describes a result in one call
 (annotated connections, relations, groups, coupling change, BrainMap domains,
@@ -528,7 +533,7 @@ distance check, evidence packet, connectograms):
 
    # Schaefer parcels: anatomy from the Brainnetome tissue they cover, networks = their own Yeo-7 labels
    rois = annotate_rois(support="parcel", parcel_image=img, parcel_labels=ids, networks=yeo_labels)
-   # or spheres: annotate_rois(coords, names=names, support="sphere", radius_mm=6)
+   # or spheres: annotate_rois(coords, names=names, support="sphere", radius_mm=6, space="MNI152NLin2009cAsym")
    # Brainnetome regions: identity and networks from the Brainnetome division (bna246_hierarchy.csv)
    # rois = annotate_bna_regions(bna_ids, division="yeo7")
    report = interpret_result(out.inference, rois, name="EC vs EO", source_atlas="Schaefer-200")
@@ -542,7 +547,11 @@ distance check, evidence packet, connectograms):
   ``yeo17`` columns of ``bna246_hierarchy.csv``, subcortex 'Subcortical'), and
   otherwise the Brainnetome division of the tissue each ROI covers. ``yeo7``
   keeps the Brainnetome crosswalk for reference. ``AtlasInfo.bna_246()`` carries
-  the same Brainnetome division (``networks='lobe'`` for the lobe grouping).
+  the same Brainnetome division (``networks='yeo7'`` by default,
+  ``'yeo17'``, or ``'lobe'`` for the lobe grouping). **Changed in October
+  2026:** ``bna_246()`` previously grouped by lobe; network-pair summaries,
+  network columns of edge tables and network-ordered figures of BNA-246 data
+  now follow the Yeo-7 division unless ``networks='lobe'`` is passed.
 
 - **Support, not points.** A 6 mm sphere usually covers 2–4 Brainnetome
   regions, and a parcel's centroid can lie outside the parcel, so each ROI
@@ -550,12 +559,18 @@ distance check, evidence packet, connectograms):
   probabilistic maps, its membership probability. A label is given at the
   finest level (subregion → gyrus → lobe) holding at least ``purity`` of the
   labelled tissue; otherwise the ROI is ``mixed``. Cerebellum, brainstem and
-  white matter are ``unassigned``. Coordinates need a declared ``space``
-  (MNI variants other than FSL MNI152 are flagged approximate; Talairach is
-  refused).
+  white matter are ``unassigned``.
+- **Declare the template.** The atlas is on the FSL MNI152 grid, and
+  ``space`` defaults to it (``'MNI152NLin6Asym'``, no flag). Set ``space``
+  to the template the signals were extracted in: other MNI variants
+  (``'MNI152NLin2009cAsym'``, fMRIPrep's default output; ``'MNI152'`` when
+  the variant is unknown) differ by about 1–3 mm and every ROI is flagged
+  approximate. Talairach coordinates are refused (convert them first, e.g.
+  Lancaster et al., 2007).
 - **Identity first.** Each ROI carries its subregion, gyrus, lobe, hemisphere,
-  cytoarchitectonic description, Yeo-7/17 network (cortex only) and BrainMap
-  behavioural domains. BrainMap terms are published forward-inference
+  cytoarchitectonic description, Yeo-7 and Yeo-17 networks (cortex only; each
+  assigned under the same purity rule on its own shares, with
+  ``yeo7_purity`` / ``yeo17_purity``) and BrainMap behavioural domains. BrainMap terms are published forward-inference
   associations (which tasks activate a region in the literature), kept per
   region with their likelihood ratios and never combined into a "top term";
   a region without terms has too few BrainMap studies.
@@ -564,14 +579,14 @@ distance check, evidence packet, connectograms):
   circuit class (cortico-cortical, thalamo-cortical, cortico-basal ganglia,
   ...), centre distance, sphere overlap (overlapping spheres share voxels),
   population structural connectivity and network relation.
-- **Descriptive summaries.** :func:`~conninfpy.interpret.annotate.summarize_annotation`
+- **Descriptive summaries.** :func:`~conninfpy.interpret.summarize_annotation`
   puts the detections next to the tested opportunities by relation, region
   group and BrainMap domain, and reports the distance dependence of the
   statistic (a motion-confound check). It adds no test and leaves the
   correction and the inference unit (edge, component or block) unchanged.
   ``rois.to_atlas(level)`` gives an :class:`~conninfpy.atlas.AtlasInfo` for
   :meth:`~conninfpy.results.InferenceResult.network_summary`.
-- **Connectogram.** :func:`~conninfpy.interpret.annotate.aggregate_connections` sums the
+- **Connectogram.** :func:`~conninfpy.interpret.aggregate_connections` sums the
   detected and tested connections over Brainnetome units (subregions, gyri or
   lobes per hemisphere), split by the endpoints' networks: each ROI is spread
   over the units its support covers (``assign="weighted"``, so a connection
