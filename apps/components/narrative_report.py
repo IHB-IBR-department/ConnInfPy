@@ -68,7 +68,7 @@ def render_narrative_report_view():
             st.session_state.llm_model = model_val
             st.session_state.llm_api_key = api_key
 
-        st.info("💡 **Scientific note**: anatomy comes from the Brainnetome atlas (Fan et al., 2016). BrainMap terms are forward-inference associations from published activation studies (Fox & Laird, 2012): which tasks activate a region, not what a region or a connection does.")
+        st.info("💡 **Scientific note**: anatomy comes from the Brainnetome atlas (Fan et al., 2016). BrainMap terms are forward-inference associations from published activation studies (BrainMap; Laird et al., 2005): which tasks activate a region, not what a region or a connection does.")
         
         # Validate evidence
         try:

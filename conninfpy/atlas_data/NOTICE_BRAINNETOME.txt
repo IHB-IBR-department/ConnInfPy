@@ -32,5 +32,9 @@ Cite:
   doi:10.1093/cercor/bhw157
 
 For the BrainMap profiles (BDf_FDR05.json, PCf_FDR05.json) cite also:
-Fox PT, Laird AR (2012). BrainMap: the social evolution of a human brain
-mapping database. NeuroImage 62(2):807-812.
+  Laird AR, Lancaster JL, Fox PT (2005). BrainMap: the social evolution of a
+  human brain mapping database. Neuroinformatics 3(1):65-78.
+  doi:10.1385/NI:3:1:065
+  Laird AR, Eickhoff SB, Fox PM, et al. (2011). The BrainMap strategy for
+  standardization, sharing, and meta-analysis of neuroimaging data.
+  BMC Research Notes 4:349. doi:10.1186/1756-0500-4-349
