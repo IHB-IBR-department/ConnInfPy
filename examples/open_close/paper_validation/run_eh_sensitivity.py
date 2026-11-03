@@ -17,7 +17,7 @@ H ∈ {1.00, 2.00, 3.00, 5.00, 7.00, 10.00} (6 values)
 
 Output
 ------
-results/sensitivity/eh/
+results/paper_validation/sensitivity/eh/
   grid_summary.csv                    # per-method per-cell n_sig
   eh_sensitivity.png                  # 6-panel composite figure
 """
@@ -41,11 +41,11 @@ import pandas as pd
 
 from conninfpy import compute_p_val
 from examples.open_close._shared.data import OpenCloseDataset, DATA_DIR
+from examples.open_close._shared.paths import PAPER, PLOTS
 
 
-HERE = Path(__file__).resolve().parents[1]
-OUT_DIR = HERE / "results" / "sensitivity" / "eh"
-PLOTS_DIR = HERE / "results" / "plots"
+OUT_DIR = PAPER / "sensitivity" / "eh"
+PLOTS_DIR = PLOTS
 
 E_GRID = (0.20, 0.40, 0.50, 0.75, 1.00, 1.30)
 H_GRID = (1.00, 2.00, 3.00, 5.00, 7.00, 10.00)

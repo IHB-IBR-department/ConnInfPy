@@ -40,8 +40,9 @@ from conninfpy.atlas.brainnetome import BrainnetomeReference  # noqa: E402
 from conninfpy.plot import plot_connectogram  # noqa: E402
 from conninfpy.results import InferenceResult  # noqa: E402
 from examples.open_close._shared.data import OpenCloseDataset  # noqa: E402
+from examples.open_close._shared.paths import STRUCTURAL_PRIOR  # noqa: E402
 
-RES = HERE / "results" / "blocks"
+RES = STRUCTURAL_PRIOR / "blocks"
 OUT = RES / "connectograms"
 TAILS = {"positive": "EC > EO", "negative": "EO > EC"}
 COHORT_NAMES = {"ihb": "IHB", "china_ec1": "China (EC1)", "china_ec0": "China (EC0)"}

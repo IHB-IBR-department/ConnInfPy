@@ -7,7 +7,7 @@ Training on IHB, testing on China. Edge masks are derived from saved p-maps.
 Usage:
   python -m examples.open_close.openclose_ml_transfer_from_pvals \\
     --pvals-dir examples/open_close/results/pvals \\
-    --output-csv examples/open_close/results/ml_transfer_results.csv
+    --output-csv examples/open_close/results/ml_transfer/ml_transfer_results.csv
 
 Optional:
   --methods tstat,tfnbs,nbs
@@ -194,7 +194,7 @@ def main() -> None:
     parser.add_argument("--c-values", type=str, default="1e-4,1e-3,1e-2,1e-1,1.0")
     parser.add_argument("--n-splits", type=int, default=5)
     parser.add_argument("--tune-per-mask", action="store_true")
-    parser.add_argument("--output-csv", type=Path, default=(ROOT / "examples/open_close/results/ml_transfer_results.csv"))
+    parser.add_argument("--output-csv", type=Path, default=(ROOT / "examples/open_close/results/ml_transfer/ml_transfer_results.csv"))
     args = parser.parse_args()
 
     methods_filter = None

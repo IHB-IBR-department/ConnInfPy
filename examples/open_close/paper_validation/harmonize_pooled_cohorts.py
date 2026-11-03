@@ -33,7 +33,7 @@ Command-line
 ------------
     python -m examples.open_close.harmonize
     python -m examples.open_close.harmonize --no-drop-rois \\
-        --output examples/open_close/results/openclose_harmonized.npz
+        --output examples/open_close/results/paper_validation/openclose_harmonized.npz
 """
 
 from __future__ import annotations
@@ -54,10 +54,10 @@ import numpy as np
 
 from conninfpy import combat_harmonize, fisher_r_to_z
 from examples.open_close._shared.data import OpenCloseDataset, DATA_DIR
+from examples.open_close._shared.paths import PAPER
 
 
-HERE = Path(__file__).resolve().parents[1]
-DEFAULT_OUTPUT = HERE / "results" / "openclose_harmonized.npz"
+DEFAULT_OUTPUT = PAPER / "openclose_harmonized.npz"
 
 
 @dataclass

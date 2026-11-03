@@ -7,9 +7,9 @@ Running every method in the SELECTORS bundle on this contrast lets us
 build a specificity panel (state vs empirical-null per-method edge
 counts at FWER α = 0.05).
 
-The state-contrast pmaps already live in ``results/ml/pmap_china_*.npz``;
+The state-contrast pmaps already live in ``results/paper_validation/methods/pmap_china_*.npz``;
 this script writes the matching retest pmaps as
-``results/ml/pmap_china_retest_{method}.npz`` so the downstream plot
+``results/paper_validation/methods/pmap_china_retest_{method}.npz`` so the downstream plot
 script can pair them up by method name.
 
 Subject mask: ``ds.retest_subject_mask()`` (excludes ``sub-3258811``
@@ -35,10 +35,10 @@ import numpy as np
 
 from conninfpy import compute_p_val
 from examples.open_close._shared.data import OpenCloseDataset, DATA_DIR
+from examples.open_close._shared.paths import METHOD_MAPS
 
 
-HERE = Path(__file__).resolve().parents[1]
-ML_DIR = HERE / "results" / "ml"
+MAPS_DIR = METHOD_MAPS
 
 # Matches examples/open_close/ml_transfer/run_ml_feature_selection.py
 SELECTORS = {
@@ -54,17 +54,17 @@ SELECTORS = {
 
 
 def main() -> None:
-    global ML_DIR
+    global MAPS_DIR
     ap = argparse.ArgumentParser()
     ap.add_argument("--n-permutations", type=int, default=1000)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--methods", nargs="+", default=list(SELECTORS.keys()))
     ap.add_argument("--data-dir", type=Path, default=DATA_DIR)
-    ap.add_argument("--output", type=Path, default=ML_DIR)
+    ap.add_argument("--output", type=Path, default=MAPS_DIR)
     args = ap.parse_args()
-    ML_DIR = args.output.resolve()
+    MAPS_DIR = args.output.resolve()
 
-    ML_DIR.mkdir(parents=True, exist_ok=True)
+    MAPS_DIR.mkdir(parents=True, exist_ok=True)
 
     ds = OpenCloseDataset.load("china", data_dir=args.data_dir)
     mask = ds.retest_subject_mask()
@@ -102,7 +102,7 @@ def main() -> None:
         print(f"  {name:10s}  {dt:5.1f}s  "
               f"n_sig(α=0.05) {keys[0]}={n_sig_a}, {keys[1]}={n_sig_b}")
 
-        out_path = ML_DIR / f"pmap_china_retest_{name}.npz"
+        out_path = MAPS_DIR / f"pmap_china_retest_{name}.npz"
         np.savez(out_path, **{k: p[k] for k in p})
         print(f"    saved: {out_path}")
 

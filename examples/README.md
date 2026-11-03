@@ -13,7 +13,7 @@ Runnable examples are organized by purpose. Install the package in the active Py
 
 Each study's `_shared/` contains data adapters and support functions. `examples/_shared/` contains repository paths and small artifact utilities. These are study code, separate from the installed `conninfpy` library.
 
-Generated results remain ignored. Shared publication plots stay at `abide/results/plots/` and `open_close/results/plots/`; benchmark outputs stay at `benchmarks/res_benchmarks/`. Saved configurations and source hashes describe the run that created them and are retained verbatim.
+Each study has one `results/` folder with a subfolder per analysis, named like the code folder that writes it; Brainnetome interpretation goes inside the analysis it describes (e.g. `abide/results/diagnosis/brainnetome/`). The study READMEs show the layout. Generated results remain ignored. Shared publication plots stay at `abide/results/plots/` and `open_close/results/plots/`; benchmark outputs stay at `benchmarks/res_benchmarks/`. Saved configurations and source hashes describe the run that created them and are retained verbatim.
 
 Simulation calibration is conditional on the generative model and tested settings. Paired Open-Close comparisons improve control of between-person variation; they do not establish causality. ABIDE diagnosis contrasts remain observational. Method agreement, bootstrap stability and cross-cohort replication measure different properties.
 

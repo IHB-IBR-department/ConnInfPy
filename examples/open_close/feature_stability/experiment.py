@@ -19,6 +19,7 @@ from threadpoolctl import threadpool_limits
 ROOT = Path(__file__).resolve().parents[3]
 
 from examples.open_close._shared.data import DATA_DIR  # noqa: E402
+from examples.open_close._shared.paths import FEATURE_STABILITY  # noqa: E402
 from examples.open_close.feature_stability.metrics import (  # noqa: E402
     METRICS, agreement_icc, coefficient_correlations, paired_differences,
     prediction_stability, scores, sign_stability, test_participant_draws,
@@ -233,7 +234,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.threads < 1:
         parser.error("--threads must be positive")
-    output = args.output or HERE / "results" / f"edge_models_{args.anatomical_level}_run{args.china_close_run}_b{args.bootstraps}_seed{args.seed}"
+    output = args.output or FEATURE_STABILITY / f"edge_models_{args.anatomical_level}_run{args.china_close_run}_b{args.bootstraps}_seed{args.seed}"
     input_paths = [args.roi_annotations, *[args.data_dir / f"{site}_{state}_Schaefer200_strategy-4_GSR.npy"
                                          for site in ("ihb", "china") for state in ("open", "close")],
                    args.data_dir / "schaefer_labels.csv", *[args.data_dir / f"subject_order_{site}.txt"

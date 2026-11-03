@@ -48,10 +48,11 @@ from sklearn.preprocessing import StandardScaler
 
 from conninfpy import compute_p_val
 from examples.open_close._shared.data import OpenCloseDataset
+from examples.open_close._shared.paths import ML_TRANSFER
 
 
 HERE = Path(__file__).resolve().parent
-RESULTS = HERE.parent / "results" / "ml"
+RESULTS = ML_TRANSFER
 
 from examples.open_close._shared.inference import SELECTORS, compute_selector_pmaps
 

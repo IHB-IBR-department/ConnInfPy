@@ -45,16 +45,17 @@ from scipy import stats
 
 HERE = Path(__file__).resolve().parent
 from examples.open_close.atlas_stability import adapter as A  # noqa: E402
+from examples.open_close._shared.paths import ATLAS_STABILITY, PAPER  # noqa: E402
 
 from examples.open_close.atlas_stability.inference import tfnbs
 from examples.open_close.atlas_stability.metrics import fisher_z, _digest, unit_pairs, unit_summaries, draws, agreement, pct
 from examples.open_close.atlas_stability.reporting import figures, write_report
 from conninfpy.interpret.annotate import aggregate_connections, summarize_annotation  # noqa: E402
 
-OUT = HERE / "results"
+OUT = ATLAS_STABILITY
 # Only IHB has a stored paper map with the same participants; the stored China run-0 map used all
 # 48 participants, while every China branch here uses the matched 47.
-STORED = {"ihb": A.ROOT / "examples/open_close/results/ihb_paired_tfnbs.npz"}
+STORED = {"ihb": PAPER / "ihb_paired_tfnbs.npz"}
 ALPHA, SEED, MIN_SUPPORT = 0.05, 42, 1.0
 PRIMARY = "lobe"
 

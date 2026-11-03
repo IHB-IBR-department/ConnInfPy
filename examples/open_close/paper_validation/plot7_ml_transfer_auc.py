@@ -3,16 +3,14 @@ from pathlib import Path as _Path
 import sys as _sys
 
 if __package__ in (None, ""):
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[4]))
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
 
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parents[2]
-ML_DIR = HERE / "results" / "ml"
-PLOTS = HERE / "results" / "plots"
+from examples.open_close._shared.paths import ML_TRANSFER, PLOTS
 
 PRETTY = {
     "tstat": "t-stat",
@@ -26,7 +24,7 @@ PRETTY = {
 }
 
 def main():
-    csv_path = ML_DIR / "ml_feature_selection.csv"
+    csv_path = ML_TRANSFER / "ml_feature_selection.csv"
     if not csv_path.exists():
         print(f"Missing results: {csv_path}")
         return

@@ -3,21 +3,18 @@ from pathlib import Path as _Path
 import sys as _sys
 
 if __package__ in (None, ""):
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[4]))
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pathlib import Path
 from scipy import stats
 from conninfpy import fisher_r_to_z
 from examples.open_close._shared.data import OpenCloseDataset
+from examples.open_close._shared.paths import PAPER, PLOTS
 
-HERE = Path(__file__).resolve().parents[2]
-RESULTS = HERE / "results"
-PLOTS = RESULTS / "plots"
-HARM_PATH = RESULTS / "openclose_harmonized.npz"
+HARM_PATH = PAPER / "openclose_harmonized.npz"
 
 def _ts_to_fisher_z(ts: np.ndarray) -> np.ndarray:
     n, _, N = ts.shape

@@ -11,8 +11,8 @@ Per method (TFNBS, NI-TFNBS, FBC-TFNBS, NBS τ=2.0, NBS τ=3.0, BH-FDR, t-stat)
 we compare n_sig at α=0.05, state vs empirical-null, grouped bars.
 Lower retest bar ⇒ better FWER specificity.
 
-Inputs : results/ml/pmap_china_{method}.npz           (state contrast)
-         results/ml/pmap_china_retest_{method}.npz    (empirical null)
+Inputs : results/paper_validation/methods/pmap_china_{method}.npz           (state contrast)
+         results/paper_validation/methods/pmap_china_retest_{method}.npz    (empirical null)
 Output : results/plots/plot5_retest_specificity.png
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ from pathlib import Path as _Path
 import sys as _sys
 
 if __package__ in (None, ""):
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[4]))
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
 
 from pathlib import Path
 
@@ -30,9 +30,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-HERE = Path(__file__).resolve().parents[2]
-ML_DIR = HERE / "results" / "ml"
-PLOTS = HERE / "results" / "plots"
+from examples.open_close._shared.paths import METHOD_MAPS as MAPS_DIR, PLOTS
 
 ALPHA = 0.05
 
@@ -74,8 +72,8 @@ def main() -> None:
     state_n = []
     null_n = []
     for m in METHODS:
-        state_n.append(_n_sig(ML_DIR / f"pmap_china_{m}.npz", ALPHA))
-        null_n.append(_n_sig(ML_DIR / f"pmap_china_retest_{m}.npz", ALPHA))
+        state_n.append(_n_sig(MAPS_DIR / f"pmap_china_{m}.npz", ALPHA))
+        null_n.append(_n_sig(MAPS_DIR / f"pmap_china_retest_{m}.npz", ALPHA))
 
     n_edges_total = 182 * 181 // 2  # for axis annotation
     null_floor = ALPHA * n_edges_total  # expected n_sig under perfect uniform null at α=0.05

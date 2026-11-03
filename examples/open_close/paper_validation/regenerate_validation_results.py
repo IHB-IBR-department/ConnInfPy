@@ -20,17 +20,17 @@ PAPER_STEPS = (
     "paper_validation.run_state_methods",
     "paper_validation.run_eh_sensitivity",
     "paper_validation.audit_openclose_agreement",
-    "paper_validation.plots.plot1_combat_impact",
-    "paper_validation.plots.plot2_block_mass_convergence",
-    "paper_validation.plots.plot3_method_sensitivity",
-    "paper_validation.plots.plot5_retest_specificity",
-    "paper_validation.plots.plot6_network_informed_hierarchy",
-    "paper_validation.plots.plot6_retest_hierarchy",
+    "paper_validation.plot1_combat_impact",
+    "paper_validation.plot2_block_mass_convergence",
+    "paper_validation.plot3_method_sensitivity",
+    "paper_validation.plot5_retest_specificity",
+    "paper_validation.plot6_network_informed_hierarchy",
+    "paper_validation.plot6_retest_hierarchy",
 )
 ML_STEPS = (
     "ml_transfer.run_ml_feature_selection",
     "ml_transfer.audit_ml_feature_selection",
-    "paper_validation.plots.plot7_ml_transfer_auc",
+    "paper_validation.plot7_ml_transfer_auc",
 )
 
 

@@ -8,7 +8,7 @@ The core claim is that topological selection (TFNBS, etc.) maintains or
 improves predictive performance while drastically reducing the feature space, 
 proving that it captures the stable biological core of the brain-state transition.
 
-Reads from: `examples/open_close/results/ml/ml_feature_selection.csv`
+Reads from: `examples/open_close/results/ml_transfer/ml_feature_selection.csv`
 """
 
 from __future__ import annotations
@@ -20,12 +20,10 @@ import sys as _sys
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
 
-from pathlib import Path
 import pandas as pd
 import numpy as np
 
-HERE = Path(__file__).resolve().parents[1]
-ML_DIR = HERE / "results" / "ml"
+from examples.open_close._shared.paths import ML_TRANSFER as ML_DIR
 
 def main() -> None:
     csv_path = ML_DIR / "ml_feature_selection.csv"

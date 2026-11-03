@@ -63,7 +63,7 @@ python examples/open_close/atlas_stability/run_atlas_stability.py --quick     # 
 python examples/open_close/atlas_stability/run_atlas_stability.py --reuse     # reuse saved TFNBS maps
 ```
 
-Outputs go to `results/` (git-ignored): CSV tables, `tfnbs/*.npz`,
+Outputs go to `../results/atlas_stability/` (git-ignored): CSV tables, `tfnbs/*.npz`,
 `fig_cross_cohort_units.png`, `fig_primary_bootstrap.png`.
 
 Everything is descriptive: no new hypothesis test, and the TFNBS correction is unchanged.
