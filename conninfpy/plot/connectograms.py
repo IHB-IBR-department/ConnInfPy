@@ -122,6 +122,15 @@ def plot_connectogram(
     its support covers; that is faithful to mixed ROIs, but splits a
     connection between large parcels into many fractional chords, most below
     ``min_weight`` (the footer gives the share of connections drawn).
+    ``aggregate_connections`` itself defaults to the fractional ``'weighted'``.
+
+    ROIs that ``annotate_rois`` marked ``level == 'unassigned'`` (no labelled
+    support in the atlas, or a labelled share below its ``min_coverage``) are
+    not placed: they get no tissue on the rings and none of their chords, and
+    the footer reports how many were left out and why, together with how many
+    detected connections touch such an ROI. The full counts live in the
+    ``attrs['coverage']`` of the underlying aggregation (see
+    :func:`conninfpy.interpret.annotate.aggregate_connections`).
 
     A chord joins two (unit, network) slots; its colour runs from one
     endpoint's network to the other's, and its width scales with the number of
@@ -150,7 +159,7 @@ def plot_connectogram(
     nets = [
         str(x) for x in (rois.grouping("network") if networks is None else networks)
     ]
-    W, units = _unit_weights(rois, level, assign)
+    W, units = _unit_weights(rois, level, assign, placed_only=True)
     agg = aggregate_connections(
         result,
         rois,
@@ -161,14 +170,17 @@ def plot_connectogram(
         networks=nets,
         param_idx=param_idx,
     )
+    coverage = dict(agg.attrs.get("coverage", {}))
 
     if ax is None:
         _, ax = plt.subplots(figsize=(9, 9), facecolor="white")
     ax.set_aspect("equal")
     ax.axis("off")
 
-    # rings: subregions (sampled or not) and gyri
-    sampled = np.nan_to_num(rois.labelled_weights(), nan=0.0).sum(axis=0) >= 0.1
+    # rings: subregions (sampled by placed ROIs or not) and gyri
+    lw = np.nan_to_num(rois.labelled_weights(), nan=0.0)
+    lw[np.asarray(rois.table["level"] == "unassigned")] = 0.0
+    sampled = lw.sum(axis=0) >= 0.1
     for rid, r in lay.iterrows():
         a0, a1 = sorted(
             (_side_angle(r.s0, r.hemisphere), _side_angle(r.s1, r.hemisphere))
@@ -380,20 +392,39 @@ def plot_connectogram(
             fontsize=6.5,
             frameon=False,
         )
-    total = float(agg["detected"].sum())
     shown = float(links["detected"].sum()) if len(links) else 0.0
     how = (
         "placed in the unit holding most of it"
         if assign == "dominant"
         else "spread over the units it covers"
     )
+    n_rois = coverage.get("n_rois", len(rois))
+    n_placed = coverage.get("n_placed", n_rois)
+    n_out = len(coverage.get("unplaced_no_support", []))
+    n_low = len(coverage.get("unplaced_low_coverage", []))
+    place = (
+        f"{n_placed} of {n_rois} ROIs placed ({n_out} outside the atlas, "
+        f"{n_low} below min_coverage), each {how} (Brainnetome {level})"
+    )
+    n_det = coverage.get("detected_total", 0)
+    text = f"{place}; no detected connections"
+    if n_det:
+        text = (
+            f"{place}; {len(links)} chord{'s' if len(links) != 1 else ''} ≥ "
+            f"{min_weight:g} connection carry "
+            f"{shown:.0f} of {n_det} detected connections ({shown / n_det:.0%})"
+        )
+        n_unplaced_end = n_det - int(coverage.get("detected_placed", n_det))
+        if n_unplaced_end:
+            text += (
+                f"; {n_unplaced_end} detected connection"
+                f"{'s' if n_unplaced_end != 1 else ''} touch"
+                f"{'es' if n_unplaced_end == 1 else ''} an unplaced ROI"
+            )
     ax.text(
         0,
         -lim - 0.03,
-        f"Each of {len(rois)} ROIs {how} (Brainnetome {level}); {len(links)} chords ≥ "
-        f"{min_weight:g} connection carry {shown:.0f} of {total:.0f} connections ({shown / total:.0%})"
-        if total
-        else f"Each of {len(rois)} ROIs {how} (Brainnetome {level}); no detected connections",
+        text,
         ha="center",
         va="center",
         fontsize=6.5,

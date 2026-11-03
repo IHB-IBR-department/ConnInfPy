@@ -767,19 +767,26 @@ def summarize_annotation(
             "edges": ann, "meta": meta}
 
 
-def _unit_weights(rois: RoiAnnotation, level: str, assign: str):
+def _unit_weights(rois: RoiAnnotation, level: str, assign: str, placed_only: bool = False):
     """(n_rois, n_units) share of each ROI's labelled support in each BNA unit at ``level``.
 
     Units are subregions (BNA names) or gyri / lobes per hemisphere ('SFG_L').
     ``assign='dominant'`` puts all of an ROI in the unit holding most of it at
     that level (a gyrus can hold most of an ROI whose largest subregion lies
-    elsewhere). ROIs without labelled support get a zero row.
+    elsewhere). ROIs without labelled support get a zero row. With
+    ``placed_only=True`` the row of every ROI that ``annotate_rois`` marked
+    ``level == 'unassigned'`` (outside the atlas or below ``min_coverage``) is
+    zeroed as well, so such ROIs are not placed on the connectogram; the
+    default ``False`` keeps the weighted composition of all labelled ROIs
+    (e.g. the atlas-stability example) unchanged.
     """
     if level not in _LEVELS:
         raise ValueError(f"level must be one of {_LEVELS}; got {level!r}.")
     if assign not in ("weighted", "dominant"):
         raise ValueError("assign must be 'weighted' or 'dominant'.")
     w = np.nan_to_num(rois.labelled_weights(), nan=0.0)
+    if placed_only:
+        w[np.asarray(rois.table["level"] == "unassigned")] = 0.0
     regions = rois.reference.regions
     if level == "subregion":
         units = list(regions["name"])
@@ -822,13 +829,27 @@ def aggregate_connections(
     every tested connection, so ``rate = detected / tested`` compares unit
     pairs sampled by different numbers of ROIs.
 
+    ROIs that ``annotate_rois`` marked ``level == 'unassigned'`` (no labelled
+    support, or a labelled share below ``min_coverage``) are not placed: their
+    weight rows are zero, so their connections carry no rows here. The
+    returned frame carries ``df.attrs['coverage']`` with the atlas coverage of
+    the aggregation: ``n_rois``, ``n_placed``, ``unplaced_no_support`` and
+    ``unplaced_low_coverage`` (ROI names), ``detected_total`` and
+    ``detected_placed`` (detected connections of ``tail`` with finite p —
+    all, vs. those with both endpoints placed; counted once with
+    ``tail='both'``), ``tested_total`` / ``tested_placed``, and ``level``,
+    ``assign``, ``tail``. Use it to report placement alongside the table;
+    :func:`conninfpy.plot.connectograms.plot_connectogram` puts it in its
+    footer and defaults to ``assign='dominant'`` while this function defaults
+    to the fractional ``'weighted'``.
+
     Descriptive only: the result's correction and inference unit are unchanged.
     """
     import pandas as pd
 
     if tail not in ("positive", "negative", "both"):
         raise ValueError("tail must be 'positive', 'negative' or 'both'.")
-    W, units = _unit_weights(rois, level, assign)
+    W, units = _unit_weights(rois, level, assign, placed_only=True)
     nets = [str(x) for x in (rois.grouping("network") if networks is None else networks)]
     if len(nets) != len(rois):
         raise ValueError(f"networks has {len(nets)} labels for {len(rois)} ROIs.")
@@ -860,11 +881,27 @@ def aggregate_connections(
     if nonzero_only:
         keep &= D[p, q] > 0
     p, q = p[keep], q[keep]
-    return pd.DataFrame({
+    df = pd.DataFrame({
         "unit_a": [units[x // K] for x in p], "network_a": [net_names[x % K] for x in p],
         "unit_b": [units[x // K] for x in q], "network_b": [net_names[x % K] for x in q],
         "detected": D[p, q], "tested": T[p, q], "rate": D[p, q] / T[p, q],
     }).sort_values("detected", ascending=False).reset_index(drop=True)
+    names = list(rois.table["roi"])
+    placed = W.sum(axis=1) > 0
+    labelled = rois.weights.sum(axis=1) > 0
+    unassigned = np.asarray(rois.table["level"] == "unassigned")
+    df.attrs["coverage"] = {
+        "n_rois": len(rois),
+        "n_placed": int(placed.sum()),
+        "unplaced_no_support": [nm for nm, u, l in zip(names, unassigned, labelled) if u and not l],
+        "unplaced_low_coverage": [nm for nm, u, l in zip(names, unassigned, labelled) if u and l],
+        "detected_total": int(det.sum()),
+        "detected_placed": int((det & placed[i] & placed[j]).sum()),
+        "tested_total": int(len(i)),
+        "tested_placed": int((placed[i] & placed[j]).sum()),
+        "level": level, "assign": assign, "tail": tail,
+    }
+    return df
 
 
 __all__ = ["RoiAnnotation", "annotate_rois", "annotate_bna_regions", "bna_region_ids", "annotate_edges",
