@@ -22,7 +22,7 @@ The (0.4, 3.0) cell therefore reproduces the age map.
 
 Output
 ------
-results/age_development/sensitivity/eh/
+results/age/sensitivity/eh/
   grid_summary.csv                    # per-method per-cell n_sig (p <= 0.05)
   pmaps_<method>.npz                  # p-maps, (N, N, 36) per tail
   spearman_matrix[_neg].csv           # TFNBS: pairwise Spearman of -log10 p across cells
@@ -56,7 +56,7 @@ from examples.abide._shared.data import load_prepared
 
 HERE = Path(__file__).resolve().parents[1]
 DATA_FILE = HERE / "results" / "abide_prepared.npz"
-OUT_DIR = HERE / "results" / "age_development" / "sensitivity" / "eh"
+OUT_DIR = HERE / "results" / "age" / "sensitivity" / "eh"
 PLOTS_DIR = HERE / "results" / "plots"
 
 E_GRID = (0.20, 0.40, 0.50, 0.75, 1.00, 1.30)

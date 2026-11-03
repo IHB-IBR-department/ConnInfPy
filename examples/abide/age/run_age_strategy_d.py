@@ -6,7 +6,7 @@ the ComBat preserve design and site dummies are appended to the downstream GLM.
 That removes the Nygaard-style label leak risk that Strategy B can introduce
 when the tested variable is correlated with site.
 
-Outputs go to ``results/age_development/`` as strategy-explicit p-map ``.npz``
+Outputs go to ``results/age/`` as strategy-explicit p-map ``.npz``
 files plus atlas-annotated edge tables.
 
 Usage:
@@ -35,7 +35,7 @@ from examples.abide._shared.data import load_prepared, build_atlas
 
 HERE = Path(__file__).resolve().parents[1]
 DATA_FILE = HERE / "results" / "abide_prepared.npz"
-OUT_DIR = HERE / "results" / "age_development"
+OUT_DIR = HERE / "results" / "age"
 
 
 def _load(path: Path = DATA_FILE) -> dict:

@@ -150,7 +150,7 @@ def plot2_effect_size(data):
 
 def plot3_network_block_mass(data):
     print("Generating Network-Level Block-Mass...")
-    csv_file = RESULTS_DIR / "age_development" / "age_strategy_d_edges.csv"
+    csv_file = RESULTS_DIR / "age" / "age_strategy_d_edges.csv"
     if not csv_file.exists(): return
     df = pd.read_csv(csv_file); network_order = list(data["network_order"]); n_nets = len(network_order)
     mat_pos = np.zeros((n_nets, n_nets)); mat_neg = np.zeros((n_nets, n_nets))
@@ -167,7 +167,7 @@ def plot3_network_block_mass(data):
 
 def plot4_method_sensitivity():
     print("Generating Method Sensitivity...")
-    methods_dir = RESULTS_DIR / "age_development" / "methods"
+    methods_dir = RESULTS_DIR / "age" / "methods"
     csv_files = list(methods_dir.glob("age_*_edges.csv"))
     if not csv_files: return
     method_names = []; edge_sets = {}; full_stats = {}

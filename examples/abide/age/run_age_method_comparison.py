@@ -2,7 +2,7 @@
 
 Runs each method on the same Strategy D GLM design (interest=age,
 confounds=sex, mean_fd) and writes p-maps plus atlas-aware edge tables to
-``results/age_development/methods/``. The downstream agreement audit is
+``results/age/methods/``. The downstream agreement audit is
 produced by :mod:`audit_age_methods`.
 
 We intentionally run on age (which has strong signal) rather than ADOS
@@ -31,7 +31,7 @@ from examples.abide._shared.data import load_prepared, build_atlas
 
 HERE = Path(__file__).resolve().parents[1]
 DATA_FILE = HERE / "results" / "abide_prepared.npz"
-OUT_DIR = HERE / "results" / "age_development" / "methods"
+OUT_DIR = HERE / "results" / "age" / "methods"
 
 
 def _load(path: Path = DATA_FILE) -> dict:
