@@ -1,4 +1,7 @@
 """Brainnetome annotation step: where the detected connections are."""
+from io import BytesIO
+
+import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
@@ -10,9 +13,11 @@ from apps.utils.helpers import (
     result_is_stale,
     safe_filename_part,
 )
-from conninfpy.interpret.annotate import annotate_bna_regions, annotate_rois, bna_region_ids, summarize_annotation
-from conninfpy.brainnetome import BrainnetomeReference
+from conninfpy.interpret.annotate import (aggregate_connections, annotate_bna_regions, annotate_rois,
+                                          bna_region_ids, summarize_annotation)
+from conninfpy.atlas.brainnetome import BrainnetomeReference
 from conninfpy.interpret.evidence import build_annotation_evidence, describe_coverage, summarize_terms
+from conninfpy.plot import plot_connectogram
 
 
 # Unknown variant first: an undeclared space is flagged approximate, never assumed exact.
@@ -105,7 +110,8 @@ def render_bna_annotation_view(base_atlas):
                 inference_unit=getattr(result, "inference_unit", "edge"), summary=summary,
             )
         st.session_state.annotation = {"rois": rois, "summary": summary, "detected": detected,
-                                       "support": support, "level": level}
+                                       "support": support, "level": level, "alpha": alpha,
+                                       "param_idx": param_idx}
         st.session_state.evidence_packet = evidence if evidence["rois"] else None
         st.session_state.narrative_text = None
         st.session_state.narrative_results = None
@@ -154,3 +160,37 @@ def render_bna_annotation_view(base_atlas):
         st.markdown("A contrast that covaries with head motion often shows short-range increases and "
                     "long-range decreases; overlapping spheres share voxels.")
         st.dataframe(summary["distance_qc"], width="stretch", hide_index=True)
+
+    st.markdown("#### Connectogram")
+    cc1, cc2, cc3 = st.columns(3)
+    tail = cc1.selectbox("Tail", ["positive", "negative"], key="bna_connectogram_tail",
+                         help="Draw one connectogram per tail; both tails at the same alpha are two figures.")
+    conn_level = cc2.selectbox("Level", ["gyrus", "subregion", "lobe"], key="bna_connectogram_level")
+    assign = cc3.selectbox("Assignment", ["dominant", "weighted"], key="bna_connectogram_assign",
+                           help="dominant: each ROI sits in the unit holding most of it (whole chords); "
+                                "weighted: spread over the units it covers (fractional chords).")
+    conn_alpha = ann.get("alpha", 0.05)
+    conn_param_idx = ann.get("param_idx")
+    agg = aggregate_connections(result, rois, tail=tail, level=conn_level, alpha=conn_alpha,
+                                assign=assign, param_idx=conn_param_idx)
+    cov = agg.attrs["coverage"]
+    fig, ax = plt.subplots(figsize=(9, 9), facecolor="white")
+    plot_connectogram(result, rois, tail=tail, level=conn_level, alpha=conn_alpha, assign=assign,
+                      param_idx=conn_param_idx, ax=ax)
+    st.pyplot(fig, width="stretch")
+    st.caption(
+        f"{cov['n_placed']} of {cov['n_rois']} ROIs placed ({len(cov['unplaced_no_support'])} outside the "
+        f"atlas, {len(cov['unplaced_low_coverage'])} below min_coverage). Detected ({tail} tail): "
+        f"{cov['detected_placed']} of {cov['detected_total']} with both endpoints placed; tested: "
+        f"{cov['tested_placed']} of {cov['tested_total']}. Descriptive only; correction unchanged."
+    )
+    png, pdf = BytesIO(), BytesIO()
+    fig.savefig(png, format="png", dpi=220, bbox_inches="tight", facecolor="white")
+    fig.savefig(pdf, format="pdf", bbox_inches="tight", facecolor="white")
+    stem = f"connectogram_{safe_filename_part(current_contrast_name())}_{conn_level}_{assign}_{tail}"
+    dc1, dc2 = st.columns(2)
+    dc1.download_button("Download connectogram (PNG)", data=png.getvalue(), file_name=f"{stem}.png",
+                        mime="image/png", key="bna_connectogram_png")
+    dc2.download_button("Download connectogram (PDF)", data=pdf.getvalue(), file_name=f"{stem}.pdf",
+                        mime="application/pdf", key="bna_connectogram_pdf")
+    plt.close(fig)
