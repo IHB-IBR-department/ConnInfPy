@@ -8,13 +8,13 @@ import argparse
 import numpy as np
 from examples.open_close._shared.data import DATA_DIR, OpenCloseDataset
 from examples.open_close._shared.inference import compute_selector_pmaps
-from examples.open_close._shared.paths import RESULTS
+from examples.open_close._shared.paths import METHOD_MAPS
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=DATA_DIR)
-    parser.add_argument("--output", type=Path, default=RESULTS / "ml")
+    parser.add_argument("--output", type=Path, default=METHOD_MAPS)
     parser.add_argument("--n-perm", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()

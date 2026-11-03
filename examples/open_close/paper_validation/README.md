@@ -1,17 +1,17 @@
 # Paired inference and publication checks
 
-These runners generate paired EO/EC maps, empirical EC-run controls and descriptive agreement panels. They use `_shared/data.py` and `_shared/inference.py`; no classifier is fitted in this workflow.
+These runners generate paired EO/EC maps, empirical EC-run controls and descriptive agreement panels. They use `_shared/data.py` and `_shared/inference.py`; no classifier is fitted in this workflow. Outputs go to `../results/paper_validation/` (written `results/` below); figures go to `../results/plots/`.
 
-| Runner | Input and output |
+| Script | Input and output |
 |---|---|
-| `run_paired_tfnbs.py` | Schaefer time series; cohort/retest TFNBS maps and edge CSVs in the shared `results/` |
-| `run_state_methods.py` | Paired state maps for all configured methods in `results/ml/` |
+| `run_paired_tfnbs.py` | Schaefer time series; cohort/retest TFNBS maps and edge CSVs in `results/` |
+| `run_state_methods.py` | Paired state maps for all configured methods in `results/methods/` |
 | `harmonize_pooled_cohorts.py` | Pooled state-preserving ComBat; `results/openclose_harmonized.npz` |
-| `run_pooled_methods.py` | Explicit harmonized NPZ; pooled method maps in `results/ml/` |
-| `run_retest_methods.py` | China complete EC-run pairs; control maps in `results/ml/` |
-| `run_eh_sensitivity.py` | Parameter grid; descriptive similarity tables and plots |
-| `audit_openclose_agreement.py` | Saved cohort maps; agreement CSVs and block-mass plot |
-| `plots/` | Saved artifacts; publication plots in `results/plots/` |
+| `run_pooled_methods.py` | Explicit harmonized NPZ; pooled method maps in `results/methods/` |
+| `run_retest_methods.py` | China complete EC-run pairs; control maps in `results/methods/` |
+| `run_eh_sensitivity.py` | Parameter grid; `results/sensitivity/eh/` and a plot |
+| `audit_openclose_agreement.py` | Saved cohort maps; `results/audit/` and the block-mass plot |
+| `plot*.py` | Saved maps; publication plots |
 
 ```bash
 python -m examples.open_close.paper_validation.run_paired_tfnbs --analyses ihb china china_retest

@@ -126,23 +126,23 @@ From the repository root with `conninfpy` and development dependencies:
 # Corrected two-model smoke run, including post-fit feature analysis.
 python examples/open_close/feature_stability/run_feature_stability.py \
   --bootstraps 10 --test-bootstraps 100 \
-  --output examples/open_close/feature_stability/results/edge_only_smoke
+  --output examples/open_close/results/feature_stability/edge_only_smoke
 
 # Full edge-only primary run; post-fit analysis is automatic.
 python examples/open_close/feature_stability/run_feature_stability.py \
-  --output examples/open_close/feature_stability/results/edge_only_run1
+  --output examples/open_close/results/feature_stability/edge_only_run1
 
 # EC run0, same participant split and seeds.
 python examples/open_close/feature_stability/run_feature_stability.py \
   --china-close-run 0 \
-  --split-from examples/open_close/feature_stability/results/edge_only_run1/participant_splits.csv \
-  --output examples/open_close/feature_stability/results/edge_only_run0
+  --split-from examples/open_close/results/feature_stability/edge_only_run1/participant_splits.csv \
+  --output examples/open_close/results/feature_stability/edge_only_run0
 
 # Reuse saved edge models from a previous complete run: NO fitting.
 # Legacy aggregate-input models in that folder are ignored.
 python examples/open_close/feature_stability/feature_stability.py \
-  --input examples/open_close/feature_stability/results/lobe_run1 \
-  --output examples/open_close/feature_stability/results/edge_features_run1
+  --input examples/open_close/results/feature_stability/lobe_run1 \
+  --output examples/open_close/results/feature_stability/edge_features_run1
 
 python -m pytest -q tests/test_openclose_prediction.py
 ```

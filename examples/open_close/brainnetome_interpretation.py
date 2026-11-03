@@ -27,11 +27,12 @@ openclose_china_run0_n47   openclose_china on the same 47 subjects
 
 Usage::
 
-    python examples/open_close/interpretation/brainnetome_interpretation.py [--atlas schaefer200|brainnetome] [--quick]
-        [--analyses ...] [--report NAME]
+    python examples/open_close/brainnetome_interpretation.py [--atlas schaefer200|brainnetome] [--quick]
+        [--analyses ...] [--report PATH]
 
-Outputs: ``examples/open_close/results/brainnetome[_native]/<analysis>/`` (tables,
-evidence packet, connectograms), the ROI table and the report.
+Outputs go next to the paired maps they describe:
+``results/paper_validation/brainnetome[_native]/<analysis>/`` (tables, evidence
+packet, connectograms, ``report.md``), plus the ROI table.
 """
 from __future__ import annotations
 
@@ -40,23 +41,22 @@ from pathlib import Path as _Path
 import sys as _sys
 
 if __package__ in (None, ""):
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import argparse
 import time
 from pathlib import Path
-
-HERE = Path(__file__).resolve().parents[1]
 
 from conninfpy import analyze  # noqa: E402
 from conninfpy.atlas.brainnetome import BrainnetomeReference  # noqa: E402
 from conninfpy.interpret import annotate_bna_regions, annotate_rois, interpret_result  # noqa: E402
 from conninfpy.interpret.report import reproduction_note, roi_markdown  # noqa: E402
 from examples.open_close._shared.data import OpenCloseDataset  # noqa: E402
+from examples.open_close._shared.paths import PAPER  # noqa: E402
 
 SCHAEFER_200 = Path.home() / "nilearn_data/schaefer_2018/Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm.nii.gz"
-STORED = {"openclose_ihb": HERE / "results/ihb_paired_tfnbs.npz",
-          "openclose_china": HERE / "results/china_paired_tfnbs_run0.npz"}
+STORED = {"openclose_ihb": PAPER / "ihb_paired_tfnbs.npz",
+          "openclose_china": PAPER / "china_paired_tfnbs_run0.npz"}
 TFNBS = dict(method="tfnbs", e=0.4, h=3.0, n=10, acceleration=None, rng=42, use_mp=True)
 # name -> (experiment, close run, restrict to subjects with both close runs)
 ANALYSES = {
@@ -89,19 +89,20 @@ def main():
     ap.add_argument("--atlas", default="schaefer200", choices=["schaefer200", "brainnetome"])
     ap.add_argument("--quick", action="store_true", help="500 permutations (smoke test)")
     ap.add_argument("--analyses", nargs="+", default=["openclose_ihb", "openclose_china"], choices=list(ANALYSES))
-    ap.add_argument("--report", type=Path, help="Optional Markdown report path in the project vault")
+    ap.add_argument("--report", type=Path, help="Optional combined Markdown report path in the project vault")
     args = ap.parse_args()
     n_perm = 500 if args.quick else 5000
     native = args.atlas == "brainnetome"
-    out_dir = HERE / "results" / ("brainnetome_native" if native else "brainnetome")
+    out_dir = PAPER / ("brainnetome_native" if native else "brainnetome")
     out_dir.mkdir(parents=True, exist_ok=True)
     ref = BrainnetomeReference.load()
     atlas_name = "BNA-246 (242 regions, native)" if native else "Schaefer-200 (182 parcels)"
-    report = [f"# Brainnetome interpretation of the Open-Close results ({atlas_name})\n\n"
-              f"`examples/open_close/interpretation/brainnetome_interpretation.py --atlas {args.atlas}`, {n_perm} permutations, "
+    header = (f"# Brainnetome interpretation of the Open-Close results ({atlas_name})\n\n"
+              f"`examples/open_close/brainnetome_interpretation.py --atlas {args.atlas}`, {n_perm} permutations, "
               "TFNBS E = 0.4, H = 3, α = 0.05 per tail. Descriptive: no test is added and the correction is "
               "unchanged. The data used global-signal regression, which induces part of the anticorrelations. "
-              "BrainMap domains are literature context of the endpoint regions.\n"]
+              "BrainMap domains are literature context of the endpoint regions.\n")
+    report = [header]
     rois = None
     for name in args.analyses:
         t0 = time.time()
@@ -110,17 +111,19 @@ def main():
         if rois is None:
             rois = annotate(ref, ds)
             rois.table.to_csv(out_dir / f"rois_openclose_{'bna242' if native else 'schaefer200'}.csv", index=False)
+            roi_section = roi_markdown(rois, f"Open-Close, {atlas_name}")
         n_sub = int(ds.retest_subject_mask().sum()) if both_runs_only else ds.n_subjects
         dataset = f"Open-Close {exp}, close run {run}, {n_sub} subjects, {atlas_name}"
         out = run_paired(ds, n_perm, run, both_runs_only)
         repro = "no stored map" if native else reproduction_note(out.inference, STORED.get(name))
         rep = interpret_result(out.inference, rois, name=name, source_atlas=dataset,
                                labels={"A": "eyes open", "B": "eyes closed"})
-        rep.save(out_dir / name)
-        report.append(rep.markdown(reproduction=repro))
+        section = rep.markdown(reproduction=repro)
+        (rep.save(out_dir / name) / "report.md").write_text(header + section + roi_section)
+        report.append(section)
         print(f"{name}: {time.time() - t0:.0f}s; {len(rep.edges)} detections; reproduction: {repro}")
     if rois is not None:
-        report.append(roi_markdown(rois, f"Open-Close, {atlas_name}"))
+        report.append(roi_section)
     if args.report is not None:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text("".join(report))

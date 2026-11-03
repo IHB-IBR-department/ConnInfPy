@@ -12,7 +12,7 @@ Spearman on −log10 p, top-k concordance, Yeo-7 block-mass Pearson) between:
 Also reports per-tail Yeo-7 block-mass matrices side-by-side for IHB & China
 as a secondary figure.
 
-Outputs: :file:`examples/open_close/results/audit/*`.
+Outputs: :file:`examples/open_close/results/paper_validation/audit/*`.
 """
 
 from __future__ import annotations
@@ -26,7 +26,6 @@ if __package__ in (None, ""):
 
 import os
 import sys
-from pathlib import Path
 from typing import Dict
 
 import matplotlib.pyplot as plt
@@ -35,6 +34,7 @@ import pandas as pd
 from scipy import stats
 
 from examples.open_close._shared.data import OpenCloseDataset
+from examples.open_close._shared.paths import PAPER, PLOTS
 
 # Shared agreement helpers (examples/_audit_utils.py).
 from examples.open_close._shared.agreement import (  # noqa: E402
@@ -49,10 +49,8 @@ from examples.open_close._shared.agreement import (  # noqa: E402
 )
 
 
-HERE = Path(__file__).resolve().parents[1]
-RESULTS = HERE / "results"
-AUDIT = RESULTS / "audit"
-PLOTS = RESULTS / "plots"
+RESULTS = PAPER
+AUDIT = PAPER / "audit"
 
 
 def _load(name: str) -> Dict[str, np.ndarray]:

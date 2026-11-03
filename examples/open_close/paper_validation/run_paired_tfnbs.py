@@ -2,7 +2,7 @@
 
 Canonical paired Open-Close validation. With no ``sites=`` argument, the
 wrapper skips ComBat and runs the paired sign-flip permutation. Outputs are
-atlas-aware p-maps and edge tables under ``results/``.
+atlas-aware p-maps and edge tables under ``results/paper_validation/``.
 
 Usage:
     python examples/open_close/paper_validation/run_paired_tfnbs.py --quick
@@ -26,10 +26,10 @@ import numpy as np
 
 from conninfpy import AtlasInfo, analyze
 from examples.open_close._shared.data import OpenCloseDataset, DATA_DIR
+from examples.open_close._shared.paths import PAPER
 
 
-HERE = Path(__file__).resolve().parents[1]
-OUT_ROOT = HERE / "results"
+OUT_ROOT = PAPER
 
 
 def _build_atlas(net_labels: np.ndarray, names: list[str]) -> AtlasInfo:

@@ -44,8 +44,9 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 
+from examples.open_close._shared.paths import STRUCTURAL_PRIOR  # noqa: E402
 
-OUT = HERE / "results"
+OUT = STRUCTURAL_PRIOR
 SEED, ALPHA = 42, 0.05
 THRESHOLDS = (0.05, 0.01, 0.1, 0.2)                # first = primary
 SETTINGS = dict(test_type="paired", e=0.4, h=3.0, n=10, acceleration=None, rng=SEED, use_mp=True)

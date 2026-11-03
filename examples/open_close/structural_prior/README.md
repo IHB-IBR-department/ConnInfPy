@@ -28,7 +28,7 @@ python examples/open_close/structural_prior/run_sc_inference.py --quick    # ~10
 python examples/open_close/structural_prior/run_sc_inference.py --stage e0,e2
 ```
 
-Outputs go to `results/` (git-ignored): CSV tables per stage, and
+Outputs go to `../results/structural_prior/` (git-ignored): CSV tables per stage, and
 p-maps for the primary runs.
 
 ## NI-TFNBS with SC blocks (`run_sc_blocks.py`)
@@ -48,6 +48,6 @@ python examples/open_close/structural_prior/run_sc_blocks.py                 # ~
 python examples/open_close/structural_prior/draw_sc_block_connectograms.py
 ```
 
-Outputs go to `results/blocks/` (git-ignored).
+Outputs go to `../results/structural_prior/blocks/` (git-ignored).
 
-`analysis.py` contains shared data, mask and inference primitives; module-resolution inference does not import a runner or mutate its cohort selection. Both inference runners accept `--output` and optional `--report` (an explicit vault Markdown path). Results and saved map bytes from the earlier folder are retained under `structural_prior/results/`.
+`analysis.py` contains shared data, mask and inference primitives; module-resolution inference does not import a runner or mutate its cohort selection. Both inference runners accept `--output` and optional `--report` (an explicit vault Markdown path).

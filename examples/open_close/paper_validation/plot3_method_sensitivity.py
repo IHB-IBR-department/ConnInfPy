@@ -3,7 +3,7 @@ from pathlib import Path as _Path
 import sys as _sys
 
 if __package__ in (None, ""):
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[4]))
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
 
 import numpy as np
 import pandas as pd
@@ -12,10 +12,7 @@ import seaborn as sns
 from pathlib import Path
 from scipy import stats
 
-HERE = Path(__file__).resolve().parents[2]
-RESULTS = HERE / "results"
-ML_DIR = RESULTS / "ml"
-PLOTS = RESULTS / "plots"
+from examples.open_close._shared.paths import METHOD_MAPS as MAPS_DIR, PLOTS
 
 ALPHA = 0.05
 METHODS = ["tstat", "tfnbs", "ni_tfnbs", "fbc_tfnbs", "nbs_20", "nbs_30", "bh_fdr"]
@@ -32,7 +29,7 @@ PRETTY = {
 def _load_data(cohort):
     masks = {}; stats_maps = {}
     for m in METHODS:
-        path = ML_DIR / f"pmap_{cohort}_{m}.npz"
+        path = MAPS_DIR / f"pmap_{cohort}_{m}.npz"
         if not path.exists():
             print(f"  missing: {path}")
             continue

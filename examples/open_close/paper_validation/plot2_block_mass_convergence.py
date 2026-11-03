@@ -3,16 +3,14 @@ from pathlib import Path as _Path
 import sys as _sys
 
 if __package__ in (None, ""):
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[4]))
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
 
 import numpy as np
 import matplotlib.pyplot as plt
-from pathlib import Path
 from examples.open_close._shared.data import OpenCloseDataset
+from examples.open_close._shared.paths import PAPER, PLOTS
 
-HERE = Path(__file__).resolve().parents[2]
-RESULTS = HERE / "results"
-PLOTS = RESULTS / "plots"
+RESULTS = PAPER
 
 # Σ −log10 p per network pair, from conninfpy.results.summarize_by_network
 # (the aggregation users get from result.network_summary(atlas)).

@@ -16,7 +16,7 @@ For each (cohort, method) we threshold the saved p-map at α = 0.05 on each
 tail, collapse positive ∪ negative, and aggregate significant edges into a
 Yeo-7 block × block count heatmap.
 
-Input  : examples/open_close/results/ml/pmap_{cohort}_{method}.npz
+Input  : examples/open_close/results/paper_validation/methods/pmap_{cohort}_{method}.npz
 Output : examples/open_close/results/plots/plot6_network_informed_hierarchy.png
 """
 from __future__ import annotations
@@ -26,7 +26,7 @@ from pathlib import Path as _Path
 import sys as _sys
 
 if __package__ in (None, ""):
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[4]))
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[3]))
 
 from pathlib import Path
 
@@ -37,9 +37,7 @@ import seaborn as sns
 from examples.open_close._shared.data import OpenCloseDataset
 
 
-HERE = Path(__file__).resolve().parents[2]
-ML_DIR = HERE / "results" / "ml"
-PLOTS = HERE / "results" / "plots"
+from examples.open_close._shared.paths import METHOD_MAPS as MAPS_DIR, PLOTS
 
 ALPHA = 0.05
 
@@ -92,7 +90,7 @@ def main() -> None:
 
     for r, cohort in enumerate(COHORTS):
         for c, (method, title, cmap) in enumerate(METHODS):
-            pmap_path = ML_DIR / f"pmap_{cohort}_{method}.npz"
+            pmap_path = MAPS_DIR / f"pmap_{cohort}_{method}.npz"
             mat = _block_counts(pmap_path, net_labels, n_nets)
             n_sig = int(mat.sum() / 2 + np.diag(mat).sum() / 2)
             ax = axes[r, c]

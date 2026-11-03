@@ -42,7 +42,7 @@ from sklearn.metrics import adjusted_rand_score
 
 from examples.open_close.structural_prior import analysis as R
 
-OUT = R.HERE / "results" / "blocks"
+OUT = R.OUT / "blocks"
 COHORTS = {"ihb": ("ihb", 0, False), "china_ec1": ("china", 1, True), "china_ec0": ("china", 0, True)}
 GAMMAS = tuple(float(g) for g in np.round(np.arange(0.8, 2.01, 0.1), 2))
 N_SEEDS = 50

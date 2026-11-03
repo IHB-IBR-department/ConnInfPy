@@ -18,11 +18,10 @@ import numpy as np
 
 from conninfpy import compute_p_val
 from examples.open_close._shared.data import OpenCloseDataset, DATA_DIR
+from examples.open_close._shared.paths import METHOD_MAPS, PAPER
 
-HERE = Path(__file__).resolve().parents[1]
-RESULTS = HERE / "results"
-ML_DIR = RESULTS / "ml"
-HARM_PATH = RESULTS / "openclose_harmonized.npz"
+MAPS_DIR = METHOD_MAPS
+HARM_PATH = PAPER / "openclose_harmonized.npz"
 
 SELECTORS = {
     "tstat":     dict(method="tstat"),
@@ -33,17 +32,17 @@ SELECTORS = {
 }
 
 def main() -> None:
-    global ML_DIR, HARM_PATH
+    global MAPS_DIR, HARM_PATH
     ap = argparse.ArgumentParser()
     ap.add_argument("--n-perm", type=int, default=1000)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--data-dir", type=Path, default=DATA_DIR)
     ap.add_argument("--input", type=Path, default=HARM_PATH)
-    ap.add_argument("--output", type=Path, default=ML_DIR)
+    ap.add_argument("--output", type=Path, default=MAPS_DIR)
     args = ap.parse_args()
-    HARM_PATH, ML_DIR = args.input.resolve(), args.output.resolve()
+    HARM_PATH, MAPS_DIR = args.input.resolve(), args.output.resolve()
 
-    ML_DIR.mkdir(parents=True, exist_ok=True)
+    MAPS_DIR.mkdir(parents=True, exist_ok=True)
 
     if not HARM_PATH.exists():
         print(f"Error: {HARM_PATH} not found. Run harmonize_pooled_cohorts.py first.")
@@ -83,7 +82,7 @@ def main() -> None:
         )
         dt = time.time() - t0
         
-        out_path = ML_DIR / f"pmap_pooled_{name}.npz"
+        out_path = MAPS_DIR / f"pmap_pooled_{name}.npz"
         np.savez(out_path, **{k: p[k] for k in p})
         print(f"  {name:10s} {dt:5.1f}s saved: {out_path}")
 
