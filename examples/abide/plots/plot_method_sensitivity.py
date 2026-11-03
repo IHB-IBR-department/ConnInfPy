@@ -19,7 +19,7 @@ PLOTS_DIR.mkdir(exist_ok=True, parents=True)
 
 def plot_method_sensitivity():
     print("Generating Method Sensitivity & Convergence (Jaccard + Spearman)...")
-    methods_dir = RESULTS_DIR / "age_development" / "methods"
+    methods_dir = RESULTS_DIR / "age" / "methods"
     csv_files = list(methods_dir.glob("age_*_edges.csv"))
     
     if len(csv_files) == 0:
