@@ -512,8 +512,13 @@ Every result is dict-like and carries metadata and exporters:
 The Brainnetome report describes where the detected connections lie (endpoint
 subregion, gyrus and lobe; hemispheric relation, circuit class, distance;
 BrainMap domains of the endpoints) next to what was tested. It adds no test:
-the p-values, their correction and the inference unit are unchanged. For data
-parcellated with the Brainnetome atlas itself use ``annotate_bna_regions``.
+the p-values, their correction and the inference unit are unchanged. The
+connectograms place only ROIs with atlas support: ``unassigned`` ROIs
+(outside the atlas or below ``min_coverage``) get no tissue on the rings, and
+each footer reports the placement counts and the detected connections that
+touch an unplaced ROI (``aggregate_connections(...).attrs["coverage"]``).
+For data parcellated with the Brainnetome atlas itself use
+``annotate_bna_regions``.
 See :ref:`usage-interpret` for the rules, and the ABIDE and Open-Close
 examples (``examples/abide/``, ``examples/open_close/``) for complete runs.
 

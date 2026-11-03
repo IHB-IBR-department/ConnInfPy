@@ -279,7 +279,13 @@ The atlas is on the FSL MNI152 grid, which `space=` assumes by default
 unknown), and other MNI variants are flagged approximate.
 Each connection gets its hemispheric relation (homotopic or not), circuit
 class (cortico-cortical, thalamo-cortical, ...), distance, sphere overlap and
-population structural connectivity. BrainMap terms are published
+population structural connectivity. Connectograms
+(`conninfpy.plot.plot_connectogram`; also in the app's annotation view) draw
+one tail over the Brainnetome units and report atlas coverage: ROIs without
+atlas support (outside the atlas or below `min_coverage`) are not placed, and
+the footer — like `aggregate_connections(...).attrs["coverage"]` — states how
+many were left out and how many detected connections touch them. BrainMap
+terms are published
 forward-inference associations (which tasks activate a region), not functions
 of a region or a connection, and the summaries are descriptive: they put the
 detections next to the tested opportunities and add no test. The optional

@@ -12,10 +12,13 @@ labels, declared template) and worked calls are in :ref:`usage-interpret`.
   :func:`~conninfpy.interpret.annotate_bna_regions` annotates data
   parcellated with BNA-246 itself.
 - :func:`~conninfpy.interpret.annotate_edges` (also
-  :meth:`~conninfpy.results.InferenceResult.annotated_edges`),
-  :func:`~conninfpy.interpret.summarize_annotation` and
-  :func:`~conninfpy.interpret.aggregate_connections` describe the connections
+  :meth:`~conninfpy.results.InferenceResult.annotated_edges`) and
+  :func:`~conninfpy.interpret.summarize_annotation` describe the connections
   against the tested opportunities.
+  :func:`~conninfpy.interpret.aggregate_connections` sums them over
+  Brainnetome units and reports atlas coverage in ``attrs['coverage']``:
+  ``unassigned`` ROIs (outside the atlas or below ``min_coverage``) are not
+  placed, and the detected connections touching them stay counted.
 - :func:`~conninfpy.interpret.interpret_result` does all of it in one call and
   returns an :class:`~conninfpy.interpret.InterpretationReport` (tables,
   evidence packet, connectograms, Markdown section).
