@@ -58,14 +58,14 @@ openclose() {
   step "Open-Close: cross-cohort agreement (Table oc-cross) + block-mass figure"
   $PY examples/open_close/paper_validation/audit_openclose_agreement.py
   step "Open-Close: specificity figure"
-  $PY examples/open_close/paper_validation/plots/plot5_retest_specificity.py
+  $PY examples/open_close/paper_validation/plot5_retest_specificity.py
 }
 
 mltransfer() {
   step "Open-Close: separate significant-edge ML transfer study"
   $PY examples/open_close/ml_transfer/run_ml_feature_selection.py
   $PY examples/open_close/ml_transfer/audit_ml_feature_selection.py
-  $PY examples/open_close/paper_validation/plots/plot7_ml_transfer_auc.py
+  $PY examples/open_close/paper_validation/plot7_ml_transfer_auc.py
 }
 
 simulation() {

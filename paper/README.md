@@ -25,12 +25,12 @@ simulations and benchmarks need no data.
 | Fig `fig:pipeline` | `pipeline_firsted.pdf` — hand-drawn diagram, no data | — |
 | Fig `fig:abide-global-alignment` + `fig:abide-site-effects` | `abide/plot1_combat_site_variance.png` (one figure; the manuscript splits it into two) | `abide/plots/plot_paper_figures.py` |
 | Fig `fig:abide-age-networks` | `abide/plot3_network_block_mass.png` | `age/run_age_strategy_d.py --variant age` → `plots/plot_paper_figures.py` |
-| Table `tab:abide-dx`, Fig `fig:abide-dx` | `abide/plot6_diagnosis_methodology.png`; counts from `results/diagnosis/*_edges.csv` | `diagnosis/run_naive_baseline.py`, `diagnosis/run_dx_combat_only.py`, `diagnosis/run_dx_strategy_e.py`, `diagnosis/run_dx_site_glm.py` → `plots/plot_diagnosis_quadrant.py` |
-| Table `tab:method-spread` | `results/age_development/methods/*.npz` | `age/run_age_method_comparison.py` (+ `plots/plot_method_sensitivity.py`) |
-| Table `tab:tfnbs-multiverse`, Fig `fig:abide-multiverse` | `results/age_development/sensitivity/eh/multiverse_summary.csv` (+ pairwise matrices); `abide/plot5_tfnbs_grid_sensitivity.png` (counts per cell; the manuscript figure shows a Spearman matrix, which no script plots) | `age/run_eh_sensitivity.py` |
-| Table `tab:oc-within` | `results/{ihb,china}_paired_tfnbs*_edges.csv` | `open_close/paper_validation/run_paired_tfnbs.py` |
-| Table `tab:oc-cross`, Fig `fig:oc-replication` | `results/audit/openclose_agreement.csv`, `openclose/plot2_block_mass_convergence.png` | `audit_openclose_agreement.py` |
-| Fig `fig:oc-specificity` | `openclose/plot5_retest_specificity.png` | `paper_validation/run_state_methods.py`, `paper_validation/run_retest_methods.py` → `paper_validation/plots/plot5_retest_specificity.py` |
+| Table `tab:abide-dx`, Fig `fig:abide-dx` | `abide/plot6_diagnosis_methodology.png`; counts from `abide/results/diagnosis/*_edges.csv` | `diagnosis/run_naive_baseline.py`, `diagnosis/run_dx_combat_only.py`, `diagnosis/run_dx_strategy_e.py`, `diagnosis/run_dx_site_glm.py` → `plots/plot_diagnosis_quadrant.py` |
+| Table `tab:method-spread` | `abide/results/age/methods/*.npz` | `age/run_age_method_comparison.py` (+ `plots/plot_method_sensitivity.py`) |
+| Table `tab:tfnbs-multiverse`, Fig `fig:abide-multiverse` | `abide/results/age/sensitivity/eh/multiverse_summary.csv` (+ pairwise matrices); `abide/plot5_tfnbs_grid_sensitivity.png` (counts per cell; the manuscript figure shows a Spearman matrix, which no script plots) | `age/run_eh_sensitivity.py` |
+| Table `tab:oc-within` | `open_close/results/paper_validation/{ihb,china}_paired_tfnbs*_edges.csv` | `open_close/paper_validation/run_paired_tfnbs.py` |
+| Table `tab:oc-cross`, Fig `fig:oc-replication` | `open_close/results/paper_validation/audit/openclose_agreement.csv`, `openclose/plot2_block_mass_convergence.png` | `audit_openclose_agreement.py` |
+| Fig `fig:oc-specificity` | `openclose/plot5_retest_specificity.png` | `paper_validation/run_state_methods.py`, `paper_validation/run_retest_methods.py` → `paper_validation/plot5_retest_specificity.py` |
 | Table `tab:timing`, Fig `fig:timing` | `res_benchmarks/timing_benchmark.csv`, `figures/timing_benchmark.png` | `benchmarks/performance/timing_benchmark.py` → `benchmarks/performance/plot_results.py` |
 | Fig `fig:fwer` | `simulation/fig1_fwer_calibration.png`; verdict in `results/fpr_calibration/fpr_summary.txt` | `fpr/fpr_calibration.py` → `regenerate_paper_figures.py` |
 | Fig `fig:topologies` | `simulation/topologies_gallery_dr0.125_n30.png` | `regenerate_paper_figures.py` |
@@ -314,7 +314,7 @@ permutations give a smallest Bonferroni p of 27/5,001 = 0.0054. The ML table
 reports NaN there; the random/top-k baselines matched to cNBS's edge count
 changed with it (all other selectors are identical). `delta_auc.csv`,
 `best_cells.csv` and `average_cross_site_auc.csv` come from
-`ml/openclose_ml_transfer_from_pvals.py` (not in the manuscript) and were
+`open_close/ml_transfer/openclose_ml_transfer_from_pvals.py` (not in the manuscript) and were
 not regenerated.
 
 ## NI-TFNBS: fixed block capacity (2026-10-09)
