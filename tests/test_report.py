@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from conninfpy.brainnetome import BrainnetomeReference
+from conninfpy.atlas.brainnetome import BrainnetomeReference
 from conninfpy.interpret import annotate_rois, interpret_result
 from conninfpy.interpret.report import reproduction_note, roi_markdown
 from conninfpy.results import InferenceResult

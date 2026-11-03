@@ -136,7 +136,7 @@ class TestAnnotationUsesCoupling(unittest.TestCase):
         import tempfile
 
         from conninfpy.interpret.annotate import annotate_rois, summarize_annotation
-        from conninfpy.brainnetome import BrainnetomeReference
+        from conninfpy.atlas.brainnetome import BrainnetomeReference
 
         coords = [(-42, 36, 24), (42, 36, 24), (-22, -4, -18), (-38, -22, 56), (-6, -52, 28), (-8, -84, 4)]
         rois = annotate_rois(coords, reference=BrainnetomeReference.load(
