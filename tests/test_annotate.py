@@ -271,7 +271,7 @@ class TestAggregateConnections(unittest.TestCase):
         self.assertEqual(len(chords), 1)
         self.assertEqual(len(chords[0].get_segments()) % 3, 0)      # 3 chords of equal length
         self.assertIn("3 connections", ax.get_title())
-        self.assertTrue(any("carry 3 of 3 connections" in t.get_text() for t in ax.texts))
+        self.assertTrue(any("carry 3 of 3 detected connections" in t.get_text() for t in ax.texts))
         with self.assertRaisesRegex(ValueError, "one connectogram per tail"):
             plot_connectogram(self.res, self.rois, tail="both")
         plt.close("all")
