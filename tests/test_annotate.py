@@ -13,7 +13,7 @@ import pandas as pd
 from conninfpy.interpret.annotate import (_lens_share, aggregate_connections, annotate_edges, annotate_rois,
                                  summarize_annotation)
 from conninfpy.atlas import brainnetome_data_dir, get_bna_246_nifti_path
-from conninfpy.brainnetome import BrainnetomeReference
+from conninfpy.atlas.brainnetome import BrainnetomeReference
 from conninfpy.results import InferenceResult
 
 DATA = brainnetome_data_dir()
