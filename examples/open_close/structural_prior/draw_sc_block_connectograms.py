@@ -101,7 +101,7 @@ def main():
                     if leg is not None and hasattr(leg, "set_visible"):
                         leg.set_visible(False)
                 for t in list(ax.texts):                    # footers would shrink the panels
-                    if t.get_text().startswith("Each of"):
+                    if "ROIs placed" in t.get_text():
                         t.remove()
             fig.suptitle(f"{COHORT_NAMES[cohort]}, {TAILS[tail]}: NI-TFNBS with SC blocks across resolutions "
                          "(chords coloured by Yeo network)", fontsize=14)
