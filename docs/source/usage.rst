@@ -596,7 +596,16 @@ distance check, evidence packet, connectograms):
   from frontal to subcortical; rings for subregions, gyri and each unit's
   network make-up) with chords coloured by the endpoint networks. It places
   ROIs by default (whole connections per chord); weighted assignment splits a
-  connection between large parcels into many fractional chords:
+  connection between large parcels into many fractional chords. ROIs that
+  came out ``unassigned`` (no labelled support in the atlas, or a labelled
+  share below ``min_coverage``) are not placed: they get no tissue on the
+  rings and no chords. The figure's footer reports how many ROIs were placed
+  and why the rest were not, how many detected connections touch an unplaced
+  ROI, and the share of detected connections the drawn chords carry; the same
+  counts are in ``df.attrs["coverage"]`` of the aggregation (``n_rois``,
+  ``n_placed``, ``unplaced_no_support``, ``unplaced_low_coverage`` — ROI names
+  —, ``detected_total`` / ``detected_placed``, ``tested_total`` /
+  ``tested_placed``, ``level``, ``assign``, ``tail``):
 
   .. code-block:: python
 
@@ -605,6 +614,9 @@ distance check, evidence packet, connectograms):
      plot_connectogram(out.inference, rois, tail="positive", level="gyrus")
      plot_connectogram(out.inference, rois, tail="negative", level="subregion",
                        labels="subregion")
+
+     agg = aggregate_connections(out.inference, rois, tail="positive")
+     agg.attrs["coverage"]      # placement and detection counts
 
 The probabilistic and tractography maps (``BNA_PM_4D.nii.gz``,
 ``BNA_SC_3D_246.zip``, from atlas.brainnetome.org) are optional and read from
