@@ -69,6 +69,10 @@ examples/benchmarks/res_benchmarks/*.png
 examples/abide/results/abide_prepared.npz
 datasets/ABIDE_TS_Schaefer100/abide_ts.npy
 
+# Open-Close Brainnetome series and Beijing EOEC phenotype: local data, see datasets/README.md
+datasets/open_close/*_Brainnetome_*.npy
+datasets/open_close/BeijingEOEC.csv
+
 # Local validation plans (local results only, not committed)
 Abide_Validation_Plan.md
 OpenClose_Validation_Plan.md
