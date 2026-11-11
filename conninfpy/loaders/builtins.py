@@ -59,10 +59,18 @@ class NumpyLoader(BaseDataLoader):
     """Loader for standard numpy files (.npy or .npz) containing 3D arrays."""
     name = "NumpyLoader"
 
-    def __init__(self, data_path: str, pheno_path: str | None = None, data_kind: Literal["timeseries", "correlation", "fisher_z"] = "correlation"):
+    def __init__(
+        self,
+        data_path: str,
+        pheno_path: str | None = None,
+        data_kind: Literal["timeseries", "correlation", "fisher_z"] = "correlation",
+        atlas_metadata: str | None = None,
+    ):
         self.data_path = data_path
         self.pheno_path = pheno_path
         self.data_kind = data_kind
+        # Optional atlas CSV (see AtlasInfo.from_csv), one row per ROI in data order.
+        self.atlas_metadata = atlas_metadata
 
     def preview(self) -> DatasetPreview:
         """Cheap preview of the dataset without a full load."""
@@ -122,13 +130,29 @@ class NumpyLoader(BaseDataLoader):
             })
             
         subject_ids = list(pheno["subject_id"].values) if "subject_id" in pheno.columns else [f"sub_{i:02d}" for i in range(n_obs)]
-        
+
+        atlas = None
+        if self.atlas_metadata:
+            if not os.path.exists(self.atlas_metadata):
+                raise FileNotFoundError(f"Atlas metadata not found: {self.atlas_metadata}")
+            atlas = AtlasInfo.from_csv(self.atlas_metadata)
+            if len(atlas) != data.shape[-1]:
+                raise ValueError(
+                    f"Atlas metadata has {len(atlas)} ROIs, but the data have {data.shape[-1]}."
+                )
+
         return LoadedDataset(
             data=data,
             pheno=pheno,
             data_kind=self.data_kind,
             subject_ids=subject_ids,
-            provenance={"data_path": self.data_path, "pheno_path": self.pheno_path}
+            atlas=atlas,
+            roi_labels=list(atlas.labels) if atlas is not None else None,
+            provenance={
+                "data_path": self.data_path,
+                "pheno_path": self.pheno_path,
+                "atlas_metadata": self.atlas_metadata,
+            },
         )
 
 
