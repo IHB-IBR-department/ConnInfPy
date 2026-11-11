@@ -171,6 +171,12 @@ edges counted as false).
 | NBS-extent, τ = 2 | 0.261 | 0.263 | 0.57 |
 | NBS-intensity, τ = 2 | 0.419 | 0.423 | 0.90 |
 
+> **Stale NBS-intensity rows (2026-11-11).** These were computed with
+> intensity = Σt. ConnInfPy now uses the MATLAB NBS definition Σ(t − τ)
+> (verified against NBS v1.2 in `tests/test_nbs_schizophrenia_reference.py`).
+> Σt adds τ per edge, which favours absorbing null edges at τ = 2; re-run the
+> NBS-intensity cells before quoting them.
+
 Old table: t-stat 0.002, NI 0.005, FBC 0.023, TFNBS 0.026, NBS-ext 0.290,
 cNBS 0.422, NBS-int 0.427 — same ranking except cNBS, which with the
 published statistic (0.177; previously 0.405 in this run) moves above NBS at

@@ -94,7 +94,14 @@ def get_nbs_score(
         T-statistic threshold for edge inclusion.
     stat_type : {'extent', 'intensity'}
         - 'extent': cluster size (# edges).
-        - 'intensity': sum of t-values within the cluster.
+        - 'intensity': sum over the cluster's edges of the statistic minus
+          the threshold, ``sum(t - threshold)``, as in the MATLAB NBS
+          toolbox (``NBSstats.m``). Only the excess above the threshold
+          counts: an edge just above it adds almost nothing, so the score
+          does not jump when an edge crosses the threshold, and a small
+          cluster of strong edges can outrank a large cluster of weak ones.
+          Summing ``t`` itself would add ``threshold * extent``, which makes
+          intensity close to a rescaled extent.
 
     Returns
     -------
@@ -135,9 +142,10 @@ def get_nbs_score(
             edge_component_ids, minlength=n_components
         ).astype(np.float64)
     else:
+        # Mass above the threshold (NBS v1.2 'Intensity').
         component_stats = np.bincount(
             edge_component_ids,
-            weights=edge_weights.astype(np.float64),
+            weights=edge_weights.astype(np.float64) - threshold,
             minlength=n_components,
         )
 
