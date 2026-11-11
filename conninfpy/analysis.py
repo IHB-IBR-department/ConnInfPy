@@ -13,7 +13,7 @@ fits and you want one line of code.
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
@@ -105,6 +105,14 @@ class AnalyzeResult:
         :meth:`~conninfpy.InferenceResult.to_csv`.
         """
         return self.inference.to_csv(path, **kwargs)
+
+    def one_sided(self, direction: str) -> "AnalyzeResult":
+        """Copy restricted to one prespecified direction; see
+        :meth:`~conninfpy.InferenceResult.one_sided`.
+        """
+        if isinstance(self.inference, OmnibusInferenceResult):
+            raise ValueError("An F-stat omnibus result has no direction to restrict.")
+        return replace(self, inference=self.inference.one_sided(direction))
 
     def __repr__(self) -> str:  # pragma: no cover (cosmetic)
         parts = [
@@ -286,6 +294,8 @@ def analyze(
     harmonize: Optional[str] = "auto",
     input: Optional[str] = None,
     fisher_z: Optional[bool] = None,
+    r_to_z: bool = True,
+    var_equal: bool = False,
     method: Union[str, StatMethod] = "tfnbs",
     acceleration: Optional[str] = DEFAULT_ACCELERATION,
     n_permutations: int = DEFAULT_N_PERMUTATIONS,
@@ -410,6 +420,18 @@ def analyze(
     fisher_z : bool, optional
         Legacy alias: ``True`` means ``input='r'``, ``False`` means
         ``input='z'``. Prefer ``input``.
+    r_to_z : bool, default True
+        Whether correlations (``input='r'``, given or detected) are Fisher
+        transformed before inference. ``False`` analyses the correlations
+        as they are, as the MATLAB NBS toolbox does; the result then records
+        ``design['scale'] = 'correlation'`` instead of ``'fisher_z'``. No
+        effect for ``input='z'``.
+    var_equal : bool, default False
+        Two-sample t-test path only (``group1``/``group2`` with
+        ``test_type='two-sample'``): False uses Welch's t, True Student's t
+        with a pooled variance (the MATLAB NBS toolbox t-test). The GLM path
+        always uses the pooled residual variance, and paired / one-sample
+        tests have one group, so ``var_equal=True`` raises there.
     method : str, default ``'tfnbs'``
         Enhancement method.
     acceleration : str or None, default ``None``
@@ -487,6 +509,12 @@ def analyze(
         raise ValueError(
             "analyze() requires Y when using the GLM path (interest=, "
             "[confounds=]). Pass Y as the first positional argument."
+        )
+    if var_equal and not (ttest_mode and test_type == "two-sample"):
+        raise ValueError(
+            "var_equal applies to the two-sample t-test (group1=, group2=, "
+            "test_type='two-sample'). The GLM t uses a pooled residual variance "
+            "by construction; paired and one-sample tests have one group."
         )
     if multi_mode:
         # Several predictors → compute_p_val_glm_multi. Each value must be a
@@ -620,6 +648,11 @@ def analyze(
     # ---- Input preparation: zero diagonal, Fisher r→z exactly once ----
     stacks = [Y] if glm_mode else [g for g in (group1, group2) if g is not None]
     kind = _resolve_input_kind(input, fisher_z, stacks)
+    analysis_scale = "correlation" if (kind == "r" and not r_to_z) else "fisher_z"
+    if analysis_scale == "correlation":
+        # prepare_connectivity(..., 'z') checks and zeroes the diagonal
+        # without transforming: the correlations are analysed as given.
+        kind = "z"
     if missing not in ("raise", "available_case"):
         raise ValueError(f"missing must be 'raise' or 'available_case'; got {missing!r}.")
     allow_missing = missing == "available_case"
@@ -755,7 +788,7 @@ def analyze(
         out: Dict[str, AnalyzeResult] = {}
         for nm, res in results.items():
             if getattr(res, "design", None) is not None:
-                res.design["scale"] = "fisher_z"
+                res.design["scale"] = analysis_scale
             res.harmonized = (
                 strategy in (COMBAT_ONLY, COMBAT_SITE_DUMMIES_GLM)
                 and sites is not None
@@ -802,6 +835,7 @@ def analyze(
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
+            var_equal=var_equal,
             **method_kwargs,
         )
 
@@ -822,7 +856,7 @@ def analyze(
     result.preserve_provided = preserve is not None
     result.combat_diagnostics = combat_diag
     if getattr(result, "design", None) is not None:
-        result.design["scale"] = "fisher_z"
+        result.design["scale"] = analysis_scale
     # strata_provided was set inside compute_p_val{,_glm} from the strata=
     # argument; preserved here for clarity.
 

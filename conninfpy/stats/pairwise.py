@@ -57,6 +57,7 @@ from conninfpy.stats._engine import (
     _is_worker_process,
     _stratified_choice_n1,
     _stratified_perm,
+    _twosample_se2,
     get_available_cores,
 )
 from conninfpy.stats._types import (
@@ -222,8 +223,11 @@ def _onesample_tstat_from_sums(sum_vec, sumsq_vec, n):
     return np.maximum(t, 0.0), np.maximum(-t, 0.0)
 
 
-def _twosample_tstat_from_sums(sum1, sumsq1, n1, sum2, sumsq2, n2):
-    """Welch two-sample t-statistic from pre-computed sums. Returns (t_pos, t_neg) edge vectors."""
+def _twosample_tstat_from_sums(sum1, sumsq1, n1, sum2, sumsq2, n2, var_equal=False):
+    """Two-sample t (Welch, or Student with ``var_equal``) from pre-computed sums.
+
+    Returns (t_pos, t_neg) edge vectors.
+    """
     mean1 = sum1 / n1
     mean2 = sum2 / n2
     var1 = np.maximum((sumsq1 - sum1**2 / n1) / (n1 - 1), 0)
@@ -231,7 +235,7 @@ def _twosample_tstat_from_sums(sum1, sumsq1, n1, sum2, sumsq2, n2):
     meansq = (sumsq1 + sumsq2) / (n1 + n2)
     t = _degenerate.t_ratio(
         mean2 - mean1,
-        var1 / n1 + var2 / n2,
+        _twosample_se2(var1, n1, var2, n2, var_equal),
         _degenerate.RTOL * meansq * (1 / n1 + 1 / n2),
     )
     return np.maximum(t, 0.0), np.maximum(-t, 0.0)
@@ -279,7 +283,8 @@ def _fast_permutation_task_paired(X, sumsq_all, seed):
 
 
 def _fast_permutation_task_ind(
-    Xall, Xall2, sum_all, sumsq_all, n1, seed, strata=None, n1_per_stratum=None
+    Xall, Xall2, sum_all, sumsq_all, n1, seed, strata=None, n1_per_stratum=None,
+    var_equal=False,
 ):
     """Two-sample permutation via group-label shuffle + sums. Returns max stats.
 
@@ -298,7 +303,9 @@ def _fast_permutation_task_ind(
     sumsq1 = g @ Xall2
     sum2 = sum_all - sum1
     sumsq2 = sumsq_all - sumsq1
-    t_pos, t_neg = _twosample_tstat_from_sums(sum1, sumsq1, n1, sum2, sumsq2, n2)
+    t_pos, t_neg = _twosample_tstat_from_sums(
+        sum1, sumsq1, n1, sum2, sumsq2, n2, var_equal=var_equal
+    )
     return {
         "positive": np.float64(np.max(t_pos)),
         "negative": np.float64(np.max(t_neg)),
@@ -316,7 +323,8 @@ def _fast_permutation_task_paired_edges(X, sumsq_all, seed):
 
 
 def _fast_permutation_task_ind_edges(
-    Xall, Xall2, sum_all, sumsq_all, n1, seed, strata=None, n1_per_stratum=None
+    Xall, Xall2, sum_all, sumsq_all, n1, seed, strata=None, n1_per_stratum=None,
+    var_equal=False,
 ):
     """Two-sample permutation returning upper-triangle t-stat vectors (for BH-FDR-perm)."""
     rng = np.random.RandomState(seed)
@@ -331,7 +339,9 @@ def _fast_permutation_task_ind_edges(
     sumsq1 = g @ Xall2
     sum2 = sum_all - sum1
     sumsq2 = sumsq_all - sumsq1
-    t_pos, t_neg = _twosample_tstat_from_sums(sum1, sumsq1, n1, sum2, sumsq2, n2)
+    t_pos, t_neg = _twosample_tstat_from_sums(
+        sum1, sumsq1, n1, sum2, sumsq2, n2, var_equal=var_equal
+    )
     return {"positive": t_pos, "negative": t_neg}
 
 
@@ -386,6 +396,7 @@ def _fast_perm_task_enhanced_ind(
     seed,
     strata=None,
     n1_per_stratum=None,
+    var_equal=False,
 ):
     """Two-sample permutation: group shuffle + fast t-stat + enhancement → max.
 
@@ -404,7 +415,9 @@ def _fast_perm_task_enhanced_ind(
     sumsq1 = g @ Xall2
     sum2 = sum_all - sum1
     sumsq2 = sumsq_all - sumsq1
-    t_pos, t_neg = _twosample_tstat_from_sums(sum1, sumsq1, n1, sum2, sumsq2, n2)
+    t_pos, t_neg = _twosample_tstat_from_sums(
+        sum1, sumsq1, n1, sum2, sumsq2, n2, var_equal=var_equal
+    )
     t_pos_mat, t_neg_mat = _tstat_edges_to_matrix(t_pos, t_neg, triu_idx, N)
     stat_dict = {"positive": t_pos_mat, "negative": t_neg_mat}
     if enhance_func is not None:
@@ -434,6 +447,7 @@ def compute_null_dist(
     use_mp: bool = True,
     verbose: bool = False,
     strata: Optional[npt.NDArray[Any]] = None,
+    var_equal: bool = False,
     **func_kwargs,
 ) -> Dict[str, npt.NDArray[np.float64]]:
     """
@@ -465,6 +479,9 @@ def compute_null_dist(
     use_mp : bool, default=True
         Whether to use multiprocessing. Automatically disabled when called
         from inside a multiprocessing worker to prevent nested pools.
+    var_equal : bool, default=False
+        Two-sample, built-in t-statistic only: False for Welch's t, True for
+        Student's t with a pooled variance.
     **func_kwargs
         Additional keyword arguments passed to func.
 
@@ -501,11 +518,19 @@ def compute_null_dist(
 
     if n_permutations < 1:
         raise ValueError("n_permutations must be at least 1.")
+    builtin_tstat = func in (compute_t_stat_diff, _compute_t_stat_ind, compute_t_stat)
+    if var_equal and test_type_str != TestType.TWO_SAMPLE.value:
+        raise ValueError("var_equal applies to test_type='two-sample' only.")
+    if var_equal and not builtin_tstat:
+        raise ValueError(
+            "var_equal applies to the built-in two-sample t-statistic; pass the "
+            "option to your own func instead."
+        )
 
     # Fast path: raw t-statistic with no enhancement — uses pre-computed sums
     # trick (upper-triangle only, sign-flip-invariant Σx²). ~6-8x faster per perm.
     use_fast_tstat = (
-        func in (compute_t_stat_diff, _compute_t_stat_ind, compute_t_stat)
+        builtin_tstat
         and not func_kwargs
         and group1.ndim == 3
         and group1.shape[1] == group1.shape[2]
@@ -551,6 +576,7 @@ def compute_null_dist(
                 n1,
                 strata=strata_codes,
                 n1_per_stratum=n1_per_stratum,
+                var_equal=var_equal,
             )
         else:
             if strata is not None:
@@ -560,6 +586,10 @@ def compute_null_dist(
                     "functions (compute_t_stat / _compute_t_stat_ind) to "
                     "exercise the stratified-permutation path."
                 )
+            if builtin_tstat:
+                # The worker calls func(g1, g2, test_type=...): use the
+                # public entry point, which accepts it, with the variance choice.
+                func = partial(compute_t_stat, var_equal=var_equal)
             array_to_permute = np.concatenate((group1, group2), axis=0)
             task_func = partial(
                 _permutation_task_ind, array_to_permute, func, n1, **func_kwargs
@@ -613,6 +643,7 @@ def _compute_enhanced_null_dist(
     use_mp: bool = True,
     verbose: bool = False,
     strata: Optional[npt.NDArray[Any]] = None,
+    var_equal: bool = False,
 ) -> Dict[str, npt.NDArray[np.float64]]:
     """Null distribution for enhancement methods via pre-computed sums fast path.
 
@@ -680,6 +711,7 @@ def _compute_enhanced_null_dist(
             enhance_kwargs,
             strata=strata_codes,
             n1_per_stratum=n1_per_stratum,
+            var_equal=var_equal,
         )
     else:
         raise ValueError(
@@ -714,6 +746,7 @@ def _compute_bh_fdr_perm_p_values(
     verbose: bool = False,
     strata: Optional[npt.NDArray[Any]] = None,
     two_tailed: bool = False,
+    var_equal: bool = False,
 ) -> Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]]]:
     """
     Compute BH-FDR corrected p-values using permutation-based per-edge nulls.
@@ -730,7 +763,9 @@ def _compute_bh_fdr_perm_p_values(
     elif test_type_str == TestType.ONE_SAMPLE.value:
         emp_t_dict = compute_t_stat_diff(group1)
     elif test_type_str == TestType.TWO_SAMPLE.value:
-        emp_t_dict = compute_t_stat(group1, group2, test_type=test_type_str)
+        emp_t_dict = compute_t_stat(
+            group1, group2, test_type=test_type_str, var_equal=var_equal
+        )
     else:
         raise ValueError(f"Invalid test_type: '{test_type_str}'")
 
@@ -777,6 +812,7 @@ def _compute_bh_fdr_perm_p_values(
             n1,
             strata=strata_codes,
             n1_per_stratum=n1_per_stratum,
+            var_equal=var_equal,
         )
 
 
@@ -884,9 +920,13 @@ def _compute_parametric_p_values(
     method_enum: "StatMethod",
     alpha: float = 0.05,
     two_tailed: bool = False,
+    var_equal: bool = False,
 ) -> Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]]]:
     """
     Compute parametric p-values with Bonferroni or BH-FDR correction.
+
+    Two-sample: Welch's t with edge-wise Welch-Satterthwaite df, or with
+    ``var_equal`` Student's t with ``n1 + n2 - 2`` df.
 
     Parameters
     ----------
@@ -918,8 +958,12 @@ def _compute_parametric_p_values(
         t_dict = compute_t_stat_diff(group1)
         df = _compute_degrees_of_freedom(group1.shape[0], 0, test_type_str)
     elif test_type_str == TestType.TWO_SAMPLE.value:
-        t_dict = _compute_t_stat_ind(group1, group2)
-        df = _compute_welch_degrees_of_freedom(group1, group2)
+        t_dict = _compute_t_stat_ind(group1, group2, var_equal=var_equal)
+        df = (
+            _compute_degrees_of_freedom(group1.shape[0], group2.shape[0], test_type_str)
+            if var_equal
+            else _compute_welch_degrees_of_freedom(group1, group2)
+        )
     else:
         raise ValueError(f"Invalid test_type: '{test_type_str}'")
 
@@ -990,13 +1034,13 @@ def _with_estimates(fn):
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         res = fn(*args, **kwargs)
+        b = sig.bind(*args, **kwargs)
+        b.apply_defaults()
+        tt = b.arguments["test_type"]
+        tt = tt.value if isinstance(tt, TestType) else tt
         if getattr(res, "beta", None) is None:
             from conninfpy.stats._estimates import pairwise_estimates
 
-            b = sig.bind(*args, **kwargs)
-            b.apply_defaults()
-            tt = b.arguments["test_type"]
-            tt = tt.value if isinstance(tt, TestType) else tt
             g1 = check_connectivity(b.arguments["group1"], "group1", allow_missing=True)
             g2 = b.arguments["group2"]
             g2 = (
@@ -1005,6 +1049,11 @@ def _with_estimates(fn):
                 else check_connectivity(g2, "group2", allow_missing=True)
             )
             res.beta, res.design = pairwise_estimates(g1, g2, tt)
+        if tt == TestType.TWO_SAMPLE.value and getattr(res, "design", None) is not None:
+            # Which two-sample t was used (provenance for reports).
+            res.design["t_statistic"] = (
+                "student" if b.arguments.get("var_equal") else "welch"
+            )
         return res
 
     return wrapper
@@ -1039,19 +1088,23 @@ def compute_p_val(
     cnbs_correction: str = "bonferroni",
     two_tailed: bool = False,
     edge_mask: Optional[npt.ArrayLike] = None,
+    var_equal: bool = False,
 ) -> InferenceResult:
     """
     Compute p-values using permutation testing with various network-based methods.
 
-    .. warning:: **Welch + group-label permutation under unequal variances**
+    .. warning:: **Two-sample statistic and group-label permutation**
 
-       The two-sample path uses Welch's t (unequal-variance) unconditionally.
-       Under unequal variances with unbalanced group sizes the exchangeability
-       assumption underlying permutation breaks and Type I error inflates
-       (Anderson & Robinson 2001; Hayes 2000). A pooled-variance option will
-       be added in v2.2 with an explicit ``var_equal=True|False`` knob; until
-       then, treat two-sample results with caution when both group sizes
-       and variances differ substantially.
+       The two-sample path uses Welch's t (separate group variances) by
+       default and Student's t (pooled variance) with ``var_equal=True``;
+       the observed statistic and every permutation use the same one, and
+       the permutation (group-label shuffle, optionally within ``strata``)
+       is the same for both. The permutation test is exact when the groups
+       are exchangeable under the null (same distribution). Under unequal
+       variances with unbalanced group sizes exchangeability breaks and
+       Type I error can inflate (Anderson & Robinson 2001; Hayes 2000);
+       treat such results with caution whichever statistic is used. With
+       equal group sizes the two statistics coincide.
 
     Supports multiple statistical methods: tfnbs, tstat, nbs, cnbs, ni_tfnbs,
     fbc_tfnbs, bonferroni, bh_fdr, bh_fdr_perm.
@@ -1075,7 +1128,8 @@ def compute_p_val(
        t-distribution and apply multiple comparison corrections. The
        ``n_permutations`` parameter is ignored for these methods. In the
        two-sample path, the parametric baseline uses edge-wise
-       Welch-Satterthwaite degrees of freedom to match the Welch statistic.
+       Welch-Satterthwaite degrees of freedom with Welch's t, and
+       ``n1 + n2 - 2`` with Student's t (``var_equal=True``).
 
     .. note:: **Permutation p-values**
 
@@ -1108,7 +1162,9 @@ def compute_p_val(
     threshold : float, default=2.0
         T-statistic threshold for NBS (only used when method='nbs').
     nbs_stat : {'extent', 'intensity'}, default='extent'
-        Cluster statistic for NBS (only used when method='nbs').
+        Cluster statistic for NBS (only used when method='nbs'): the number
+        of edges in the component, or the sum of ``t - threshold`` over them
+        (the MATLAB NBS toolbox definition).
     e : float or sequence of float, default=0.3
         Extent exponent for TFNBS-based methods. Pass an equal-length
         sequence with ``h`` to evaluate a whole ``(E, H)`` grid in one
@@ -1171,6 +1227,12 @@ def compute_p_val(
         corrected separately; selecting settings is not jointly corrected.
         False keeps separate one-sided families (use alpha/2 per tail for
         combined-direction FWER). Unsupported keyword arguments raise.
+    var_equal : bool, default=False
+        Two-sample tests only. False: Welch's t (separate group variances).
+        True: Student's t with a pooled variance, as in the MATLAB NBS
+        toolbox t-test and in a GLM with an intercept and a group indicator.
+        Recorded as ``result.design['t_statistic']`` (``'welch'`` /
+        ``'student'``). Raises for paired and one-sample tests.
 
     Returns
     -------
@@ -1242,6 +1304,10 @@ def compute_p_val(
     ):
         raise ValueError(f"group2 is required for test_type='{test_type_str}'.")
     _check_paired_counts(group1, group2, test_type_str)
+    if var_equal and test_type_str != TestType.TWO_SAMPLE.value:
+        raise ValueError(
+            f"var_equal applies to test_type='two-sample' only; got {test_type_str!r}."
+        )
 
     # Validate method
     try:
@@ -1341,6 +1407,7 @@ def compute_p_val(
                 if method_enum == StatMethod.CNBS
                 else None
             ),
+            var_equal=var_equal,
         )
         e_grid, h_grid = _grid_from_kwargs(method_enum, enhance_kwargs)
         return InferenceResult(
@@ -1364,7 +1431,8 @@ def compute_p_val(
     # Parametric methods: compute p-values directly from t-distribution
     if method_enum in PARAMETRIC_METHODS:
         result, obs_t_dict = _compute_parametric_p_values(
-            group1, group2, test_type_str, method_enum, two_tailed=two_tailed
+            group1, group2, test_type_str, method_enum, two_tailed=two_tailed,
+            var_equal=var_equal,
         )
         return InferenceResult(
             result["positive"],
@@ -1392,6 +1460,7 @@ def compute_p_val(
             verbose=verbose,
             strata=strata,
             two_tailed=two_tailed,
+            var_equal=var_equal,
         )
         return InferenceResult(
             result["positive"],
@@ -1414,7 +1483,7 @@ def compute_p_val(
     elif test_type_str == TestType.ONE_SAMPLE.value:
         emp_t_dict = compute_t_stat_diff(group1)
     elif test_type_str == TestType.TWO_SAMPLE.value:
-        emp_t_dict = _compute_t_stat_ind(group1, group2)
+        emp_t_dict = _compute_t_stat_ind(group1, group2, var_equal=var_equal)
     else:
         raise ValueError(
             f"Invalid test_type: '{test_type_str}'. "
@@ -1449,6 +1518,7 @@ def compute_p_val(
             n_processes=n_processes,
             verbose=verbose,
             strata=strata,
+            var_equal=var_equal,
         )
     else:
         max_null_dict = _compute_enhanced_null_dist(
@@ -1463,6 +1533,7 @@ def compute_p_val(
             n_processes=n_processes,
             verbose=verbose,
             strata=strata,
+            var_equal=var_equal,
         )
 
     block_report = None
@@ -1543,6 +1614,7 @@ def compute_t_stat(
     group1: npt.NDArray[np.float64],
     group2: Optional[npt.NDArray[np.float64]] = None,
     test_type: Union[str, TestType] = TestType.PAIRED,
+    var_equal: bool = False,
 ) -> Dict[str, npt.NDArray[np.float64]]:
     """
     Compute t-statistics for paired, one-sample, or two-sample tests.
@@ -1555,6 +1627,9 @@ def compute_t_stat(
         Data array for group 2. Required for paired/two-sample tests.
     test_type : {'paired', 'one-sample', 'two-sample'} or TestType
         Type of statistical test.
+    var_equal : bool, default=False
+        Two-sample only: False for Welch's t, True for Student's t with a
+        pooled variance.
 
     Returns
     -------
@@ -1581,7 +1656,7 @@ def compute_t_stat(
     elif test_type_str == TestType.TWO_SAMPLE.value:
         if group1.shape[1:] != group2.shape[1:]:
             raise ValueError("Trailing dimensions of group1 and group2 must match.")
-        return _compute_t_stat_ind(group1, group2)
+        return _compute_t_stat_ind(group1, group2, var_equal=var_equal)
 
     elif test_type_str == TestType.PAIRED.value:
         _check_paired_counts(group1, group2, test_type_str)
@@ -1637,10 +1712,12 @@ def compute_t_stat_diff(
 
 
 def _compute_t_stat_ind(
-    group1: npt.NDArray[np.float64], group2: npt.NDArray[np.float64]
+    group1: npt.NDArray[np.float64],
+    group2: npt.NDArray[np.float64],
+    var_equal: bool = False,
 ) -> Dict[str, npt.NDArray[np.float64]]:
     """
-    Compute Welch's t-statistics for independent samples.
+    Compute two-sample t-statistics for independent samples.
 
     Parameters
     ----------
@@ -1648,6 +1725,9 @@ def _compute_t_stat_ind(
         Data array for group 1.
     group2 : ndarray of shape (n_samples_2, *dims)
         Data array for group 2.
+    var_equal : bool, default=False
+        False: Welch's t (separate group variances). True: Student's t
+        (pooled variance), as in the MATLAB NBS toolbox t-test.
 
     Returns
     -------
@@ -1677,7 +1757,7 @@ def _compute_t_stat_ind(
     # zero variance: t = 0 (see _degenerate; entry points reject a nonzero difference)
     t_stat = _degenerate.t_ratio(
         x_mean_2 - x_mean_1,
-        x_var_1 + x_var_2,
+        _twosample_se2(x_var_1 * n1, n1, x_var_2 * n2, n2, var_equal),
         _degenerate.RTOL * meansq * (1 / n1 + 1 / n2),
     )
 

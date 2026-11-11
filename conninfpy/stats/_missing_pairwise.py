@@ -43,6 +43,7 @@ from conninfpy.stats._engine import (
     _extract_max_stats,
     _is_worker_process,
     _stratified_choice_n1,
+    _twosample_se2,
     get_available_cores,
 )
 from conninfpy.stats._workers import run_permutations
@@ -65,6 +66,7 @@ class _Design:
     N: int
     strata: Optional[npt.NDArray[np.int_]] = None
     n1_per_stratum: Optional[npt.NDArray[np.int_]] = None
+    var_equal: bool = False  # two-sample: Student (pooled) instead of Welch
 
 
 # ----------------------------------------------------------------------
@@ -87,13 +89,16 @@ def _group_moments(sum_, sumsq, n):
     return mean, var
 
 
-def _t_two(sum1, sumsq1, n1, sum2, sumsq2, n2):
-    """Welch t (group 2 - group 1) with per-edge group sizes; undefined -> 0."""
+def _t_two(sum1, sumsq1, n1, sum2, sumsq2, n2, var_equal=False):
+    """Two-sample t (group 2 - group 1) with per-edge group sizes; undefined -> 0.
+
+    Welch's t, or Student's t with a pooled variance when ``var_equal``.
+    """
     m1, v1 = _group_moments(sum1, sumsq1, n1)
     m2, v2 = _group_moments(sum2, sumsq2, n2)
     with np.errstate(divide="ignore", invalid="ignore"):
         floor = _degenerate.RTOL * (sumsq1 + sumsq2) / (n1 + n2) * (1 / n1 + 1 / n2)
-        t = _degenerate.t_ratio(m2 - m1, v1 / n1 + v2 / n2, floor)
+        t = _degenerate.t_ratio(m2 - m1, _twosample_se2(v1, n1, v2, n2, var_equal), floor)
     t = np.where((n1 >= 2) & (n2 >= 2) & np.isfinite(t), t, 0.0)
     return np.maximum(t, 0.0), np.maximum(-t, 0.0)
 
@@ -116,7 +121,7 @@ def _observed(d: _Design):
     if d.kind == "two-sample":
         s1, q1, k1 = d.X0[: d.n1].sum(0), d.X02[: d.n1].sum(0), d.M[: d.n1].sum(0)
         s, q, k = d.X0.sum(0), d.X02.sum(0), d.M.sum(0)
-        t_pos, t_neg = _t_two(s1, q1, k1, s - s1, q - q1, k - k1)
+        t_pos, t_neg = _t_two(s1, q1, k1, s - s1, q - q1, k - k1, d.var_equal)
     else:
         t_pos, t_neg = _t_one(d.X0.sum(0), d.X02.sum(0), d.M.sum(0))
     return np.where(d.tested, t_pos, 0.0), np.where(d.tested, t_neg, 0.0)
@@ -134,7 +139,7 @@ def _permuted(d: _Design, seed: int):
             g = _stratified_choice_n1(d.strata, d.n1_per_stratum, rng)
         s1, q1, k1 = g @ d.X0, g @ d.X02, g @ d.M
         s, q, k = d.X0.sum(0), d.X02.sum(0), d.M.sum(0)
-        t_pos, t_neg = _t_two(s1, q1, k1, s - s1, q - q1, k - k1)
+        t_pos, t_neg = _t_two(s1, q1, k1, s - s1, q - q1, k - k1, d.var_equal)
     else:
         signs = rng.choice([1, -1], d.X0.shape[0]).astype(np.float64)
         t_pos, t_neg = _t_one(signs @ d.X0, d.X02.sum(0), d.M.sum(0))
@@ -302,6 +307,7 @@ def available_case_p_val(
     min_coverage: float = DEFAULT_MIN_COVERAGE,
     block_inference: Optional[Dict[str, Any]] = None,
     two_tailed: bool = False,
+    var_equal: bool = False,
 ):
     """p-values, raw t maps and the coverage report for one available-case run.
 
@@ -315,6 +321,7 @@ def available_case_p_val(
     if not 0 < min_coverage <= 1:
         raise ValueError(f"min_coverage must be in (0, 1]; got {min_coverage}.")
     d, report = _build_design(group1, group2, test_type, strata, min_coverage)
+    d.var_equal = bool(var_equal)
     if not d.tested.any():
         raise ValueError(
             "no edge has enough subjects for available-case inference "
@@ -335,7 +342,11 @@ def available_case_p_val(
         if d.kind == "two-sample":
             s1, q1, k1 = d.X0[: d.n1].sum(0), d.X02[: d.n1].sum(0), d.M[: d.n1].sum(0)
             s, q, k = d.X0.sum(0), d.X02.sum(0), d.M.sum(0)
-            df = _welch_df(s1, q1, k1, s - s1, q - q1, k - k1)
+            df = (
+                k1 + (k - k1) - 2.0  # Student: per-edge n1 + n2 - 2
+                if d.var_equal
+                else _welch_df(s1, q1, k1, s - s1, q - q1, k - k1)
+            )
         else:
             df = d.M.sum(0) - 1.0
         p_values = {}

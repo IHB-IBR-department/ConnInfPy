@@ -76,7 +76,8 @@ Input conventions
 - :func:`analyze` takes ``input='r'`` for **raw correlation matrices**
   (Fisher r→z is applied once) or ``input='z'`` for data already on the
   z-scale. Left as ``None`` it detects the scale from a unit diagonal or
-  values beyond ±1, and raises when the data could be either. The lower-level
+  values beyond ±1, and raises when the data could be either;
+  ``r_to_z=False`` keeps correlations untransformed. The lower-level
   functions in :mod:`conninfpy.stats` never transform — call
   :func:`conninfpy.fisher_r_to_z` first.
 - Predictors, confounds, and ``sites`` must be row-aligned to the subject
@@ -112,12 +113,14 @@ The simplest design — two groups of subjects, no covariates.
 .. note::
 
    ``compute_p_val(test_type='two-sample')`` uses **Welch's** (unequal
-   variance) t-statistic unconditionally. Under unequal variances *combined
-   with* unbalanced group sizes the exchangeability assumption behind the
-   permutation null weakens and Type-I error can inflate (Anderson &
-   Robinson 2001). Treat such results with caution; for publication-grade
-   multi-site work prefer the GLM recipe below with a binary ``interest``
-   indicator.
+   variance) t-statistic by default and **Student's** (pooled variance) with
+   ``var_equal=True``; ``analyze()`` takes the same ``var_equal``. The
+   permutation is the same group-label shuffle for both. Under unequal
+   variances *combined with* unbalanced group sizes the exchangeability
+   assumption behind the permutation null weakens and Type-I error can
+   inflate (Anderson & Robinson 2001), whichever statistic is used. Treat such
+   results with caution; for publication-grade multi-site work prefer the
+   GLM recipe below with a binary ``interest`` indicator.
 
 
 .. _wf-continuous:

@@ -43,8 +43,10 @@ Step 1 — a statistic at each edge
 At every edge a single statistic quantifies the strength and reliability of the
 effect. The choice of statistic follows the design:
 
-- **Two groups** → a *t*-statistic of the difference in means (Welch's, which
-  does not assume equal group variances).
+- **Two groups** → a *t*-statistic of the difference in means: Welch's by
+  default (separate group variances), or Student's with ``var_equal=True``
+  (pooled variance, as in the MATLAB NBS toolbox). The group-label
+  permutation is the same for both; with equal group sizes they coincide.
 - **Same subjects, two conditions** → a one-sample *t* of the within-subject
   differences.
 - **A predictor with confounds** (e.g. age, controlling for motion and sex) →
@@ -378,6 +380,11 @@ and pairwise BH methods correct two-sided marginal p-values across eligible
 edges. Directional maps retain the p-value in the observed direction and 1
 in the opposite direction. The default ``False`` keeps separate one-sided
 families; use alpha/2 per directional family for combined-direction FWER.
+For a single prespecified direction (e.g. controls > patients, as in the
+MATLAB NBS toolbox's t-test), run with ``two_tailed=False`` and call
+``result.one_sided('positive')`` (or ``'negative'``): the tested tail keeps its
+own-null p-values at the nominal alpha, the other direction is reported as not
+tested (p = 1), and ``tail_policy`` reads ``'one-sided-positive'``.
 Each enhancement setting and contrast is corrected separately; selecting
 among settings or contrasts requires an additional declared correction.
 

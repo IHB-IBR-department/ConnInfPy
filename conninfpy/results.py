@@ -165,6 +165,9 @@ class InferenceResult(TailResult):
     two_tailed : bool
         Whether positive and negative directions form one two-sided family.
         Each enhancement parameter setting and contrast is corrected separately.
+    tested_tail : {'positive', 'negative'} or None
+        Set by :meth:`one_sided`: the one prespecified direction. The other
+        direction was not tested and its p-values are reported as 1.
     beta : ndarray of shape (p, N, N) or None
         Coefficient maps of the tested model on the response scale (GLM
         coefficients; for pairwise tests the equivalent design: group-1
@@ -193,6 +196,7 @@ class InferenceResult(TailResult):
     missing_report: Optional[Dict[str, Any]]
     block_report: Optional[Dict[str, Any]]
     two_tailed: bool
+    tested_tail: Optional[str]
     beta: Optional[npt.NDArray[np.float64]]
     design: Optional[Dict[str, Any]]
 
@@ -220,6 +224,7 @@ class InferenceResult(TailResult):
         two_tailed: bool = False,
         beta: Optional[npt.NDArray[np.float64]] = None,
         design: Optional[Dict[str, Any]] = None,
+        tested_tail: Optional[str] = None,
     ) -> "InferenceResult":
         instance = super().__new__(cls)
         TailResult.__init__(
@@ -242,6 +247,7 @@ class InferenceResult(TailResult):
         instance.missing_report = missing_report
         instance.block_report = block_report
         instance.two_tailed = two_tailed
+        instance.tested_tail = tested_tail
         instance.beta = beta
         instance.design = design
         return instance
@@ -280,7 +286,75 @@ class InferenceResult(TailResult):
     @property
     def tail_policy(self) -> str:
         """The declared directional family; legacy results default to separate tails."""
+        tested = getattr(self, "tested_tail", None)
+        if tested is not None:
+            return f"one-sided-{tested}"
         return "two-sided" if getattr(self, "two_tailed", False) else "separate-one-sided"
+
+    def one_sided(self, direction: str) -> "InferenceResult":
+        """Restrict the result to one prespecified direction.
+
+        For a directional hypothesis (e.g. controls > patients, as in the
+        MATLAB NBS toolbox's t-test) only one tail is tested. Run the
+        inference with ``two_tailed=False``, so each tail has its own
+        max-statistic null, and keep the hypothesised tail: its p-values
+        are the one-sided FWER-corrected p-values at the nominal level.
+        The other tail's p-values are set to 1, so tables, summaries and
+        plots report no detections in the direction that was not tested;
+        the statistic maps are kept unchanged.
+
+        Parameters
+        ----------
+        direction : {'positive', 'negative'}
+            The tested direction of the contrast.
+
+        Returns
+        -------
+        InferenceResult
+            A copy with ``tested_tail = direction`` and
+            ``tail_policy = 'one-sided-<direction>'``.
+
+        Raises
+        ------
+        ValueError
+            For an unknown direction, or for a two-sided result: its
+            p-values come from the joint null of both tails, which is not
+            the null of a one-sided test.
+        """
+        if direction not in ("positive", "negative"):
+            raise ValueError(f"direction must be 'positive' or 'negative'; got {direction!r}.")
+        if getattr(self, "two_tailed", False):
+            raise ValueError(
+                "one_sided() needs a result computed with two_tailed=False: a "
+                "two-sided result's p-values come from the joint null of both tails."
+            )
+        other = "negative" if direction == "positive" else "positive"
+        maps = {direction: np.array(self[direction], copy=True),
+                other: np.ones_like(self[other], dtype=np.float64)}
+        return InferenceResult(
+            maps["positive"],
+            maps["negative"],
+            method=self.method,
+            n_permutations=self.n_permutations,
+            acceleration=self.acceleration,
+            wall_time_s=self.wall_time_s,
+            null_max_dist=self.null_max_dist,
+            stat_positive=self.stat_positive,
+            stat_negative=self.stat_negative,
+            stat_type=self.stat_type,
+            harmonized=self.harmonized,
+            preserve_provided=self.preserve_provided,
+            strata_provided=self.strata_provided,
+            combat_diagnostics=self.combat_diagnostics,
+            e_grid=self.e_grid,
+            h_grid=self.h_grid,
+            missing_report=self.missing_report,
+            block_report=self.block_report,
+            two_tailed=False,
+            beta=getattr(self, "beta", None),
+            design=getattr(self, "design", None),
+            tested_tail=direction,
+        )
 
     @property
     def correction(self) -> str:
@@ -369,6 +443,7 @@ class InferenceResult(TailResult):
             two_tailed=getattr(self, "two_tailed", False),
             beta=getattr(self, "beta", None),
             design=getattr(self, "design", None),
+            tested_tail=getattr(self, "tested_tail", None),
         )
 
     def n_significant(
@@ -635,7 +710,8 @@ class InferenceResult(TailResult):
             a_name, b_name = c["profiles"]
             out[f"fc[{a_name}]"] = c["a"][i, j]
             out[f"fc[{b_name}]"] = c["b"][i, j]
-            out["delta_r" if design.get("scale") == "fisher_z" else "delta"] = c["delta"][i, j]
+            # fisher_z is converted back to r; correlation is already r.
+            out["delta_r" if design.get("scale") in ("fisher_z", "correlation") else "delta"] = c["delta"][i, j]
             out["coupling_change"] = c["classes"][i, j]
         return out
 

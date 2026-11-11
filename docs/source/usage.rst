@@ -54,7 +54,9 @@ Input conventions
   applied once) or ``input='z'`` (already transformed). Left as ``None`` it
   detects the scale: a unit diagonal means correlations, any value beyond ±1
   means Fisher z; data that could be either raise an error rather than risk a
-  second transform.
+  second transform. ``r_to_z=False`` analyses correlations as given, without
+  the transform, as the MATLAB NBS toolbox does (``design['scale']`` then
+  reads ``'correlation'``).
 - The advanced pipelines in :mod:`conninfpy.stats` expect data already on the
   analysis scale (e.g. Fisher z via :func:`conninfpy.fisher_r_to_z`).
 - Results are :class:`~conninfpy.results.InferenceResult` objects, which
@@ -90,7 +92,8 @@ dropout) has undefined correlations. ConnInfPy never treats them as zero.
   Edges kept by fewer than ``min_coverage`` (default 80 %) of a group's
   subjects, or by fewer than 3, are not tested: their p-value is NaN and they
   leave the family (and the Bonferroni / BH count). Bonferroni and BH use
-  per-edge Welch degrees of freedom.
+  per-edge Welch degrees of freedom, or per-edge ``n1 + n2 - 2`` with
+  Student's t (``var_equal=True``).
 
   .. code-block:: python
 
