@@ -7,7 +7,7 @@
 ![last-commit](https://img.shields.io/github/last-commit/IHB-IBR-department/ConnInfPy)
 ![size](https://img.shields.io/github/repo-size/IHB-IBR-department/ConnInfPy)
 
-**A unified Python framework for permutation-based statistical inference on brain connectivity networks (fMRI, EEG).**
+**A unified Python framework for permutation-based statistical inference on brain connectivity networks (fMRI).**
 
 Give ConnInfPy one connectivity matrix per subject and a design (two groups,
 paired conditions, or a continuous predictor with confounds); it returns
@@ -314,7 +314,7 @@ code only.
 | `conninfpy.acceleration` | GPD / gamma tail fits |
 | `conninfpy.loaders` | Manifest-based loading (`load`, `ManifestLoader`) and the bundled loaders |
 | `conninfpy.sim` | Synthetic connectivity with planted effects and the 20 topology scenarios |
-| `conninfpy.plot`, `conninfpy.eeg_utils` | Figures; EEG data structures and helpers |
+| `conninfpy.plot` | Figures |
 
 Worked examples for each are in the
 [usage guide](https://IHB-IBR-department.github.io/ConnInfPy/usage.html).
@@ -357,7 +357,7 @@ acceleration and the permutation count all change absolute runtimes.
 
 | Path | What |
 |---|---|
-| [examples/notebooks/](examples/notebooks/) | Tutorial series: quickstart, enhancement methods, GLM, acceleration, parameter sweeps, topology gallery, EEG, results export, and ABIDE |
+| [examples/notebooks/](examples/notebooks/) | Tutorial series: quickstart, enhancement methods, GLM, acceleration, parameter sweeps, topology gallery, results export, and ABIDE |
 | [examples/benchmarks/](examples/benchmarks/) | Timing / GLM / acceleration benchmarks and external validation (PALM, scipy, statsmodels, nilearn) |
 | [examples/simulations/](examples/simulations/) | Simulation validation (FPR + power) backing the validation paper |
 | [examples/abide/](examples/abide/) | Real-data validation on ABIDE (age, diagnosis, motion, within-site replication), CLI analysis files (`configs/`) and the Brainnetome interpretation |

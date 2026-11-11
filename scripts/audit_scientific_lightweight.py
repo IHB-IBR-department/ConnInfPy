@@ -31,7 +31,6 @@ from threadpoolctl import threadpool_limits
 from conninfpy import analyze
 from conninfpy._engine import _bh_fdr_correction, _compute_p_values_from_null
 from conninfpy.acceleration import _fit_gpd_mom, fit_gamma_tail, fit_gpd_tail
-from conninfpy.eeg_utils import reshape_eeg_data, inverse_reshape_eeg_data
 from conninfpy.glm_stats import (
     _compute_reduced_model, _freedman_lane_permutation_task, _precompute_ols,
     compute_glm_stat, compute_p_val_paired_glm,
@@ -249,8 +248,6 @@ def main():
     shift = np.max(np.abs(correlation(base)-correlation(modified)))
     record("Legacy generator effect_size=0 is a population null", shift < 1e-12, population_correlation_shift=float(shift))
 
-    eeg = rng.normal(size=(2,171,2))
-    record("EEG block-diagonal reshape round trip", np.allclose(inverse_reshape_eeg_data(reshape_eeg_data(eeg)), eeg))
     small = stack(rng.normal(size=8), nodes=4)
     for method in ("tstat", "tfnbs", "nbs", "cnbs", "ni_tfnbs", "fbc_tfnbs", "bonferroni", "bh_fdr", "bh_fdr_perm"):
         kw = {"net_labels":np.zeros(4,dtype=int)} if method in ("cnbs", "ni_tfnbs", "fbc_tfnbs") else {}

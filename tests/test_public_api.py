@@ -35,7 +35,7 @@ LEGACY_TOP_LEVEL = [
     "generate_fc_matrices", "generate_multisite_glm_dataset",
     "TopologyDatasetGenerator", "combat_harmonize", "block_mass",
     "fit_gpd_tail", "build_design_matrix", "design_diagnostics",
-    "TailResult", "EEGData",
+    "TailResult",
 ]
 
 

@@ -87,5 +87,4 @@ datasets/stress_fmriprep.yaml
 datasets/stress_timeseries.yaml
 datasets/zerssen_nifti.yaml
 datasets/zerssen_prepared.yaml
-datasets/eeg_dataframe_nansfilled.csv
 datasets/ABIDE_TS_Schaefer100/
