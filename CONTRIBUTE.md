@@ -16,12 +16,6 @@ conda activate conninfpy
 python -m pip install -r requirements/dev.txt
 ```
 
-To work on the decoding functionality, also install the `decode` extra:
-
-```bash
-python -m pip install -e .[decode]
-```
-
 ---
 
 ## Running the tests
