@@ -96,7 +96,8 @@ Fixed threshold — ``nbs``
 
 Classical Network-Based Statistics. Fix a single threshold, identify the
 connected components above it, and score each edge by the size of its component
-(extent) or by the summed statistic within it (intensity). It is most powerful
+(extent) or by the summed excess of the statistic over the threshold,
+:math:`\sum (t - \tau)`, within it (intensity, as in the MATLAB NBS toolbox). It is most powerful
 when the effect forms a large connected component above the chosen threshold.
 The threshold is arbitrary, however, and results can vary substantially with it
 (Vinokur et al. 2023 report up to 75-fold variation in detected edges across

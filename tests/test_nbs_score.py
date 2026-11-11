@@ -36,10 +36,11 @@ class TestNBSScore(TestCase):
         np.testing.assert_allclose(result, expected, rtol=1e-5)
 
     def test_small_matrix_intensity(self):
-        """Intensity = sum of t-values in the component."""
+        """Intensity = sum of (t - threshold) over the component, as in NBS v1.2."""
         statsmat = self.small_matrix
         result = get_nbs_score(statsmat, threshold=0.5, stat_type="intensity")
-        expected = np.array([[0.0, 4.0, 4.0], [4.0, 0.0, 4.0], [4.0, 4.0, 0.0]])
+        # sum(t) = 4 over 3 edges; minus 3 * 0.5
+        expected = np.array([[0.0, 2.5, 2.5], [2.5, 0.0, 2.5], [2.5, 2.5, 0.0]])
         np.testing.assert_allclose(result, expected, rtol=1e-5)
 
     def test_asymmetric_matrix_extent(self):
