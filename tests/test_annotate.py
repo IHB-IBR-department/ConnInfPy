@@ -326,7 +326,7 @@ if __name__ == "__main__":
 
 class TestResultMethods(unittest.TestCase):
 
-    def test_annotated_edges_and_removed_decoder(self):
+    def test_annotated_edges(self):
         rois = annotate_rois([(-42, 36, 24), (42, 36, 24), (-22, -4, -18)], reference=_reference(),
                              support="sphere", radius_mm=6)
         p = np.ones((3, 3))
@@ -337,8 +337,6 @@ class TestResultMethods(unittest.TestCase):
         self.assertEqual(len(e), 1)
         self.assertEqual(e.loc[0, "hemispheric_relation"], "homotopic")
         self.assertEqual(e.loc[0, "p_positive"], 0.01)              # inference columns unchanged
-        with self.assertRaisesRegex(NotImplementedError, "annotate_rois"):
-            res.decoded_edges()
         with self.assertRaisesRegex(ValueError, "ROIs"):
             res.annotated_edges(annotate_rois([(-42, 36, 24)], reference=_reference(),
                                               support="sphere", radius_mm=6))

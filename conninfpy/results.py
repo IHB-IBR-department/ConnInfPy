@@ -639,13 +639,6 @@ class InferenceResult(TailResult):
             out["coupling_change"] = c["classes"][i, j]
         return out
 
-    def decoded_edges(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
-        """Removed: Neurosynth/NiMARE decoding was replaced by Brainnetome annotation."""
-        raise NotImplementedError(
-            "decoded_edges (Neurosynth/NiMARE decoding) was removed. Annotate the ROIs with "
-            "conninfpy.interpret.annotate.annotate_rois(...) and call result.annotated_edges(rois)."
-        )
-
     def __repr__(self) -> str:  # pragma: no cover (cosmetic)
         nsig = self.n_significant(0.05)
         wall = (
