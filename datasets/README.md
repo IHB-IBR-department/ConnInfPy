@@ -13,6 +13,25 @@ Atlas resources have separate owners:
 | ENIGMA Schaefer structural-connectivity simulation fixtures | [examples/simulations/sc_prior/data/](../examples/simulations/sc_prior/data/) |
 | Derived Brainnetome arrays | `~/.cache/conninfpy/bna246/`, or the configured cache |
 
+## NBS schizophrenia example (bundled, GPL v3)
+
+`demo/NBS_schizophrenia/` holds the example data of the MATLAB NBS toolbox
+v1.2 (Zalesky, Fornito & Bullmore 2010): 12 people with schizophrenia and 15
+healthy controls, 74 AAL regions, raw wavelet correlations. It is read by
+`nbs_schizophrenia.yaml` (`NumpyLoader` with an atlas CSV) and offered in the
+app as the built-in template `NBS-Schizophrenia`. Unlike the rest of the
+repository these files are under the GNU GPL v3 or later; provenance, the two
+corrections to the NBS node table and the MATLAB reference result are in
+[demo/NBS_schizophrenia/README.md](demo/NBS_schizophrenia/README.md).
+
+| File | Shape, dtype | Bytes | SHA-256 |
+|---|---|---|---|
+| `nbs_schizophrenia.npy` | (27, 74, 74), float64 | 1 182 944 | `b33d3cee753c81ba55af6a7afbe7f468bccc7385e8fbc6a3f63d9a824c473f6e` |
+| `pheno.csv` | 27 rows | 368 | `0bda04c86213d670f623845b1b4c638f5f727c6e8f70abef97f874bfc4d9848c` |
+| `aal74_atlas.csv` | 74 rows | 3 535 | `4cfcd4966763a976f68d21315643a9f7402473091a1647147491b2c8d8aa49aa` |
+
+Rebuild with `python scripts/build_nbs_schizophrenia_demo.py --nbs-dir <NBS1.2>`.
+
 ## Open-Close Brainnetome series and Beijing EOEC phenotype (local only)
 
 These nine files stay local (ignored by git, see `.gitignore`) because they are

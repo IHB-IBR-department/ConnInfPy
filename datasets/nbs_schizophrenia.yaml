@@ -1,0 +1,26 @@
+schema_version: 1
+name: "NBS schizophrenia example (Zalesky 2010), AAL-74"
+loader: "NumpyLoader"
+
+# Example data of the MATLAB NBS toolbox v1.2 (GPL v3 or later), converted by
+# scripts/build_nbs_schizophrenia_demo.py; see demo/NBS_schizophrenia/README.md.
+paths:
+  data_path: "demo/NBS_schizophrenia/nbs_schizophrenia.npy"
+  pheno_path: "demo/NBS_schizophrenia/pheno.csv"
+  atlas_metadata: "demo/NBS_schizophrenia/aal74_atlas.csv"
+
+metadata:
+  source_type: "correlation"
+  dataset_role: "built_in_reference_demo"
+  cohort: "NBS-Schizophrenia"
+  atlas_name: "AAL-74 (NBS example)"
+  subject_id_column: "subject_id"
+  group_column: "group"
+
+params:
+  # Raw wavelet correlations, the scale NBS analyses (no Fisher z stored).
+  data_kind: "correlation"
+
+checks:
+  expected_rois: 74
+  min_subjects: 27
