@@ -63,4 +63,3 @@ Utilities and constants:
 
    conninfpy.defaults
    conninfpy.utils
-   conninfpy.eeg_utils

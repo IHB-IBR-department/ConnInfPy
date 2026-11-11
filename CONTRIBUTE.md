@@ -32,11 +32,9 @@ python -m pytest tests/test_glm_stats.py -k fstat   # single file / pattern
 python -m pytest --doctest-modules conninfpy   # docstring examples
 ```
 
-> **Note:** two tests depend on local-only files (both gitignored):
-> `tests/test_interpret.py::test_load_dotenv_manually` needs a local `.env`
-> with an `OPENROUTER_API_KEY`, and `tests/test_eeg_utils.py` needs
-> `datasets/eeg_dataframe_nansfilled.csv`. On a machine without them the
-> affected tests **skip** themselves — everything else should be green.
+> **Note:** `tests/test_interpret.py::test_load_dotenv_manually` depends on a
+> local, gitignored `.env` with an `OPENROUTER_API_KEY`. On a machine without
+> it the test **skips** itself — everything else should be green.
 
 If pytest is unavailable (e.g. a bare environment), the suite also runs with
 the standard library:

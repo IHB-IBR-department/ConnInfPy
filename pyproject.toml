@@ -16,7 +16,7 @@ maintainers = [
     { name = "Irina Knyazeva", email = "knyazeva@ihb.spb.ru" },
 ]
 keywords = [
-    "neuroimaging", "connectivity", "fmri", "eeg",
+    "neuroimaging", "connectivity", "fmri",
     "network-based-statistics", "tfnbs", "glm", "permutation-testing",
     "fwer", "fdr", "combat",
 ]

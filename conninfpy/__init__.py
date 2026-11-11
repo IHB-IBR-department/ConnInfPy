@@ -1,7 +1,7 @@
 """ConnInfPy — Connectivity Inference in Python.
 
-Permutation-based statistical inference on brain connectivity networks (fMRI,
-EEG). One permutation engine shared across nine inference methods, edge-wise
+Permutation-based statistical inference on brain connectivity networks (fMRI).
+One permutation engine shared across nine inference methods, edge-wise
 GLM (Freedman--Lane), parametric empirical-Bayes ComBat, and tail-approximation
 acceleration.
 
@@ -29,7 +29,7 @@ FWER-corrected p-values. Everything else is grouped by module:
 - :mod:`conninfpy.acceleration` — GPD / gamma tail approximation
 - :mod:`conninfpy.loaders` — manifest-based data loading (also :func:`load`)
 - :mod:`conninfpy.sim` — synthetic data and topology scenarios
-- :mod:`conninfpy.plot`, :mod:`conninfpy.eeg_utils`
+- :mod:`conninfpy.plot` — figures
 
 Names imported directly from ``conninfpy`` in earlier versions remain
 importable; ``__all__`` lists the recommended surface.
@@ -39,7 +39,6 @@ __version__ = "2.0.0"
 
 from conninfpy import (
     defaults,
-    eeg_utils,
     enhance,
     harmonize,
     interpret,
@@ -72,15 +71,6 @@ from conninfpy.defaults import (
     DEFAULT_NBS_STAT,
     DEFAULT_NBS_THRESHOLD,
     DEFAULT_START_THRESHOLD,
-)
-from conninfpy.eeg_utils import (
-    Bands,
-    EEGData,
-    Electrodes,
-    PairsElectrodes1020,
-    inverse_reshape_eeg_data,
-    read_from_eeg_dataframe,
-    reshape_eeg_data,
 )
 from conninfpy.enhance import (
     apply_cnbs,
@@ -175,6 +165,5 @@ __all__ = [
     "acceleration",
     "loaders",
     "sim",
-    "eeg_utils",
     "defaults",
 ]
