@@ -20,6 +20,25 @@ from joblib import cpu_count as _cpu_count
 from conninfpy._compat import make_tail_result
 
 
+def _twosample_se2(var1, n1, var2, n2, var_equal=False):
+    """Squared standard error of ``mean2 - mean1``.
+
+    The one place where the two two-sample t statistics differ; the observed
+    statistic, every permutation and the available-case path use it, so the
+    observed t and its null are always of the same kind.
+
+    - Welch (``var_equal=False``): ``var1/n1 + var2/n2``.
+    - Student (``var_equal=True``): pooled variance
+      ``((n1-1) var1 + (n2-1) var2) / (n1+n2-2)`` times ``1/n1 + 1/n2``.
+
+    ``n1``/``n2`` may be per-edge arrays (available-case analysis).
+    """
+    if var_equal:
+        pooled = ((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2)
+        return pooled * (1.0 / n1 + 1.0 / n2)
+    return var1 / n1 + var2 / n2
+
+
 def _encode_strata(strata: Any) -> npt.NDArray[np.int_]:
     """Map an arbitrary stratum-label sequence to contiguous integer codes."""
     arr = np.asarray(strata)
