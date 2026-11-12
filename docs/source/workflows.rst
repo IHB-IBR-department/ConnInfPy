@@ -507,6 +507,13 @@ Every result is dict-like and carries metadata and exporters:
                                           # networks, network_pairs
    out.component_report["threshold"]      # the dict behind the table (None for other methods)
 
+   # Which ROIs gather the detections (descriptive; one row per ROI)
+   nodes = out.node_summary(atlas)        # edge-wise methods: n_sig_<tail>, n_tested, prop_sig,
+                                          # mean_effect_<tail> (c'beta), partner_networks, participation.
+                                          # nbs / cnbs: significant components / blocks containing the
+                                          # ROI and its edges in them (no p-value mass). The unit is
+                                          # out.inference.inference_unit.
+
    # One-call publication figure
    from conninfpy.plot import summary_figure
    fig = summary_figure(out.inference, atlas=atlas, alpha=0.05, top_k=10)

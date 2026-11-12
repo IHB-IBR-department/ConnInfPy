@@ -162,7 +162,9 @@ class InferenceResult(TailResult):
         Set by ``method='cnbs'``: the inference unit is the block. Lists
         every within/between-network block with its edge count, mean signed
         statistic, and uncorrected and corrected p-values per tail; each
-        edge's p-value is its block's corrected p-value.
+        edge's p-value is its block's corrected p-value. ``node_labels`` is
+        the partition behind the blocks (the label of every node), which
+        :meth:`node_summary` uses to say which blocks a node belongs to.
     component_report : dict or None
         Set by ``method='nbs'``: the inference unit is the connected component
         of the edges above the threshold. Lists every observed component of
@@ -722,6 +724,139 @@ class InferenceResult(TailResult):
             significant_only=significant_only,
         )
 
+    def node_summary(
+        self,
+        atlas: Optional[Any] = None,
+        *,
+        alpha: float = 0.05,
+        tail: str = "both",
+        param_idx: Optional[int] = None,
+        sort: str = "detections",
+        top_k: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """Which ROIs gather the detected connections: one row per ROI.
+
+        A descriptive summary: it adds no p-value and no new significance and
+        leaves the result unchanged. What counts as a detection of a ROI follows
+        :attr:`inference_unit`.
+
+        **Edge results** (``tstat``, ``bh_fdr``, ``bh_fdr_perm``, ``tfnbs``,
+        ``ni_tfnbs``, ``fbc_tfnbs``; every edge has its own p-value). Per tail:
+        ``n_sig_<tail>`` (incident edges with ``p <= alpha``) and
+        ``prop_sig_<tail>``; ``n_sig_total`` / ``prop_sig`` over the edges
+        significant in either tail; ``n_tested`` is the denominator, the
+        incident edges that were *tested*: an edge outside an ``edge_mask``
+        family or with too few subjects under ``missing='available_case'`` has
+        a NaN p-value and is in neither numerator nor denominator (so it is
+        not simply ``N - 1``). ``mean_effect_<tail>`` is the mean contrast
+        effect ``c' beta`` (:meth:`effect_map`, the ``effect`` column of
+        :meth:`significant_edges`) over the ROI's significant edges of the
+        tail; NaN when the result carries no effect map (never replaced by t
+        or by an enhanced score) or the ROI has no significant edge.
+
+        **Component results** (``nbs``) and **block results** (``cnbs``). All
+        edges of a component or block share one p-value, so a count of
+        significant edges or a mass of ``-log10 p`` says nothing about a ROI.
+        The summary lists, per tail, the significant (``p_fwer`` / corrected
+        ``p <= alpha``) components or blocks that contain the ROI
+        (``component_ids_<tail>`` / ``block_ids_<tail>``, blocks as
+        ``'A—B'``), their number, and how many of the ROI's tested edges lie
+        in them (``n_edges_in_components_<tail>`` /
+        ``n_edges_in_blocks_<tail>``; totals without the suffix). The column
+        ``inference_unit`` and ``DataFrame.attrs['descriptive']`` mark the
+        table as descriptive.
+
+        **Networks.** With an atlas that has network labels, the partner
+        networks of the ROI's detections (its significant edges, or its edges
+        in the significant components / blocks) are given as
+        ``partner_networks`` (``'Net (k)'`` counts), ``n_networks_reached``
+        and ``participation``, the participation coefficient of Guimera &
+        Amaral (2005), ``P = 1 - sum_s (k_s / k)**2`` over partner networks
+        ``s``. It is NaN, not 0, for a ROI without detections, and 0 when all
+        its detections go to one network (also when it has a single one:
+        read it together with ``n_sig_total`` / ``n_edges_in_*``). Without an
+        atlas, or with an atlas without network labels, those columns (and
+        ``network``) are absent; nothing is guessed.
+
+        Parameters
+        ----------
+        atlas : :class:`~conninfpy.AtlasInfo`, optional
+            Adds ``roi_name``, ``network`` and ``hemisphere`` where the atlas
+            has them. Length must match the number of ROIs.
+        alpha : float, default 0.05
+            Significance threshold of edges, components or blocks.
+        tail : {'both', 'positive', 'negative'}, default 'both'
+            Tails to report. After :meth:`one_sided` only the tested tail
+            exists; asking for the other raises ``ValueError``. With
+            ``two_tailed=True`` results both tails are reported;
+            ``attrs['tail_policy']`` records the declared family.
+        param_idx : int, optional
+            Cell of an (E, H) parameter grid (as in :meth:`significant_edges`).
+        sort : {'detections', 'roi'}, default 'detections'
+            ``'detections'``: by ``n_sig_total`` (edge results) or by the
+            number of the ROI's edges in significant components / blocks,
+            descending, ties by ROI index; ``'roi'``: by ROI index.
+        top_k : int, optional
+            Keep the first ``top_k`` rows after sorting.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One row per ROI: ``roi`` (+ ``roi_name``, ``network``,
+            ``hemisphere``), ``inference_unit``, the count columns above,
+            ``n_tested`` (+ the network columns). ``DataFrame.attrs`` holds
+            ``alpha``, ``inference_unit``, ``tails``, ``tail_policy``,
+            ``tested_tail``, ``method``, ``param_idx`` (and ``e`` / ``h`` of a
+            grid cell), ``descriptive``, ``denominator`` and ``effect_source``.
+
+        Raises
+        ------
+        ValueError
+            For a grid result without ``param_idx``, a tail that was not
+            tested, a wrong atlas length, or a component / block result whose
+            report is missing (made before the report was recorded).
+        """
+        from conninfpy._node_summary import build_node_summary
+
+        if tail not in ("both", "positive", "negative"):
+            raise ValueError(f"tail must be 'both', 'positive' or 'negative'; got {tail!r}.")
+        tested_tail = getattr(self, "tested_tail", None)
+        available = [tested_tail] if tested_tail else ["positive", "negative"]
+        if tail == "both":
+            tails = available
+        elif tail in available:
+            tails = [tail]
+        else:
+            raise ValueError(
+                f"the {tail} tail was not tested: this result is one_sided({tested_tail!r})."
+            )
+        unit = self.inference_unit
+        report = {"component": getattr(self, "component_report", None),
+                  "block": getattr(self, "block_report", None)}.get(unit)
+        attrs: Dict[str, Any] = {
+            "method": self.method,
+            "tail_policy": self.tail_policy,
+            "tested_tail": tested_tail,
+            "param_idx": param_idx,
+        }
+        if self.is_grid and param_idx is not None:
+            if self.e_grid is not None:
+                attrs["e"] = float(self.e_grid[param_idx])
+            if self.h_grid is not None:
+                attrs["h"] = float(self.h_grid[param_idx])
+        return build_node_summary(
+            unit=unit,
+            p_maps={t: self._project_2d(np.asarray(self[t]), param_idx) for t in tails},
+            tails=tails,
+            alpha=alpha,
+            effect=self.effect_map(),
+            report=report,
+            atlas=atlas,
+            sort=sort,
+            top_k=top_k,
+            attrs=attrs,
+        )
+
     def network_summary(
         self,
         atlas: Any,
@@ -999,6 +1134,45 @@ class OmnibusInferenceResult(TailResult):
             atlas=atlas,
             alpha=alpha,
             significant_only=significant_only,
+        )
+
+    def node_summary(
+        self,
+        atlas: Optional[Any] = None,
+        *,
+        alpha: float = 0.05,
+        sort: str = "detections",
+        top_k: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """Which ROIs gather the detected connections (F omnibus, one tail ``'omnibus'``).
+
+        Same conventions as :meth:`InferenceResult.node_summary`, with one
+        unsigned tail: ``n_tested``, ``n_sig_total`` and ``prop_sig`` for edge
+        results (the denominator is the tested incident edges; NaN-p edges are
+        in neither numerator nor denominator), component / block membership for
+        ``nbs`` / ``cnbs`` (``n_components``, ``component_ids``,
+        ``n_edges_in_components`` or the block counterparts), and the
+        participation columns with an atlas that has network labels. F has no
+        direction, so there is no effect column. Descriptive: no new p-value
+        or significance.
+        """
+        from conninfpy._node_summary import build_node_summary
+
+        unit = self.inference_unit
+        report = {"component": getattr(self, "component_report", None),
+                  "block": getattr(self, "block_report", None)}.get(unit)
+        return build_node_summary(
+            unit=unit,
+            p_maps={"omnibus": np.asarray(self["omnibus"])},
+            tails=["omnibus"],
+            alpha=alpha,
+            has_effect=False,
+            report=report,
+            atlas=atlas,
+            sort=sort,
+            top_k=top_k,
+            attrs={"method": self.method, "tail_policy": self.tail_policy,
+                   "tested_tail": None, "param_idx": None},
         )
 
     def network_summary(

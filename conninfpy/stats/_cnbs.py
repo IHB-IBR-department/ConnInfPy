@@ -165,6 +165,9 @@ def block_p_values(
         rows.append(row)
     report = {
         "unit": "block",
+        # Partition behind the blocks (label of every node): lets a result say which
+        # blocks a node belongs to (InferenceResult.node_summary).
+        "node_labels": [v.item() if hasattr(v, "item") else v for v in np.asarray(net_labels)],
         "statistic": "mean signed edge statistic per block (Noble & Scheinost, 2020)",
         "correction": correction,
         "tail_policy": "two-sided" if two_sided_p is not None else "separate-one-sided",

@@ -121,6 +121,12 @@ are listed too (``significant`` marks ``p_fwer <= alpha``); a single
 suprathreshold edge is a component of one edge. The ``component_id`` column of
 ``significant_edges()`` and of the CSV export gives the component of each edge.
 The p-values are those of the p-value map: the report recomputes nothing.
+``result.node_summary(atlas)`` describes the same detections per ROI (which ROIs
+gather them): for edge-wise methods the significant edges of each ROI out of its
+*tested* incident edges; for ``nbs`` and ``cnbs``, whose edges in a component or
+block share one p-value, the significant components or blocks containing the ROI
+and how many of its edges lie in them, never a count of "significant edges" or a
+mass of -log10 p. It is descriptive and adds no significance.
 
 Threshold-free — ``tfnbs`` (the default)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
