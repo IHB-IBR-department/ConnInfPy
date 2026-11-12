@@ -82,10 +82,14 @@ class TestRun(unittest.TestCase):
         cfg = study.analysis({"type": "glm", "interest": "age",
                               "confounds": ["sex"], "sites": "site"})
         written = self._quiet_run(cfg)
-        for key in ("edges", "pvals", "provenance"):
+        for key in ("edges", "pvals", "bundle", "provenance"):
             self.assertTrue(written[key].exists(), key)
         with np.load(written["pvals"]) as z:
             self.assertEqual(z["positive"].shape, (6, 6))
+        from conninfpy import ResultBundle
+        bundle = ResultBundle.load(written["bundle"])
+        self.assertEqual(bundle.roi_ids, tuple(range(6)))
+        self.assertEqual(bundle.metadata["contrast_id"], "age")
         prov = json.loads(written["provenance"].read_text())
         self.assertEqual(prov["conninfpy_version"], __version__)
         self.assertEqual(prov["data"]["n_subjects_used"], 24)

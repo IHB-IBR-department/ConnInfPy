@@ -174,7 +174,7 @@ Phipson–Smyth correction.
        test_type='two-sample',             # or 'paired', 'one-sample'
        method='tfnbs',
        n_permutations=1000,
-       e=0.3, h=3.0, n=10,                 # FDR-calibrated regime
+       e=0.3, h=3.0, n=10,                 # example legacy grid
        use_mp=True, rng=42,
    )
    # p['positive'] : (N, N) p-map for group2 > group1
@@ -396,20 +396,19 @@ permutation p-value. This makes ~200 permutations usable for exploration
 tail exceedances) falls back to permutation p-values when the GPD does
 not fit cleanly. Report exact p-values from a large run.
 
-Topology-aware default integration steps
-----------------------------------------
+TFNBS integration
+-----------------
 
-The TFCE integral is evaluated at ``n`` thresholds. Defaults:
-
-- ``n=100`` for direct scoring (single-shot, high resolution; via
-  :func:`conninfpy.get_tfnbs_score`)
-- ``n=10`` inside the permutation loop (Hao 2024 reports n=10 is
-  sufficient for FDR control on network data)
+The default ``n=None`` integrates the piecewise support exactly. Set a
+positive integer ``n`` to reproduce the historical right-endpoint grid.
+Record the chosen mode, E/H and start threshold with the result; exact scores
+can differ from the finite-grid scores. ``bh_fdr_perm`` does not use this
+integration.
 
 The exponents ``(e, h)`` accept either scalars or equal-length lists.
 Lists are zipped pairwise into a single 3-D batched call, so a 16×11
-(E, H) grid runs 176 combos in one ``compute_p_val`` invocation without
-multiplying the runtime.
+(E, H) grid runs 176 combos in one ``compute_p_val`` invocation. Exact
+integration evaluates each pair, so the grid increases computation time.
 
 See :mod:`conninfpy.defaults` for the full list of constants and
 citations (Smith & Nichols 2009, Baggio 2018, Vinokur 2023, Hao 2024).
@@ -457,8 +456,9 @@ Command line — ``conninfpy run``
 An analysis file (YAML) names a data manifest, the design and the inference
 settings; ``conninfpy run`` loads the data, calls :func:`conninfpy.analyze`
 and writes ``edges.csv`` (significant edges, atlas-annotated when an atlas is
-known), ``pvals.npz`` and ``provenance.json`` (package version, analysis file,
-data summary, warnings, run time):
+known), ``pvals.npz``, a reloadable ``bundle.pkl`` for independent summaries,
+and ``provenance.json`` (package version, analysis file, data summary,
+warnings, run time):
 
 .. code-block:: yaml
 
@@ -664,3 +664,53 @@ units, Δr = tanh(z_b) − tanh(z_a). Negative baselines depend on preprocessing
 ``summarize_annotation`` add these classes when the result defines a
 comparison, and ``conninfpy run`` writes ``beta``, ``effect`` and the two
 predicted maps to ``pvals.npz``.
+
+Independent post-analysis summaries
+-----------------------------------
+
+``ResultBundle`` snapshots a completed result for descriptive reporting without
+original observations, permutation arrays, or statistic/enhanced maps. It uses
+an explicit schema version and trusted Python pickle; never load an untrusted
+pickle. New inference results capture their eligible, effect-estimable and
+actually-tested masks, correction family, model/contrast identity and available
+ROI metadata at the original producer call, so ``result.to_bundle()`` needs no
+manual reconstruction. ``analyze``, ``compute_p_val``, ``compute_p_val_glm``
+and ``compute_p_val_glm_multi`` accept ``atlas=``, ``roi_ids=``, ``groupings=``
+and ``units=``; single-result calls also accept ``contrast_id=``. Atlas label
+IDs and all available groupings are retained in
+matrix order; without atlas identities, zero-based input positions and unknown
+response units are declared explicitly. ``conninfpy run`` writes the same
+snapshot as ``bundle[_contrast].pkl``.
+
+Explicit metadata arguments to ``to_bundle(...)`` remain available for legacy
+or manually constructed results. On a new result they must agree with the
+captured values; conflicting masks or family are rejected. The diagonal is
+excluded. Grid tested masks have the same N × N × K shape as the corrected p
+map. Zero is a valid estimate; a p-value of 1, a finite beta or an absent tail
+does not reconstruct the original family or estimability. Legacy results
+lacking explicit metadata cannot silently be upgraded.
+
+The named effect ``contrast_beta`` is the unstandardized signed contrast
+``cᵀβ`` in the declared response units; ``standardizer`` is ``None``. Multirow
+F results have no signed effect and require an all-false estimability mask.
+Effect summaries include every estimable ROI pair, irrespective of detection.
+Counts of corrected detections are separate and keep the original tail,
+correction, family, grid selection and native inference unit. Component/block
+projections are descriptive locations, not individually significant edges.
+A grouping does not create new tests or confidence intervals.
+
+``brainnetome_crosswalk`` accepts non-BNA original ROI IDs and an explicitly
+declared MNI template and mm coordinates. Point annotations describe centres
+only; known parcel or sphere support preserves BNA overlap and unlabelled
+fractions. Pure/mixed/low-coverage settings and reference provenance are kept.
+Parallel anatomical, gyrus, lobe, hemisphere, structure and functional groupings
+are saved with the annotation and added to the bundle when not already defined.
+Functional ``not_applicable`` remains distinct from ``unknown``. Approximate
+MNI variants are flagged, never registered automatically. Nearest
+placement is disabled unless a finite limit and tissue class are provided; a
+cross-hemisphere or cross-tissue fallback is rejected. BD/PC terms and source
+scores are descriptive endpoint context, including reference homologs; they
+are not functions of edges or new connectivity evidence. Atlas overlap is not
+EPI coverage. See ``examples/post_analysis_bundle.py`` for an offline example.
+``bundle.export_summary(table, path)`` exports the selected table with a JSON
+metadata sidecar; ``bundle.plot_summary(table)`` plots that same table.

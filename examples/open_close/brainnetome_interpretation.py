@@ -57,7 +57,7 @@ from examples.open_close._shared.paths import PAPER  # noqa: E402
 SCHAEFER_200 = Path.home() / "nilearn_data/schaefer_2018/Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm.nii.gz"
 STORED = {"openclose_ihb": PAPER / "ihb_paired_tfnbs.npz",
           "openclose_china": PAPER / "china_paired_tfnbs_run0.npz"}
-TFNBS = dict(method="tfnbs", e=0.4, h=3.0, n=10, acceleration=None, rng=42, use_mp=True)
+TFNBS = dict(method="tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65, acceleration=None, rng=42, use_mp=True)
 # name -> (experiment, close run, restrict to subjects with both close runs)
 ANALYSES = {
     "openclose_ihb": ("ihb", 0, False),

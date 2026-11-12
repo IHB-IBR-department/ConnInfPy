@@ -46,6 +46,7 @@ from conninfpy.enhance import (
     apply_ni_tfnbs,
     apply_tfnbs,
 )
+from conninfpy._provenance import capture_analysis_provenance
 from conninfpy.results import InferenceResult, make_inference_result
 from conninfpy.stats import _degenerate as _degenerate
 from conninfpy.stats._components import build_component_report
@@ -69,6 +70,7 @@ from conninfpy.stats._types import (
     StatMethod,
     TestType,
     _grid_from_kwargs,
+    enhancement_provenance,
 )
 from conninfpy.stats._workers import run_permutations
 from conninfpy.stats.acceleration import compute_p_values_accelerated
@@ -1055,11 +1057,21 @@ def _with_estimates(fn):
             res.design["t_statistic"] = (
                 "student" if b.arguments.get("var_equal") else "welch"
             )
+        method = b.arguments["method"]
+        method = method.value if isinstance(method, StatMethod) else method
+        if method in {m.value for m in TFNBS_FAMILY} and res.design is not None:
+            res.design["enhancement"] = enhancement_provenance(
+                b.arguments["e"], b.arguments["h"], b.arguments["n"],
+                b.arguments["start_thres"] if b.arguments["start_thres"] is not None
+                else DEFAULT_START_THRESHOLD,
+                method, b.arguments["normalization"], b.arguments["min_cluster_size"],
+            )
         return res
 
     return wrapper
 
 
+@capture_analysis_provenance
 @_with_estimates
 def compute_p_val(
     group1: npt.NDArray[np.float64],
@@ -1079,8 +1091,8 @@ def compute_p_val(
     nbs_stat: str = DEFAULT_NBS_STAT,
     e: Union[float, List[float]] = DEFAULT_EXTENT_EXPONENT,
     h: Union[float, List[float]] = DEFAULT_HEIGHT_EXPONENT,
-    n: int = DEFAULT_N_THRESHOLDS,
-    start_thres: float = DEFAULT_START_THRESHOLD,
+    n: Optional[int] = DEFAULT_N_THRESHOLDS,
+    start_thres: Optional[float] = DEFAULT_START_THRESHOLD,
     min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
     normalization: str = "sqrt",
     strata: Optional[npt.NDArray[Any]] = None,
@@ -1090,6 +1102,11 @@ def compute_p_val(
     two_tailed: bool = False,
     edge_mask: Optional[npt.ArrayLike] = None,
     var_equal: bool = False,
+    atlas: Optional[Any] = None,
+    roi_ids: Optional[Sequence[Any]] = None,
+    groupings: Optional[Dict[str, Sequence[Any]]] = None,
+    units: Optional[str] = None,
+    contrast_id: Optional[str] = None,
 ) -> InferenceResult:
     """
     Compute p-values using permutation testing with various network-based methods.
@@ -1166,12 +1183,11 @@ def compute_p_val(
         Cluster statistic for NBS (only used when method='nbs'): the number
         of edges in the component, or the sum of ``t - threshold`` over them
         (the MATLAB NBS toolbox definition).
-    e : float or sequence of float, default=0.3
+    e : float or sequence of float, default=0.4
         Extent exponent for TFNBS-based methods. Pass an equal-length
         sequence with ``h`` to evaluate a whole ``(E, H)`` grid in one
-        permutation pass — TFNBS's threshold integration runs once
-        and broadcasts the per-cell exponentiation, so a K-cell grid
-        costs ~the same wall-clock as a single cell. In grid mode the
+        permutation pass. Exact integration evaluates each pair, so cost
+        increases with grid size. In grid mode the
         returned :class:`~conninfpy.InferenceResult` carries the
         parameter axis (``result.is_grid``, ``result.e_grid``,
         ``result.h_grid``); use ``result.select(param_idx)`` or pass
@@ -1179,8 +1195,8 @@ def compute_p_val(
         to a single cell.
     h : float or sequence of float, default=3.0
         Height exponent for TFNBS-based methods. See ``e`` for grid mode.
-    n : int, default=10
-        Number of threshold steps for TFNBS-based methods.
+    n : int or None, default=None
+        None selects exact integration; positive n uses the legacy right grid.
     start_thres : float, default=1.65
         Starting threshold for TFNBS integration.
     min_cluster_size : int, default=3
@@ -1234,6 +1250,10 @@ def compute_p_val(
         toolbox t-test and in a GLM with an intercept and a group indicator.
         Recorded as ``result.design['t_statistic']`` (``'welch'`` /
         ``'student'``). Raises for paired and one-sample tests.
+    atlas, roi_ids, groupings, units, contrast_id : optional
+        Original ROI/effect/contrast metadata captured for ``to_bundle()``.
+        Bare matrix inputs use zero-based positional identities and declare
+        unknown response units rather than inventing atlas metadata.
 
     Returns
     -------
@@ -1341,6 +1361,8 @@ def compute_p_val(
     if method_enum == StatMethod.NBS:
         enhance_kwargs = {"threshold": threshold, "nbs_stat": nbs_stat}
     elif method_enum in {StatMethod.TFNBS, StatMethod.NI_TFNBS, StatMethod.FBC_TFNBS}:
+        if start_thres is None:
+            start_thres = DEFAULT_START_THRESHOLD
         enhance_kwargs = {"e": e, "h": h, "n": n, "start_thres": start_thres}
         if method_enum in CONSTRAINED_METHODS:
             enhance_kwargs["net_labels"] = net_labels

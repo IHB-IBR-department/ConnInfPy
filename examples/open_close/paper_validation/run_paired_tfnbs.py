@@ -70,7 +70,7 @@ def _run_paired(
         test_type="paired",
         fisher_z=False,                              # caller already Fisher-z'd
         method="tfnbs",
-        e=0.4, h=3.0, n=10,
+        e=0.4, h=3.0, n=10, start_thres=1.65,
         n_permutations=n_perm,
         acceleration=None,
         rng=seed,

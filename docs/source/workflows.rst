@@ -100,7 +100,7 @@ The simplest design — two groups of subjects, no covariates.
        group2=patients_corr,        # (n2, N, N)
        test_type='two-sample',
        method='tfnbs',
-       e=0.4, h=3.0, n=10,          # FDR-calibrated regime (Hao 2024)
+       e=0.4, h=3.0, n=10,          # example legacy grid
        n_permutations=1000,
        acceleration=None,           # exact empirical reference
        rng=42,
@@ -432,12 +432,10 @@ reports up to 75-fold variation in edge counts across the ``(E, H)`` plane.
 A single ``(E, H)`` result is therefore of limited value on its own; a finding
 should be shown to be **stable across the plausible parameter range**.
 
-``analyze()`` evaluates the grid at negligible additional cost. Pass
-**equal-length sequences** for ``e`` and ``h`` and the whole grid is computed
-in **one permutation pass**: the threshold-integration loop runs once and the
-per-cell exponentiation is broadcast at the end, so a K-cell grid costs
-approximately the wall-clock of a single cell. Passing sequences thus converts
-a point estimate into a stability assessment at little extra cost.
+Pass **equal-length sequences** for ``e`` and ``h`` to evaluate the grid in
+**one permutation pass**. Exact integration evaluates each pair, so runtime
+increases with the number of pairs. The grid allows a stability assessment
+without running separate permutation pipelines.
 
 .. code-block:: python
 

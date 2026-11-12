@@ -208,7 +208,7 @@ def main():
             Y, interest=data["age"].astype(float), confounds=confounds,
             sites=data["site"], harmonize="combat_site_dummies_glm",  # as the age map
             fisher_z=False, method=mname,
-            e=e_list, h=h_list, n=10,
+            e=e_list, h=h_list, n=10, start_thres=1.65,
             n_permutations=args.n_permutations, acceleration=None,
             rng=args.seed, use_mp=True,
             **kwargs

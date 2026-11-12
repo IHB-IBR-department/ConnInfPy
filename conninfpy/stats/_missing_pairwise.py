@@ -191,10 +191,12 @@ def _build_design(
         need2 = max(int(np.ceil(min_coverage * (A.shape[0] - n1))), MIN_PER_GROUP)
         tested = (k1 >= need1) & (k2 >= need2)
         edge_n = k1 + k2
+        effect_estimable = (k1 > 0) & (k2 > 0)
     else:
         k = M.sum(0)
         tested = k >= max(int(np.ceil(min_coverage * A.shape[0])), MIN_PER_GROUP)
         edge_n = k
+        effect_estimable = k > 0
 
     strata_codes = n1_per_stratum = None
     if strata is not None and test_type == "two-sample":
@@ -220,7 +222,17 @@ def _build_design(
         strata=strata_codes,
         n1_per_stratum=n1_per_stratum,
     )
-    return design, _report(group1, group2, test_type, design, edge_n, min_coverage)
+    report = _report(group1, group2, test_type, design, edge_n, min_coverage)
+    def _symmetric(values):
+        arr = np.zeros((N, N), dtype=values.dtype)
+        arr[triu] = values
+        return arr + arr.T if values.dtype.kind != "b" else arr | arr.T
+    report["effect_estimable_mask"] = _symmetric(effect_estimable)
+    report["tested_mask"] = _symmetric(tested)
+    if test_type == "two-sample":
+        report["edge_n_group1"] = _symmetric(k1)
+        report["edge_n_group2"] = _symmetric(k2)
+    return design, report
 
 
 def _report(

@@ -28,7 +28,7 @@ def run_variants():
 
     common = dict(Y=Y, interest=group, confounds=confounds, sites=sites, 
                   harmonize="combat_site_dummies_glm", fisher_z=False, n_permutations=500, rng=42,
-                  e=0.4, h=3.0, n=10)
+                  e=0.4, h=3.0, n=10, start_thres=1.65)
 
     # 1. NI-TFNBS
     print("Running NI-TFNBS...")

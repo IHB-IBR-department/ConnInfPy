@@ -3,59 +3,15 @@ Unified default parameters for ConnInfPy.
 
 Single source of truth for all default constants used across modules.
 
-TFCE exponent defaults (E, H) use the validation-paper setting
-``E=0.3, H=3.0`` across both the scoring and permutation paths.
-This matches the ABIDE, Open-Close, and simulation examples.
+TFNBS defaults use E=0.4 and H=3.0. By default n=None integrates the
+piecewise support exactly, independently for each tail. An explicit positive
+integer n selects the historical right-endpoint grid, with threshold levels
+start + i * (max - start) / n and inclusive active edges at each level.
+Legacy finite-grid scores and the exact integral need not be equal. Record
+E, H, n and start explicitly when reproducing historical results.
 
-Hao et al. (2024) recommend ``E=0.4, H in [3.0, 7.0]`` for empirical
-FDR < 10% on network data — Baggio (2018) defaults overshoot FDR > 50%
-in their benchmarks; Vinokur et al. (2023) report 75-fold variation in
-detected edge counts across (E,H) within Baggio's recommended range.
-Smith & Nichols (2009) originally used ``E=0.5, H=2.0`` for image TFCE;
-that remains a sensible sensitivity point, but it is no longer the
-ConnInfPy default for network validation.
-
-Users tuning (E,H) for a specific dataset should treat the exponents as
-a sensitivity knob: ablate within Hao's recommended box
-``E in [0.3, 0.5]``, ``H in [3.0, 7.0]`` and report stability.
-
-The only path-specific default is ``n`` (threshold integration steps):
-``n=100`` for scoring (high resolution, single-shot), ``n=10`` for
-permutation (lower ``n`` keeps the permutation loop affordable).
-
-The rationale for ``n=10`` inside the permutation loop differs between
-the two error-control regimes ConnInfPy supports, and the literature
-strictly speaking only validates one of them at this resolution:
-
-* **FDR control (``method='bh_fdr_perm'``).** Hao et al. (2024)
-  empirically benchmark TFNOS at ``E=0.4, H=3.0, n=10`` on synthetic
-  network data and report FDR < 10% — this is the regime their result
-  underwrites. Using ``n=10`` for the permutation-calibrated BH path
-  is directly supported.
-
-* **FWER control via max-statistic permutation.** No specific
-  literature endorses ``n=10`` for this path; the choice is a
-  pragmatic compromise between integration resolution and permutation
-  budget. ConnInfPy's simulation calibration grid in
-  ``examples/simulations/`` is the empirical regression check
-  for this choice; users with budget for ``n=30+`` permutation-time
-  integration steps can pass ``n=30`` to ``compute_p_val(...)`` /
-  ``compute_p_val_glm(...)`` without changing any other default.
-  Because the default pairwise API returns positive and negative tails
-  with separate max-statistic nulls, one undirected/two-sided family
-  should be interpreted with ``α/2`` per tail unless a caller uses a
-  joint two-sided max-null path.
-
-Threshold tie-breaking convention
----------------------------------
-ConnInfPy's TFCE integral uses ``edge_t >= threshold`` (inclusive lower
-bound) at each integration step. Smith & Nichols (2009) define the
-TFCE indicator as ``e(h) = 1 if t > h``, i.e. strict inequality. The
-inclusive convention is mathematically equivalent under continuous
-``t``-statistics and computationally simpler. We retain ``>=`` and use
-the production FPR/FWER calibration in ``examples/simulations/``
-as the regression check. A future release may switch to ``>`` to match
-the literal Smith & Nichols formula and rerun calibration.
+The permutation-based BH-FDR method uses raw edge statistics and does not
+apply TFNBS enhancement or its integration settings.
 
 References
 ----------
@@ -73,7 +29,7 @@ References
 # TFCE parameters (validation-paper network setting)
 # =============================================================================
 
-DEFAULT_EXTENT_EXPONENT: float = 0.3
+DEFAULT_EXTENT_EXPONENT: float = 0.4
 """Default extent exponent E."""
 
 DEFAULT_HEIGHT_EXPONENT: float = 3.0
@@ -86,12 +42,11 @@ DEFAULT_START_THRESHOLD: float = 1.65
 # Integration resolution (path-specific)
 # =============================================================================
 
-DEFAULT_N_THRESHOLDS_SCORING: int = 100
-"""Threshold integration steps for direct TFCE scoring (high resolution)."""
+DEFAULT_N_THRESHOLDS_SCORING = None
+"""None selects exact integration; a positive integer selects the legacy grid."""
 
-DEFAULT_N_THRESHOLDS_PERMUTATION: int = 10
-"""Threshold integration steps inside the permutation loop (speed tradeoff;
-Hao 2024 reports n=10 is sufficient for FDR control on network data)."""
+DEFAULT_N_THRESHOLDS_PERMUTATION = None
+"""None selects exact integration inside the permutation loop."""
 
 # =============================================================================
 # Permutation testing

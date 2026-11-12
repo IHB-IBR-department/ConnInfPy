@@ -242,6 +242,8 @@ def annotate_rois(
         raise ValueError(f"space must be one of {sorted(_EXACT_SPACES | _APPROX_SPACES)}; got {space!r}.")
     if support not in ("sphere", "parcel", "point"):
         raise ValueError(f"support must be 'sphere', 'parcel' or 'point'; got {support!r}.")
+    if nearest_mm is not None and (support != "point" or not np.isfinite(nearest_mm) or nearest_mm <= 0):
+        raise ValueError("nearest_mm must be a positive finite distance for point support")
     for nm, v in (("purity", purity), ("min_coverage", min_coverage), ("min_weight", min_weight)):
         if not 0 < v <= 1:
             raise ValueError(f"{nm} must be in (0, 1]; got {v}.")
@@ -365,7 +367,12 @@ def _supports(ref, coords, support, radius_mm, parcel_image, parcel_labels):
         import nibabel as nib
 
         img = nib.load(str(parcel_image)) if not hasattr(parcel_image, "affine") else parcel_image
-        data = np.rint(np.asarray(img.dataobj)).astype(np.int64)
+        raw = np.asarray(img.dataobj)
+        if raw.ndim != 3 or not np.isfinite(raw).all() or not np.allclose(raw, np.rint(raw)):
+            raise ValueError("parcel image must be a finite 3-D integer label image")
+        if not np.isfinite(img.affine).all() or abs(np.linalg.det(img.affine[:3, :3])) < 1e-12:
+            raise ValueError("parcel image requires a finite nonsingular affine")
+        data = np.rint(raw).astype(np.int64)
         ijk = np.argwhere(data > 0)
         lab = data[tuple(ijk.T)]
         world_all = np.c_[ijk, np.ones(len(ijk))] @ np.asarray(img.affine, float).T

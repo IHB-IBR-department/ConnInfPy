@@ -62,7 +62,7 @@ def run_method(data, atlas, method_key: str, n_perm: int, seed: int):
     if method_key == "tstat":
         out = analyze(**kwargs, method="tstat")
     elif method_key == "tfnbs":
-        out = analyze(**kwargs, method="tfnbs", e=0.4, h=3.0, n=10)
+        out = analyze(**kwargs, method="tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65)
     elif method_key.startswith("nbs_"):
         thr = float(method_key.split("_")[1])
         out = analyze(**kwargs, method="nbs", threshold=thr)
@@ -70,10 +70,10 @@ def run_method(data, atlas, method_key: str, n_perm: int, seed: int):
         out = analyze(**kwargs, method="cnbs", net_labels=data["net_labels"])
     elif method_key == "ni_tfnbs":
         out = analyze(**kwargs, method="ni_tfnbs", net_labels=data["net_labels"],
-                      e=0.4, h=3.0, n=10)
+                      e=0.4, h=3.0, n=10, start_thres=1.65)
     elif method_key == "fbc_tfnbs":
         out = analyze(**kwargs, method="fbc_tfnbs", net_labels=data["net_labels"],
-                     e=0.4, h=3.0, n=10, min_cluster_size=3)
+                     e=0.4, h=3.0, n=10, start_thres=1.65, min_cluster_size=3)
     else:
         raise ValueError(f"Unknown method_key: {method_key}")
 

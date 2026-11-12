@@ -93,7 +93,7 @@ def run_variant(
         harmonize="combat_site_dummies_glm",                   # Strategy D
         fisher_z=False,
         method="tfnbs",
-        e=0.4, h=3.0, n=10,
+        e=0.4, h=3.0, n=10, start_thres=1.65,
         n_permutations=n_perm,
         acceleration=None,
         rng=seed,

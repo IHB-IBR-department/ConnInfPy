@@ -121,6 +121,8 @@ class AtlasInfo:
                 raise ValueError(
                     f"label_ids must have length {n}; got {self.label_ids.shape}."
                 )
+            if len(np.unique(self.label_ids)) != n:
+                raise ValueError("label_ids must be unique")
 
     def __len__(self) -> int:
         return len(self.labels)
@@ -195,6 +197,10 @@ class AtlasInfo:
             coords=coords,
             hemisphere=hemisphere,
             source=source or str(path),
+            label_ids=(np.asarray([int(r['roi_id']) for r in rows], dtype=np.int64)
+                       if 'roi_id' in rows[0] else
+                       np.asarray([int(r['id']) for r in rows], dtype=np.int64)
+                       if 'id' in rows[0] else None),
         )
 
     # ------------------------------------------------------------------
@@ -338,8 +344,11 @@ class AtlasInfo:
         names: Optional[Sequence[str]] = None,
         networks: Optional[Sequence[str]] = None,
         group_by: str = "auto",
-        max_distance: float = 5.0,
+        max_distance: Optional[float] = None,
         source: Optional[str] = None,
+        space: Optional[str] = None,
+        reference_space: Optional[str] = None,
+        units: Optional[str] = None,
     ) -> "AtlasInfo":
         """Describe ROIs given by MNI coordinates, placed in a reference atlas.
 
@@ -370,9 +379,14 @@ class AtlasInfo:
         group_by : {'auto', 'network', 'region'}
             How ROIs are grouped. ``'auto'`` uses the reference's networks
             when it has them, else its regions.
-        max_distance : float, default 5.0
-            Largest distance (mm) from a coordinate outside every region to
-            the nearest labelled voxel for it to be assigned.
+        max_distance : float, optional
+            Opt-in maximum distance (mm) to a labelled voxel or, when no image
+            exists, a centroid. The default leaves unmatched points unassigned.
+        space, reference_space : str
+            Declared, matching coordinate and reference templates. No
+            registration or template conversion is performed.
+        units : {'mm'}
+            Coordinates are world coordinates in millimetres.
         source : str, optional
             Provenance string.
 
@@ -383,9 +397,15 @@ class AtlasInfo:
             the placement table (region, network, inside, distance_mm,
             method).
         """
+        if not space or units != "mm":
+            raise ValueError("declare the source coordinate space and units='mm'")
+        if reference is not None and (not reference_space or reference_space != space):
+            raise ValueError("declare matching source and reference spaces; no registration is performed")
         coords = np.asarray(coords, dtype=np.float64)
         if coords.ndim != 2 or coords.shape[1] != 3:
             raise ValueError(f"coords must have shape (n_rois, 3); got {coords.shape}.")
+        if not np.isfinite(coords).all():
+            raise ValueError("coords must be finite")
         n = len(coords)
         if names is None:
             width = len(str(n))
@@ -407,19 +427,24 @@ class AtlasInfo:
                     reference if isinstance(reference, (list, tuple)) else [reference]
                 )
             ]
-            table = assign_coordinates(coords, refs, max_distance=max_distance)
+            table = assign_coordinates(coords, refs, max_distance=max_distance, space=space,
+                                       reference_space=reference_space, units=units)
             table.insert(0, "roi", names)
             mode = group_by
             if mode == "auto":
                 has_networks = any(list(r.networks) != list(r.labels) for r in refs)
                 mode = "network" if has_networks else "region"
+            if mode == "region" and len(refs) > 1 and networks is None:
+                mapped = table[table["atlas"] >= 0]
+                if any(len(set(g["atlas"])) > 1 for _, g in mapped.groupby("region")):
+                    raise ValueError("region names collide across references; supply distinct explicit group labels")
             groups = list(table[mode])
         if networks is not None:
             groups = [str(x) for x in networks]
             if len(groups) != n:
                 raise ValueError(f"networks must have length {n}; got {len(groups)}.")
             if table is not None:
-                table["network"] = groups
+                table["selected_network"] = groups
 
         ref_src = (
             " + ".join(str(r.source) for r in refs) if reference is not None else None
@@ -562,6 +587,8 @@ def _load_label_image(img: Any) -> Tuple[Any, npt.NDArray[np.int64]]:
             f"expected a 3-D label image, got shape {data.shape}; probabilistic "
             "(4-D) atlases are not supported."
         )
+    if not np.isfinite(data).all():
+        raise ValueError("the label image must contain finite labels")
     labels = np.rint(data)
     if not np.allclose(data, labels):
         raise ValueError("the label image must hold integer labels.")
@@ -696,7 +723,10 @@ def assign_coordinates(
     coords: Any,
     reference: Any,
     *,
-    max_distance: float = 5.0,
+    max_distance: Optional[float] = None,
+    space: Optional[str] = None,
+    reference_space: Optional[str] = None,
+    units: Optional[str] = None,
 ) -> "Any":
     """Place MNI coordinates in a reference atlas (or a list of atlases, in order).
 
@@ -707,29 +737,50 @@ def assign_coordinates(
     or to the region centroid without an image), ``method`` (``'voxel'``,
     ``'nearest voxel'``, ``'centroid'`` or ``'unassigned'``) and, for a
     list of atlases, ``atlas`` (the position of the atlas that assigned it).
-    With a list, each coordinate takes the first atlas that assigns it
-    inside a region, then the first that assigns it within ``max_distance``.
+    With a list, exact containment is tried across all references first,
+    followed by opt-in bounded nearest-voxel and centroid approximations.
+    Declare identical source/reference spaces and mm units; this function
+    does not register images or infer templates.
     """
+    if not space or not reference_space or space != reference_space or units != "mm":
+        raise ValueError("declare matching coordinate/reference spaces and units='mm'; no registration is performed")
+    if max_distance is not None and (not np.isfinite(max_distance) or max_distance <= 0):
+        raise ValueError("max_distance must be a positive finite distance or None")
+    c = np.asarray(coords, dtype=float)
+    if c.ndim != 2 or c.shape[1] != 3 or not np.isfinite(c).all():
+        raise ValueError("coords must be finite with shape (n, 3)")
     if isinstance(reference, (list, tuple)):
+        if not reference:
+            raise ValueError("reference list cannot be empty")
         tables = [
-            assign_coordinates(coords, r, max_distance=max_distance) for r in reference
+            assign_coordinates(coords, r, max_distance=max_distance, space=space,
+                               reference_space=reference_space, units=units) for r in reference
         ]
         out = tables[0].copy()
-        out["atlas"] = np.where(out["method"] == "unassigned", -1, 0)
+        out["region"] = "unassigned"
+        out["network"] = "unassigned"
+        out["label_id"] = 0
+        out["inside"] = False
+        out["distance_mm"] = np.nan
+        out["method"] = "unassigned"
+        out["atlas"] = -1
         for rank in ("voxel", "nearest voxel", "centroid"):
             for k, t in enumerate(tables):
                 take = (
-                    (out["method"] != "voxel")
-                    & (t["method"] == rank)
-                    & ((out["method"] == "unassigned") | (rank == "voxel"))
+                    (out["method"] == "unassigned") & (t["method"] == rank)
                 )
                 out.loc[take, t.columns] = t.loc[take]
                 out.loc[take, "atlas"] = k
+        out.attrs.update({"space": space, "reference_space": reference_space,
+                          "units": units, "max_distance_mm": max_distance})
         return out
-    return _assign_one(coords, reference, max_distance=max_distance)
+    out = _assign_one(coords, reference, max_distance=max_distance)
+    out.attrs.update({"space": space, "reference_space": reference_space,
+                      "units": units, "max_distance_mm": max_distance})
+    return out
 
 
-def _assign_one(coords: Any, reference: Any, *, max_distance: float) -> "Any":
+def _assign_one(coords: Any, reference: Any, *, max_distance: Optional[float]) -> "Any":
     """:func:`assign_coordinates` for a single reference atlas."""
     import pandas as pd
 
@@ -755,7 +806,7 @@ def _assign_one(coords: Any, reference: Any, *, max_distance: float) -> "Any":
             if lab[i] in pos:
                 idx[i], inside[i], dist[i], method[i] = pos[lab[i]], True, 0.0, "voxel"
         todo = np.flatnonzero(idx < 0)
-        if todo.size:
+        if todo.size and max_distance is not None:
             from scipy.spatial import cKDTree
 
             labelled = np.argwhere(np.isin(data, ref.label_ids))
@@ -765,7 +816,7 @@ def _assign_one(coords: Any, reference: Any, *, max_distance: float) -> "Any":
                 if di <= max_distance:
                     idx[i] = pos[int(data[tuple(labelled[ji])])]
                     dist[i], method[i] = di, "nearest voxel"
-    elif ref.coords is not None:
+    elif ref.coords is not None and max_distance is not None:
         warnings.warn(
             "the reference atlas has no label image; each coordinate is assigned "
             "to the nearest region centroid (see distance_mm). Use "
@@ -774,9 +825,13 @@ def _assign_one(coords: Any, reference: Any, *, max_distance: float) -> "Any":
             stacklevel=2,
         )
         d = np.linalg.norm(coords[:, None, :] - ref.coords[None, :, :], axis=2)
-        idx = np.nanargmin(d, axis=1)
-        dist = d[np.arange(n), idx]
-        method[:] = "centroid"
+        nearest = np.nanargmin(d, axis=1)
+        dist = d[np.arange(n), nearest]
+        ok = dist <= max_distance
+        idx[ok] = nearest[ok]
+        method[ok] = "centroid"
+    elif ref.coords is not None:
+        pass  # a centroid is not containment; fallback must be explicit
     else:
         raise ValueError(
             "the reference atlas has neither a label image nor coordinates."

@@ -144,6 +144,8 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
             interest[c] = values.ravel()
         kwargs["Y"] = Y[keep]
         kwargs["interest"] = interest if len(interest) > 1 else interest[interest_cols[0]]
+        if len(interest) == 1:
+            kwargs["contrast_id"] = interest_cols[0]
         if confound_cols:
             kwargs["confounds"] = _numeric(p[confound_cols])
         if site_col:
@@ -269,7 +271,7 @@ def run(
     alpha = float(cfg.get("alpha", 0.05))
 
     t0 = time.perf_counter()
-    result = analyze(**kwargs, **inference)
+    result = analyze(**kwargs, **inference, atlas=atlas)
     wall = time.perf_counter() - t0
 
     out = Path(out_dir) if out_dir else base / cfg.get("output", "conninfpy_results")
@@ -298,6 +300,9 @@ def run(
         np.savez_compressed(pvals_path, **arrays)
         written[f"edges{suffix}"] = edges_path
         written[f"pvals{suffix}"] = pvals_path
+        bundle_path = out / f"bundle{suffix}.pkl"
+        res.to_bundle().save(bundle_path)
+        written[f"bundle{suffix}"] = bundle_path
         per_result[name or "result"] = {
             "n_significant": inf.n_significant(alpha),
             "method": inf.method,
@@ -310,7 +315,8 @@ def run(
             "combat_diagnostics": res.combat_diagnostics,
             "design": None if design is None else {
                 k: design.get(k) for k in ("kind", "columns", "contrast", "column_means", "profiles",
-                                           "comparison", "interest", "scale", "estimable_columns")
+                                           "comparison", "interest", "scale", "estimable_columns",
+                                           "enhancement")
             },
         }
 

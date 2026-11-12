@@ -9,7 +9,7 @@ from conninfpy import analyze
 from conninfpy.results import InferenceResult
 from examples._shared.paths import ROOT, sha256
 
-TFNBS = dict(method="tfnbs", e=0.4, h=3.0, n=10, acceleration=None, rng=42, use_mp=True)
+TFNBS = dict(method="tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65, acceleration=None, rng=42, use_mp=True)
 
 
 def array_digest(array) -> str:

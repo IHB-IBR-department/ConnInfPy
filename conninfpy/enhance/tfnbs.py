@@ -90,7 +90,7 @@ def get_tfnbs_score(
     t_stats: npt.NDArray[np.floating],
     e: ArrayLike,
     h: ArrayLike,
-    n: int,
+    n: Optional[int] = None,
     start_thres: float = DEFAULT_START_THRESHOLD,
     backend: str = "auto",
 ) -> npt.NDArray[np.floating]:
@@ -111,14 +111,15 @@ def get_tfnbs_score(
         Extent exponent. Can be a scalar or list of values for parameter sweep.
     h : float or array-like
         Height exponent. Can be a scalar or list of values for parameter sweep.
-    n : int
-        Number of threshold steps between start_thres and max(t_stats).
+    n : int or None, default=None
+        None integrates the piecewise support exactly. A positive integer
+        retains the historical right-endpoint threshold grid.
     start_thres : float, default=1.65
         Initial threshold for cluster formation.
     backend : {'auto', 'numba', 'scipy'}, default='auto'
-        Computation backend. 'auto' uses numba if available, otherwise scipy.
-        'numba' uses JIT-compiled union-find for connected components
-        (8-30x faster). Falls back to 'scipy' if numba is not installed.
+        'auto' uses Numba if available. For the exact integral, 'scipy'
+        selects the Python fallback; for explicit n it selects the legacy
+        SciPy grid implementation. Numba is optional.
 
     Returns
     -------
@@ -134,6 +135,17 @@ def get_tfnbs_score(
            [2.19, 0.  , 4.5 ],
            [0.  , 4.5 , 0.  ]])
     """
+    if n is None:
+        from conninfpy.enhance._exact import integrate
+
+        e_arr, h_arr, scalar_mode = _validate_params(t_stats, e, h)
+        rounded = np.round(t_stats, decimals=10)
+        symmetric = _is_symmetric(rounded)
+        rows, cols, weights = _get_edges(rounded, start_thres, symmetric)
+        return integrate(rows, cols, weights, rounded.shape[0], e_arr, h_arr,
+                         scalar_mode, symmetric, start_thres,
+                         use_numba=backend != "scipy" and HAS_NUMBA)
+
     use_numba = (backend == "numba") or (backend == "auto" and HAS_NUMBA)
     if use_numba:
         if not HAS_NUMBA:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 import numpy.typing as npt
+from typing import Optional
 
 from conninfpy.defaults import (
     DEFAULT_MIN_CLUSTER_SIZE,
@@ -28,7 +29,7 @@ def get_fbc_tfnbs_score(
     net_labels: npt.NDArray[np.integer],
     e: ArrayLike,
     h: ArrayLike,
-    n: int,
+    n: Optional[int] = None,
     start_thres: float = DEFAULT_START_THRESHOLD,
     min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
 ) -> npt.NDArray[np.floating]:
@@ -62,8 +63,8 @@ def get_fbc_tfnbs_score(
         Extent exponent. Controls how much cluster size matters.
     h : float or array-like
         Height exponent. Controls how much threshold height matters.
-    n : int
-        Number of threshold steps between start_thres and max(t_stats).
+    n : int or None, default=None
+        Exact integration when None; otherwise the historical right grid.
     start_thres : float, default=1.65
         Initial threshold for cluster formation.
     min_cluster_size : int, default=3
@@ -109,6 +110,20 @@ def get_fbc_tfnbs_score(
     num_params = len(e_arr)
     tfnbs_shape = (nroi, nroi) if scalar_mode else (nroi, nroi, num_params)
     tfnbs = np.zeros(tfnbs_shape)
+
+    if n is None:
+        from conninfpy.enhance._exact import integrate
+
+        is_symm = _is_symmetric(t_stats)
+        rows, cols, weights = _get_edges(t_stats, start_thres, symmetric=is_symm)
+        if not len(weights):
+            return integrate(rows, cols, weights, nroi, e_arr, h_arr,
+                             scalar_mode, is_symm, start_thres)
+        blocks = _compute_canonical_block_ids(rows, cols, normalized_net_labels, n_networks)
+        return integrate(rows, cols, weights, nroi, e_arr, h_arr, scalar_mode,
+                         is_symm, start_thres, blocks=blocks,
+                         scale=np.ones(n_networks * n_networks),
+                         minimum=min_cluster_size)
 
     # 2. Compute thresholds
     threshs, dh = _compute_thresholds(t_stats, n, start_thres)

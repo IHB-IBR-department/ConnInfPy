@@ -82,6 +82,9 @@ def test_design_inputs_survive_visiting_another_step():
     app.button(key="nav_step_2").click().run()
     assert not app.exception
     assert app.button(key="run_inference_btn").label == "🚀 Run Connectivity Inference"
+    integration = next(s for s in app.selectbox if s.label == "Integration")
+    assert integration.value == "exact"
+    integration.set_value("right-grid").run()
     steps = next(n for n in app.number_input if n.label == "Integration steps (n)")
     assert steps.value == 50
     steps.set_value(25).run()
@@ -93,6 +96,7 @@ def test_design_inputs_survive_visiting_another_step():
     assert not app.exception
     assert next(r for r in app.radio if r.label == "Permutation Budget Preset:").value == "Custom"
     assert next(n for n in app.number_input if n.label == "Number of Permutations (B)").value == 300
+    assert next(s for s in app.selectbox if s.label == "Integration").value == "right-grid"
     assert next(n for n in app.number_input if n.label == "Integration steps (n)").value == 25
 
 

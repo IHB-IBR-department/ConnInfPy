@@ -269,6 +269,14 @@ def available_case_glm(
             "or a contrast that is not estimable on the available subjects."
         )
 
+    f_threshold_info = None
+    if stat_type == "fstat" and "start_thres" in enhance_kwargs:
+        from conninfpy.stats._types import resolve_f_threshold
+        resolved, f_threshold_info = resolve_f_threshold(
+            enhance_kwargs["start_thres"], C.shape[0], [p.df for p in patterns]
+        )
+        enhance_kwargs = {**enhance_kwargs, "start_thres": resolved}
+
     # An exact fit with a nonzero contrast has an infinite t (or F)
     infinite = np.zeros((N, N), dtype=bool)
     for pat in patterns:
@@ -352,6 +360,15 @@ def available_case_glm(
         p_values[key] = p
 
     report = _report(Y, X, C, present, tested, triu, N, min_coverage, reasons)
+    # These are the patterns actually fitted above, before any p-map filling.
+    report["tested_mask"] = tested_mat.copy()
+    report["effect_estimable_mask"] = (tested_mat.copy() if C.shape[0] == 1 and stat_type != "fstat"
+                                        else np.zeros((N, N), dtype=bool))
+    df_mat = np.full((N, N), np.nan)
+    for pat in patterns:
+        df_mat[triu[0][pat.edges], triu[1][pat.edges]] = pat.df
+        df_mat[triu[1][pat.edges], triu[0][pat.edges]] = pat.df
+    report["edge_residual_df"] = df_mat
     if block_report is not None:
         report["block_report"] = block_report
     # Coefficient maps, each edge fitted with its own subjects (NaN where untested;
@@ -363,6 +380,9 @@ def available_case_glm(
     beta[:, triu[0], triu[1]] = beta_vec
     beta[:, triu[1], triu[0]] = beta_vec
     report["beta"] = beta
+    if f_threshold_info is not None:
+        report["f_threshold"] = {**f_threshold_info,
+                                 "start_thres": enhance_kwargs["start_thres"]}
     return p_values, raw, report
 
 

@@ -29,7 +29,7 @@ def get_network_informed_tfnbs_score(
     net_labels: npt.NDArray[np.integer],
     e: ArrayLike,
     h: ArrayLike,
-    n: int,
+    n: Optional[int] = None,
     start_thres: float = DEFAULT_START_THRESHOLD,
     normalization: str = "sqrt",
     edge_mask: Optional[npt.NDArray[np.bool_]] = None,
@@ -62,8 +62,8 @@ def get_network_informed_tfnbs_score(
         Extent exponent.
     h : float or array-like
         Height exponent.
-    n : int
-        Number of threshold steps.
+    n : int or None, default=None
+        Exact integration when None; otherwise the historical right grid.
     start_thres : float, default=1.65
         Initial threshold for cluster formation.
     normalization : {'sqrt', 'linear', 'none'}, default='sqrt'
@@ -103,6 +103,22 @@ def get_network_informed_tfnbs_score(
     num_params = len(e_arr)
     tfnbs_shape = (nroi, nroi) if scalar_mode else (nroi, nroi, num_params)
     tfnbs = np.zeros(tfnbs_shape)
+
+    if n is None:
+        from conninfpy.enhance._exact import integrate
+
+        rows, cols, weights = _get_edges(t_stats, start_thres, symmetric=True)
+        if not len(weights):
+            return integrate(rows, cols, weights, nroi, e_arr, h_arr,
+                             scalar_mode, True, start_thres)
+        blocks, capacities = _precompute_block_metadata(
+            rows, cols, normalized_net_labels, edge_mask
+        )
+        scales = {"sqrt": 1.0 / capacities, "linear": 1.0 / capacities**2,
+                  "none": np.ones_like(capacities)}
+        return integrate(rows, cols, weights, nroi, e_arr, h_arr, scalar_mode,
+                         True, start_thres, blocks=blocks,
+                         scale=scales[normalization])
 
     # 2. Thresholds
     threshs, dh = _compute_thresholds(t_stats, n, start_thres)

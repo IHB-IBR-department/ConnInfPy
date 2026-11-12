@@ -25,9 +25,9 @@ HARM_PATH = PAPER / "openclose_harmonized.npz"
 
 SELECTORS = {
     "tstat":     dict(method="tstat"),
-    "tfnbs":     dict(method="tfnbs", e=0.4, h=3.0, n=10),
-    "ni_tfnbs":  dict(method="ni_tfnbs", e=0.4, h=3.0, n=10),
-    "fbc_tfnbs": dict(method="fbc_tfnbs", e=0.4, h=3.0, n=10),
+    "tfnbs":     dict(method="tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65),
+    "ni_tfnbs":  dict(method="ni_tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65),
+    "fbc_tfnbs": dict(method="fbc_tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65),
     "nbs_30":    dict(method="nbs", threshold=3.0),
 }
 

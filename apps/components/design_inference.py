@@ -128,12 +128,13 @@ def _format_runtime(seconds):
 def _method_plan_parameters(method, method_kwargs):
     """Keep only human-readable settings relevant to the selected method."""
     if method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
-        keys = ("e", "h", "n", "min_cluster_size", "normalization")
+        keys = ("e", "h", "n", "start_thres", "min_cluster_size", "normalization")
         labels = {
             "e": "E",
             "h": "H",
             "min_cluster_size": "minimum block size",
             "n": "integration steps",
+            "start_thres": "start threshold",
             "normalization": "normalization",
         }
     elif method == "nbs":
@@ -141,11 +142,14 @@ def _method_plan_parameters(method, method_kwargs):
         labels = {"threshold": "tau", "nbs_stat": "component statistic"}
     else:
         return {}
-    return {
+    result = {
         labels[key]: method_kwargs[key]
         for key in keys
         if key in method_kwargs
     }
+    if method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
+        result["integration"] = "exact" if method_kwargs.get("n") is None else "right-grid"
+    return result
 
 
 def _format_method_plan_parameters(method, method_kwargs):
@@ -250,6 +254,7 @@ def _run_inference_background(
             sites=sites,
             harmonize=harmonization_choice,
             input=input_kind,
+            atlas=atlas,
             r_to_z=False,
             two_tailed=two_tailed,
             method=operator_choice,
@@ -274,7 +279,8 @@ def _run_inference_background(
             if comp_method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
                 comp_run_kwargs.setdefault("e", 0.4)
                 comp_run_kwargs.setdefault("h", 3.0)
-                comp_run_kwargs.setdefault("n", 50)
+                comp_run_kwargs.setdefault("n", None)
+                comp_run_kwargs.setdefault("start_thres", 1.65)
                 if comp_method in ("ni_tfnbs", "fbc_tfnbs"):
                     comp_run_kwargs["net_labels"] = sc_net_labels if use_sc_prior else atlas.network_index()
             elif comp_method == "cnbs":
@@ -293,6 +299,7 @@ def _run_inference_background(
                 sites=sites,
                 harmonize=harmonization_choice,
                 input=input_kind,
+            atlas=atlas,
                 r_to_z=False,
                 two_tailed=two_tailed,
                 method=comp_method,
@@ -346,7 +353,7 @@ def _run_inference_background(
             "method_parameters": _method_plan_parameters(operator_choice, op_kwargs),
             "companion_method": comp_method if run_sensitivity else None,
             "companion_method_parameters": (
-                _method_plan_parameters(comp_method, comp_kwargs)
+                _method_plan_parameters(comp_method, comp_run_kwargs)
                 if run_sensitivity and comp_method else {}
             ),
         }
@@ -753,12 +760,15 @@ def render_design_inference_view(base_atlas, tabs_list):
             sc_prior_path = None
             with st.expander("Method Parameters", expanded=False):
                 if operator_choice in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
-                    e_exp = st.number_input("Extent exponent (E)", 0.1, 2.0, 0.6, 0.05, key=persistent_key('design:extent_exponent_e', scope='design'))
-                    h_exp = st.number_input("Height exponent (H)", 1.0, 5.0, 2.0, 0.1, key=persistent_key('design:height_exponent_h', scope='design'))
-                    n_steps = st.number_input("Integration steps (n)", 5, 50, 50, 1, key=persistent_key('design:integration_steps_n', scope='design'))
+                    e_exp = st.number_input("Extent exponent (E)", 0.1, 2.0, 0.4, 0.05, key=persistent_key('design:extent_exponent_e', scope='design'))
+                    h_exp = st.number_input("Height exponent (H)", 1.0, 5.0, 3.0, 0.1, key=persistent_key('design:height_exponent_h', scope='design'))
+                    integration = st.selectbox("Integration", ["exact", "right-grid"], key=persistent_key('design:integration_mode', scope='design'))
+                    n_steps = st.number_input("Integration steps (n)", 1, 10000, 50, 1, key=persistent_key('design:integration_steps_n', scope='design')) if integration == "right-grid" else None
+                    start = st.number_input("Start threshold (t)", 0.0, 100.0, 1.65, 0.05, key=persistent_key('design:start_threshold', scope='design'))
                     op_kwargs["e"] = e_exp
                     op_kwargs["h"] = h_exp
                     op_kwargs["n"] = n_steps
+                    op_kwargs["start_thres"] = start
 
                     if operator_choice == "fbc_tfnbs":
                         m_min = st.number_input("Minimum block size (m_min)", 5, 100, 20, key=persistent_key('design:minimum_block_size_m_min', scope='design'))
@@ -820,12 +830,15 @@ def render_design_inference_view(base_atlas, tabs_list):
 
                 with st.expander("Companion Method Parameters", expanded=False):
                     if comp_method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
-                        comp_e = st.number_input("Companion Extent exponent (E)", 0.1, 2.0, 0.6, 0.05, key=persistent_key("comp_e", scope='design'))
-                        comp_h = st.number_input("Companion Height exponent (H)", 1.0, 5.0, 2.0, 0.1, key=persistent_key("comp_h", scope='design'))
-                        comp_n = st.number_input("Companion Integration steps (n)", 5, 50, 50, 1, key=persistent_key("comp_n", scope='design'))
+                        comp_e = st.number_input("Companion Extent exponent (E)", 0.1, 2.0, 0.4, 0.05, key=persistent_key("comp_e", scope='design'))
+                        comp_h = st.number_input("Companion Height exponent (H)", 1.0, 5.0, 3.0, 0.1, key=persistent_key("comp_h", scope='design'))
+                        comp_integration = st.selectbox("Companion integration", ["exact", "right-grid"], key=persistent_key("comp_integration", scope='design'))
+                        comp_n = st.number_input("Companion Integration steps (n)", 1, 10000, 50, 1, key=persistent_key("comp_n", scope='design')) if comp_integration == "right-grid" else None
+                        comp_start = st.number_input("Companion start threshold (t)", 0.0, 100.0, 1.65, 0.05, key=persistent_key("comp_start", scope='design'))
                         comp_kwargs["e"] = comp_e
                         comp_kwargs["h"] = comp_h
                         comp_kwargs["n"] = comp_n
+                        comp_kwargs["start_thres"] = comp_start
                         if comp_method == "fbc_tfnbs":
                             comp_m_min = st.number_input("Companion Minimum block size (m_min)", 5, 100, 20, key=persistent_key("comp_m_min", scope='design'))
                             comp_kwargs["min_cluster_size"] = comp_m_min

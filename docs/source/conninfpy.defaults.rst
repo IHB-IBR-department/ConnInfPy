@@ -1,20 +1,24 @@
 conninfpy.defaults
 ==================
 
-Single source of truth for default parameters used across the package.
+TFNBS-family scoring defaults to E=0.4, H=3.0 and exact integration of
+its piecewise support function (``n=None``). A positive integer ``n``
+selects the historical right-endpoint grid from ``start_thres + dh`` to
+``max(statistic)``, where ``dh = (max - start_thres) / n``. Active edges
+satisfy ``weight >= threshold`` after the initial strict ``weight > start``
+filter. Inputs are rounded to ten decimal places before integration.
 
-TFCE exponents (E, H) follow Smith & Nichols (2009) values across both the
-scoring and permutation paths. Standard validation settings use
-``E=0.3, H=3.0`` for empirical FDR control on network data — the
-package uses these as global defaults since v2.1. every validation
-pipeline in ``examples/`` passes
-``e=0.3, h=3.0, n=10`` explicitly. Vinokur et al. (2023) report 75-fold
-edge-count variation across (E, H) within Baggio's recommended range —
-sensitivity is real and should be reported.
+Record E, H, n, the start threshold, statistic scale and software version to
+reproduce an earlier run. Explicit ``n`` retains the old grid; exact scores
+and p-values need not equal finite-grid results. ``bh_fdr_perm`` uses raw
+edge statistics and does not use TFNBS integration settings. T and beta tails
+are enhanced separately; an F statistic is a single omnibus map.
 
-The only path-specific default is ``n`` (threshold integration steps):
-``n=100`` for direct scoring (high resolution, single-shot), ``n=10`` for
-permutation (Hao 2024 reports n=10 is sufficient for FDR control).
+For F with TFNBS and no start supplied, the start is F's 0.90 quantile with
+the numerator and residual degrees of freedom. With available-case data and
+different tested residual degrees of freedom, provide one common start
+explicitly. An explicitly supplied F start below any applicable quantile emits
+a warning. Beta thresholds remain in coefficient units.
 
 .. automodule:: conninfpy.defaults
    :members:
