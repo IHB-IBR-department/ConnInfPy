@@ -490,8 +490,8 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     render_help("built_in_demo")
                 
                 custom_ds = load_custom_datasets()
-                builtin_templates = ["ABIDE-mini", "OpenClose", "China-CloseClose", "NBS-Schizophrenia"]
-                template_options = builtin_templates + list(custom_ds.keys())
+                builtin_templates = ["ABIDE-mini", "OpenClose"]
+                template_options = builtin_templates
                 
                 dataset_choice = st.selectbox(
                     "Select Template Structure",
@@ -749,7 +749,11 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                         # Pre-populate preprocessing checkboxes from manifest
                         manifest = loader_instance.manifest
                         requested = manifest.preprocessing.get("requested", {})
-                        
+                        if manifest.params.get("connectivity_kind") == "partial_correlation":
+                            st.session_state["corr_type_pre"] = "Partial correlation"
+                        elif manifest.params.get("connectivity_kind") == "correlation":
+                            st.session_state["corr_type_pre"] = "Pearson correlation"
+
                         if "correlation" in requested:
                             val = requested["correlation"]
                             if val == "pearson":
@@ -995,23 +999,40 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
         with col_left:
             st.divider()
             # Timeseries connectivity options if timeseries is loaded
-            if ts_preprocess_required or (preview and preview.data_kind_guess == "timeseries"):
+            if ts_preprocess_required or (preview and preview.data_kind_guess == "timeseries") or hasattr(getattr(loader_instance, "target_loader", loader_instance), "connectivity_kind"):
                 st.markdown("##### 🛠️ Connectivity Construction Options")
                 preprocess_source = dataset_choice if ingest_mode == "Built-in data" else manifest_file
                 conn_col1, conn_col2 = st.columns(2)
                 with conn_col1:
                     default_corr = st.session_state.get("corr_type_pre", "Pearson correlation")
-                    idx = 0 if default_corr == "Pearson correlation" else 1
-                    corr_type = st.selectbox("Correlation Estimator", ["Pearson correlation", "Spearman correlation"], index=idx, key=persistent_key(f'data:correlation:{ingest_mode}:{preprocess_source}', scope='data'))
+                    choices = ["Pearson correlation", "Partial correlation", "Spearman correlation"]
+                    idx = choices.index(default_corr) if default_corr in choices else 0
+                    corr_type = st.selectbox("Correlation Estimator", choices, index=idx, key=persistent_key(f'data:correlation:{ingest_mode}:{preprocess_source}', scope='data'))
                 with conn_col2:
                     default_fisher = st.session_state.get("apply_fisher_pre", True)
                     apply_fisher = st.checkbox("Fisher r-to-z transform", value=default_fisher, help="Convert correlations to Fisher-z values before analysis.", key=persistent_key(f'data:fisher:{ingest_mode}:{preprocess_source}', scope='data'))
                 
+                default_shrinkage = getattr(getattr(loader_instance, "manifest", None), "params", {}).get("shrinkage", "auto")
+                shrinkage_options = ["auto", "none", "ledoit_wolf", "oas", "fixed"]
+                default_label = ("none" if default_shrinkage is None else "fixed" if isinstance(default_shrinkage, (int, float)) else default_shrinkage)
+                default_label = default_label if default_label in shrinkage_options else "auto"
+                shrinkage_choice = st.selectbox(
+                    "Covariance shrinkage", shrinkage_options, index=shrinkage_options.index(default_label),
+                    help="Auto: none for Pearson, Ledoit-Wolf for partial correlation. Estimated shrinkage can vary across subjects.",
+                    key=persistent_key(f'data:shrinkage:{ingest_mode}:{preprocess_source}', scope='data'))
+                shrinkage_value = (st.number_input("Common shrinkage intensity", min_value=0.0, max_value=1.0, value=float(default_shrinkage) if isinstance(default_shrinkage, (int, float)) else 0.1, step=0.01,
+                    key=persistent_key(f'data:shrinkage_value:{ingest_mode}:{preprocess_source}', scope='data')) if shrinkage_choice == "fixed" else None)
+                if corr_type == "Spearman correlation" and shrinkage_choice != "auto":
+                    st.caption("Spearman uses ranks and no covariance shrinkage.")
+                st.caption("Compare valid-frame counts and shrinkage by group before inference; subject-wise shrinkage can induce group differences.")
+
                 if "corr_type_pre" in st.session_state or "apply_fisher_pre" in st.session_state:
                     st.caption("ℹ️ Preprocessing options were pre-selected by the manifest.")
             else:
                 st.markdown("##### 🛠️ Ingestion Preprocessing")
                 st.info("Input data is already precomputed connectivity matrices. No correlation calculation required.")
+                apply_fisher = st.checkbox("Fisher r-to-z transform", value=False,
+                    key=persistent_key(f'data:fisher_precomputed:{ingest_mode}', scope='data'))
 
             # Check cache status beforehand to inform the user
             is_cached = False
@@ -1027,11 +1048,21 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                 spinner_msg = "Loading dataset from cache..." if is_cached else "Executing loader & validation pipeline (extracting and caching)..."
                 with st.spinner(spinner_msg):
                     try:
+                        target = getattr(loader_instance, "target_loader", loader_instance)
+                        is_timeseries_source = ts_preprocess_required or (preview and preview.data_kind_guess == "timeseries") or hasattr(target, "connectivity_kind")
+                        if is_timeseries_source and hasattr(target, "connectivity_kind"):
+                            if corr_type == "Spearman correlation":
+                                raise ValueError("Spearman is available for raw time-series loaders; this loader constructs connectivity internally.")
+                            target.connectivity_kind = "partial_correlation" if corr_type == "Partial correlation" else "correlation"
+                            target.shrinkage = ("auto" if shrinkage_choice == "auto" else None if shrinkage_choice == "none" else shrinkage_value if shrinkage_choice == "fixed" else shrinkage_choice)
+                        # Manifest conversion is deferred here so UI settings also apply to raw loaders.
+                        if is_timeseries_source and hasattr(loader_instance, "manifest") and not hasattr(target, "connectivity_kind"):
+                            loader_instance.manifest.params.pop("connectivity_kind", None)
+                            loader_instance.manifest.params.pop("shrinkage", None)
                         loaded = loader_instance.load()
-                        n_loader_warnings = len(loaded.warnings)
                         if drop_missing_subjects:
                             loaded = drop_subjects_with_missing(loaded)
-                        load_notes = list(loaded.warnings[n_loader_warnings:])
+                        load_notes = list(loaded.warnings)
 
                         # 1. Source Validation
                         report = validate_loaded_dataset(loaded, check_inference_ready=False)
@@ -1041,23 +1072,31 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             # 2. Connectivity Preprocessing
                             Y = loaded.data
                             if loaded.data_kind == "timeseries":
-                                corrs = []
-                                for i in range(Y.shape[0]):
-                                    ts = Y[i]
-                                    if corr_type == "Pearson correlation":
-                                        c = np.corrcoef(ts.T)
-                                    else:
-                                        c = pd.DataFrame(ts).corr(method='spearman').values
-                                    # Undefined correlations remain missing for validation.
-                                    
-                                    # Always set diagonal to zero to avoid infinity during Fisher z-transform
-                                    np.fill_diagonal(c, 0.0)
-                                    corrs.append(c)
-                                    
-                                Y = np.array(corrs)
-                                loaded.data = Y
-                                loaded.data_kind = "correlation"
-                                
+                                from conninfpy.connectivity import connectivity_from_dataset
+                                if corr_type == "Spearman correlation":
+                                    from scipy.stats import rankdata
+                                    ranked = []
+                                    for ts in loaded.data:
+                                        ts = np.asarray(ts, dtype=float)
+                                        ranked.append(rankdata(ts[np.isfinite(ts).all(axis=1)], axis=0))
+                                    loaded.data = ranked
+                                    opts = {"shrinkage": None}
+                                    kind = "correlation"
+                                else:
+                                    kind = "partial_correlation" if corr_type == "Partial correlation" else "correlation"
+                                    opts = {} if shrinkage_choice == "auto" else {"shrinkage": None if shrinkage_choice == "none" else shrinkage_value if shrinkage_choice == "fixed" else shrinkage_choice}
+                                manifest_params = getattr(getattr(loader_instance, "manifest", None), "params", {})
+                                for key in ("min_valid_tr", "group_column"):
+                                    if key in manifest_params:
+                                        opts[key] = manifest_params[key]
+                                if "connectivity_standardize" in manifest_params:
+                                    opts["standardize"] = manifest_params["connectivity_standardize"]
+                                connectivity_from_dataset(loaded, kind=kind, **opts)
+                                if corr_type == "Spearman correlation":
+                                    loaded.provenance["connectivity"]["kind"] = "spearman"
+                                load_notes = list(loaded.warnings)
+                                Y = loaded.data
+
                             # Apply Fisher z if checked
                             if loaded.data_kind == "correlation":
                                 # Always zero out the diagonal before Fisher z-transform to prevent infinity values
@@ -1104,6 +1143,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                     name=dataset_choice if ingest_mode == "Built-in data" else Path(manifest_file).stem,
                                     source="Built-in dataset" if ingest_mode == "Built-in data" else str(manifest_file),
                                     atlas=loaded_atlas_label, mode=ingest_mode,
+                                    loader_provenance=loaded.provenance,
                                 )
                                 reset_widget_scopes("design", "results", "annotation")
                                     
@@ -1199,6 +1239,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
     # Preprocessing options
     if "corr_type" in locals(): settings_parts.append(corr_type)
     if "apply_fisher" in locals(): settings_parts.append(apply_fisher)
+    if "shrinkage_choice" in locals(): settings_parts.extend([shrinkage_choice, shrinkage_value])
 
     # Subnetwork selection indices
     if roi_idx is not None:

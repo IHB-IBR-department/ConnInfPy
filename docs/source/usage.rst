@@ -71,6 +71,65 @@ Input conventions
 - Every entry point shares the defaults in :mod:`conninfpy.defaults`
   (1000 permutations, exact empirical p-values).
 
+Connectivity from time series
+-----------------------------
+
+``compute_connectivity`` accepts a single ``(timepoints, ROIs)`` array, a
+stack of equally long observations, or a list with different lengths. For each
+observation it removes every frame containing a non-finite value in any ROI;
+it does not perform pairwise deletion. The returned matrices retain the input
+observation order. Constant ROIs have undefined Pearson correlations (NaN and
+a warning); partial correlation raises an error. Fewer than two complete frames
+raises an error and fewer than ten emits a warning by default.
+
+.. code-block:: python
+
+   from conninfpy import compute_connectivity
+
+   r, info = compute_connectivity(series, return_diagnostics=True)
+   partial, diagnostics = compute_connectivity(
+       series, kind="partial_correlation", shrinkage="oas",
+       return_diagnostics=True,
+   )
+   print(diagnostics["n_valid_tr"], diagnostics["delta_s"])
+
+Omitting shrinkage uses no shrinkage for Pearson and Ledoit–Wolf for partial
+correlation. Explicit ``shrinkage=None`` disables it even for partial
+correlation; singular or ill-conditioned covariance raises an error. ``oas``
+and ``ledoit_wolf`` estimate a separate intensity per observation, while a
+float in [0, 1] fixes a common intensity. Unless ``standardize=False``, each
+ROI is centered and scaled by its population standard deviation before
+shrinking covariance toward its mean diagonal times the identity. Partial
+correlations are derived from the precision matrix. Large output stacks still
+require memory proportional to the number of observations times ROIs squared;
+working batches are bounded.
+
+Subject-specific shrinkage can itself create group differences in connectivity,
+particularly when recording lengths or quality differ. The diagnostics report
+``n_valid_tr`` and ``delta_s`` for each observation. Compare their distributions
+by group and consider including relevant diagnostics as covariates when
+scientifically appropriate; descriptive warnings are not significance tests.
+
+Manifests for time-series loaders can request construction with, for example:
+
+.. code-block:: yaml
+
+   params:
+     connectivity_kind: partial_correlation
+     shrinkage: oas
+     group_column: group
+     min_valid_tr: 10
+
+The resulting phenotype table gains ``n_valid_tr`` and ``delta_s`` and the
+loader provenance records the estimator. Without these manifest options, raw
+time series remain raw for loaders that normally return them. In a CLI analysis
+file, use ``connectivity: {kind: partial_correlation, shrinkage: oas}`` when
+the manifest returns raw time series. A loader that constructs matrices itself
+must instead receive its settings in the manifest. In the app, choose the
+estimator and shrinkage before loading. Fisher transformation remains an
+independent option. The built-in demo picker contains ABIDE-mini and OpenClose;
+other datasets can be loaded through a manifest.
+
 Missing connectivity
 --------------------
 

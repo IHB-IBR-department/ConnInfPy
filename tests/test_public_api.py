@@ -42,7 +42,7 @@ LEGACY_TOP_LEVEL = [
 class TestPublicSurface(unittest.TestCase):
 
     def test_all_is_short_and_resolvable(self):
-        self.assertLessEqual(len(conninfpy.__all__), 20)
+        self.assertLessEqual(len(conninfpy.__all__), 21)
         for name in conninfpy.__all__:
             with self.subTest(name=name):
                 self.assertTrue(hasattr(conninfpy, name))

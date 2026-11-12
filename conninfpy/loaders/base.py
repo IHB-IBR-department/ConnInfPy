@@ -14,9 +14,9 @@ class LoadedDataset:
     
     Attributes
     ----------
-    data : np.ndarray
-        Either a 3D timeseries tensor of shape (n_subjects, n_timepoints, n_rois)
-        or a 3D connectivity tensor of shape (n_subjects, n_rois, n_rois).
+    data : np.ndarray | list[np.ndarray]
+        A 3D timeseries tensor, a list of (timepoints, ROIs) arrays with
+        variable lengths, or a 3D connectivity tensor.
     pheno : pd.DataFrame
         Phenotypic metadata. Must have one row per subject/observation matching `data`.
     data_kind : Literal["timeseries", "correlation", "fisher_z"]
@@ -36,7 +36,7 @@ class LoadedDataset:
     warnings : list[str]
         Warnings accumulated during data loading.
     """
-    data: np.ndarray
+    data: np.ndarray | list[np.ndarray]
     pheno: pd.DataFrame
     data_kind: Literal["timeseries", "correlation", "fisher_z"]
     subject_ids: list[str] | None = None

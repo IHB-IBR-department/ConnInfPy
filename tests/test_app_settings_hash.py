@@ -42,16 +42,17 @@ class TestBuiltinAbideMini(unittest.TestCase):
     def test_builtin_demo_loads_without_the_subject_with_missing_connectivity(self):
         at = AppTest.from_file(str(APP), default_timeout=300).run()
         next(r for r in at.radio if r.label == "Select Ingestion Method").set_value("Built-in data").run()
-        self.assertEqual(next(s for s in at.selectbox if s.label == "Select Template Structure").value,
-                         "ABIDE-mini")
+        picker = next(s for s in at.selectbox if s.label == "Select Template Structure")
+        self.assertEqual(picker.value, "ABIDE-mini")
+        self.assertEqual(picker.options, ["ABIDE-mini", "OpenClose"])
         next(b for b in at.button if b.label == "Load, Preprocess & Validate Data").click().run()
         self.assertFalse(at.exception)
         self.assertFalse([e.value for e in at.error])
         # 204 subjects; one has ROI 82 without signal (as in datasets/abide_mini.yaml).
         self.assertEqual(at.session_state["connectivity_data"].shape, (203, 100, 100))
         notes = at.session_state["dataset_load_notes"]
-        self.assertEqual(len(notes), 1)
-        self.assertIn("ROI 82", notes[0])
+        self.assertTrue(any("ROI 82" in note for note in notes))
+        self.assertTrue(any("n_valid_tr" in note for note in notes))
         self.assertTrue(any("ROI 82" in i.value for i in at.info))      # shown to the user
 
 

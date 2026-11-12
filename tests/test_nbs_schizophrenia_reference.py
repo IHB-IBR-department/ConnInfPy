@@ -203,8 +203,9 @@ class TestBuiltinNBSSchizophrenia(unittest.TestCase):
 
     def test_builtin_template_loads_raw_correlations_with_its_atlas(self):
         at = AppTest.from_file(str(APP), default_timeout=300).run()
-        next(r for r in at.radio if r.label == "Select Ingestion Method").set_value("Built-in data").run()
-        next(s for s in at.selectbox if s.label == "Select Template Structure").set_value("NBS-Schizophrenia").run()
+        next(r for r in at.radio if r.label == "Select Ingestion Method").set_value("Dataset Manifest (data.yaml)").run()
+        manifests = next(s for s in at.selectbox if s.label == "Select Ingestion Manifest File (.yaml)")
+        manifests.set_value("datasets/nbs_schizophrenia.yaml").run()
         next(b for b in at.button if b.label == "Load, Preprocess & Validate Data").click().run()
         self.assertFalse(at.exception)
         self.assertFalse([e.value for e in at.error])
