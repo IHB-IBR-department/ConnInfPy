@@ -133,7 +133,8 @@ class InferenceResult(TailResult):
         ``stat_positive[i, j]`` equals ``max(t_ij, 0)``; ``stat_negative``
         equals ``max(-t_ij, 0)``. The original signed statistic map is
         recoverable as ``stat_signed`` (= positive − negative). Populated
-        by the pipeline since v2.1; ``None`` on older pickled results.
+        by the pipeline since v2.1; ``None`` on results created without
+        stat maps (e.g. pre-v2.1 pipelines).
     stat_type : {'tstat', 'beta'}
         Which statistic the stat maps hold. ``'tstat'`` for the default
         t-statistic path, ``'beta'`` when the GLM is run with
@@ -258,6 +259,18 @@ class InferenceResult(TailResult):
         # the canonical keys when called with kwargs like method="tfnbs".
         return
 
+    def __getnewargs_ex__(self) -> "tuple[tuple, dict]":
+        """Rebuild args for pickle (protocol >= 2) and copy/deepcopy.
+
+        Serialization reconstructs the object through
+        ``InferenceResult.__new__(cls, positive, negative)`` and then
+        restores every metadata attribute from the saved ``__dict__``
+        state, so attributes round-trip without being enumerated here
+        and future fields are kept automatically. Pickle protocols
+        0/1 (legacy text modes) are not supported.
+        """
+        return ((self["positive"], self["negative"]), {})
+
     @property
     def positive(self) -> npt.NDArray[np.float64]:
         """Corrected p-values, positive tail (FWER or FDR by method)."""
@@ -276,8 +289,8 @@ class InferenceResult(TailResult):
         signed statistic; for any edge exactly one of them is zero, so
         their difference reconstructs the original t/β map.
 
-        Returns ``None`` when stat maps are unavailable (older pickled
-        results from before v2.1).
+        Returns ``None`` when stat maps are unavailable (results from
+        before v2.1, or objects created without stat maps).
         """
         if self.stat_positive is None or self.stat_negative is None:
             return None
@@ -602,8 +615,8 @@ class InferenceResult(TailResult):
         ------
         ValueError
             If ``stat_positive`` / ``stat_negative`` are missing (e.g.
-            pickled pre-v2.1 results), or if ``sort='network_pair'``
-            without an atlas.
+            pre-v2.1 results, or objects created without stat maps), or
+            if ``sort='network_pair'`` without an atlas.
         """
         df = build_tailed_dataframe(
             self._project_2d(self["positive"], param_idx),
@@ -805,6 +818,16 @@ class OmnibusInferenceResult(TailResult):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
         return
+
+    def __getnewargs_ex__(self) -> "tuple[tuple[npt.NDArray[np.float64]], dict]":
+        """Rebuild args for pickle (protocol >= 2) and copy/deepcopy.
+
+        Same mechanism as
+        :meth:`InferenceResult.__getnewargs_ex__`: metadata attributes
+        are restored from the saved ``__dict__`` state without being
+        enumerated here. Pickle protocols 0/1 are not supported.
+        """
+        return ((self["omnibus"],), {})
 
     @property
     def omnibus(self) -> npt.NDArray[np.float64]:

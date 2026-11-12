@@ -183,8 +183,8 @@ def build_tailed_dataframe(
         )
     if stat_signed is None:
         raise ValueError(
-            "stat maps not populated; v2.0 pickled results are not "
-            "exportable — rerun with v2.1+ pipeline."
+            "stat maps not populated; results without stat maps are "
+            "not exportable — rerun with the v2.1+ pipeline."
         )
 
     _check_square(p_positive, "p_positive")
@@ -264,8 +264,8 @@ def build_omnibus_dataframe(
         )
     if stat_omnibus is None:
         raise ValueError(
-            "stat map not populated; v2.0 pickled F-stat results are "
-            "not exportable — rerun with v2.1+ pipeline."
+            "stat map not populated; F-stat results without a stat "
+            "map are not exportable — rerun with the v2.1+ pipeline."
         )
 
     _check_square(p_omnibus, "p_omnibus")
