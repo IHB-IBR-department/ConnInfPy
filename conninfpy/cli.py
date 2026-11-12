@@ -36,7 +36,7 @@ import pandas as pd
 import yaml
 
 DESIGNS = ("glm", "two-sample", "paired", "one-sample")
-_TOP_LEVEL_KEYS = {"data", "input", "design", "inference", "atlas", "alpha", "output"}
+_TOP_LEVEL_KEYS = {"data", "input", "design", "inference", "atlas", "alpha", "output", "connectivity"}
 _KIND_TO_INPUT = {"correlation": "r", "fisher_z": "z"}
 _BUILTIN_ATLASES = ("schaefer_100_yeo7", "schaefer_200_yeo7", "schaefer_400_yeo7", "bna_246")
 
@@ -94,14 +94,21 @@ def _numeric(frame: pd.DataFrame) -> np.ndarray:
 # Data → analyze() arguments
 # ---------------------------------------------------------------------------
 
-def _connectivity(dataset: Any) -> Tuple[np.ndarray, Optional[str]]:
-    """Connectivity stack and its scale ('r' / 'z' / None) from a loaded dataset."""
+def _connectivity(dataset: Any, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Optional[str]]:
+    """Construct connectivity when needed and retain observation diagnostics."""
     if dataset.data_kind == "timeseries":
-        # Undefined correlations (constant region signal) stay NaN and are
-        # rejected with a report by the inference entry points.
-        with np.errstate(invalid="ignore", divide="ignore"):
-            corr = np.array([np.corrcoef(np.asarray(ts).T) for ts in dataset.data])
-        return corr, "r"
+        from conninfpy.connectivity import connectivity_from_dataset
+        opts = dict(options or {})
+        kind = opts.pop("kind", "correlation")
+        if not hasattr(dataset, "pheno"):
+            # Retain the lightweight internal conversion contract for callers
+            # that supply only data and data_kind.
+            from conninfpy.connectivity import compute_connectivity
+            opts.pop("group_column", None)
+            return compute_connectivity(dataset.data, kind=kind, **opts), "r"
+        connectivity_from_dataset(dataset, kind=kind, **opts)
+    elif options:
+        raise ConfigError("connectivity options require raw timeseries data; configure the manifest for loaders that construct matrices.")
     return np.asarray(dataset.data, dtype=np.float64), _KIND_TO_INPUT.get(dataset.data_kind)
 
 
@@ -113,8 +120,14 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
     """
     design = cfg["design"]
     kind = design["type"]
+    options = dict(cfg.get("connectivity") or {})
+    if design.get("group") and "group_column" not in options:
+        options["group_column"] = design["group"]
+    Y, scale = _connectivity(dataset, options if dataset.data_kind == "timeseries" else cfg.get("connectivity"))
     pheno = dataset.pheno.reset_index(drop=True)
-    Y, scale = _connectivity(dataset)
+    if design.get("group") and "n_valid_tr" in pheno:
+        from conninfpy.connectivity import warn_group_diagnostics
+        warn_group_diagnostics(dataset, design["group"])
     if len(pheno) != Y.shape[0]:
         raise ConfigError(
             f"phenotype table has {len(pheno)} rows but the data has {Y.shape[0]} subjects."
@@ -208,6 +221,9 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
         "n_subjects_used": n_used,
         "n_regions": int(Y.shape[-1]),
         "input": input_kind,
+        "connectivity": dataset.provenance.get("connectivity"),
+        "connectivity_diagnostics": dataset.pheno[[c for c in ("n_valid_tr", "delta_s") if c in dataset.pheno]].to_dict(orient="list"),
+        "loader_warnings": dataset.warnings,
     }
     return kwargs, summary
 

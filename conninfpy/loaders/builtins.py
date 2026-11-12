@@ -55,6 +55,13 @@ def _masker_standardize(value: "str | bool | None") -> "str | bool | None":
     return "zscore_sample" if value == "zscore" else value
 
 
+def _pack_timeseries(series):
+    """Stack equal-length observations; retain different frame counts otherwise."""
+    if len({x.shape for x in series}) == 1:
+        return np.stack(series)
+    return list(series)
+
+
 class NumpyLoader(BaseDataLoader):
     """Loader for standard numpy files (.npy or .npz) containing 3D arrays."""
     name = "NumpyLoader"
@@ -244,7 +251,7 @@ class CSVDirectoryLoader(BaseDataLoader):
             sub_id = re.sub(r'(_ts|_timeseries|_Brainnetome|_Schaefer\d+)', '', sub_id)
             subject_ids.append(sub_id)
             
-        data = np.array(data_list) # shape: (n_subjects, n_timepoints, n_rois)
+        data = _pack_timeseries(data_list)
         pheno = pd.DataFrame({"subject_id": subject_ids})
         
         return LoadedDataset(
@@ -425,10 +432,8 @@ class NiftiDirectoryLoader(BaseDataLoader):
                 all_subject_ids.extend(sub_ds.subject_ids)
                 all_groups.extend([grp] * len(sub_ds.subject_ids))
             
-            # Stack and match shape lengths
-            min_len = min(d.shape[1] for d in all_data)
-            data_list_clean = [d[:, :min_len, :] for d in all_data]
-            data = np.vstack(data_list_clean)
+            # Keep each observation's available frames across cohorts.
+            data = _pack_timeseries([ts for group in all_data for ts in group])
             
             pheno = pd.DataFrame({
                 "subject_id": all_subject_ids,
@@ -532,9 +537,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
                 
             data_list.append(timeseries)
 
-        min_len = min(ts.shape[0] for ts in data_list)
-        data_list_clean = [ts[:min_len] for ts in data_list]
-        data = np.array(data_list_clean)
+        data = _pack_timeseries(data_list)
 
         pheno = pd.DataFrame({"subject_id": subject_ids})
         if groups:
@@ -578,9 +581,12 @@ class AbideSchaeferLoader(BaseDataLoader):
     """Loader for the pickled dictionary format of the ABIDE Schaefer-100 dataset."""
     name = "AbideSchaeferLoader"
 
-    def __init__(self, data_path: str, pheno_csv_path: str | None = None):
+    def __init__(self, data_path: str, pheno_csv_path: str | None = None,
+                 connectivity_kind="correlation", shrinkage="auto"):
         self.data_path = data_path
         self.pheno_csv_path = pheno_csv_path
+        self.connectivity_kind = connectivity_kind
+        self.shrinkage = shrinkage
 
     def preview(self) -> DatasetPreview:
         """Cheap preview of the dataset without a full load."""
@@ -617,25 +623,12 @@ class AbideSchaeferLoader(BaseDataLoader):
         subject_ids = list(d.keys())
         labels = []
         sites = []
-        corr_list = []
-        
-        # Since ABIDE timepoints might slightly differ by site, we compute correlation
-        # matrices for each subject directly in the loader.
+        series = []
         for sub_id in subject_ids:
-            ts = d[sub_id]["time_series"] # shape: (timepoints, 100)
-            # Compute Pearson correlation matrix
-            # A region with a constant signal has undefined correlations:
-            # keep them as NaN so validation reports them (filling 0 would
-            # pass them off as measured zero connectivity).
-            with np.errstate(invalid="ignore", divide="ignore"):
-                corr = np.corrcoef(ts.T)
-            corr_list.append(corr)
-            
+            series.append(d[sub_id]["time_series"])
             labels.append(d[sub_id].get("label", "unknown"))
             sites.append(d[sub_id].get("site", "unknown"))
-            
-        data = np.array(corr_list) # shape: (n_subjects, 100, 100)
-        
+
         pheno = pd.DataFrame({
             "subject_id": subject_ids,
             "group_interest": labels,
@@ -693,13 +686,13 @@ class AbideSchaeferLoader(BaseDataLoader):
                 # Add warning but continue
                 pass
                 
-        return LoadedDataset(
-            data=data,
-            pheno=pheno,
-            data_kind="correlation",
-            subject_ids=subject_ids,
-            provenance={"data_path": self.data_path, "pheno_csv_path": self.pheno_csv_path}
-        )
+        from conninfpy.connectivity import connectivity_from_dataset
+        dataset = LoadedDataset(
+            data=series, pheno=pheno, data_kind="timeseries", subject_ids=subject_ids,
+            provenance={"data_path": self.data_path, "pheno_csv_path": self.pheno_csv_path})
+        options = {} if self.shrinkage == "auto" else {"shrinkage": self.shrinkage}
+        return connectivity_from_dataset(dataset, kind=self.connectivity_kind, **options)
+
 
 
 def build_fmriprep_confounds(img_path: str, strategy: int, n_compcor: int | None = 10, use_GSR: bool = False) -> tuple[pd.DataFrame, np.ndarray]:
@@ -898,14 +891,8 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                     all_groups.append("control")
                     
         n_volumes = [int(ts.shape[0]) for ts in all_data]
-        min_len = min(n_volumes)
-        if len(set(n_volumes)) > 1:
-            logger.warning(
-                "fMRIPrep series have %d-%d volumes after censoring; all are truncated "
-                "to %d (recorded in provenance).", min_len, max(n_volumes), min_len)
-        data_list_clean = [ts[:min_len] for ts in all_data]
-        data = np.array(data_list_clean)
-        
+        data = _pack_timeseries(all_data)
+
         pheno = pd.DataFrame({
             "subject_id": all_subject_ids,
             "group": all_groups
@@ -937,7 +924,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                 "use_GSR": use_GSR,
                 "censoring": "load_confounds sample_mask applied",
                 "n_volumes": dict(zip(map(str, all_subject_ids), n_volumes)),
-                "truncated_to": min_len,
+                "truncated_to": n_volumes[0] if len(set(n_volumes)) == 1 else None,
             }
         )
 
@@ -1069,9 +1056,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
                         ) from exc
                 data_list.append(arr)
             
-        min_len = min(arr.shape[0] for arr in data_list)
-        data_list_clean = [arr[:min_len] for arr in data_list]
-        data = np.array(data_list_clean)
+        data = _pack_timeseries(data_list)
         
         pheno = pd.DataFrame({
             "subject_id": subject_ids,
@@ -1122,7 +1107,9 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
         gsr: str = "GSR",
         file_template: str = "{site}_{condition}_{atlas_token}_strategy-{strategy}_{gsr}.npy",
         array_shape: str = "subjects_timepoints_rois",
-        close_session_policy: str = "first"
+        close_session_policy: str = "first",
+        connectivity_kind: str = "correlation",
+        shrinkage="auto"
     ):
         self.data_dir = data_dir
         self.subject_order_path = subject_order_path
@@ -1135,6 +1122,8 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
         self.file_template = file_template
         self.array_shape = array_shape
         self.close_session_policy = close_session_policy
+        self.connectivity_kind = connectivity_kind
+        self.shrinkage = shrinkage
 
     def _get_subject_order(self) -> list[str]:
         """Subject order reconstructed from the listing file."""
@@ -1185,7 +1174,7 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
         if not sub_list:
             raise FileNotFoundError(f"Subject list not found: {self.subject_order_path}")
             
-        all_corr = []
+        all_series = []
         all_conditions = []
         all_pheno_subs = []
         
@@ -1208,15 +1197,11 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
                 else:
                     raise ValueError(f"Unsupported session policy: {self.close_session_policy}")
             
-            # Undefined correlations (constant region signal) stay NaN.
-            with np.errstate(invalid="ignore", divide="ignore"):
-                corr_mats = np.array([np.corrcoef(ts.T) for ts in arr])
-            
-            all_corr.append(corr_mats)
+            all_series.extend(arr)
             all_conditions.extend([cond] * len(sub_list))
             all_pheno_subs.extend(sub_list)
             
-        data = np.vstack(all_corr)
+        data = _pack_timeseries(all_series)
         pheno = pd.DataFrame({
             "subject_id": all_pheno_subs,
             "condition": all_conditions
@@ -1224,16 +1209,14 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
         
         atlas = _load_atlas_if_present(self.atlas)
                 
-        return LoadedDataset(
-            data=data,
-            pheno=pheno,
-            data_kind="correlation",
-            subject_ids=all_pheno_subs,
-            conditions=self.conditions,
-            condition_column="condition",
-            atlas=atlas,
-            provenance={"data_dir": self.data_dir, "strategy": self.strategy}
-        )
+        from conninfpy.connectivity import connectivity_from_dataset
+        dataset = LoadedDataset(
+            data=data, pheno=pheno, data_kind="timeseries", subject_ids=all_pheno_subs,
+            conditions=self.conditions, condition_column="condition", atlas=atlas,
+            provenance={"data_dir": self.data_dir, "strategy": self.strategy})
+        options = {} if self.shrinkage == "auto" else {"shrinkage": self.shrinkage}
+        return connectivity_from_dataset(dataset, kind=self.connectivity_kind, **options)
+
 
 
 class ConnectivityMatrixLoader(BaseDataLoader):

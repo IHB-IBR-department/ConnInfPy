@@ -54,6 +54,7 @@ from conninfpy._shared.arrays import (
     fisher_z_to_r,
     get_components,
 )
+from conninfpy.connectivity import compute_connectivity
 from conninfpy.analysis import AnalyzeResult, analyze
 from conninfpy.atlas.brainnetome import BrainnetomeReference
 from conninfpy.atlas.metadata import AtlasInfo
@@ -146,6 +147,7 @@ from conninfpy.stats.pairwise import (
 # should reach advanced functions through their module (``conninfpy.stats``,
 # ``conninfpy.enhance``, ...).
 __all__ = [
+    "compute_connectivity",
     "__version__",
     # main entry point and results
     "analyze",

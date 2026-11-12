@@ -32,6 +32,63 @@ def validate_loaded_dataset(dataset: LoadedDataset, check_inference_ready: bool 
     pheno = dataset.pheno
     data_kind = dataset.data_kind
 
+    if data_kind == "timeseries":
+        if check_inference_ready:
+            errors.append("Inference-ready dataset must be connectivity, not timeseries.")
+        if not isinstance(pheno, pd.DataFrame):
+            errors.append("dataset.pheno must be a pandas DataFrame.")
+            return DataValidationReport(False, errors, warnings, summary)
+        if isinstance(data, np.ndarray) and data.ndim == 3:
+            series = list(data)
+        elif isinstance(data, list):
+            series = data
+        else:
+            errors.append("Timeseries data must be a 3D array or a list of 2D arrays.")
+            return DataValidationReport(False, errors, warnings, summary)
+        if not series:
+            errors.append("Timeseries data has no observations.")
+            return DataValidationReport(False, errors, warnings, summary)
+        if len(series) != len(pheno):
+            errors.append(f"Subject count mismatch: data has {len(series)} observations, but pheno has {len(pheno)} rows.")
+        shapes = []
+        for i, raw in enumerate(series):
+            arr = np.asarray(raw)
+            if arr.ndim != 2 or not np.issubdtype(arr.dtype, np.number):
+                errors.append(f"Observation {i} must be a numeric 2D timeseries.")
+                continue
+            shapes.append(arr.shape)
+            valid = arr[np.isfinite(arr).all(axis=1)]
+            if len(valid) < 2:
+                errors.append(f"Observation {i} has fewer than two complete finite frames.")
+            else:
+                if len(valid) < 10:
+                    warnings.append(f"Observation {i} has only {len(valid)} valid frames.")
+                bad = np.flatnonzero(np.var(valid, axis=0) == 0)
+                if len(bad):
+                    warnings.append(f"Observation {i} has constant timeseries in ROIs: {bad.tolist()}.")
+                if len(valid) < len(arr):
+                    warnings.append(f"Observation {i} has {len(arr) - len(valid)} incomplete frames to scrub.")
+        if shapes:
+            roi_counts = {shape[1] for shape in shapes}
+            if len(roi_counts) != 1:
+                errors.append("Timeseries observations have inconsistent ROI counts.")
+            n_rois = shapes[0][1]
+            lengths = [shape[0] for shape in shapes]
+            summary.update(n_timepoints=lengths[0] if len(set(lengths)) == 1 else (min(lengths), max(lengths)), n_rois=n_rois)
+            if dataset.atlas is not None and len(dataset.atlas) != n_rois:
+                errors.append(f"Atlas/Node count mismatch: atlas has {len(dataset.atlas)} labels, but data has {n_rois} nodes.")
+        ids = dataset.subject_ids
+        if ids is not None:
+            if len(ids) != len(series):
+                errors.append(f"Length of subject_ids ({len(ids)}) does not match observations ({len(series)}).")
+            elif len(set(ids)) < len(ids):
+                if not dataset.condition_column or dataset.condition_column not in pheno:
+                    warnings.append("Duplicate subject IDs detected, but no valid condition_column is specified.")
+                elif len(set(zip(ids, pheno[dataset.condition_column]))) < len(ids):
+                    errors.append("Duplicate subject IDs found within the same condition.")
+        summary.update(n_observations=len(series), data_kind=data_kind, ok=not errors)
+        return DataValidationReport(not errors, errors, warnings, summary)
+
     # Basic type checks
     if not isinstance(data, np.ndarray):
         errors.append("dataset.data must be a numpy ndarray.")

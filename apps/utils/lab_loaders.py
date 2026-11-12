@@ -29,12 +29,14 @@ class OpenCloseLoader(BaseDataLoader):
     """Loader for the open_close dataset containing paired timeseries arrays for different conditions."""
     name = "OpenCloseLoader"
 
-    def __init__(self, open_path: str, close_path: str, subject_list_path: str | None = None, atlas: str | None = None, drop_missing_rois: bool = False):
+    def __init__(self, open_path: str, close_path: str, subject_list_path: str | None = None, atlas: str | None = None, drop_missing_rois: bool = False, connectivity_kind="correlation", shrinkage="auto"):
         self.open_path = open_path
         self.close_path = close_path
         self.subject_list_path = subject_list_path
         self.atlas = atlas
         self.drop_missing_rois = drop_missing_rois
+        self.connectivity_kind = connectivity_kind
+        self.shrinkage = shrinkage
 
     def _get_kept_indices(self) -> np.ndarray | None:
         """ROI indices surviving the missing-ROI drop."""
@@ -110,12 +112,8 @@ class OpenCloseLoader(BaseDataLoader):
             # Fallback if subject list length mismatch
             subject_ids = [f"sub_{i:02d}" for i in range(n_sub)]
 
-        # Convert both to connectivity first
-        open_corr = np.array([np.corrcoef(ts.T) for ts in open_data])
-        close_corr = np.array([np.corrcoef(ts.T) for ts in close_data])
-        
-        # Combine into long format
-        data = np.vstack([open_corr, close_corr]) # shape: (n_sub * 2, n_rois, n_rois)
+        # Retain each observation's complete frames until the shared estimator.
+        data = list(open_data) + list(close_data)
         
         pheno = pd.DataFrame({
             "subject_id": subject_ids * 2,
@@ -125,16 +123,14 @@ class OpenCloseLoader(BaseDataLoader):
         # Load atlas
         atlas = _load_atlas_if_present(self.atlas)
         
-        return LoadedDataset(
-            data=data,
-            pheno=pheno,
-            data_kind="correlation",
-            subject_ids=subject_ids * 2,
-            conditions=["open", "close"],
-            condition_column="condition",
-            atlas=atlas,
-            provenance={"open_path": self.open_path, "close_path": self.close_path}
-        )
+        from conninfpy.connectivity import connectivity_from_dataset
+        ds = LoadedDataset(data=data, pheno=pheno, data_kind="timeseries",
+            subject_ids=subject_ids * 2, conditions=["open", "close"],
+            condition_column="condition", atlas=atlas,
+            provenance={"open_path": self.open_path, "close_path": self.close_path})
+        options = {} if self.shrinkage == "auto" else {"shrinkage": self.shrinkage}
+        return connectivity_from_dataset(ds, kind=self.connectivity_kind, **options)
+
 
 
 class MultiSiteOpenCloseLoader(BaseDataLoader):
@@ -151,10 +147,13 @@ class MultiSiteOpenCloseLoader(BaseDataLoader):
         site_configs: dict[str, dict[str, str]],
         atlas: str | None = None,
         drop_missing_rois: bool = True,
+        connectivity_kind="correlation", shrinkage="auto",
     ):
         if not site_configs:
             raise ValueError("site_configs must contain at least one site.")
         self.site_configs = site_configs
+        self.connectivity_kind = connectivity_kind
+        self.shrinkage = shrinkage
         self.atlas = atlas
         self.drop_missing_rois = drop_missing_rois
 
@@ -170,6 +169,7 @@ class MultiSiteOpenCloseLoader(BaseDataLoader):
                     subject_list_path=config.get("subject_list_path"),
                     atlas=self.atlas,
                     drop_missing_rois=self.drop_missing_rois,
+                    connectivity_kind=self.connectivity_kind, shrinkage=self.shrinkage,
                 ),
             ))
         return loaders
@@ -234,7 +234,7 @@ class MultiSiteOpenCloseLoader(BaseDataLoader):
             pheno_parts.append(site_pheno)
             subject_ids.extend(site_pheno["subject_id"].tolist())
 
-        return LoadedDataset(
+        result = LoadedDataset(
             data=np.concatenate(data_parts, axis=0),
             pheno=pd.concat(pheno_parts, ignore_index=True),
             data_kind="correlation",
@@ -246,8 +246,12 @@ class MultiSiteOpenCloseLoader(BaseDataLoader):
                 "sites": list(self.site_configs),
                 "paired_within_site": True,
                 "site_configs": self.site_configs,
+                "connectivity": datasets[0][1].provenance.get("connectivity"),
             },
         )
+        from conninfpy.connectivity import warn_group_diagnostics
+        warn_group_diagnostics(result, "site")
+        return result
 
 
 class StressTimeseriesLoader(BaseDataLoader):
@@ -568,11 +572,13 @@ class ChinaCloseCloseLoader(BaseDataLoader):
     """Loader for China Eyes-Closed Run 1 vs Run 2 (test-retest) comparison."""
     name = "ChinaCloseCloseLoader"
     
-    def __init__(self, close_path: str, subject_list_path: str | None = None, atlas: str | None = None, drop_missing_rois: bool = True):
+    def __init__(self, close_path: str, subject_list_path: str | None = None, atlas: str | None = None, drop_missing_rois: bool = True, connectivity_kind="correlation", shrinkage="auto"):
         self.close_path = close_path
         self.subject_list_path = subject_list_path
         self.atlas = atlas
         self.drop_missing_rois = drop_missing_rois
+        self.connectivity_kind = connectivity_kind
+        self.shrinkage = shrinkage
         
     def _get_kept_indices(self) -> np.ndarray | None:
         """ROI indices surviving the missing-ROI drop."""
@@ -658,10 +664,7 @@ class ChinaCloseCloseLoader(BaseDataLoader):
         subject_ids = [sid for idx, sid in enumerate(subject_ids) if keep_mask[idx]]
         n_sub = len(subject_ids)
         
-        run0_corr = np.array([np.corrcoef(ts.T) for ts in run0_data])
-        run1_corr = np.array([np.corrcoef(ts.T) for ts in run1_data])
-        
-        data = np.vstack([run0_corr, run1_corr])
+        data = list(run0_data) + list(run1_data)
         pheno = pd.DataFrame({
             "subject_id": subject_ids * 2,
             "condition": ["close_run1"] * n_sub + ["close_run2"] * n_sub
@@ -669,16 +672,13 @@ class ChinaCloseCloseLoader(BaseDataLoader):
         
         atlas = _load_atlas_if_present(self.atlas)
                 
-        return LoadedDataset(
-            data=data,
-            pheno=pheno,
-            data_kind="correlation",
-            subject_ids=subject_ids * 2,
-            conditions=["close_run1", "close_run2"],
-            condition_column="condition",
-            atlas=atlas,
-            provenance={"close_path": self.close_path}
-        )
+        from conninfpy.connectivity import connectivity_from_dataset
+        ds = LoadedDataset(data=data, pheno=pheno, data_kind="timeseries",
+            subject_ids=subject_ids * 2, conditions=["close_run1", "close_run2"],
+            condition_column="condition", atlas=atlas, provenance={"close_path": self.close_path})
+        options = {} if self.shrinkage == "auto" else {"shrinkage": self.shrinkage}
+        return connectivity_from_dataset(ds, kind=self.connectivity_kind, **options)
+
 
 
 for _cls in (

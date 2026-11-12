@@ -196,6 +196,16 @@ class ManifestLoader(BaseDataLoader):
         if keep_rois is not None:
             dataset = filter_dataset_rois(dataset, keep_rois)
 
+        # Explicit connectivity settings turn raw series into matrices. Loaders
+        # that already construct matrices consume these settings themselves.
+        params = self.manifest.params
+        if dataset.data_kind == "timeseries" and ("connectivity_kind" in params or "shrinkage" in params):
+            from conninfpy.connectivity import connectivity_from_dataset
+            opts = {k: params[k] for k in ("shrinkage", "min_valid_tr", "group_column") if k in params}
+            if "connectivity_standardize" in params:
+                opts["standardize"] = params["connectivity_standardize"]
+            connectivity_from_dataset(dataset, kind=params.get("connectivity_kind", "correlation"), **opts)
+
         # Missing connectivity: by default left in place, so validation and the
         # inference entry points report it; "drop_subjects" removes them.
         missing = self.manifest.params.get("missing", "raise")
@@ -250,7 +260,7 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
         keep_idx = np.array([ids.index(x) for x in keep_ids], dtype=int)
     else:
         keep_idx = np.array([int(x) - 1 for x in keep_ids if x > 0], dtype=int)
-    n_rois = dataset.data.shape[-1]
+    n_rois = dataset.data[0].shape[-1] if isinstance(dataset.data, list) else dataset.data.shape[-1]
     keep_idx = np.array([idx for idx in keep_idx if 0 <= idx < n_rois], dtype=int)
     
     if len(keep_idx) == 0:
@@ -258,8 +268,10 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
         return dataset
         
     # Filter data tensor
-    if dataset.data.ndim == 3:
-        if dataset.data.shape[1] == dataset.data.shape[2]:
+    if isinstance(dataset.data, list):
+        dataset.data = [x[:, keep_idx] for x in dataset.data]
+    elif isinstance(dataset.data, np.ndarray) and dataset.data.ndim == 3:
+        if dataset.data_kind != "timeseries":
             dataset.data = dataset.data[:, keep_idx, :][:, :, keep_idx]
         else:
             dataset.data = dataset.data[:, :, keep_idx]
@@ -297,8 +309,10 @@ def drop_subjects_with_missing(dataset: LoadedDataset) -> LoadedDataset:
     """
     from conninfpy._prepare import nonfinite_report
 
+    if dataset.data_kind == "timeseries":
+        return dataset
     data = np.asarray(dataset.data)
-    if dataset.data_kind == "timeseries" or data.ndim != 3 or data.shape[1] != data.shape[2]:
+    if data.ndim != 3 or data.shape[1] != data.shape[2]:
         return dataset
     report = nonfinite_report(data)
     if not report["n_values"]:
@@ -334,25 +348,29 @@ def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest)
     # expected_rois
     if "expected_rois" in checks:
         expected_rois = checks["expected_rois"]
-        n_rois = dataset.data.shape[-1]
+        n_rois = dataset.data[0].shape[-1] if isinstance(dataset.data, list) else dataset.data.shape[-1]
         if n_rois != expected_rois:
             errors.append(f"ROI count mismatch: expected {expected_rois}, found {n_rois}")
             
     # min_subjects
     if "min_subjects" in checks:
         min_subjects = checks["min_subjects"]
-        n_subs = dataset.data.shape[0]
+        n_subs = len(dataset.data)
         if n_subs < min_subjects:
             errors.append(f"Subject count below minimum: expected at least {min_subjects}, found {n_subs}")
             
-    # min_timepoints
+    # Timepoints mean complete retained frames after construction.
     if "min_timepoints" in checks:
-        min_timepoints = checks["min_timepoints"]
-        if dataset.data.ndim == 3:
-            n_tps = dataset.data.shape[1]
-            if n_tps < min_timepoints:
-                errors.append(f"Timepoints below minimum: expected at least {min_timepoints}, found {n_tps}")
-                
+        minimum = checks["min_timepoints"]
+        if "n_valid_tr" in dataset.pheno:
+            n_tps = int(dataset.pheno["n_valid_tr"].min())
+        elif dataset.data_kind == "timeseries":
+            n_tps = min(int(np.isfinite(x).all(axis=1).sum()) for x in dataset.data)
+        else:
+            n_tps = None
+        if n_tps is not None and n_tps < minimum:
+            errors.append(f"Timepoints below minimum: expected at least {minimum}, found {n_tps}")
+
     # require_pheno_columns
     if "require_pheno_columns" in checks:
         req_cols = checks["require_pheno_columns"]
@@ -376,7 +394,7 @@ def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest)
                         
     # require_symmetric
     if checks.get("require_symmetric", False):
-        if dataset.data.ndim == 3:
+        if isinstance(dataset.data, np.ndarray) and dataset.data.ndim == 3:
             for idx in range(dataset.data.shape[0]):
                 mat = dataset.data[idx]
                 if not np.allclose(mat, mat.T, atol=1e-5, equal_nan=True):
@@ -385,7 +403,7 @@ def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest)
                     
     # require_zero_diagonal
     if checks.get("require_zero_diagonal", False):
-        if dataset.data.ndim == 3:
+        if isinstance(dataset.data, np.ndarray) and dataset.data.ndim == 3:
             for idx in range(dataset.data.shape[0]):
                 mat = dataset.data[idx]
                 diag = np.diagonal(mat)
@@ -402,8 +420,8 @@ def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest)
                 if actual_count != count:
                     errors.append(f"Subject count mismatch for group '{grp}': expected {count}, found {actual_count}")
         elif isinstance(expected_subs, int):
-            if dataset.data.shape[0] != expected_subs:
-                errors.append(f"Subject count mismatch: expected {expected_subs}, found {dataset.data.shape[0]}")
+            if len(dataset.data) != expected_subs:
+                errors.append(f"Subject count mismatch: expected {expected_subs}, found {len(dataset.data)}")
                 
     if errors:
         raise ValueError("Manifest validation failed:\n" + "\n".join(errors))
