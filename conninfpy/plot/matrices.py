@@ -169,8 +169,9 @@ def _effect_and_pmin_from_result(
     if isinstance(result, OmnibusInferenceResult):
         if result.stat_omnibus is None:
             raise ValueError(
-                "stat_omnibus is None — v2.0 pickled results cannot be "
-                "plotted with plot_effect_matrix; rerun the pipeline."
+                "stat_omnibus is None — results without stat maps "
+                "cannot be plotted with plot_effect_matrix; rerun the "
+                "pipeline."
             )
         return (
             np.asarray(result.stat_omnibus, dtype=np.float64),
@@ -181,9 +182,9 @@ def _effect_and_pmin_from_result(
         signed = result.stat_signed
         if signed is None:
             raise ValueError(
-                "stat_positive / stat_negative are None — v2.0 pickled "
-                "results cannot be plotted with plot_effect_matrix; "
-                "rerun the pipeline."
+                "stat_positive / stat_negative are None — results "
+                "without stat maps cannot be plotted with "
+                "plot_effect_matrix; rerun the pipeline."
             )
         p_min = np.minimum(result["positive"], result["negative"])
         label = "β" if result.stat_type == "beta" else "t"
