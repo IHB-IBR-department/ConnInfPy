@@ -105,6 +105,23 @@ The threshold is arbitrary, however, and results can vary substantially with it
 (Vinokur et al. 2023 report up to 75-fold variation in detected edges across
 reasonable thresholds); report results at several thresholds when using it.
 
+The inference unit is the component. Its statistic is compared with the
+permutation distribution of the *largest* component statistic (family-wise
+error control): with separate one-sided families (the default,
+``two_tailed=False``) each tail has its own null of maxima; with
+``two_tailed=True`` the two tails share one null, the larger of the two
+tails' maxima in every permutation. Every edge of a component carries the
+component's p-value, so a significant component is a claim about the set, not
+about each of its edges. ``result.component_report`` (and
+``result.component_table(atlas)``) lists every observed component of each tail:
+its ``component_id`` (numbered within the tail by decreasing statistic), edges,
+ROIs, extent or intensity, and ``p_fwer``; with an atlas also the ROI names and
+the networks and network pairs it spans. Components that are not significant
+are listed too (``significant`` marks ``p_fwer <= alpha``); a single
+suprathreshold edge is a component of one edge. The ``component_id`` column of
+``significant_edges()`` and of the CSV export gives the component of each edge.
+The p-values are those of the p-value map: the report recomputes nothing.
+
 Threshold-free — ``tfnbs`` (the default)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

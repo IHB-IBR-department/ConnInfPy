@@ -72,7 +72,7 @@ class TestNBSSchizophreniaDataset(unittest.TestCase):
 class TestNBSSchizophreniaAgainstMatlab(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.Y, cls.hc, _, cls.ref = _load()
+        cls.Y, cls.hc, cls.dataset, cls.ref = _load()
         cls.iu = np.triu_indices(N_NODES, 1)
         # NBS tests the contrast direction only: one-sided, per-tail null.
         cls.results = {
@@ -134,6 +134,57 @@ class TestNBSSchizophreniaAgainstMatlab(unittest.TestCase):
         self.assertEqual(len(p), 1)
         self.assertAlmostEqual(p.pop(), float(np.atleast_1d(self.ref["extent"]["p"])[0]), delta=0.02)
         self.assertEqual(res.design["t_statistic"], "student")
+        # the component report of this path is the same MATLAB component
+        row = res.component_table().iloc[0]
+        self.assertEqual((row["tail"], row["n_edges"]), ("positive", 40))
+        self.assertAlmostEqual(row["p_fwer"], float(np.atleast_1d(self.ref["extent"]["p"])[0]), delta=0.02)
+
+    def test_component_report_is_the_matlab_component(self):
+        """NETSTAT-15 AC #1: one component of 40 edges; statistic and p as in NBS v1.2."""
+        t_ref = np.asarray(self.ref["t_upper"])
+        edges = _edge_set(self.ref["extent"]["edges"])
+        nodes = sorted({n for edge in edges for n in edge})
+        for stat in ("extent", "intensity"):
+            with self.subTest(stat=stat):
+                res = self.results[stat]
+                report = res.component_report
+                self.assertEqual(report["n_components"], {"positive": 1, "negative": 0})
+                self.assertEqual(report["stat_type"], stat)
+                self.assertEqual(report["threshold"], THRESHOLD)
+                table = res.component_table()
+                self.assertEqual(len(table), 1)
+                row = table.iloc[0]
+                self.assertEqual((row["tail"], row["component_id"]), ("positive", 1))
+                self.assertEqual(row["n_edges"], len(edges))
+                self.assertEqual(row["n_nodes"], len(nodes))
+                self.assertEqual(row["nodes"], nodes)
+                labelled = {(int(i), int(j)) for i, j in zip(*self.iu)
+                            if report["labels"]["positive"][i, j] == 1}
+                self.assertEqual(labelled, edges)
+                if stat == "extent":
+                    self.assertEqual(row["statistic"], 40.0)
+                else:
+                    self.assertAlmostEqual(
+                        row["statistic"], float(np.sum(t_ref[t_ref > THRESHOLD] - THRESHOLD)), places=9)
+                # the component's p is the p of every one of its edges in the map ...
+                self.assertEqual({float(res.positive[i, j]) for i, j in edges}, {row["p_fwer"]})
+                # ... and MATLAB's within Monte-Carlo error (2000 vs 5000 permutations)
+                self.assertAlmostEqual(row["p_fwer"], float(np.atleast_1d(self.ref[stat]["p"])[0]), delta=0.02)
+                self.assertEqual(bool(row["significant"]), row["p_fwer"] <= 0.05)
+
+    def test_component_id_in_edge_table_and_roi_names(self):
+        res = self.results["extent"]
+        edges = res.significant_edges(atlas=self.dataset.atlas)
+        self.assertEqual(len(edges), 40)
+        self.assertTrue((edges["component_id"] == 1).all())
+        self.assertTrue((edges["component_tail"] == "positive").all())
+        table = res.component_table(self.dataset.atlas)
+        names = table.iloc[0]["roi_names"]
+        self.assertEqual(len(names), 29)
+        self.assertEqual(names[0], "Precentral_L")
+        # the AAL-74 example carries no network labels: nothing is invented
+        self.assertNotIn("networks", table.columns)
+        self.assertNotIn("network_pairs", table.columns)
 
     def test_intensity_is_mass_above_threshold(self):
         """NBS 'Intensity' = sum of (t - threshold) over the component."""

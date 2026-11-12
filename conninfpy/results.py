@@ -163,6 +163,19 @@ class InferenceResult(TailResult):
         every within/between-network block with its edge count, mean signed
         statistic, and uncorrected and corrected p-values per tail; each
         edge's p-value is its block's corrected p-value.
+    component_report : dict or None
+        Set by ``method='nbs'``: the inference unit is the connected component
+        of the edges above the threshold. Lists every observed component of
+        each tail (``tail``, ``component_id``, ``n_edges``, ``n_nodes``,
+        ``statistic``: extent or intensity ``sum(t - threshold)``, ``p_fwer``,
+        ``nodes``: ROI indices), plus the ``threshold``, the statistic type
+        and ``labels``, the component number of every edge. Each edge's
+        p-value is its component's ``p_fwer``, taken from the permutation
+        distribution of the maximum component statistic; the report adds
+        nothing to it. Component ids are numbered within each tail by
+        decreasing statistic. :meth:`component_table` returns it as a table,
+        with ROI names and networks when given an atlas; ``component_id`` is
+        also a column of :meth:`significant_edges`. ``None`` for other methods.
     two_tailed : bool
         Whether positive and negative directions form one two-sided family.
         Each enhancement parameter setting and contrast is corrected separately.
@@ -196,6 +209,8 @@ class InferenceResult(TailResult):
     h_grid: Optional[npt.NDArray[np.float64]]
     missing_report: Optional[Dict[str, Any]]
     block_report: Optional[Dict[str, Any]]
+    # A class-level default also covers results pickled before the attribute existed.
+    component_report: Optional[Dict[str, Any]] = None
     two_tailed: bool
     tested_tail: Optional[str]
     beta: Optional[npt.NDArray[np.float64]]
@@ -226,6 +241,7 @@ class InferenceResult(TailResult):
         beta: Optional[npt.NDArray[np.float64]] = None,
         design: Optional[Dict[str, Any]] = None,
         tested_tail: Optional[str] = None,
+        component_report: Optional[Dict[str, Any]] = None,
     ) -> "InferenceResult":
         instance = super().__new__(cls)
         TailResult.__init__(
@@ -247,6 +263,7 @@ class InferenceResult(TailResult):
         instance.h_grid = h_grid
         instance.missing_report = missing_report
         instance.block_report = block_report
+        instance.component_report = component_report
         instance.two_tailed = two_tailed
         instance.tested_tail = tested_tail
         instance.beta = beta
@@ -314,7 +331,9 @@ class InferenceResult(TailResult):
         are the one-sided FWER-corrected p-values at the nominal level.
         The other tail's p-values are set to 1, so tables, summaries and
         plots report no detections in the direction that was not tested;
-        the statistic maps are kept unchanged.
+        the statistic maps are kept unchanged. For ``method='nbs'`` the
+        component report lists the tested tail's components only, with the
+        same component ids.
 
         Parameters
         ----------
@@ -341,6 +360,8 @@ class InferenceResult(TailResult):
                 "one_sided() needs a result computed with two_tailed=False: a "
                 "two-sided result's p-values come from the joint null of both tails."
             )
+        from conninfpy.stats._components import restrict_component_report
+
         other = "negative" if direction == "positive" else "positive"
         maps = {direction: np.array(self[direction], copy=True),
                 other: np.ones_like(self[other], dtype=np.float64)}
@@ -367,6 +388,9 @@ class InferenceResult(TailResult):
             beta=getattr(self, "beta", None),
             design=getattr(self, "design", None),
             tested_tail=direction,
+            component_report=restrict_component_report(
+                getattr(self, "component_report", None), direction
+            ),
         )
 
     @property
@@ -457,6 +481,7 @@ class InferenceResult(TailResult):
             beta=getattr(self, "beta", None),
             design=getattr(self, "design", None),
             tested_tail=getattr(self, "tested_tail", None),
+            component_report=getattr(self, "component_report", None),
         )
 
     def n_significant(
@@ -597,7 +622,11 @@ class InferenceResult(TailResult):
             network_pair, t_signed, p_positive, p_negative, p_min,
             tail, hemisphere_i, hemisphere_j``. Without an atlas the
             ``roi_*_name``, ``roi_*_network``, ``hemisphere_*`` and
-            ``network_pair`` columns are omitted.
+            ``network_pair`` columns are omitted. A ``method='nbs'`` result
+            adds ``component_tail`` and ``component_id`` after ``tail``: the
+            component (see :attr:`component_report`) the edge belongs to,
+            numbered within its tail; ``<NA>`` for an edge above no
+            threshold. Edges of one component share one ``p_*``.
 
         Notes
         -----
@@ -618,6 +647,7 @@ class InferenceResult(TailResult):
             pre-v2.1 results, or objects created without stat maps), or
             if ``sort='network_pair'`` without an atlas.
         """
+        report = getattr(self, "component_report", None)
         df = build_tailed_dataframe(
             self._project_2d(self["positive"], param_idx),
             self._project_2d(self["negative"], param_idx),
@@ -628,12 +658,69 @@ class InferenceResult(TailResult):
             sort=sort,
             include_nonsig=include_nonsig,
             top_k=top_k,
+            component_labels=None if report is None else report["labels"],
         )
         eff = self.effect_map()
         if eff is not None and not df.empty:
             col = list(df.columns).index("t_signed") + 1 if "t_signed" in df.columns else len(df.columns)
             df.insert(col, "effect", eff[df["roi_i"].to_numpy(int), df["roi_j"].to_numpy(int)])
         return df
+
+    def component_table(
+        self,
+        atlas: Optional[Any] = None,
+        *,
+        alpha: float = 0.05,
+        tail: str = "both",
+        significant_only: bool = False,
+    ) -> pd.DataFrame:
+        """Components of an NBS result: one row per observed component.
+
+        The inference unit of ``method='nbs'`` is the connected component of
+        the edges above the threshold, calibrated against the permutation
+        distribution of the maximum component statistic (FWER). Every
+        observed component is listed, significant or not, as ``block_report``
+        lists every block; ``significant`` is ``p_fwer <= alpha`` and
+        ``significant_only=True`` keeps those rows. A component's ``p_fwer``
+        is the p-value its edges carry in ``positive`` / ``negative``. After
+        :meth:`one_sided` only the tested tail is listed.
+
+        Parameters
+        ----------
+        atlas : :class:`~conninfpy.AtlasInfo`, optional
+            Adds ``roi_names`` and, if the atlas has network labels,
+            ``networks`` (with ROI counts) and ``network_pairs`` (with edge
+            counts). Without an atlas those columns are absent. Length must
+            match the number of ROIs.
+        alpha : float, default 0.05
+            Threshold of the ``significant`` column.
+        tail : {'both', 'positive', 'negative'}, default 'both'
+        significant_only : bool, default False
+
+        Returns
+        -------
+        pandas.DataFrame
+            ``tail, component_id, n_edges, n_nodes, statistic,
+            statistic_type, p_fwer, significant, nodes`` (+ atlas columns);
+            ``statistic`` is the extent or the intensity
+            ``sum(t - threshold)``. The threshold and the permutation count
+            are in ``df.attrs``. Ids are numbered within each tail by
+            decreasing statistic.
+
+        Raises
+        ------
+        ValueError
+            If the result is not from ``method='nbs'``.
+        """
+        from conninfpy.stats._components import component_table
+
+        return component_table(
+            getattr(self, "component_report", None),
+            atlas=atlas,
+            alpha=alpha,
+            tail=tail,
+            significant_only=significant_only,
+        )
 
     def network_summary(
         self,
@@ -774,6 +861,8 @@ class OmnibusInferenceResult(TailResult):
     preserve_provided: bool
     strata_provided: bool
     combat_diagnostics: Optional[Dict[str, Any]]
+    # See InferenceResult.component_report (single tail, 'omnibus').
+    component_report: Optional[Dict[str, Any]] = None
 
     def __new__(
         cls,
@@ -794,6 +883,7 @@ class OmnibusInferenceResult(TailResult):
         block_report: Optional[Dict[str, Any]] = None,
         beta: Optional[npt.NDArray[np.float64]] = None,
         design: Optional[Dict[str, Any]] = None,
+        component_report: Optional[Dict[str, Any]] = None,
     ) -> "OmnibusInferenceResult":
         instance = super().__new__(cls)
         # Don't go through TailResult's positive/negative initializer —
@@ -812,6 +902,7 @@ class OmnibusInferenceResult(TailResult):
         instance.combat_diagnostics = combat_diagnostics
         instance.missing_report = missing_report
         instance.block_report = block_report
+        instance.component_report = component_report
         instance.beta = beta
         instance.design = design
         return instance
@@ -875,8 +966,11 @@ class OmnibusInferenceResult(TailResult):
         -----
         Interpret p-values at ``inference_unit``: a projected block or
         component detection is not an individual edge localization claim.
-        Detection alone does not establish a biological mechanism.
+        Detection alone does not establish a biological mechanism. A
+        ``method='nbs'`` result adds a ``component_id`` column (the
+        component of :attr:`component_report` the edge belongs to).
         """
+        report = getattr(self, "component_report", None)
         return build_omnibus_dataframe(
             self["omnibus"],
             stat_omnibus=self.stat_omnibus,
@@ -885,6 +979,26 @@ class OmnibusInferenceResult(TailResult):
             sort=sort,
             include_nonsig=include_nonsig,
             top_k=top_k,
+            component_labels=None if report is None else report["labels"].get("omnibus"),
+        )
+
+    def component_table(
+        self,
+        atlas: Optional[Any] = None,
+        *,
+        alpha: float = 0.05,
+        significant_only: bool = False,
+    ) -> pd.DataFrame:
+        """Components of an NBS omnibus result; see
+        :meth:`InferenceResult.component_table` (the single tail is
+        ``'omnibus'`` and the edge statistic is F)."""
+        from conninfpy.stats._components import component_table
+
+        return component_table(
+            getattr(self, "component_report", None),
+            atlas=atlas,
+            alpha=alpha,
+            significant_only=significant_only,
         )
 
     def network_summary(

@@ -326,7 +326,8 @@ both accept:
 ``'tstat'``         No enhancement; per-tail max-statistic FWER on raw t / β / F
 ``'tfnbs'``         Threshold-Free NBS (Baggio 2018)
 ``'nbs'``           Classical Network-Based Statistic (Zalesky 2010); supply
-                    ``threshold=2.0`` and ``nbs_stat='extent'`` or ``'intensity'``
+                    ``threshold=2.0`` and ``nbs_stat='extent'`` or ``'intensity'``;
+                    inference per component (``result.component_table()``)
 ``'cnbs'``          Constrained NBS (Noble & Scheinost 2020): mean signed t per
                     block, one null per block, Bonferroni (or ``cnbs_correction='bh'``)
                     across blocks; supply ``net_labels=``; inference per block

@@ -23,6 +23,8 @@ __all__ = [
     "DEFAULT_NBS_THRESHOLD",
     "DEFAULT_NBS_STAT",
     "get_nbs_score",
+    "nbs_components",
+    "NBSComponents",
     "get_cnbs_score",
     "cnbs_blocks",
     "cnbs_block_means",
@@ -78,6 +80,81 @@ def _check_square(t_stat: npt.NDArray[np.floating]) -> None:
 # =============================================================================
 
 
+@dataclass(frozen=True)
+class _Suprathreshold:
+    """Suprathreshold edges of one statistic map and their connected components.
+
+    ``rows``/``cols``/``weights`` list the edges (the upper triangle when the
+    map is symmetric); ``edge_component`` gives the component of each edge
+    (labels from :func:`scipy.sparse.csgraph.connected_components`);
+    ``node_labels`` gives the component of every node.
+    """
+
+    rows: npt.NDArray[np.intp]
+    cols: npt.NDArray[np.intp]
+    weights: npt.NDArray[np.floating]
+    edge_component: npt.NDArray[np.intp]
+    n_components: int
+    node_labels: npt.NDArray[np.intp]
+    symmetric: bool
+
+
+def _label_suprathreshold(
+    t_stats: npt.NDArray[np.floating], threshold: float
+) -> Optional[_Suprathreshold]:
+    """Edges with ``t > threshold`` and their connected components.
+
+    The single place where NBS components are defined: :func:`get_nbs_score`
+    (the statistic the permutation test uses) and :func:`nbs_components`
+    (the component report) both read it, so the reported components are
+    the components that were tested. Returns ``None`` when no edge exceeds
+    the threshold.
+    """
+    # Round to avoid float precision issues at threshold boundaries
+    t_stats = np.round(t_stats, decimals=10)
+    nroi = t_stats.shape[0]
+    is_symm = _is_symmetric(t_stats)
+    edge_rows, edge_cols, edge_weights = _get_edges(
+        t_stats, threshold, symmetric=is_symm
+    )
+    if edge_rows.size == 0:
+        return None
+
+    mask = np.zeros((nroi, nroi), dtype=bool)
+    mask[edge_rows, edge_cols] = True
+    if is_symm:
+        mask[edge_cols, edge_rows] = True
+
+    mask_for_cc = mask | mask.T
+    sparse_mat = csr_matrix(mask_for_cc)
+    n_components, node_labels = connected_components(sparse_mat, directed=False)
+    return _Suprathreshold(
+        rows=edge_rows,
+        cols=edge_cols,
+        weights=edge_weights,
+        edge_component=node_labels[edge_rows],
+        n_components=n_components,
+        node_labels=node_labels,
+        symmetric=is_symm,
+    )
+
+
+def _component_statistics(
+    found: _Suprathreshold, threshold: float, stat_type: str
+) -> npt.NDArray[np.float64]:
+    """Extent or intensity of every connected component (isolated nodes: 0)."""
+    if stat_type == "extent":
+        return np.bincount(
+            found.edge_component, minlength=found.n_components
+        ).astype(np.float64)
+    # Mass above the threshold (NBS v1.2 'Intensity').
+    return np.bincount(
+        found.edge_component,
+        weights=found.weights.astype(np.float64) - threshold,
+        minlength=found.n_components,
+    )
+
+
 def get_nbs_score(
     t_stats: npt.NDArray[np.floating],
     threshold: float = DEFAULT_NBS_THRESHOLD,
@@ -108,53 +185,129 @@ def get_nbs_score(
     ndarray of shape (N, N)
         Matrix where each suprathreshold edge is assigned its cluster statistic.
         Non-suprathreshold edges are 0.
+
+    See Also
+    --------
+    nbs_components : the components themselves (ids, sizes, nodes).
     """
     if stat_type not in ("extent", "intensity"):
         raise ValueError("stat_type must be 'extent' or 'intensity'.")
     _check_square(t_stats)
 
-    # Round to avoid float precision issues at threshold boundaries
-    t_stats = np.round(t_stats, decimals=10)
-
     nroi = t_stats.shape[0]
     scores = np.zeros((nroi, nroi), dtype=np.float64)
 
-    is_symm = _is_symmetric(t_stats)
-    edge_rows, edge_cols, edge_weights = _get_edges(
-        t_stats, threshold, symmetric=is_symm
-    )
-    if edge_rows.size == 0:
+    found = _label_suprathreshold(t_stats, threshold)
+    if found is None:
         return scores
 
-    mask = np.zeros((nroi, nroi), dtype=bool)
-    mask[edge_rows, edge_cols] = True
-    if is_symm:
-        mask[edge_cols, edge_rows] = True
-
-    mask_for_cc = mask | mask.T
-    sparse_mat = csr_matrix(mask_for_cc)
-    n_components, node_labels = connected_components(sparse_mat, directed=False)
-
-    edge_component_ids = node_labels[edge_rows]
-
-    if stat_type == "extent":
-        component_stats = np.bincount(
-            edge_component_ids, minlength=n_components
-        ).astype(np.float64)
-    else:
-        # Mass above the threshold (NBS v1.2 'Intensity').
-        component_stats = np.bincount(
-            edge_component_ids,
-            weights=edge_weights.astype(np.float64) - threshold,
-            minlength=n_components,
-        )
-
-    edge_stats = component_stats[edge_component_ids]
-    scores[edge_rows, edge_cols] = edge_stats
-    if is_symm:
-        scores[edge_cols, edge_rows] = edge_stats
+    component_stats = _component_statistics(found, threshold, stat_type)
+    edge_stats = component_stats[found.edge_component]
+    scores[found.rows, found.cols] = edge_stats
+    if found.symmetric:
+        scores[found.cols, found.rows] = edge_stats
 
     return scores
+
+
+@dataclass(frozen=True)
+class NBSComponents:
+    """Connected components of the suprathreshold edges of one tail.
+
+    Components are numbered ``1..K`` by decreasing statistic (ties: more
+    edges first, then the lower first ROI index), so a component keeps its
+    number whatever else is reported.
+
+    Fields: ``labels``, an (N, N) int32 array with the component number of
+    every edge (both triangles; 0 for an edge not above the threshold and on
+    the diagonal); ``n_edges``, the undirected edges of each component (its
+    extent); ``nodes``, the sorted ROI indices of each component (a single
+    suprathreshold edge is a component of two nodes and one edge);
+    ``statistic``, the extent or the intensity ``sum(t - threshold)`` of
+    each component; ``stat_type`` (``'extent'`` or ``'intensity'``) and
+    ``threshold``.
+    """
+
+    labels: npt.NDArray[np.int32]
+    n_edges: npt.NDArray[np.intp]
+    nodes: Tuple[npt.NDArray[np.intp], ...]
+    statistic: npt.NDArray[np.float64]
+    stat_type: str
+    threshold: float
+
+    @property
+    def n_components(self) -> int:
+        return int(self.n_edges.size)
+
+    @property
+    def n_nodes(self) -> npt.NDArray[np.intp]:
+        return np.array([n.size for n in self.nodes], dtype=np.intp)
+
+
+def nbs_components(
+    t_stats: npt.NDArray[np.floating],
+    threshold: float = DEFAULT_NBS_THRESHOLD,
+    stat_type: str = DEFAULT_NBS_STAT,
+) -> NBSComponents:
+    """Connected components of the edges above ``threshold`` in one tail.
+
+    The components :func:`get_nbs_score` scores, with their numbers, sizes,
+    nodes and statistics; the permutation test of ``method='nbs'`` assigns
+    to every edge the p-value of its component's statistic. Used for the
+    component report of :class:`~conninfpy.InferenceResult`.
+
+    Parameters
+    ----------
+    t_stats : ndarray of shape (N, N)
+        Non-negative, symmetric statistic map of one tail with a zero
+        diagonal (the same input as :func:`get_nbs_score`).
+    threshold : float
+        Edge threshold: an edge belongs to a component iff ``t > threshold``.
+    stat_type : {'extent', 'intensity'}
+        Component statistic, as in :func:`get_nbs_score`.
+    """
+    if stat_type not in ("extent", "intensity"):
+        raise ValueError("stat_type must be 'extent' or 'intensity'.")
+    _check_square(t_stats)
+    nroi = t_stats.shape[0]
+    found = _label_suprathreshold(t_stats, threshold)
+    if found is None:
+        return NBSComponents(
+            labels=np.zeros((nroi, nroi), dtype=np.int32),
+            n_edges=np.zeros(0, dtype=np.intp),
+            nodes=(),
+            statistic=np.zeros(0, dtype=np.float64),
+            stat_type=stat_type,
+            threshold=float(threshold),
+        )
+    if not found.symmetric:
+        raise ValueError("t_stats must be symmetric to report components.")
+
+    raw_stat = _component_statistics(found, threshold, stat_type)
+    raw_ids, n_edges = np.unique(found.edge_component, return_counts=True)
+    statistic = raw_stat[raw_ids]
+    node_lists = [np.flatnonzero(found.node_labels == c) for c in raw_ids]
+    first_node = np.array([n[0] for n in node_lists])
+    # lexsort: last key is primary
+    order = np.lexsort((first_node, -n_edges, -statistic))
+    rank = np.empty(raw_ids.size, dtype=np.int32)
+    rank[order] = np.arange(1, raw_ids.size + 1, dtype=np.int32)
+
+    lookup = np.zeros(found.n_components, dtype=np.int32)
+    lookup[raw_ids] = rank
+    edge_rank = lookup[found.edge_component]
+    labels = np.zeros((nroi, nroi), dtype=np.int32)
+    labels[found.rows, found.cols] = edge_rank
+    labels[found.cols, found.rows] = edge_rank
+
+    return NBSComponents(
+        labels=labels,
+        n_edges=n_edges[order].astype(np.intp),
+        nodes=tuple(node_lists[i] for i in order),
+        statistic=statistic[order],
+        stat_type=stat_type,
+        threshold=float(threshold),
+    )
 
 
 # =============================================================================

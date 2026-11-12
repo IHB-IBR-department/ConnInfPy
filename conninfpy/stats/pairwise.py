@@ -48,6 +48,7 @@ from conninfpy.enhance import (
 )
 from conninfpy.results import InferenceResult, make_inference_result
 from conninfpy.stats import _degenerate as _degenerate
+from conninfpy.stats._components import build_component_report
 from conninfpy.stats._engine import (
     _bh_fdr_correction,
     _collect_results_to_arrays,
@@ -1426,6 +1427,11 @@ def compute_p_val(
             missing_report=report,
             block_report=report.pop("block_report", None),
             two_tailed=two_tailed,
+            component_report=build_component_report(
+                raw_t_ac, p_ac, method=method_enum, threshold=threshold,
+                nbs_stat=nbs_stat, n_permutations=n_permutations,
+                two_tailed=two_tailed,
+            ),
         )
 
     # Parametric methods: compute p-values directly from t-distribution
@@ -1585,6 +1591,11 @@ def compute_p_val(
         h_grid=h_grid,
         block_report=block_report,
         two_tailed=two_tailed,
+        component_report=build_component_report(
+            raw_t_dict, result, method=method_enum, threshold=threshold,
+            nbs_stat=nbs_stat, n_permutations=n_permutations,
+            two_tailed=two_tailed, edge_mask=family,
+        ),
     )
 
 

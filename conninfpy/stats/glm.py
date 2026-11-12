@@ -54,6 +54,7 @@ from conninfpy.enhance import (
 from conninfpy.results import InferenceResult, OmnibusInferenceResult
 from conninfpy.stats import _degenerate as _degenerate
 from conninfpy.stats import _estimates as _estimates
+from conninfpy.stats._components import build_component_report
 from conninfpy.stats._design import (
     _check_estimable,
     _precompute_ols,
@@ -811,6 +812,11 @@ def compute_p_val_glm(
                 block_report=block_report,
                 beta=beta_ac,
                 design=design,
+                component_report=build_component_report(
+                    raw_ac, p_ac, method=method_enum, threshold=threshold,
+                    nbs_stat=nbs_stat, edge_stat="fstat",
+                    n_permutations=n_permutations,
+                ),
             )
         e_grid, h_grid = _grid_from_kwargs(method_enum, enhance_kwargs)
         return InferenceResult(
@@ -831,6 +837,11 @@ def compute_p_val_glm(
             two_tailed=two_tailed,
             beta=beta_ac,
             design=design,
+            component_report=build_component_report(
+                raw_ac, p_ac, method=method_enum, threshold=threshold,
+                nbs_stat=nbs_stat, edge_stat=stat_type_str,
+                n_permutations=n_permutations, two_tailed=two_tailed,
+            ),
         )
 
     # An exact fit with a nonzero contrast has an infinite t (or F)
@@ -980,6 +991,11 @@ def compute_p_val_glm(
             two_tailed=two_tailed,
             beta=beta,
             design=design,
+            component_report=build_component_report(
+                raw_stat_dict, result, method=method_enum, threshold=threshold,
+                nbs_stat=nbs_stat, edge_stat=stat_type_str,
+                n_permutations=n_permutations, two_tailed=two_tailed,
+            ),
         )
     # F-stat path: single 'omnibus' map → OmnibusInferenceResult
     return OmnibusInferenceResult(
@@ -994,6 +1010,10 @@ def compute_p_val_glm(
         block_report=block_report,
         beta=beta,
         design=design,
+        component_report=build_component_report(
+            raw_stat_dict, result, method=method_enum, threshold=threshold,
+            nbs_stat=nbs_stat, edge_stat="fstat", n_permutations=n_permutations,
+        ),
     )
 
 
@@ -1414,6 +1434,11 @@ def compute_p_val_glm_multi(
             beta=beta,
             design=_estimates.glm_design(
                 X, contrast_arrays[contrast_names.index(name)], design_columns
+            ),
+            component_report=build_component_report(
+                raw, res, method=method_enum, threshold=threshold,
+                nbs_stat=nbs_stat, edge_stat=stat_type_str,
+                n_permutations=n_permutations, two_tailed=two_tailed,
             ),
         )
     return out
