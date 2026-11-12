@@ -100,6 +100,13 @@ class AnalyzeResult:
         """
         return self.inference.network_summary(atlas, **kwargs)
 
+    def node_summary(self, *args: Any, **kwargs: Any) -> "Any":
+        """Delegate to the underlying inference result's ``node_summary``:
+        which ROIs gather the detected connections (descriptive; see
+        :meth:`~conninfpy.InferenceResult.node_summary`).
+        """
+        return self.inference.node_summary(*args, **kwargs)
+
     @property
     def component_report(self) -> Optional[Dict[str, Any]]:
         """The underlying result's NBS component report (``None`` for other
