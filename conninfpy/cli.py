@@ -136,6 +136,8 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
     confound_cols = _as_list(design.get("confounds"))
     site_col = design.get("sites")
     kwargs: Dict[str, Any] = {"input": input_kind}
+    encoding_frame = None
+    encoding_columns: List[str] = []
     if design.get("harmonize") is not None:
         kwargs["harmonize"] = design["harmonize"]
 
@@ -146,6 +148,8 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
         used = interest_cols + confound_cols + _as_list(site_col)
         keep = _columns(pheno, used, "design").notna().all(axis=1).to_numpy()
         p = pheno[keep]
+        encoding_frame = p
+        encoding_columns = interest_cols + confound_cols
         interest = {}
         for c in interest_cols:
             values = _numeric(_columns(p, [c], "design.interest"))
@@ -156,8 +160,11 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
                 )
             interest[c] = values.ravel()
         kwargs["Y"] = Y[keep]
-        kwargs["interest"] = interest if len(interest) > 1 else interest[interest_cols[0]]
-        if len(interest) == 1:
+        interactions = design.get("interactions")
+        kwargs["interest"] = interest if len(interest) > 1 or interactions is not None else interest[interest_cols[0]]
+        if interactions is not None:
+            kwargs["interactions"] = interactions
+        if len(interest) == 1 and interactions is None:
             kwargs["contrast_id"] = interest_cols[0]
         if confound_cols:
             kwargs["confounds"] = _numeric(p[confound_cols])
@@ -191,9 +198,19 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
         cond_col = design.get("condition") or getattr(dataset, "condition_column", None)
         levels = design.get("levels")
         subj_col = design.get("subject", "subject_id")
-        if not cond_col or not levels or len(levels) != 2:
+        if not cond_col or not levels or len(levels) != 2 or levels[0] == levels[1]:
             raise ConfigError("type 'paired' needs design.condition and two design.levels.")
-        _columns(pheno, [cond_col, subj_col] + confound_cols, "design")
+        interest_cols = _as_list(design.get("interest"))
+        subject_confounds = _as_list(design.get("subject_confounds"))
+        if set(confound_cols) & set(subject_confounds):
+            raise ConfigError("a confound cannot be both condition-specific and subject-level")
+        used = [cond_col, subj_col] + confound_cols + interest_cols + subject_confounds + _as_list(site_col)
+        _columns(pheno, used, "design")
+        if pheno[used].isna().any().any():
+            raise ConfigError("paired design columns cannot contain missing values")
+        observed = set(pheno[cond_col].unique())
+        if observed != set(levels):
+            raise ConfigError(f"paired condition levels {levels!r} do not match observed levels {sorted(observed, key=str)!r}")
         rows = {lvl: pheno.index[pheno[cond_col] == lvl] for lvl in levels}
         for lvl in levels:
             if pheno.loc[rows[lvl], subj_col].duplicated().any():
@@ -203,24 +220,61 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
                 )
         by_subj = {lvl: pd.Series(rows[lvl], index=pheno.loc[rows[lvl], subj_col]) for lvl in levels}
         subjects = by_subj[levels[0]].index.intersection(by_subj[levels[1]].index)
-        if len(subjects) == 0:
-            raise ConfigError(f"no subject has both conditions {levels} in column {cond_col!r}.")
+        if len(subjects) == 0 or len(subjects) != len(by_subj[levels[0]]) or len(subjects) != len(by_subj[levels[1]]):
+            raise ConfigError(f"each subject must have both conditions {levels}; missing pair detected")
         ia = by_subj[levels[0]].loc[subjects].to_numpy()
         ib = by_subj[levels[1]].loc[subjects].to_numpy()
+        encoding_frame = pheno
+        encoding_columns = interest_cols + confound_cols + subject_confounds
         kwargs.update(group1=Y[ia], group2=Y[ib], test_type="paired")
+        for col in interest_cols + subject_confounds + _as_list(site_col):
+            if not np.array_equal(pheno.loc[ia, col].to_numpy(), pheno.loc[ib, col].to_numpy()):
+                raise ConfigError(f"paired subject-level column {col!r} must be constant across conditions")
+        if interest_cols:
+            interest = {}
+            for c in interest_cols:
+                values = _numeric(pheno.loc[ia, [c]])
+                if values.shape[1] != 1:
+                    raise ConfigError(f"design.interest {c!r} must be numeric or binary categorical")
+                interest[c] = values.ravel()
+            interactions = design.get("interactions")
+            kwargs["interest"] = interest if len(interest) > 1 or interactions is not None else interest[interest_cols[0]]
+            if interactions is not None:
+                kwargs["interactions"] = interactions
+            elif len(interest) == 1:
+                kwargs["contrast_id"] = interest_cols[0]
+            if subject_confounds:
+                kwargs["confounds"] = _numeric(pheno.loc[ia, subject_confounds])
+        elif subject_confounds or design.get("interactions") is not None:
+            raise ConfigError("subject_confounds and interactions require paired design.interest")
         if confound_cols:
-            kwargs["confounds_group1"] = _numeric(pheno.loc[ia, confound_cols])
-            kwargs["confounds_group2"] = _numeric(pheno.loc[ib, confound_cols])
+            for col in confound_cols:
+                if not pd.api.types.is_numeric_dtype(pheno[col]):
+                    if set(pheno.loc[ia, col]) != set(pheno.loc[ib, col]):
+                        raise ConfigError(f"condition-specific categorical confound {col!r} has incompatible levels")
+            # Fit one encoding on both conditions so the same columns are
+            # subtracted even if rows are shuffled.
+            combined = _numeric(pd.concat([pheno.loc[ia, confound_cols], pheno.loc[ib, confound_cols]]))
+            kwargs["confounds_group1"] = combined[:len(ia)]
+            kwargs["confounds_group2"] = combined[len(ia):]
         if site_col:
             kwargs["sites"] = pheno.loc[ia, site_col].to_numpy()
         n_used = len(subjects)
 
+    categorical_coding = {}
+    if encoding_frame is not None:
+        for col in dict.fromkeys(encoding_columns):
+            series = encoding_frame[col].dropna()
+            if not pd.api.types.is_numeric_dtype(series):
+                levels_found = pd.Categorical(series).categories.tolist()
+                categorical_coding[col] = {"levels": levels_found, "reference": levels_found[0] if levels_found else None}
     summary = {
         "design": kind,
         "n_subjects_in_data": int(Y.shape[0]),
         "n_subjects_used": n_used,
         "n_regions": int(Y.shape[-1]),
         "input": input_kind,
+        "categorical_coding": categorical_coding,
         "connectivity": dataset.provenance.get("connectivity"),
         "connectivity_diagnostics": dataset.pheno[[c for c in ("n_valid_tr", "delta_s") if c in dataset.pheno]].to_dict(orient="list"),
         "loader_warnings": dataset.warnings,
@@ -300,6 +354,11 @@ def run(
         edges_path = out / f"edges{suffix}.csv"
         res.to_csv(edges_path, atlas=atlas, alpha=alpha)
         inf = res.inference
+        if getattr(inf, "design", None) is not None and cfg["design"]["type"] in ("glm", "paired"):
+            # Keep the original field roles and categorical reference levels in
+            # the self-contained bundle, without retaining phenotype rows.
+            inf.design["input_design"] = dict(cfg["design"])
+            inf.design["categorical_coding"] = summary["categorical_coding"]
         pvals_path = out / f"pvals{suffix}.npz"
         arrays = {"positive": inf.positive, "negative": inf.negative}
         if getattr(inf, "stat_signed", None) is not None:
