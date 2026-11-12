@@ -23,7 +23,13 @@ import numpy as np
 from conninfpy import compute_p_val_glm
 from conninfpy.loaders.manifest import ManifestLoader
 
+try:
+    from streamlit.testing.v1 import AppTest
+except ImportError:  # the [app] extra is not installed
+    AppTest = None
+
 REPO = Path(__file__).resolve().parents[1]
+APP = REPO / "apps" / "streamlit_app.py"
 MANIFEST = REPO / "datasets" / "nbs_schizophrenia.yaml"
 REFERENCE = REPO / "tests" / "data" / "nbs_schizophrenia_matlab_reference.json"
 N_NODES = 74
@@ -139,6 +145,28 @@ class TestNBSSchizophreniaAgainstMatlab(unittest.TestCase):
         score = get_nbs_score(T, threshold=THRESHOLD, stat_type="intensity")
         i, j = next(iter(_edge_set(self.ref["intensity"]["edges"])))
         self.assertAlmostEqual(float(score[i, j]), expected, places=9)
+
+
+@unittest.skipIf(AppTest is None, "streamlit is not installed")
+class TestBuiltinNBSSchizophrenia(unittest.TestCase):
+
+    def test_builtin_template_loads_raw_correlations_with_its_atlas(self):
+        at = AppTest.from_file(str(APP), default_timeout=300).run()
+        next(r for r in at.radio if r.label == "Select Ingestion Method").set_value("Built-in data").run()
+        next(s for s in at.selectbox if s.label == "Select Template Structure").set_value("NBS-Schizophrenia").run()
+        next(b for b in at.button if b.label == "Load, Preprocess & Validate Data").click().run()
+        self.assertFalse(at.exception)
+        self.assertFalse([e.value for e in at.error])
+        Y = at.session_state["connectivity_data"]
+        self.assertEqual(Y.shape, (27, N_NODES, N_NODES))
+        # Stored as raw correlations (the NBS scale); the diagonal is zeroed on loading.
+        self.assertEqual(at.session_state["connectivity_data_kind"], "correlation")
+        self.assertTrue(np.all(np.abs(Y) <= 1.0))
+        # The dataset atlas wins over the sidebar atlas and keeps its own coordinates.
+        atlas = at.session_state["dataset_atlas"]
+        self.assertEqual(len(atlas), N_NODES)
+        self.assertEqual(atlas.labels[0], "Precentral_L")
+        self.assertLess(atlas.coords[0, 0], 0)
 
 
 if __name__ == "__main__":

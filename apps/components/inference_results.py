@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import streamlit as st
+from apps.utils.ui_state import persistent_key
+from apps.utils.workspace import require_analysis_step
 import pandas as pd
 from io import BytesIO
 
@@ -25,6 +27,15 @@ def _render_one_sentence_summary(res, edges_df, method_name, direction_labels):
         neg_count = len(edges_df[edges_df["t_signed"] < 0])
     
     n_perms = getattr(res, "n_permutations", 100)
+    tested = getattr(res, "tested_tail", None)
+    if tested is not None:
+        count = pos_count if tested == "positive" else neg_count
+        st.info(
+            f"📝 **Summary:** The one-sided {method_name} test of **{direction_labels[tested]}** "
+            f"detected **{count}** significant edges using {n_perms} permutations. "
+            "The opposite direction was not tested."
+        )
+        return
     st.info(
         f"📝 **Summary:** The {method_name} run detected **{pos_count}** significant edges for **{direction_labels['positive']}** "
         f"and **{neg_count}** edges for **{direction_labels['negative']}** using {n_perms} permutations."
@@ -34,13 +45,23 @@ def _render_summary_metrics(res, edges_df, method_name, direction_labels):
     """Render the headline metric row for one result."""
     st.markdown(f"##### 📊 {method_name} Summary")
     nsig = res.n_significant(0.05)
+    tested = getattr(res, "tested_tail", None)
+    shown = {
+        tail: ("not tested" if tested is not None and tail != tested else nsig[tail])
+        for tail in ("positive", "negative")
+    }
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(direction_labels["positive"], nsig["positive"], help="Edges significant in the positive statistical tail.")
+        st.metric(direction_labels["positive"], shown["positive"], help="Edges significant in the positive statistical tail.")
     with col2:
-        st.metric(direction_labels["negative"], nsig["negative"], help="Edges significant in the negative statistical tail.")
+        st.metric(direction_labels["negative"], shown["negative"], help="Edges significant in the negative statistical tail.")
     with col3:
         st.metric("Permutations Completed", res.n_permutations)
+    if tested is not None:
+        st.caption(
+            f"Prespecified one-sided test ({res.tail_policy}): the {tested} direction has its own "
+            "max-statistic null at the nominal alpha; the opposite direction was not tested."
+        )
 
 def _render_ground_truth_metrics(edges_df, effect_mask, method_name):
     """Render precision/recall against the planted effect mask, if any."""
@@ -166,7 +187,7 @@ def _download_figure_button(fig, label, filename, key):
         key=key,
     )
 
-def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction_labels):
+def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction_labels, res):
     """Render glass-brain connectome graphs of the significant edges."""
     atlas = _active_atlas(base_atlas)
     st.markdown(f"##### 🧠 Brain-Space Effect Graphs ({method_name})")
@@ -177,6 +198,10 @@ def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction
     if not atlas_has_coords(atlas):
         st.info("Brain graph plotting requires complete atlas x/y/z coordinates.")
         return
+    tested_tail = getattr(res, "tested_tail", None)
+    if tested_tail in ("positive", "negative"):
+        other_tail = "negative" if tested_tail == "positive" else "positive"
+        st.caption(f"Only {direction_labels[tested_tail]} was tested. To test {direction_labels[other_tail]}, change the hypothesis direction in Design and run a new analysis.")
     if edges_df is None or edges_df.empty:
         st.info("No significant edges available to plot.")
         return
@@ -184,77 +209,56 @@ def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction
     network_options = list(dict.fromkeys(str(n) for n in atlas.networks)) if atlas_has_networks(atlas) else []
     ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([1, 1, 1, 1])
     with ctrl1:
-        alpha = st.slider("Graph p-value cutoff", 0.001, 0.100, 0.050, 0.001, key=f"{method_name}_graph_alpha")
-        top_n = st.slider("Top edges per direction", 10, 500, 100, 10, key=f"{method_name}_graph_top_n")
+        alpha = st.slider("Graph p-value cutoff", 0.001, 0.100, 0.050, 0.001, key=persistent_key(f"{method_name}_graph_alpha", scope='results'))
+        top_n = st.slider("Top edges per direction", 10, 500, 100, 10, key=persistent_key(f"{method_name}_graph_top_n", scope='results'))
     with ctrl2:
-        display_mode = st.selectbox("Brain view", ["z", "ortho", "x", "y"], index=0, key=f"{method_name}_graph_display")
-        weight_by = st.selectbox("Edge weight", ["-log10(p)", "|t|"], index=0, key=f"{method_name}_graph_weight")
+        display_mode = st.selectbox("Brain view", ["z", "ortho", "x", "y"], index=0, key=persistent_key(f"{method_name}_graph_display", scope='results'))
+        weight_by = st.selectbox("Edge weight", ["-log10(p)", "|t|"], index=0, key=persistent_key(f"{method_name}_graph_weight", scope='results'))
     with ctrl3:
         color_options = ["Network", "Degree"]
         if getattr(atlas, "hemisphere", None) is not None:
             color_options.insert(1, "Hemisphere")
-        color_by = st.selectbox("Node color", color_options, index=0, key=f"{method_name}_graph_color")
-        rank_by = st.selectbox("Top edge ranking", ["p-value", "|t|"], index=0, key=f"{method_name}_graph_rank")
+        color_by = st.selectbox("Node color", color_options, index=0, key=persistent_key(f"{method_name}_graph_color", scope='results', options=color_options))
+        rank_by = st.selectbox("Top edge ranking", ["p-value", "|t|"], index=0, key=persistent_key(f"{method_name}_graph_rank", scope='results'))
     with ctrl4:
         selected_networks = []
         network_filter_mode = "Any endpoint"
         if network_options:
-            selected_networks = st.multiselect("Networks", network_options, default=[], key=f"{method_name}_graph_networks")
-            network_filter_mode = st.radio("Network filter", ["Any endpoint", "Both endpoints"], horizontal=True, key=f"{method_name}_graph_network_mode")
+            selected_networks = st.multiselect("Networks", network_options, default=[], key=persistent_key(f"{method_name}_graph_networks", scope='results', options=network_options, multiple=True))
+            network_filter_mode = st.radio("Network filter", ["Any endpoint", "Both endpoints"], horizontal=True, key=persistent_key(f"{method_name}_graph_network_mode", scope='results'))
         else:
             st.caption("No network labels available for filtering.")
 
-    pos_edges = _filter_edges_for_tail(edges_df, atlas, "positive", alpha, top_n, rank_by, selected_networks, network_filter_mode)
-    neg_edges = _filter_edges_for_tail(edges_df, atlas, "negative", alpha, top_n, rank_by, selected_networks, network_filter_mode)
+    tails = [tested_tail] if tested_tail in ("positive", "negative") else ["positive", "negative"]
+    filtered = {
+        tail: _filter_edges_for_tail(edges_df, atlas, tail, alpha, top_n, rank_by, selected_networks, network_filter_mode)
+        for tail in tails
+    }
+    default_tail = max(tails, key=lambda tail: len(filtered[tail]))
+    direction_key = f"{method_name}_graph_direction"
+    result_key = f"_{method_name}_graph_result_id"
+    if st.session_state.get(result_key) != id(res):
+        st.session_state.pop(direction_key, None)
+        st.session_state[result_key] = id(res)
+    tail = st.radio(
+        "Effect direction", tails, index=tails.index(default_tail), horizontal=True,
+        format_func=lambda value: f"{direction_labels[value]} ({len(filtered[value])} edges)",
+        key=persistent_key(direction_key, scope="results", options=tails),
+    )
+    if filtered[tail].empty:
+        st.info(f"No edges for {direction_labels[tail]} pass the current graph filters.")
+        st.caption("Try raising the p-value cutoff or clearing network filters.")
+        return
 
-    col_pos, col_neg = st.columns(2)
-    with col_pos:
-        st.markdown(f"**{direction_labels['positive']}: {len(pos_edges)} edges**")
-        if pos_edges.empty:
-            st.info(f"No edges for {direction_labels['positive']} pass the current graph filters.")
-            st.caption("💡 **Tip:** Try raising the p-value cutoff, increasing top edges, or clearing network filters.")
-        else:
-            fig_pos = plot_connectome_graph(
-                edges_df=edges_df,
-                atlas=atlas,
-                tail="positive",
-                alpha=alpha,
-                top_n=top_n,
-                display_mode=display_mode,
-                color_by=color_by,
-                weight_by=weight_by,
-                rank_by=rank_by,
-                selected_networks=selected_networks,
-                network_filter_mode=network_filter_mode,
-                title=direction_labels["positive_title"]
-            )
-            st.pyplot(fig_pos, width="stretch")
-            _download_figure_button(fig_pos, f"Download {direction_labels['positive']} graph PNG", f"{safe_filename_part(direction_labels['positive'])}_connectome_{safe_filename_part(method_name)}.png", f"{method_name}_pos_graph_download")
-            plt.close(fig_pos)
-
-    with col_neg:
-        st.markdown(f"**{direction_labels['negative']}: {len(neg_edges)} edges**")
-        if neg_edges.empty:
-            st.info(f"No edges for {direction_labels['negative']} pass the current graph filters.")
-            st.caption("💡 **Tip:** Try raising the p-value cutoff, increasing top edges, or clearing network filters.")
-        else:
-            fig_neg = plot_connectome_graph(
-                edges_df=edges_df,
-                atlas=atlas,
-                tail="negative",
-                alpha=alpha,
-                top_n=top_n,
-                display_mode=display_mode,
-                color_by=color_by,
-                weight_by=weight_by,
-                rank_by=rank_by,
-                selected_networks=selected_networks,
-                network_filter_mode=network_filter_mode,
-                title=direction_labels["negative_title"]
-            )
-            st.pyplot(fig_neg, width="stretch")
-            _download_figure_button(fig_neg, f"Download {direction_labels['negative']} graph PNG", f"{safe_filename_part(direction_labels['negative'])}_connectome_{safe_filename_part(method_name)}.png", f"{method_name}_neg_graph_download")
-            plt.close(fig_neg)
+    fig = plot_connectome_graph(
+        edges_df=edges_df, atlas=atlas, tail=tail, alpha=alpha, top_n=top_n,
+        display_mode=display_mode, color_by=color_by, weight_by=weight_by,
+        rank_by=rank_by, selected_networks=selected_networks,
+        network_filter_mode=network_filter_mode, title=direction_labels[f"{tail}_title"],
+    )
+    st.pyplot(fig, width="stretch")
+    _download_figure_button(fig, f"Download {direction_labels[tail]} graph PNG", f"{safe_filename_part(direction_labels[tail])}_connectome_{safe_filename_part(method_name)}.png", f"{method_name}_{tail}_graph_download")
+    plt.close(fig)
 
 def _render_table_and_download(edges_df, contrast_name, file_suffix):
     """Render the edge table with a CSV download button."""
@@ -373,8 +377,8 @@ def render_inference_results_view(base_atlas):
     if is_stale:
         st.warning("⚠️ **Stale Results Detected:** The dataset configuration, parcellation, or preprocessing settings have changed in Tab 1 since these inference results were generated. Please re-run the inference in Tab 2 to obtain up-to-date results.")
         
-    if st.session_state.inference_result is None:
-        st.warning("Please configure and run inference in Tab 2 first.")
+    if not require_analysis_step(key="results"):
+        return
     else:
         # Determine if companion result is available
         companion_res_wrapper = st.session_state.get("companion_inference_result")
@@ -390,7 +394,8 @@ def render_inference_results_view(base_atlas):
             view_mode = st.radio(
                 "Select Result View Mode:",
                 [f"Primary Run ({primary_method})", f"Sensitivity Companion ({companion_method})", "Side-by-Side Comparison"],
-                horizontal=True
+                horizontal=True,
+                key=persistent_key('results:select_result_view_mode', scope='results', options=[f'Primary Run ({primary_method})', f'Sensitivity Companion ({companion_method})', 'Side-by-Side Comparison']),
             )
             st.write("")
             
@@ -403,7 +408,7 @@ def render_inference_results_view(base_atlas):
                 _render_summary_metrics(res, edges_df, primary_method, direction_labels)
                 _render_ground_truth_metrics(edges_df, effect_mask, primary_method)
                 _render_heatmaps(res, base_atlas, primary_method)
-                _render_brain_connectome_graphs(edges_df, base_atlas, primary_method, direction_labels)
+                _render_brain_connectome_graphs(edges_df, base_atlas, primary_method, direction_labels, res)
                 _render_table_and_download(edges_df, contrast_name, primary_method)
                 
             elif view_mode == f"Sensitivity Companion ({companion_method})":
@@ -414,7 +419,7 @@ def render_inference_results_view(base_atlas):
                 _render_summary_metrics(res, edges_df, companion_method, direction_labels)
                 _render_ground_truth_metrics(edges_df, effect_mask, companion_method)
                 _render_heatmaps(res, base_atlas, companion_method)
-                _render_brain_connectome_graphs(edges_df, base_atlas, companion_method, direction_labels)
+                _render_brain_connectome_graphs(edges_df, base_atlas, companion_method, direction_labels, res)
                 _render_table_and_download(edges_df, contrast_name, companion_method)
                 
             else: # Side-by-Side
@@ -441,5 +446,5 @@ def render_inference_results_view(base_atlas):
             _render_summary_metrics(res, edges_df, primary_method, direction_labels)
             _render_ground_truth_metrics(edges_df, effect_mask, primary_method)
             _render_heatmaps(res, base_atlas, primary_method)
-            _render_brain_connectome_graphs(edges_df, base_atlas, primary_method, direction_labels)
+            _render_brain_connectome_graphs(edges_df, base_atlas, primary_method, direction_labels, res)
             _render_table_and_download(edges_df, contrast_name, primary_method)

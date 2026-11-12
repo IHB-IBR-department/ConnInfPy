@@ -4,6 +4,8 @@ from io import BytesIO
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
+from apps.utils.ui_state import persistent_key
+from apps.utils.workspace import require_analysis_step, render_data_table
 
 from apps.utils.helpers import (
     active_analysis_atlas,
@@ -45,10 +47,9 @@ def render_bna_annotation_view(base_atlas):
     if result_is_stale():
         st.error("The dataset configuration has changed. Re-run inference in Tab 2 before annotating.")
         return
-    result = st.session_state.get("inference_result")
-    if result is None:
-        st.warning("Run inference first (Tab 2).")
+    if not require_analysis_step(key="annotation"):
         return
+    result = st.session_state.inference_result
     atlas = active_analysis_atlas(base_atlas)
     n_nodes = len(result["positive"])
     if atlas is None or not atlas_has_coords(atlas) or len(atlas) != n_nodes:
@@ -60,28 +61,38 @@ def render_bna_annotation_view(base_atlas):
 
     has_image = getattr(atlas, "image", None) is not None and getattr(atlas, "label_ids", None) is not None
     supports = (["parcel"] if has_image else []) + ["sphere", "point"]
-    with st.form("bna_annotation_form"):
+    saved = st.session_state.get("annotation") or {}
+    saved_support = saved.get("support", supports[0])
+    summary_slot = st.container()
+    settings_panel = st.expander("Annotation settings", expanded=not bool(st.session_state.get("annotation")))
+    with settings_panel, st.form("bna_annotation_form"):
         support = st.radio(
-            "What produced each ROI's signal?", supports, horizontal=True,
+            "ROI signal source", supports, horizontal=True,
+            index=supports.index(saved_support) if saved_support in supports else 0,
+            format_func={"parcel": "Atlas parcels", "sphere": "Spheres around ROI centres", "point": "ROI centre coordinates"}.get,
             help="parcel: the label image the signals were extracted with; sphere: a sphere around each "
                  "coordinate; point: the coordinate alone (flagged as a point estimate).",
+            key=persistent_key('annotation:what_produced_each_roi_s_signal', scope='annotation', options=supports),
         )
         c1, c2, c3 = st.columns(3)
-        radius = c1.number_input("Sphere radius (mm)", 2.0, 20.0, 6.0, 0.5)
-        purity = c2.slider("Purity for a label", 0.3, 0.9, 0.5, 0.05,
+        radius = c1.number_input("Sphere radius (mm)", 2.0, 20.0, saved.get("radius", 6.0), 0.5, help="Used only for spheres around ROI centres.", key=persistent_key('annotation:sphere_radius_mm', scope='annotation'))
+        purity = c2.slider("Minimum label purity", 0.3, 0.9, saved.get("purity", 0.5), 0.05,
                            help="A level (subregion, gyrus, lobe) is assigned when it holds this share of "
-                                "the ROI's labelled tissue; otherwise the ROI is 'mixed'.")
-        alpha = c3.number_input("Alpha", 0.001, 0.2, 0.05, 0.005, format="%.3f")
+                                "the ROI's labelled tissue; otherwise the ROI is 'mixed'.", key=persistent_key('annotation:purity_for_a_label', scope='annotation'))
+        alpha = c3.number_input("Detection threshold (α)", 0.001, 0.2, saved.get("alpha", 0.05), 0.005, format="%.3f", help="Select detections using the corrected p-values already computed by inference. This does not change the correction.", key=persistent_key('annotation:alpha', scope='annotation'))
         space = st.selectbox(
             "Template the signals were extracted in", list(_SPACES), format_func=_SPACES.get,
+            index=list(_SPACES).index(saved.get("space", "MNI152")),
             help="FSL MNI152 is the atlas's own grid (exact); other MNI variants differ by about 1-3 mm and "
                  "every ROI is flagged approximate. Ignored for Brainnetome regions.",
+            key=persistent_key('annotation:template_the_signals_were_extracted_in', scope='annotation', options=list(_SPACES)),
         )
         c4, c5 = st.columns(2)
-        level = c4.selectbox("Summary level", ["lobe", "gyrus", "subregion", "network"])
+        levels = ["lobe", "gyrus", "subregion", "network"]
+        level = c4.selectbox("Summary level", levels, index=levels.index(saved.get("level", "lobe")), format_func=str.capitalize, key=persistent_key('annotation:summary_level', scope='annotation'))
         param_idx = None
         if getattr(result, "is_grid", False):
-            param_idx = int(c5.number_input("(E, H) cell", 0, len(result.e_grid) - 1, 0))
+            param_idx = int(c5.number_input("(E, H) cell", 0, len(result.e_grid) - 1, saved.get("param_idx") or 0, key=persistent_key('annotation:e_h_cell', scope='annotation')))
         submitted = st.form_submit_button("Annotate", type="primary")
 
     if submitted:
@@ -111,24 +122,37 @@ def render_bna_annotation_view(base_atlas):
             )
         st.session_state.annotation = {"rois": rois, "summary": summary, "detected": detected,
                                        "support": support, "level": level, "alpha": alpha,
+                                       "radius": radius, "purity": purity, "space": space,
                                        "param_idx": param_idx}
         st.session_state.evidence_packet = evidence if evidence["rois"] else None
-        st.session_state.narrative_text = None
-        st.session_state.narrative_results = None
+        st.rerun()
 
     ann = st.session_state.get("annotation")
     if not ann:
         return
     rois, summary, detected = ann["rois"], ann["summary"], ann["detected"]
     meta = summary["meta"]
-    st.caption(
-        f"Inference unit: **{meta['inference_unit']}**. Descriptive annotation: the p-values and their "
-        "correction are unchanged, and no enrichment test is made."
-    )
-    if st.session_state.evidence_packet is not None:
-        st.info(describe_coverage(st.session_state.evidence_packet)["report_sentence"])
-    else:
-        st.warning("No detected connections at this alpha.")
+    with summary_slot:
+        endpoint_rois = set(detected.get("i_roi", [])) | set(detected.get("j_roi", []))
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Detected connections", len(detected))
+        c2.metric("Endpoint ROIs", len(endpoint_rois))
+        c3.metric("Detection threshold", f"{ann['alpha']:.3f}")
+        st.caption(
+            f"Inference unit: **{meta['inference_unit']}**. Descriptive annotation; corrected p-values "
+            "are unchanged. No enrichment test is performed."
+        )
+        if st.session_state.evidence_packet is not None:
+            st.info(describe_coverage(st.session_state.evidence_packet)["report_sentence"])
+        elif detected.empty:
+            st.info("No detected connections at this threshold. The analysis is complete.")
+        else:
+            st.info("The detected connections have no usable annotation evidence. Review ROI coverage and atlas metadata.")
+        exports = st.columns(2)
+        exports[0].download_button("Connections · CSV", detected.to_csv(index=False),
+                                   file_name=f"bna_connections_{safe_filename_part(current_contrast_name())}.csv", mime="text/csv")
+        exports[1].download_button("ROI annotation · CSV", rois.table.to_csv(index=False),
+                                   file_name=f"bna_rois_{safe_filename_part(current_contrast_name())}.csv", mime="text/csv")
 
     tab_c, tab_r, tab_rel, tab_dom, tab_qc = st.tabs(
         ["Detected connections", "ROIs", "Relations", "BrainMap domains", "Distance QC"])
@@ -136,37 +160,38 @@ def render_bna_annotation_view(base_atlas):
         cols = ["i_roi", "j_roi", "i_bna", "j_bna", "t_signed", "p_positive", "p_negative",
                 "hemispheric_relation", "anatomical_relation", "circuit", "distance_mm",
                 "shared_support", "sc", "network_relation", "shared_domains"]
-        st.dataframe(detected[[c for c in cols if c in detected.columns]], width="stretch", hide_index=True)
-        st.download_button("Download annotated connections (CSV)", detected.to_csv(index=False),
-                           file_name=f"bna_connections_{safe_filename_part(current_contrast_name())}.csv")
+        render_data_table(detected[[c for c in cols if c in detected.columns]], width="stretch", hide_index=True)
     with tab_r:
-        st.dataframe(rois.table, width="stretch", hide_index=True)
-        st.download_button("Download ROI annotation (CSV)", rois.table.to_csv(index=False),
-                           file_name=f"bna_rois_{safe_filename_part(current_contrast_name())}.csv")
+        render_data_table(rois.table, width="stretch", hide_index=True)
     with tab_rel:
         st.markdown("Detections next to the tested opportunities (shares of each).")
-        st.dataframe(summary["relations"], width="stretch", hide_index=True)
+        render_data_table(summary["relations"], width="stretch", hide_index=True)
         st.markdown(f"**Groups at the {ann['level']} level** (ROIs not pure at that level are 'mixed').")
-        st.dataframe(summary["regions"], width="stretch", hide_index=True)
+        render_data_table(summary["regions"], width="stretch", hide_index=True)
     with tab_dom:
         st.markdown("Unique ROIs per BrainMap domain (forward-inference literature context; "
                     "memberships overlap).")
-        st.dataframe(summary["domains"], width="stretch", hide_index=True)
+        render_data_table(summary["domains"], width="stretch", hide_index=True)
         if st.session_state.evidence_packet is not None:
             terms = pd.DataFrame(summarize_terms(st.session_state.evidence_packet)["terms"])
             if not terms.empty:
-                st.dataframe(terms, width="stretch", hide_index=True)
+                render_data_table(terms, width="stretch", hide_index=True)
     with tab_qc:
         st.markdown("A contrast that covaries with head motion often shows short-range increases and "
                     "long-range decreases; overlapping spheres share voxels.")
-        st.dataframe(summary["distance_qc"], width="stretch", hide_index=True)
+        render_data_table(summary["distance_qc"], width="stretch", hide_index=True)
 
     st.markdown("#### Connectogram")
     cc1, cc2, cc3 = st.columns(3)
-    tail = cc1.selectbox("Tail", ["positive", "negative"], key="bna_connectogram_tail",
-                         help="Draw one connectogram per tail; both tails at the same alpha are two figures.")
-    conn_level = cc2.selectbox("Level", ["gyrus", "subregion", "lobe"], key="bna_connectogram_level")
-    assign = cc3.selectbox("Assignment", ["dominant", "weighted"], key="bna_connectogram_assign",
+    tested_tail = getattr(getattr(result, "inference", result), "tested_tail", None)
+    tail_options = [tested_tail] if tested_tail else ["positive", "negative"]
+    if st.session_state.get("bna_connectogram_tail") not in (None, *tail_options):
+        st.session_state.pop("bna_connectogram_tail")   # left over from an earlier run
+    tail = cc1.selectbox("Tail", tail_options, key=persistent_key("bna_connectogram_tail", scope='annotation', options=tail_options),
+                         help="Draw one connectogram per tail; both tails at the same alpha are two figures. "
+                              "After a one-sided test only the tested direction is available.")
+    conn_level = cc2.selectbox("Level", ["gyrus", "subregion", "lobe"], key=persistent_key("bna_connectogram_level", scope='annotation'))
+    assign = cc3.selectbox("Assignment", ["dominant", "weighted"], key=persistent_key("bna_connectogram_assign", scope='annotation'),
                            help="dominant: each ROI sits in the unit holding most of it (whole chords); "
                                 "weighted: spread over the units it covers (fractional chords).")
     conn_alpha = ann.get("alpha", 0.05)

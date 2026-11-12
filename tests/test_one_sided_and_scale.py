@@ -4,8 +4,16 @@
   ``two_tailed=False`` run and reports the other direction as not tested.
 * ``analyze(..., r_to_z=False)`` analyses correlations as given and records
   ``design['scale'] = 'correlation'``; the default still applies Fisher z.
+* The Streamlit worker runs on the loaded scale (no silent r -> z) and passes
+  the chosen direction to both the primary and the companion run.
 """
 from __future__ import annotations
+
+import ast
+import inspect
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -79,3 +87,72 @@ def test_r_to_z_false_analyses_correlations_as_given():
                                rng=1, use_mp=False, two_tailed=False)
     np.testing.assert_allclose(raw.stat_signed, direct.stat_signed, atol=1e-12)
     assert not np.allclose(raw.stat_signed, fz.stat_signed)
+
+
+def _app_worker():
+    """The Streamlit worker, loaded without importing the UI."""
+    source = Path(__file__).resolve().parents[1] / "apps/components/design_inference.py"
+    tree = ast.parse(source.read_text())
+    names = {"_run_inference_background", "_method_plan_parameters"}
+    module = ast.Module(body=[n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names],
+                        type_ignores=[])
+    namespace = {}
+    exec(compile(module, str(source), "exec"), namespace)
+    return namespace["_run_inference_background"]
+
+
+@pytest.mark.parametrize("tested_tail", [None, "positive", "negative"])
+def test_app_worker_runs_on_loaded_scale_with_chosen_direction(tested_tail):
+    worker = _app_worker()
+    args = {name: None for name in inspect.signature(worker).parameters}
+    task = SimpleNamespace()
+    restricted = []
+
+    def one_sided(direction):
+        restricted.append(direction)
+        return fake
+
+    fake = SimpleNamespace(significant_edges=lambda **kw: [], one_sided=one_sided)
+    args.update(task=task, data_kind="correlation", test_type="glm", operator_choice="nbs",
+                op_kwargs={"threshold": 3.1}, run_sensitivity=True, comp_method="tstat",
+                comp_kwargs={}, acceleration_choice="none", tested_tail=tested_tail)
+    with patch("conninfpy.analyze", return_value=fake) as run:
+        worker(**args)
+    assert task.status == "success", getattr(task, "error", None)
+    calls = run.call_args_list
+    assert len(calls) == 2
+    assert all(c.kwargs["input"] == "r" and c.kwargs["r_to_z"] is False for c in calls)
+    assert all(c.kwargs["two_tailed"] is (tested_tail is None) for c in calls)
+    assert restricted == ([] if tested_tail is None else [tested_tail, tested_tail])
+    assert task.run_plan["analysis_scale"] == "correlation"
+    assert task.run_plan["tested_tail"] == tested_tail
+    assert task.run_plan["tail_policy"] == (
+        "two-sided" if tested_tail is None else f"one-sided-{tested_tail}"
+    )
+    # GLM run: no variance choice is passed (the GLM t is pooled).
+    assert all("var_equal" not in c.kwargs for c in calls)
+    assert task.run_plan["t_statistic"] == "glm"
+
+
+@pytest.mark.parametrize("test_type,var_equal,expected", [
+    ("two-sample", True, "student"),
+    ("two-sample", False, "welch"),
+    ("paired", None, None),
+])
+def test_app_worker_passes_the_variance_choice_to_the_two_sample_test(test_type, var_equal, expected):
+    worker = _app_worker()
+    args = {name: None for name in inspect.signature(worker).parameters}
+    task = SimpleNamespace()
+    fake = SimpleNamespace(significant_edges=lambda **kw: [])
+    args.update(task=task, data_kind="fisher_z", test_type=test_type, operator_choice="tstat",
+                op_kwargs={}, run_sensitivity=True, comp_method="tstat", comp_kwargs={},
+                acceleration_choice="none", var_equal=var_equal)
+    with patch("conninfpy.analyze", return_value=fake) as run:
+        worker(**args)
+    assert task.status == "success", getattr(task, "error", None)
+    for call in run.call_args_list:
+        if expected is None:
+            assert "var_equal" not in call.kwargs
+        else:
+            assert call.kwargs["var_equal"] is var_equal
+    assert task.run_plan["t_statistic"] == expected
