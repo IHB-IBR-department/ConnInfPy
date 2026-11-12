@@ -100,6 +100,20 @@ class AnalyzeResult:
         """
         return self.inference.network_summary(atlas, **kwargs)
 
+    @property
+    def component_report(self) -> Optional[Dict[str, Any]]:
+        """The underlying result's NBS component report (``None`` for other
+        methods); see :attr:`~conninfpy.InferenceResult.component_report`.
+        """
+        return getattr(self.inference, "component_report", None)
+
+    def component_table(self, *args: Any, **kwargs: Any) -> "Any":
+        """Delegate to the underlying inference result's
+        :meth:`~conninfpy.InferenceResult.component_table`: the observed NBS
+        components with their FWER p-values.
+        """
+        return self.inference.component_table(*args, **kwargs)
+
     def to_csv(self, path: "Any", **kwargs: Any) -> None:
         """Delegate to the underlying inference result's
         :meth:`~conninfpy.InferenceResult.to_csv`.

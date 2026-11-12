@@ -8,5 +8,5 @@ Result types returned by every inference pipeline:
 
 .. automodule:: conninfpy.results
    :members:
-   :exclude-members: method, n_permutations, acceleration, wall_time_s, null_max_dist, stat_type, harmonized, preserve_provided, strata_provided, combat_diagnostics
+   :exclude-members: method, n_permutations, acceleration, wall_time_s, null_max_dist, stat_type, harmonized, preserve_provided, strata_provided, combat_diagnostics, component_report
    :show-inheritance:

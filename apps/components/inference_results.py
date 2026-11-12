@@ -9,6 +9,7 @@ from io import BytesIO
 from conninfpy.plot import plot_connectome_graph
 from apps.utils.helpers import (
     active_analysis_atlas,
+    atlas_for_annotation,
     atlas_has_coords,
     atlas_has_networks,
     current_contrast_name,
@@ -273,6 +274,61 @@ def _render_table_and_download(edges_df, contrast_name, file_suffix):
         mime="text/csv"
     )
 
+def _components_for_display(table, direction_labels):
+    """The component table with reader-facing headers and one-line cells."""
+    out = pd.DataFrame({
+        "Direction": table["tail"].map(lambda tail: direction_labels.get(tail, tail)),
+        "Component": table["component_id"],
+        "Edges": table["n_edges"],
+        "ROIs": table["n_nodes"],
+        f"Statistic ({table.attrs['statistic_type']})": table["statistic"],
+        "p (FWER)": table["p_fwer"],
+        "Significant": table["significant"],
+    })
+    if "roi_names" in table:
+        out["ROI names"] = table["roi_names"].map("; ".join)
+    else:
+        out["ROI indices"] = table["nodes"].map(lambda nodes: ", ".join(str(n) for n in nodes))
+    if "networks" in table:
+        out["Networks (ROIs)"] = table["networks"].map("; ".join)
+        out["Network pairs (edges)"] = table["network_pairs"].map("; ".join)
+    return out
+
+
+def _render_components_table(res, base_atlas, method_name, contrast_name, direction_labels, slot):
+    """NBS only: the observed components with their FWER p-values and a CSV download."""
+    report = getattr(res, "component_report", None)
+    if report is None:
+        return
+    st.markdown(f"##### 🧩 NBS Components ({method_name})")
+    alpha = (st.session_state.get("run_plan") or {}).get("alpha", 0.05)
+    n_nodes = next(iter(report["labels"].values())).shape[0]
+    atlas = atlas_for_annotation(_active_atlas(base_atlas), n_nodes, warn=False)
+    table = res.component_table(atlas=atlas, alpha=alpha)
+    threshold = report["threshold"]
+    if table.empty:
+        st.info(f"No edge exceeds the NBS threshold ({threshold:g}), so there is no component to test.")
+        return
+    shown = _components_for_display(table, direction_labels)
+    n_sig = int(table["significant"].sum())
+    st.caption(
+        f"A component is a connected set of edges above the threshold ({threshold:g}). Its p-value is "
+        f"FWER-corrected: it comes from the permutation distribution of the largest component statistic "
+        f"({report['stat_type']}: " + ("number of edges" if report["stat_type"] == "extent"
+                                       else "sum of statistic minus threshold") + "); every edge of a component "
+        f"has that p-value. All observed components are listed; {n_sig} of {len(table)} have p ≤ {alpha:g}. "
+        "The Component column is the component_id of the edge table below."
+    )
+    st.dataframe(shown, width="stretch", hide_index=True)
+    st.download_button(
+        f"Download {method_name} Components CSV",
+        data=shown.to_csv(index=False).encode("utf-8"),
+        file_name=f"nbs_components_{safe_filename_part(contrast_name)}_{method_name}.csv",
+        mime="text/csv",
+        key=f"components_download_{slot}",
+    )
+
+
 def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, primary_name, comp_name, base_atlas, effect_mask, direction_labels):
     """Render the side-by-side two-method comparison view."""
     st.markdown("#### 🔄 Side-by-Side Comparison")
@@ -409,6 +465,7 @@ def render_inference_results_view(base_atlas):
                 _render_ground_truth_metrics(edges_df, effect_mask, primary_method)
                 _render_heatmaps(res, base_atlas, primary_method)
                 _render_brain_connectome_graphs(edges_df, base_atlas, primary_method, direction_labels, res)
+                _render_components_table(res, base_atlas, primary_method, contrast_name, direction_labels, 'primary')
                 _render_table_and_download(edges_df, contrast_name, primary_method)
                 
             elif view_mode == f"Sensitivity Companion ({companion_method})":
@@ -420,6 +477,7 @@ def render_inference_results_view(base_atlas):
                 _render_ground_truth_metrics(edges_df, effect_mask, companion_method)
                 _render_heatmaps(res, base_atlas, companion_method)
                 _render_brain_connectome_graphs(edges_df, base_atlas, companion_method, direction_labels, res)
+                _render_components_table(res, base_atlas, companion_method, contrast_name, direction_labels, 'companion')
                 _render_table_and_download(edges_df, contrast_name, companion_method)
                 
             else: # Side-by-Side
@@ -433,8 +491,10 @@ def render_inference_results_view(base_atlas):
                 # Show tables in tabs
                 tab_p, tab_c = st.tabs([f"Primary Edges ({primary_method})", f"Companion Edges ({companion_method})"])
                 with tab_p:
+                    _render_components_table(primary_res, base_atlas, primary_method, contrast_name, direction_labels, 'primary')
                     _render_table_and_download(primary_edges, contrast_name, primary_method)
                 with tab_c:
+                    _render_components_table(comp_res, base_atlas, companion_method, contrast_name, direction_labels, 'companion')
                     _render_table_and_download(comp_edges, contrast_name, companion_method)
         else:
             # Traditional single run view
@@ -447,4 +507,5 @@ def render_inference_results_view(base_atlas):
             _render_ground_truth_metrics(edges_df, effect_mask, primary_method)
             _render_heatmaps(res, base_atlas, primary_method)
             _render_brain_connectome_graphs(edges_df, base_atlas, primary_method, direction_labels, res)
+            _render_components_table(res, base_atlas, primary_method, contrast_name, direction_labels, 'primary')
             _render_table_and_download(edges_df, contrast_name, primary_method)

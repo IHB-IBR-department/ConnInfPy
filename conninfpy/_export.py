@@ -118,6 +118,8 @@ def _column_order_tailed(with_atlas: bool) -> list:
             "p_negative",
             "p_min",
             "tail",
+            "component_tail",
+            "component_id",
             "hemisphere_i",
             "hemisphere_j",
         ]
@@ -131,6 +133,8 @@ def _column_order_tailed(with_atlas: bool) -> list:
             "p_negative",
             "p_min",
             "tail",
+            "component_tail",
+            "component_id",
         ]
     return cols
 
@@ -149,10 +153,11 @@ def _column_order_omnibus(with_atlas: bool) -> list:
             "network_pair",
             "F",
             "p_omnibus",
+            "component_id",
             "hemisphere_i",
             "hemisphere_j",
         ]
-    return ["edge_id", "roi_i", "roi_j", "F", "p_omnibus"]
+    return ["edge_id", "roi_i", "roi_j", "F", "p_omnibus", "component_id"]
 
 
 def build_tailed_dataframe(
@@ -166,8 +171,14 @@ def build_tailed_dataframe(
     sort: str = "p",
     include_nonsig: bool = False,
     top_k: Optional[int] = None,
+    component_labels: Optional[dict] = None,
 ) -> pd.DataFrame:
-    """Build the significant-edges table for a t / β inference result."""
+    """Build the significant-edges table for a t / β inference result.
+
+    ``component_labels`` (tail -> (N, N) int array of component numbers, from
+    an NBS result's ``component_report``) adds the ``component_tail`` and
+    ``component_id`` columns.
+    """
     if tail not in _VALID_TAILS:
         raise ValueError(
             f"tail must be one of {_VALID_TAILS}; got {tail!r}."
@@ -229,6 +240,12 @@ def build_tailed_dataframe(
             "tail": tail_label_full[keep],
         }
     )
+    if component_labels is not None:
+        from conninfpy.stats._components import component_edge_columns
+
+        columns = component_edge_columns(component_labels, iu, ju)
+        df["component_tail"] = columns["component_tail"][keep]
+        df["component_id"] = columns["component_id"][keep]
 
     with_atlas = atlas is not None
     if atlas is not None:
@@ -252,8 +269,13 @@ def build_omnibus_dataframe(
     sort: str = "p",
     include_nonsig: bool = False,
     top_k: Optional[int] = None,
+    component_labels: Optional[npt.NDArray[np.int32]] = None,
 ) -> pd.DataFrame:
-    """Build the significant-edges table for an F-stat omnibus result."""
+    """Build the significant-edges table for an F-stat omnibus result.
+
+    ``component_labels`` ((N, N) int array of component numbers, from an NBS
+    result's ``component_report``) adds the ``component_id`` column.
+    """
     if sort not in _VALID_SORTS:
         raise ValueError(
             f"sort must be one of {_VALID_SORTS}; got {sort!r}."
@@ -289,6 +311,12 @@ def build_omnibus_dataframe(
             "p_omnibus": p_v[keep],
         }
     )
+    if component_labels is not None:
+        from conninfpy.stats._components import component_edge_columns
+
+        df["component_id"] = component_edge_columns(
+            {"omnibus": component_labels}, iu, ju
+        )["component_id"][keep]
 
     with_atlas = atlas is not None
     if atlas is not None:

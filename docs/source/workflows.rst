@@ -499,6 +499,14 @@ Every result is dict-like and carries metadata and exporters:
    df = out.significant_edges(atlas, sort='network_pair', top_k=50)
    out.to_csv('edges.csv', atlas=atlas)
 
+   # NBS (method='nbs'): the inference unit is the component, not the edge.
+   # One row per observed component of each tail, with its FWER p-value;
+   # `component_id` also labels the rows of significant_edges() and the CSV.
+   comps = out.component_table(atlas)     # tail, component_id, n_edges, n_nodes,
+                                          # statistic, p_fwer, significant, ROI names,
+                                          # networks, network_pairs
+   out.component_report["threshold"]      # the dict behind the table (None for other methods)
+
    # One-call publication figure
    from conninfpy.plot import summary_figure
    fig = summary_figure(out.inference, atlas=atlas, alpha=0.05, top_k=10)
