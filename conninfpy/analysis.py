@@ -314,6 +314,7 @@ def analyze(
     group2: Optional[npt.NDArray[np.float64]] = None,
     confounds_group1: Optional[npt.NDArray[np.float64]] = None,
     confounds_group2: Optional[npt.NDArray[np.float64]] = None,
+    interactions: Optional[Sequence[tuple[str, str]]] = None,
     test_type: str = "two-sample",
     sites: Optional[Sequence[Any]] = None,
     preserve: Optional[npt.NDArray[np.float64]] = None,
@@ -372,7 +373,9 @@ def analyze(
         Nuisance regressors for the GLM pipeline.
     group1, group2 : ndarray, optional
         Two-sample inputs of shape ``(n_i, N, N)``. Triggers the t-test
-        pipeline. Mutually exclusive with ``interest``. For
+        pipeline. With ``interest`` and ``test_type='paired'`` they instead
+        form the subject-level GLM response B minus A after transforming each
+        condition separately to Fisher z. For
         ``test_type='paired'`` they are the two within-subject
         conditions and must be row-aligned (``group1[s]`` and
         ``group2[s]`` are the same subject).
@@ -381,12 +384,20 @@ def analyze(
         path, shape ``(n_subjects,)`` or ``(n_subjects, k)``, aligned to
         ``group1`` / ``group2`` respectively. Only valid with
         ``test_type='paired'``; pass both or neither. When given, the
-        paired difference ``group1 - group2`` is tested while the
+        paired difference ``group2 - group1`` is tested while the
         per-subject confound difference is partialled out
         (Freedman–Lane on the differences, via
         :func:`~conninfpy.compute_p_val_paired_glm`). Use these for a
         confound whose value differs between conditions for the same
         subject (e.g. condition-level motion, arousal, reaction time).
+        With paired ``interest``, ``confounds`` instead specifies subject-level
+        covariates; both kinds can be supplied and only the condition-specific
+        covariates are differenced (B minus A).
+    interactions : sequence of pairs of names, optional
+        Requires named numeric ``interest`` predictors. Center all named
+        predictors by their sample means and add a product column per pair,
+        named ``a:b``. Each named effect is tested with all other columns,
+        including the main effects, as nuisance. Encode categories explicitly.
         Subject-constant nuisances (and additive site effects) cancel in
         the difference and do not need to be supplied. With no
         condition-varying confounds the paired path stays on the
@@ -535,6 +546,74 @@ def analyze(
     flags: list = []
     combat_diag: Optional[Dict[str, Any]] = None
 
+    # A repeated-measures regression has one observation per subject.  Do
+    # the nonlinear transform before subtraction, never on the difference.
+    paired_interest = interest is not None and (group1 is not None or group2 is not None)
+    derived_scale = None
+    derived_transform = None
+    paired_details = None
+    centered_means = None
+    if paired_interest:
+        if Y is not None or group1 is None or group2 is None or test_type != "paired":
+            raise ValueError("paired interest requires group1 and group2, test_type='paired', and no Y")
+        a, b = np.asarray(group1), np.asarray(group2)
+        if a.ndim != 3 or a.shape != b.shape:
+            raise ValueError("paired conditions must have identical (subjects, regions, regions) shapes and subject order")
+        original_kind = _resolve_input_kind(input, fisher_z, [a, b])
+        if original_kind == "r" and not r_to_z:
+            raise ValueError("paired interest with correlations requires Fisher transformation; r_to_z=False is not supported")
+        if harmonize not in (None, "auto"):
+            raise ValueError("paired interest supports harmonize=None or 'auto'; harmonization of condition differences is not automatic")
+        if (confounds_group1 is None) != (confounds_group2 is None):
+            raise ValueError("supply both condition-specific confounds or neither")
+        n_subject_confounds = 0 if confounds is None else _as_2d(confounds).shape[1]
+        n_condition_confounds = 0
+        if confounds_group1 is not None:
+            ca, cb = _as_2d(confounds_group1), _as_2d(confounds_group2)
+            if ca.shape != cb.shape or ca.shape[0] != a.shape[0]:
+                raise ValueError("condition-specific confounds must align with paired subjects and have equal shapes")
+            delta_c = cb.astype(float) - ca.astype(float)
+            n_condition_confounds = delta_c.shape[1]
+            confounds = delta_c if confounds is None else np.column_stack((_as_2d(confounds), delta_c))
+        paired_details = {"input": original_kind, "orientation": "B - A",
+                          "subject_confound_columns": n_subject_confounds,
+                          "condition_confound_columns": n_condition_confounds,
+                          "condition_confound_transform": "B - A"}
+        allow_missing_pair = missing == "available_case"
+        Y = (prepare_connectivity(b, original_kind, "group2", allow_missing=allow_missing_pair)
+             - prepare_connectivity(a, original_kind, "group1", allow_missing=allow_missing_pair))
+        derived_scale = "difference_fisher_z"
+        derived_transform = "Fisher r-to-z separately for each condition, then B minus A" if original_kind == "r" else "B minus A of Fisher z conditions"
+        group1 = group2 = confounds_group1 = confounds_group2 = None
+        input, fisher_z = "z", None
+
+    if interactions is not None:
+        if not isinstance(interest, dict) or not interest:
+            raise ValueError("interactions require a nonempty named interest dictionary of numeric predictors")
+        centered = {}
+        centered_means = {}
+        for name, values in interest.items():
+            if not isinstance(name, str) or not name or ':' in name:
+                raise ValueError("interaction predictor names must be nonempty strings without ':'")
+            try:
+                v = np.asarray(values, dtype=float)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"interaction predictor {name!r} must be numeric; encode categories explicitly") from exc
+            if v.ndim != 1 or not np.isfinite(v).all():
+                raise ValueError(f"interaction predictor {name!r} must be a finite 1D numeric vector")
+            centered_means[name] = float(v.mean())
+            centered[name] = v - centered_means[name]
+        for pair in interactions:
+            if not isinstance(pair, (tuple, list)) or len(pair) != 2 or pair[0] == pair[1] or any(x not in centered_means for x in pair):
+                raise ValueError("each interaction must name two distinct interest predictors")
+            name = f"{pair[0]}:{pair[1]}"
+            if name in centered or f"{pair[1]}:{pair[0]}" in centered:
+                raise ValueError(f"duplicate interaction {name!r}")
+            if centered[pair[0]].shape != centered[pair[1]].shape:
+                raise ValueError("interaction predictors must have the same length")
+            centered[name] = centered[pair[0]] * centered[pair[1]]
+        interest = centered
+
     glm_mode = interest is not None
     multi_mode = glm_mode and isinstance(interest, dict)
     ttest_mode = group1 is not None or group2 is not None
@@ -633,6 +712,12 @@ def analyze(
         sites_provided=sites is not None,
         confounds_provided=confounds is not None,
     )
+    if paired_interest:
+        # Site labels still constrain subject permutations, but subject-constant
+        # additive site effects cancel in the condition difference.
+        strategy = None
+        if sites is not None:
+            flags.append("paired differences: ComBat skipped; sites stratify subject permutations")
 
     # Explicit ComBat guards (only fire for explicit requests; 'auto'
     # resolves to combat_site_dummies_glm only when these guards are satisfied).
@@ -691,6 +776,8 @@ def analyze(
     stacks = [Y] if glm_mode else [g for g in (group1, group2) if g is not None]
     kind = _resolve_input_kind(input, fisher_z, stacks)
     analysis_scale = "correlation" if (kind == "r" and not r_to_z) else "fisher_z"
+    if derived_scale:
+        analysis_scale = derived_scale
     if analysis_scale == "correlation":
         # prepare_connectivity(..., 'z') checks and zeroes the diagonal
         # without transforming: the correlations are analysed as given.
@@ -834,7 +921,12 @@ def analyze(
         for nm, res in results.items():
             if getattr(res, "design", None) is not None:
                 res.design["scale"] = analysis_scale
-                update_analysis_scale(res, analysis_scale, units)
+                if derived_transform:
+                    res.design["response_transform"] = derived_transform
+                    res.design["paired_difference"] = paired_details.copy()
+                if centered_means is not None:
+                    res.design["predictor_centering_means"] = centered_means.copy()
+                update_analysis_scale(res, analysis_scale, units or ("Fisher z difference (B - A)" if derived_scale else None))
             res.harmonized = (
                 strategy in (COMBAT_ONLY, COMBAT_SITE_DUMMIES_GLM)
                 and sites is not None
@@ -908,7 +1000,12 @@ def analyze(
     result.combat_diagnostics = combat_diag
     if getattr(result, "design", None) is not None:
         result.design["scale"] = analysis_scale
-        update_analysis_scale(result, analysis_scale, units)
+        if derived_transform:
+            result.design["response_transform"] = derived_transform
+            result.design["paired_difference"] = paired_details.copy()
+        if centered_means is not None:
+            result.design["predictor_centering_means"] = centered_means.copy()
+        update_analysis_scale(result, analysis_scale, units or ("Fisher z difference (B - A)" if derived_scale else None))
     # strata_provided was set inside compute_p_val{,_glm} from the strata=
     # argument; preserved here for clarity.
 

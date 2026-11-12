@@ -543,8 +543,9 @@ warnings, run time):
 Two-sample designs use ``group:`` and ``levels: [group1, group2]``
 (``positive`` = second level higher); paired designs use ``condition:``,
 ``levels:`` and ``subject:`` (default ``subject_id``) and pair rows by subject.
-Rows with a missing value in any column the design uses are dropped and
-counted in ``provenance.json``. ``python -m conninfpy`` is equivalent.
+For GLM and two-sample designs, rows with a missing value in any column the
+design uses are dropped and counted in ``provenance.json``. Paired designs
+reject missing design values. ``python -m conninfpy`` is equivalent.
 Built-in atlas names are ``schaefer_100_yeo7``, ``schaefer_200_yeo7``,
 ``schaefer_400_yeo7`` and ``bna_246``; ``bna_246`` labels networks with the
 Brainnetome Yeo-7 division (see :ref:`usage-interpret`).
@@ -773,3 +774,40 @@ are not functions of edges or new connectivity evidence. Atlas overlap is not
 EPI coverage. See ``examples/post_analysis_bundle.py`` for an offline example.
 ``bundle.export_summary(table, path)`` exports the selected table with a JSON
 metadata sidecar; ``bundle.plot_summary(table)`` plots that same table.
+
+Paired condition differences and interactions
+---------------------------------------------
+
+For a between-subject effect on change, supply paired arrays in identical
+subject order, ``test_type="paired"``, and ``interest``. With ``input="r"``,
+Fisher transformation is applied to each condition before forming B minus A.
+With ``input="z"``, inputs are already Fisher z. The response units are Fisher
+z difference; coefficients are native contrast estimates. ``confounds`` are
+subject-level covariates, whereas ``confounds_group1`` and
+``confounds_group2`` are matched numeric condition-specific covariates and
+enter as B minus A. Both may be supplied. The permutation unit is the subject.
+
+Named numeric predictors can include ``interactions=[("group", "age")]``.
+All named predictors are mean centered on this path; the interaction is their
+product. Each returned contrast adjusts for all other columns, including both
+main effects. Encode categorical variables numerically (e.g. 0/1) in Python;
+CLI text predictors must have exactly two levels and use the sorted first level
+as reference. Text CLI confounds are dummy coded with the first sorted level as
+reference; condition-specific categorical confounds must have the same levels
+in both conditions and use a single shared encoding.
+
+.. code-block:: yaml
+
+   design:
+     type: paired
+     subject: subject_id
+     condition: condition
+     levels: [pre, post]
+     interest: [group, age]
+     interactions: [[group, age]]
+     confounds: [motion]           # post - pre
+     subject_confounds: [sex]      # constant within subject
+
+Paired CLI rows require exactly one observation at each listed level for every
+subject, and interest, subject confounds and sites must agree across conditions.
+Missing values, duplicate pairs and extra or absent levels raise errors.
