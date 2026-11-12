@@ -1,9 +1,12 @@
 import os
 import re
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
+from apps.utils.ui_state import persistent_key, persistent_file_uploader, reset_widget_scopes
+from apps.utils.workspace import atlas_display_name, remember_dataset, render_dataset_card
 
 from conninfpy.atlas import AtlasInfo, get_bna_246_nifti_path
 from conninfpy.loaders import (
@@ -13,6 +16,7 @@ from conninfpy.loaders import (
     NiftiDirectoryLoader,
     AbideSchaeferLoader,
 )
+from conninfpy.loaders.manifest import drop_subjects_with_missing
 from apps.utils.lab_loaders import (
     ChinaCloseCloseLoader,
     MultiSiteOpenCloseLoader,
@@ -21,7 +25,6 @@ from apps.utils.lab_loaders import (
     ZerssenNiftiLoader,
 )
 from conninfpy.topologies import TopologyDatasetGenerator, list_scenarios
-from conninfpy.interpret.llm_narrative import LLMNarrator
 
 from apps.utils.helpers import (
     LOADER_CLASSES,
@@ -36,6 +39,21 @@ from apps.utils.helpers import (
     align_atlas_coordinates,
 )
 
+def _add_group_variance(values, added_percent, rng, *, time_points=30):
+    """Add a percentage of the approximate Fisher-z sampling variance per edge."""
+    if added_percent == 0.0:
+        return values
+    # For correlations from independent Gaussian time points, Var(atanh(r))
+    # is approximately 1 / (T - 3), independently of the correlation strength.
+    added_variance = (added_percent / 100.0) / (time_points - 3)
+    rows, cols = np.triu_indices(values.shape[1], k=1)
+    noise = rng.normal(0.0, np.sqrt(added_variance), size=(len(values), len(rows)))
+    result = values.copy()
+    result[:, rows, cols] += noise
+    result[:, cols, rows] += noise
+    return result
+
+
 def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
     """Render the data-ingestion step (manifest upload, preview, validation)."""
     col_t, col_h = st.columns([0.8, 0.2])
@@ -43,6 +61,8 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
         st.markdown("### Preprocessing & Data Ingestion")
     with col_h:
         render_help("data_source")
+
+    st.caption("Settings apply when you load or generate a dataset. Your active dataset and results are kept while you edit.")
 
     # Ingestion type selector - simplified options
     ingest_mode = st.radio(
@@ -52,11 +72,15 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
             "Built-in data",
             "Dataset Manifest (data.yaml)"
         ],
-        horizontal=True
+        horizontal=True,
+        key=persistent_key('data:select_ingestion_method', scope='data'),
     )
+    with st.container(key="data_actions"):
+        load_action, next_action = st.columns(2)
 
     loader_instance = None
     preview = None
+    drop_missing_subjects = False
     ts_preprocess_required = False
     corr_type = "Pearson correlation"
     apply_fisher = False
@@ -65,57 +89,99 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
     if ingest_mode == "Generate Synthetic Dataset":
         # Wrap BOTH generator and inspector inside a single bordered container
         with st.container(border=True):
+            with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+                st.markdown("##### Synthetic Dataset Generator", width="content")
+                render_help("synthetic_dataset")
             col_left, col_right = st.columns([0.35, 0.65])
             
             with col_left:
-                st.markdown("##### Synthetic Dataset Generator")
-                
-                sim_type = st.radio("Simulation Paradigm", ["Two-Group Contrast", "Two-Group Contrast with Confound", "Continuous Covariate GLM"])
+                sim_type = st.radio("Simulation Paradigm", ["Two-Group Contrast", "Two-Group Contrast with Confound", "Continuous Covariate GLM"], key=persistent_key('data:simulation_paradigm', scope='data'))
                 
                 scenarios = list_scenarios()
-                selected_scenario = st.selectbox("Select Target Scenario", scenarios)
+                selected_scenario = st.selectbox("Select Target Scenario", scenarios, format_func=lambda name: name.replace("_", " ").capitalize(), key=persistent_key('data:select_target_scenario', scope='data', options=scenarios))
 
                 if base_atlas is None:
-                    manual_n_nodes = st.number_input("Number of ROIs / Nodes", 10, 500, 100, 10)
-                    manual_n_modules = st.number_input("Synthetic modules", 1, 50, 7, 1)
+                    manual_n_nodes = st.number_input("Number of ROIs / Nodes", 10, 500, 100, 10, key=persistent_key('data:number_of_rois_nodes', scope='data'))
+                    manual_n_modules = st.number_input("Synthetic modules", 1, 50, 7, 1, key=persistent_key('data:synthetic_modules', scope='data'))
                 else:
                     manual_n_nodes = len(base_atlas)
                     manual_n_modules = len(set(base_atlas.networks)) if atlas_has_networks(base_atlas) else 1
                 
+                if sim_type in ("Two-Group Contrast", "Two-Group Contrast with Confound"):
+                    n_group1 = st.number_input("Subjects in group 1", 10, 200, 30, 5, key=persistent_key('data:subjects_group_1', scope='data'))
+                    n_group2 = st.number_input("Subjects in group 2", 10, 200, 30, 5, key=persistent_key('data:subjects_group_2', scope='data'))
+                    with st.expander("Group variability", expanded=False):
+                        st.caption("Added variance as a percentage of the approximate original Fisher-z sampling variance. 0% adds no noise; 100% adds approximately the original variance again.")
+                        variance_g1 = st.number_input("Group 1 added variance (%)", 0, 500, 0, 10, key=persistent_key('data:variance_percent_group_1', scope='data'))
+                        variance_g2 = st.number_input("Group 2 added variance (%)", 0, 500, 0, 10, key=persistent_key('data:variance_percent_group_2', scope='data'))
+                        st.caption("The reference is 1 / (T − 3), an approximation for Gaussian time series (T = 30), not the observed variance of each edge.")
+                        st.caption("Edgewise noise can produce matrices that are not valid correlation matrices.")
+
                 if sim_type == "Two-Group Contrast":
-                    n_sub_per_group = st.number_input("Subjects per group", 10, 200, 30, 5, help="Total observations will be 2x this number.")
-                    effect_sz = st.slider("Signal of Interest (0.0 = Null)", 0.0, 1.0, 0.25, 0.05)
+                    effect_sz = st.slider("Signal of Interest (0.0 = Null)", 0.0, 1.0, 0.25, 0.05, key=persistent_key('data:signal_of_interest_0_0_null', scope='data'))
+                    st.caption("Signal is introduced in Group 2 (group = 1), relative to Group 1 (group = 0), on the selected connections. Observed differences may vary.")
                 elif sim_type == "Two-Group Contrast with Confound":
-                    n_sub_per_group = st.number_input("Subjects per group", 10, 200, 30, 5, help="Total observations will be 2x this number.")
-                    effect_sz = st.slider("Signal of Interest (0.0 = Null)", 0.0, 1.0, 0.25, 0.05)
-                    confound_effect_sz = st.slider("Confound Effect Size", 0.0, 1.0, 0.15, 0.05)
-                    interest_confound_corr = st.slider("Correlation (Signal vs Confound)", -0.9, 0.9, 0.3, 0.1)
-                    confound_scenario = st.selectbox("Confound Topology Scenario", scenarios, index=scenarios.index("between_modules_dense") if "between_modules_dense" in scenarios else 0)
+                    effect_sz = st.slider("Signal of Interest (0.0 = Null)", 0.0, 1.0, 0.25, 0.05, key=persistent_key('data:signal_of_interest_0_0_null_2', scope='data'))
+                    st.caption("Signal is introduced in Group 2 (group = 1), relative to Group 1 (group = 0), on the selected connections. The confound can also affect group differences.")
+                    confound_effect_sz = st.slider("Confound Effect Size", 0.0, 1.0, 0.15, 0.05, key=persistent_key('data:confound_effect_size', scope='data'))
+                    interest_confound_corr = st.slider("Correlation (Signal vs Confound)", -0.9, 0.9, 0.3, 0.1, key=persistent_key('data:correlation_signal_vs_confound', scope='data'))
+                    confound_scenario = st.selectbox("Confound Topology Scenario", scenarios, index=scenarios.index("between_modules_dense") if "between_modules_dense" in scenarios else 0, key=persistent_key('data:confound_topology_scenario', scope='data', options=scenarios))
                 else:
-                    n_subjects = st.number_input("Total Subjects", 20, 400, 60, 10)
-                    effect_sz = st.slider("Signal of Interest (0.0 = Null)", 0.0, 1.0, 0.20, 0.05)
-                    confound_effect_sz = st.slider("Confound Effect Size", 0.0, 1.0, 0.15, 0.05)
-                    interest_confound_corr = st.slider("Correlation (Signal vs Confound)", -0.9, 0.9, 0.3, 0.1)
-                    confound_scenario = st.selectbox("Confound Topology Scenario", scenarios, index=scenarios.index("between_modules_dense") if "between_modules_dense" in scenarios else 0)
+                    n_subjects = st.number_input("Total Subjects", 20, 400, 60, 10, key=persistent_key('data:total_subjects', scope='data'))
+                    effect_sz = st.slider("Signal of Interest (0.0 = Null)", 0.0, 1.0, 0.20, 0.05, key=persistent_key('data:signal_of_interest_0_0_null_3', scope='data'))
+                    confound_effect_sz = st.slider("Confound Effect Size", 0.0, 1.0, 0.15, 0.05, key=persistent_key('data:confound_effect_size_2', scope='data'))
+                    interest_confound_corr = st.slider("Correlation (Signal vs Confound)", -0.9, 0.9, 0.3, 0.1, key=persistent_key('data:correlation_signal_vs_confound_2', scope='data'))
+                    confound_scenario = st.selectbox("Confound Topology Scenario", scenarios, index=scenarios.index("between_modules_dense") if "between_modules_dense" in scenarios else 0, key=persistent_key('data:confound_topology_scenario_2', scope='data', options=scenarios))
+
+                synthetic_fisher = st.checkbox("Apply Fisher r-to-z transform", value=True, help="Output Fisher-z matrices when selected; otherwise output correlations (r).", key=persistent_key('data:synthetic_fisher', scope='data'))
+                synthetic_seed = st.number_input(
+                    "Random seed", min_value=0, max_value=999999, value=42, step=1,
+                    help="The same seed and settings reproduce the same dataset. A different seed changes the simulated data and may change the affected connections.",
+                    key=persistent_key('data:synthetic_seed', scope='data'),
+                )
+
+                synthetic_settings = [st.session_state.get("active_atlas_signature", atlas_choice), ingest_mode, sim_type, selected_scenario, manual_n_nodes, manual_n_modules]
+                if sim_type != "Continuous Covariate GLM":
+                    synthetic_settings.extend([n_group1, n_group2, variance_g1, variance_g2])
+                else:
+                    synthetic_settings.append(n_subjects)
+                synthetic_settings.append(effect_sz)
+                if sim_type != "Two-Group Contrast":
+                    synthetic_settings.extend([confound_effect_sz, interest_confound_corr, confound_scenario])
+                synthetic_settings.append(synthetic_fisher)
+                # Default 42 preserves signatures for datasets created before this control existed.
+                if synthetic_seed != 42:
+                    synthetic_settings.append(f"seed={synthetic_seed}")
+                draft_signature = "|".join(str(part) for part in [*synthetic_settings, corr_type, apply_fisher])
+                loaded_synthetic = (
+                    st.session_state.connectivity_data is not None
+                    and (st.session_state.get("dataset_info") or {}).get("mode") == ingest_mode
+                )
+                if loaded_synthetic:
+                    generate_label = "↻ Generate again" if st.session_state.get("loaded_settings_hash") == draft_signature else "↻ Generate with new settings"
+                else:
+                    generate_label = "Generate Synthetic Dataset"
                 
-                if st.button("Generate Synthetic Dataset", type="primary"):
-                    clear_downstream_results()
-                    
+                if load_action.button(generate_label, type="primary", width="stretch", key="generate_dataset_btn", help="Generate a dataset with the current settings. A successful generation replaces the active dataset and clears its analysis results."):
                     # Use atlas dimensions when metadata is active; otherwise use explicit synthetic controls.
                     n_nodes = int(manual_n_nodes)
                     n_modules = int(manual_n_modules)
                     
-                    gen = TopologyDatasetGenerator(n_nodes=n_nodes, n_modules=max(1, n_modules), seed=42)
+                    gen = TopologyDatasetGenerator(n_nodes=n_nodes, n_modules=max(1, n_modules), seed=synthetic_seed)
+                    noise_rng_g1 = np.random.default_rng(synthetic_seed + 1)
+                    noise_rng_g2 = np.random.default_rng(synthetic_seed + 2)
                     
                     with st.spinner(f"Generating {sim_type} dataset..."):
                         if sim_type == "Two-Group Contrast":
                             ds = gen.generate(
                                 selected_scenario,
                                 effect_size=effect_sz,
-                                n_samples_g1=n_sub_per_group,
-                                n_samples_g2=n_sub_per_group
+                                n_samples_g1=n_group1,
+                                n_samples_g2=n_group2
                             )
                             g1_z, g2_z = ds.fisher_z()
+                            g1_z = _add_group_variance(g1_z, variance_g1, noise_rng_g1)
+                            g2_z = _add_group_variance(g2_z, variance_g2, noise_rng_g2)
                             Y_z = np.concatenate([g1_z, g2_z], axis=0)
                             n_total = len(Y_z)
                             pheno = pd.DataFrame({
@@ -130,15 +196,17 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             base_ds = gen.generate(
                                 selected_scenario,
                                 effect_size=0.0,
-                                n_samples_g1=n_sub_per_group,
-                                n_samples_g2=n_sub_per_group,
+                                n_samples_g1=n_group1,
+                                n_samples_g2=n_group2,
                                 time_points=30
                             )
                             g1_z, g2_z = base_ds.fisher_z()
+                            g1_z = _add_group_variance(g1_z, variance_g1, noise_rng_g1)
+                            g2_z = _add_group_variance(g2_z, variance_g2, noise_rng_g2)
                             Y_z = np.concatenate([g1_z, g2_z], axis=0)
                             n_total = len(Y_z)
                             
-                            group_interest = np.concatenate([np.zeros(n_sub_per_group), np.ones(n_sub_per_group)])
+                            group_interest = np.concatenate([np.zeros(n_group1), np.ones(n_group2)])
                             signal_weights = np.abs(base_ds.effect_mask)
                             
                             if confound_scenario == selected_scenario:
@@ -152,7 +220,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 )
                                 confound_weights = np.abs(confound_ds.effect_mask)
                                 
-                            rng = np.random.default_rng(42)
+                            rng = np.random.default_rng(synthetic_seed)
                             def _zscore(x):
                                 """Population z-score with a tiny std floor to avoid division by zero."""
                                 return (x - x.mean()) / max(x.std(ddof=0), 1e-12)
@@ -201,7 +269,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 )
                                 confound_weights = np.abs(confound_ds.effect_mask)
                             
-                            rng = np.random.default_rng(42)
+                            rng = np.random.default_rng(synthetic_seed)
                             
                             def _zscore(x):
                                 """Population z-score with a tiny std floor to avoid division by zero."""
@@ -231,8 +299,9 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             confound_weights_val = confound_weights
                             empirical_corr = np.corrcoef(interest, confound)[0, 1]
                         
-                        st.session_state.connectivity_data = Y_z
-                        st.session_state.connectivity_data_kind = "fisher_z"
+                        clear_downstream_results()
+                        st.session_state.connectivity_data = Y_z if synthetic_fisher else np.tanh(Y_z)
+                        st.session_state.connectivity_data_kind = "fisher_z" if synthetic_fisher else "correlation"
                         st.session_state.pheno_df = pheno
                         st.session_state["loaded_settings_hash"] = st.session_state.get("current_settings_hash")
                         st.session_state["_just_loaded_data"] = True
@@ -243,6 +312,16 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                         st.session_state["_synthetic_confound_name"] = confound_scenario if sim_type in ("Continuous Covariate GLM", "Two-Group Contrast with Confound") else None
                         st.session_state["_synthetic_confound_mask"] = confound_weights_val
                         st.session_state["_empirical_corr"] = empirical_corr
+                        st.session_state["dataset_load_notes"] = []
+                        st.session_state.loaded_reference_atlas = base_atlas
+                        st.session_state.loaded_atlas_signature = st.session_state.active_atlas_signature
+                        remember_dataset(
+                            name=selected_scenario.replace("_", " ").capitalize(),
+                            source="Synthetic simulation", atlas=atlas_choice, mode=ingest_mode,
+                            scenario=selected_scenario, fisher_z=synthetic_fisher, seed=synthetic_seed,
+                            group_added_variance_percent=(variance_g1, variance_g2) if sim_type != "Continuous Covariate GLM" else None,
+                        )
+                        reset_widget_scopes("design", "results", "annotation")
                         
                     st.success(f"Synthetic dataset generated successfully with {selected_scenario} topology.")
                     st.rerun()
@@ -254,33 +333,10 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     n_obs = st.session_state.connectivity_data.shape[0]
                     n_rois = st.session_state.connectivity_data.shape[1]
                     
-                    st.markdown("### 🎉 Dataset ready")
+                    render_dataset_card()
                     
-                    # Create summary table
-                    summary_data = {
-                        "Property": ["Dataset Type", "Observations", "ROIs", "Atlas Metadata", "Target Scenario"],
-                        "Value": ["Synthetic Generator", f"{n_obs} subjects", f"{n_rois} nodes", str(atlas_choice), str(st.session_state.get('_synthetic_scenario_name'))]
-                    }
-                    if st.session_state.get("_synthetic_confound_name"):
-                        summary_data["Property"].append("Confound Scenario")
-                        summary_data["Value"].append(str(st.session_state['_synthetic_confound_name']))
-                        
-                    if st.session_state.pheno_df is not None and "group" in st.session_state.pheno_df.columns:
-                        unique_groups = sorted(st.session_state.pheno_df["group"].unique().tolist())
-                        summary_data["Property"].append("Group Labels")
-                        summary_data["Value"].append(f"{unique_groups} (0=Null, 1=Effect)")
-                        
-                    st.table(pd.DataFrame(summary_data))
-                    
-                    st.success("✅ Dataset in-session, verified, and ready for inference.")
-                    
-                    # Next action button
-                    if st.button("Continue to Design & Inference ➡️", key="btn_continue_to_design", type="primary", width="stretch"):
-                        st.session_state.next_tab = tabs_list[1]
-                        st.rerun()
-                    
-                    # Expanders for large matrices
-                    with st.expander("🔍 Inspect connectivity matrices & relationships", expanded=False):
+                    # Show the synthetic preview immediately after generation.
+                    with st.expander("🔍 Inspect connectivity matrices & relationships", expanded=st.session_state.get("_synthetic_scenario_name") is not None):
                         if st.session_state.get("_synthetic_effect_mask") is not None:
                             overall_mean = np.mean(st.session_state.connectivity_data, axis=0)
                             mask = st.session_state["_synthetic_effect_mask"] > 0
@@ -310,7 +366,8 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 mean_g0 = np.mean(st.session_state.connectivity_data[g0_idx], axis=0)
                                 mean_g1 = np.mean(st.session_state.connectivity_data[g1_idx], axis=0)
                                 
-                                st.markdown("**Mean Correlation Matrices (Fisher-z)**")
+                                matrix_scale = "Fisher-z" if st.session_state.get("connectivity_data_kind") == "fisher_z" else "correlation r"
+                                st.markdown(f"**Mean Connectivity Matrices ({matrix_scale})**")
                                 fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 4))
                                 
                                 v_max = max(np.max(np.abs(mean_g0)), np.max(np.abs(mean_g1)))
@@ -355,7 +412,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 v_max = max(0.5, min(v_max, 2.0))
                                 im = ax.imshow(st.session_state.connectivity_data[0], cmap="RdBu_r", vmin=-v_max, vmax=v_max)
                                 fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                                ax.set_title("Subject 0 (Fisher-z)")
+                                ax.set_title(f"Subject 0 ({'Fisher-z' if st.session_state.get('connectivity_data_kind') == 'fisher_z' else 'correlation r'})")
                                 st.pyplot(fig)
                                 plt.close(fig)
                         elif pheno_df is not None and "interest" in pheno_df.columns:
@@ -413,7 +470,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             v_max = max(0.5, min(v_max, 2.0))
                             im = ax.imshow(st.session_state.connectivity_data[0], cmap="RdBu_r", vmin=-v_max, vmax=v_max)
                             fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                            ax.set_title("Subject 0 (Fisher-z)")
+                            ax.set_title(f"Subject 0 ({'Fisher-z' if st.session_state.get('connectivity_data_kind') == 'fisher_z' else 'correlation r'})")
                             st.pyplot(fig)
                             plt.close(fig)
                 else:
@@ -433,32 +490,41 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     render_help("built_in_demo")
                 
                 custom_ds = load_custom_datasets()
-                builtin_templates = ["ABIDE-mini", "OpenClose", "China-CloseClose"]
+                builtin_templates = ["ABIDE-mini", "OpenClose", "China-CloseClose", "NBS-Schizophrenia"]
                 template_options = builtin_templates + list(custom_ds.keys())
                 
                 dataset_choice = st.selectbox(
                     "Select Template Structure",
-                    template_options
+                    template_options,
+                    key=persistent_key('data:select_template_structure', scope='data', options=template_options),
                 )
                 
                 if dataset_choice == "ABIDE-mini":
                     data_path = st.text_input(
                         "Pickled Dict Path (.npy)",
-                        value="datasets/demo/ABIDE_mini/abide_mini.npy"
+                        value="datasets/demo/ABIDE_mini/abide_mini.npy",
+                        key=persistent_key('data:pickled_dict_path_npy', scope='data'),
                     )
                     pheno_path = st.text_input(
                         "Optional Phenotypic CSV Path (optional)",
-                        value="datasets/demo/ABIDE_mini/ABIDE1_Phenotypic_mini.csv"
+                        value="datasets/demo/ABIDE_mini/ABIDE1_Phenotypic_mini.csv",
+                        key=persistent_key('data:optional_phenotypic_csv_path_optional', scope='data'),
                     )
                     if data_path:
                         loader_instance = AbideSchaeferLoader(data_path, pheno_csv_path=pheno_path if pheno_path else None)
-                        
+                        # Same policy as datasets/abide_mini.yaml (params.missing: drop_subjects):
+                        # a subject with a region without signal has undefined correlations.
+                        drop_missing_subjects = True
+                        st.caption("Subjects with missing connectivity (a region without signal) are "
+                                   "removed on loading and listed, as in `datasets/abide_mini.yaml`.")
+
                 elif dataset_choice == "OpenClose":
                     cohort_col, cohort_help_col = st.columns([0.7, 0.3])
                     with cohort_col:
                         cohort = st.selectbox(
                             "Cohort",
                             ["Both sites (IHB + China)", "IHB", "China"],
+                            key=persistent_key('data:cohort', scope='data'),
                         )
                     with cohort_help_col:
                         render_help("openclose_multisite")
@@ -471,26 +537,32 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                         ihb_open_path = st.text_input(
                             "IHB Open Condition Path (.npy)",
                             value="datasets/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy",
+                            key=persistent_key('data:ihb_open_condition_path_npy', scope='data'),
                         )
                         ihb_close_path = st.text_input(
                             "IHB Close Condition Path (.npy)",
                             value="datasets/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy",
+                            key=persistent_key('data:ihb_close_condition_path_npy', scope='data'),
                         )
                         ihb_sub_list = st.text_input(
                             "IHB Subject Order file (.txt)",
                             value="datasets/open_close/subject_order_ihb.txt",
+                            key=persistent_key('data:ihb_subject_order_file_txt', scope='data'),
                         )
                         china_open_path = st.text_input(
                             "China Open Condition Path (.npy)",
                             value="datasets/open_close/china_open_Schaefer200_strategy-4_GSR.npy",
+                            key=persistent_key('data:china_open_condition_path_npy', scope='data'),
                         )
                         china_close_path = st.text_input(
                             "China Close Condition Path (.npy)",
                             value="datasets/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
+                            key=persistent_key('data:china_close_condition_path_npy', scope='data'),
                         )
                         china_sub_list = st.text_input(
                             "China Subject Order file (.txt)",
                             value="datasets/open_close/subject_order_china.txt",
+                            key=persistent_key('data:china_subject_order_file_txt', scope='data'),
                         )
                         atlas = "datasets/open_close/schaefer_labels.csv"
                         loader_instance = MultiSiteOpenCloseLoader(
@@ -512,28 +584,34 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     elif cohort == "IHB":
                         open_path = st.text_input(
                             "Open Condition Path (.npy)",
-                            value="datasets/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy"
+                            value="datasets/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy",
+                            key=persistent_key('data:open_condition_path_npy', scope='data'),
                         )
                         close_path = st.text_input(
                             "Close Condition Path (.npy)",
-                            value="datasets/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy"
+                            value="datasets/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy",
+                            key=persistent_key('data:close_condition_path_npy_2', scope='data'),
                         )
                         sub_list = st.text_input(
                             "Subject Order file (.txt)",
-                            value="datasets/open_close/subject_order_ihb.txt"
+                            value="datasets/open_close/subject_order_ihb.txt",
+                            key=persistent_key('data:subject_order_file_txt_2', scope='data'),
                         )
                     else:
                         open_path = st.text_input(
                             "Open Condition Path (.npy)",
-                            value="datasets/open_close/china_open_Schaefer200_strategy-4_GSR.npy"
+                            value="datasets/open_close/china_open_Schaefer200_strategy-4_GSR.npy",
+                            key=persistent_key('data:open_condition_path_npy_2', scope='data'),
                         )
                         close_path = st.text_input(
                             "Close Condition Path (.npy)",
-                            value="datasets/open_close/china_close_Schaefer200_strategy-4_GSR.npy"
+                            value="datasets/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
+                            key=persistent_key('data:close_condition_path_npy_3', scope='data'),
                         )
                         sub_list = st.text_input(
                             "Subject Order file (.txt)",
-                            value="datasets/open_close/subject_order_china.txt"
+                            value="datasets/open_close/subject_order_china.txt",
+                            key=persistent_key('data:subject_order_file_txt_3', scope='data'),
                         )
                         
                     if cohort != "Both sites (IHB + China)":
@@ -555,11 +633,13 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                         render_help("china_close_close")
                     close_path = st.text_input(
                         "Close Condition Path (.npy)",
-                        value="datasets/open_close/china_close_Schaefer200_strategy-4_GSR.npy"
+                        value="datasets/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
+                        key=persistent_key('data:close_condition_path_npy', scope='data'),
                     )
                     sub_list = st.text_input(
                         "Subject Order file (.txt)",
-                        value="datasets/open_close/subject_order_china.txt"
+                        value="datasets/open_close/subject_order_china.txt",
+                        key=persistent_key('data:subject_order_file_txt', scope='data'),
                     )
                     atlas = "datasets/open_close/schaefer_labels.csv"
                     
@@ -570,7 +650,37 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             atlas=atlas,
                             drop_missing_rois=True
                         )
-                        
+
+                elif dataset_choice == "NBS-Schizophrenia":
+                    nbs_col, nbs_help_col = st.columns([0.7, 0.3])
+                    with nbs_col:
+                        st.caption("MATLAB NBS example (Zalesky et al., 2010): 12 SZ vs 15 HC, AAL-74")
+                    with nbs_help_col:
+                        render_help("nbs_schizophrenia")
+                    data_path = st.text_input(
+                        "Connectivity matrices (.npy)",
+                        value="datasets/demo/NBS_schizophrenia/nbs_schizophrenia.npy",
+                        key=persistent_key('data:connectivity_matrices_npy', scope='data'),
+                    )
+                    pheno_path = st.text_input(
+                        "Phenotype CSV",
+                        value="datasets/demo/NBS_schizophrenia/pheno.csv",
+                        key=persistent_key('data:phenotype_csv', scope='data'),
+                    )
+                    atlas = st.text_input(
+                        "Atlas CSV",
+                        value="datasets/demo/NBS_schizophrenia/aal74_atlas.csv",
+                        key=persistent_key('data:atlas_csv', scope='data'),
+                    )
+                    if data_path:
+                        # Raw wavelet correlations, analysed as loaded unless Fisher z is applied explicitly.
+                        loader_instance = NumpyLoader(
+                            data_path,
+                            pheno_path=pheno_path or None,
+                            data_kind="correlation",
+                            atlas_metadata=atlas or None,
+                        )
+
                 elif dataset_choice in custom_ds:
                     cfg = custom_ds[dataset_choice]
                     loader_name = cfg.get("loader")
@@ -580,7 +690,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     
                     edited_params = {}
                     for key, val in params.items():
-                        edited_params[key] = st.text_input(f"{key}", value=str(val))
+                        edited_params[key] = st.text_input(f"{key}", value=str(val), key=persistent_key(f'data:custom:{dataset_choice}:{key}', scope='data'))
                     
                     # Convert parameter values to python types (int, bool, None, str)
                     final_params = {}
@@ -622,12 +732,14 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     manifest_file = st.selectbox(
                         "Select Ingestion Manifest File (.yaml)",
                         manifest_options,
-                        index=default_idx
+                        index=default_idx,
+                        key=persistent_key('data:select_ingestion_manifest_file_yaml', scope='data', options=manifest_options),
                     )
                 else:
                     manifest_file = st.text_input(
                         "Path to data.yaml Manifest File",
-                        value="datasets/abide_mini.yaml"
+                        value="datasets/abide_mini.yaml",
+                        key=persistent_key('data:path_to_data_yaml_manifest_file', scope='data'),
                     )
                 if manifest_file:
                     try:
@@ -665,7 +777,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 list(option_by_key),
                                 index=list(option_by_key).index(default_key),
                                 format_func=lambda key: str(option_by_key[key]["label"]),
-                                key=f"manifest_matrix_{manifest_file}",
+                                key=persistent_key(f"manifest_matrix_{manifest_file}", scope='data', options=list(option_by_key)),
                             )
                             selected = loader_instance.set_runtime_matrix_key(selected_key)
                             st.caption(
@@ -685,74 +797,64 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
             with st.container(border=True):
                 st.markdown("##### Dataset Inspector")
                 if loader_instance is not None:
-                    is_active_loaded_dataset = (
-                        st.session_state.connectivity_data is not None
-                        and st.session_state.get("loaded_settings_hash")
-                        == st.session_state.get("current_settings_hash")
-                    )
+                    is_active_loaded_dataset = st.session_state.connectivity_data is not None
                     if is_active_loaded_dataset:
-                        st.markdown("### Dataset ready")
-                        st.success("Dataset is in-session, validated, and ready for inference.")
-                        if st.button(
-                            "Continue to Design & Inference",
-                            key="btn_continue_to_design_loaded",
-                            type="primary",
-                            width="stretch",
-                        ):
-                            st.session_state.next_tab = tabs_list[1]
-                            st.rerun()
+                        render_dataset_card()
+                        for note in st.session_state.get("dataset_load_notes") or []:
+                            st.info(note)
                         st.divider()
 
-                    preview = loader_instance.preview()
+                    with st.expander("Preview of the next load", expanded=not is_active_loaded_dataset):
+                        preview = loader_instance.preview()
                     
-                    delegated_loader = getattr(loader_instance, "target_loader", None)
-                    if delegated_loader is not None:
-                        st.markdown(
-                            f"**Loader:** `{loader_instance.name}` "
-                            f"-> `{delegated_loader.name}`"
-                        )
-                    else:
-                        st.markdown(f"**Loader:** `{loader_instance.name}`")
-                    st.write(f"- **Observations:** {preview.n_observations if preview.n_observations else 'Unknown'}")
-                    st.write(f"- **Subjects:** {preview.n_subjects if preview.n_subjects else 'Unknown'}")
-                    st.write(f"- **ROIs:** {preview.n_rois if preview.n_rois else 'Unknown'}")
-                    st.write(f"- **Data Type:** `{preview.data_kind_guess}`")
-                    if preview.atlas_guess:
-                        st.write(f"- **Assumed Atlas:** `{preview.atlas_guess}`")
-                    if preview.conditions:
-                        st.write(f"- **Conditions/Groups:** `{preview.conditions}`")
-                        
-                    st.write(f"- **Sample Subject IDs:** `{preview.subject_ids_sample}`")
-                    st.write(f"- **File Count:** {preview.file_count if preview.file_count else 1}")
-                    if preview.file_sizes_mb:
-                        st.write(f"- **Total Size:** {preview.file_sizes_mb:.2f} MB")
-                    # A manifest may bring atlas metadata for a subset that is unrelated
-                    # to the optional reference atlas selected in the sidebar.
-                    manifest_atlas_path = getattr(loader_instance, "resolved_paths", {}).get("atlas_metadata")
-                    loader_atlas_path = getattr(getattr(loader_instance, "target_loader", None), "atlas_metadata", None)
-                    dataset_owns_atlas = bool(manifest_atlas_path or loader_atlas_path)
-                    if dataset_owns_atlas and preview.n_rois:
-                        atlas_detail = ""
-                        if getattr(loader_instance, "manifest", None) is not None:
-                            atlas_detail = loader_instance.manifest.metadata.get("atlas_description", "")
-                        st.info(
-                            f"This dataset supplies its own atlas metadata for {preview.n_rois} ROIs"
-                            f" ({atlas_detail}). " if atlas_detail else
-                            f"This dataset supplies its own atlas metadata for {preview.n_rois} ROIs. "
-                        )
-                        st.caption(
-                            "It will become the active atlas after loading; the sidebar parcellation is only a reference."
-                        )
-                    # Check atlas choice matching only when the source does not define its own atlas.
-                    elif base_atlas is not None and preview.n_rois and preview.n_rois != len(base_atlas):
-                        if (preview.n_rois == 182 and len(base_atlas) == 200) or (preview.n_rois == 84 and len(base_atlas) == 246):
-                            st.info(f"💡 Note: Dataset has {preview.n_rois} ROIs (subset of {atlas_choice}). Parcellation metadata will be filtered automatically.")
+                        delegated_loader = getattr(loader_instance, "target_loader", None)
+                        if delegated_loader is not None:
+                            st.markdown(
+                                f"**Loader:** `{loader_instance.name}` "
+                                f"-> `{delegated_loader.name}`"
+                            )
                         else:
-                            st.warning(f"Selected dataset expects {preview.n_rois} ROIs, but reference parcellation in sidebar is {atlas_choice} ({len(base_atlas)} ROIs).")
+                            st.markdown(f"**Loader:** `{loader_instance.name}`")
+                        st.write(f"- **Observations:** {preview.n_observations if preview.n_observations else 'Unknown'}")
+                        st.write(f"- **Subjects:** {preview.n_subjects if preview.n_subjects else 'Unknown'}")
+                        st.write(f"- **ROIs:** {preview.n_rois if preview.n_rois else 'Unknown'}")
+                        st.write(f"- **Data Type:** `{preview.data_kind_guess}`")
+                        if preview.atlas_guess:
+                            st.write(f"- **Assumed Atlas:** `{preview.atlas_guess}`")
+                        if preview.conditions:
+                            st.write(f"- **Conditions/Groups:** `{preview.conditions}`")
+
+                        st.write(f"- **Sample Subject IDs:** `{preview.subject_ids_sample}`")
+                        st.write(f"- **File Count:** {preview.file_count if preview.file_count else 1}")
+                        if preview.file_sizes_mb:
+                            st.write(f"- **Total Size:** {preview.file_sizes_mb:.2f} MB")
+                        # A manifest may bring atlas metadata for a subset that is unrelated
+                        # to the optional reference atlas selected in the sidebar.
+                        manifest_atlas_path = getattr(loader_instance, "resolved_paths", {}).get("atlas_metadata")
+                        loader_atlas_path = getattr(getattr(loader_instance, "target_loader", None), "atlas_metadata", None)
+                        dataset_owns_atlas = bool(manifest_atlas_path or loader_atlas_path)
+                        if dataset_owns_atlas and preview.n_rois:
+                            atlas_detail = ""
+                            if getattr(loader_instance, "manifest", None) is not None:
+                                atlas_detail = loader_instance.manifest.metadata.get("atlas_description", "")
+                            st.info(
+                                f"This dataset supplies its own atlas metadata for {preview.n_rois} ROIs"
+                                f" ({atlas_detail}). " if atlas_detail else
+                                f"This dataset supplies its own atlas metadata for {preview.n_rois} ROIs. "
+                            )
+                            st.caption(
+                                "It will become the active atlas after loading; the sidebar parcellation is only a reference."
+                            )
+                        # Check atlas choice matching only when the source does not define its own atlas.
+                        elif base_atlas is not None and preview.n_rois and preview.n_rois != len(base_atlas):
+                            if (preview.n_rois == 182 and len(base_atlas) == 200) or (preview.n_rois == 84 and len(base_atlas) == 246):
+                                st.info(f"💡 Note: Dataset has {preview.n_rois} ROIs (subset of {atlas_choice}). Parcellation metadata will be filtered automatically.")
+                            else:
+                                st.warning(f"Selected dataset expects {preview.n_rois} ROIs, but reference parcellation in sidebar is {atlas_choice} ({len(base_atlas)} ROIs).")
                     
-                    if preview.warnings:
-                        for w in preview.warnings:
-                            st.warning(w)
+                        if preview.warnings:
+                            for w in preview.warnings:
+                                st.warning(w)
                 elif st.session_state.connectivity_data is not None:
                     # Active dataset in session state (e.g. synthetic)
                     n_obs = st.session_state.connectivity_data.shape[0]
@@ -781,29 +883,112 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     if is_stale:
                         st.caption("*(Showing active loaded dataset characteristics. Ingest current settings to update)*")
                         
-                    pheno_df = st.session_state.pheno_df
-                    st.write(f"- **Total Variables:** {pheno_df.shape[1]}")
-                    st.markdown("**Phenotypic Variables Summary:**")
+                    with st.expander("Phenotypic variable completeness"):
+                        pheno_df = st.session_state.pheno_df
+                        st.write(f"- **Total Variables:** {pheno_df.shape[1]}")
+                        st.markdown("**Phenotypic Variables Summary:**")
                     
-                    summary_lines = []
-                    site_col_detected = next((c for c in ["site", "SITE_ID", "Site", "site_id"] if c in pheno_df.columns), None)
+                        summary_lines = []
+                        site_col_detected = next((c for c in ["site", "SITE_ID", "Site", "site_id"] if c in pheno_df.columns), None)
                     
-                    for col in pheno_df.columns:
-                        non_null = pheno_df[col].notna().sum()
-                        pct = (non_null / len(pheno_df)) * 100
+                        for col in pheno_df.columns:
+                            non_null = pheno_df[col].notna().sum()
+                            pct = (non_null / len(pheno_df)) * 100
                         
-                        line = f"- `{col}`: {non_null}/{len(pheno_df)} ({pct:.1f}%)"
+                            line = f"- `{col}`: {non_null}/{len(pheno_df)} ({pct:.1f}%)"
                         
-                        if site_col_detected and col not in (site_col_detected, "subject_id"):
-                            n_sites = pheno_df[site_col_detected].nunique()
-                            n_full_sites = 0
-                            for site, grp in pheno_df.groupby(site_col_detected):
-                                if len(grp) > 0 and grp[col].notna().sum() == len(grp):
-                                    n_full_sites += 1
-                            line += f" | 100% complete in {n_full_sites}/{n_sites} sites"
+                            if site_col_detected and col not in (site_col_detected, "subject_id"):
+                                n_sites = pheno_df[site_col_detected].nunique()
+                                n_full_sites = 0
+                                for site, grp in pheno_df.groupby(site_col_detected):
+                                    if len(grp) > 0 and grp[col].notna().sum() == len(grp):
+                                        n_full_sites += 1
+                                line += f" | 100% complete in {n_full_sites}/{n_sites} sites"
                             
-                        summary_lines.append(line)
-                    st.markdown("\n".join(summary_lines))
+                            summary_lines.append(line)
+                        st.markdown("\n".join(summary_lines))
+
+    # Draft subnetwork: commit only after a successful explicit load.
+    roi_idx = None
+    roi_selection_valid = True
+    if ingest_mode != "Generate Synthetic Dataset":
+        with col_left, st.expander("ROI selection", expanded=False):
+            roi_input_method = st.radio(
+                "ROI Selection Input Method",
+                ["Whole Brain (Default)", "Manual List (Comma-separated)", "Upload ROI List File (.csv, .txt)"],
+                horizontal=True,
+                index=0,
+                key=persistent_key('data:roi_selection_input_method', scope='data'),
+            )
+
+            roi_idx = None
+
+            if roi_input_method == "Whole Brain (Default)":
+                pass
+            elif roi_input_method == "Manual List (Comma-separated)":
+                roi_indices_input = st.text_input(
+                    "ROI Indices (comma-separated, e.g. 0,1,2,10,11 to restrict analysis to a subset of nodes)",
+                    value="",
+                    key=persistent_key('data:roi_indices_comma_separated_e_g_0_1_2_10_11_to_restrict_analysis_to_a_', scope='data'),
+                )
+                if roi_indices_input:
+                    try:
+                        roi_idx = [int(x.strip()) for x in roi_indices_input.split(",") if x.strip()]
+                    except ValueError:
+                        st.error("Please enter valid comma-separated integers.")
+                        roi_selection_valid = False
+            else:
+                roi_file = persistent_file_uploader("Upload ROI List File (.csv, .txt)", type=["csv", "txt"], key='data:upload_roi_list_file_csv_txt')
+                if roi_file:
+                    try:
+                        roi_file.seek(0)
+                        content = roi_file.read().decode('utf-8')
+                        # Split by commas, newlines, semicolons, tabs
+                        raw_items = [x.strip() for x in re.split(r'[,\n;\r\t]+', content) if x.strip()]
+
+                        parsed_idx = []
+                        missing_labels = []
+                        for item in raw_items:
+                            # Skip typical CSV headers if present
+                            if item.lower() in {"roi", "rois", "roi_index", "roi_indices", "label", "labels", "roi_name", "roi_names"}:
+                                continue
+                            try:
+                                parsed_idx.append(int(item))
+                            except ValueError:
+                                # Try matching with atlas labels when metadata exists
+                                found = False
+                                clean_item = item.replace('"', '').replace("'", "").strip().lower()
+                                if base_atlas is not None:
+                                    for idx_lbl, lbl in enumerate(base_atlas.labels):
+                                        if lbl.lower().strip() == clean_item:
+                                            parsed_idx.append(idx_lbl)
+                                            found = True
+                                            break
+                                if not found:
+                                    missing_labels.append(item)
+
+                        if missing_labels:
+                            st.warning(f"Could not find matching ROIs in the selected atlas for these entries: {missing_labels}")
+
+                        if parsed_idx:
+                            roi_idx = sorted(list(set(parsed_idx)))
+                    except Exception as e:
+                        st.error(f"Error parsing ROI file: {e}")
+                        roi_selection_valid = False
+
+            if roi_idx:
+                n_available_rois = (
+                    int(preview.n_rois) if preview is not None and preview.n_rois
+                    else st.session_state.connectivity_data.shape[1] if st.session_state.connectivity_data is not None
+                    else len(base_atlas) if base_atlas is not None else 0
+                )
+                invalid = [r for r in roi_idx if r < 0 or r >= n_available_rois]
+                if invalid:
+                    st.error(f"Indices {invalid} are out of range for the active data ({n_available_rois} ROIs).")
+                    roi_selection_valid = False
+                else:
+                    st.caption(f"Next load will use a subnetwork of {len(roi_idx)} ROIs.")
+
 
     # ----------------- DISPLAY PREPROCESSING OPTIONS & TRIGGER -----------------
     if loader_instance is not None:
@@ -812,14 +997,15 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
             # Timeseries connectivity options if timeseries is loaded
             if ts_preprocess_required or (preview and preview.data_kind_guess == "timeseries"):
                 st.markdown("##### 🛠️ Connectivity Construction Options")
+                preprocess_source = dataset_choice if ingest_mode == "Built-in data" else manifest_file
                 conn_col1, conn_col2 = st.columns(2)
                 with conn_col1:
                     default_corr = st.session_state.get("corr_type_pre", "Pearson correlation")
                     idx = 0 if default_corr == "Pearson correlation" else 1
-                    corr_type = st.selectbox("Correlation Estimator", ["Pearson correlation", "Spearman correlation"], index=idx)
+                    corr_type = st.selectbox("Correlation Estimator", ["Pearson correlation", "Spearman correlation"], index=idx, key=persistent_key(f'data:correlation:{ingest_mode}:{preprocess_source}', scope='data'))
                 with conn_col2:
                     default_fisher = st.session_state.get("apply_fisher_pre", True)
-                    apply_fisher = st.checkbox("Apply Fisher r-to-z transform before analysis", value=default_fisher)
+                    apply_fisher = st.checkbox("Fisher r-to-z transform", value=default_fisher, help="Convert correlations to Fisher-z values before analysis.", key=persistent_key(f'data:fisher:{ingest_mode}:{preprocess_source}', scope='data'))
                 
                 if "corr_type_pre" in st.session_state or "apply_fisher_pre" in st.session_state:
                     st.caption("ℹ️ Preprocessing options were pre-selected by the manifest.")
@@ -827,8 +1013,6 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                 st.markdown("##### 🛠️ Ingestion Preprocessing")
                 st.info("Input data is already precomputed connectivity matrices. No correlation calculation required.")
 
-            st.markdown("##### 🚀 Ingest & Process Dataset")
-            
             # Check cache status beforehand to inform the user
             is_cached = False
             if hasattr(loader_instance, "preview"):
@@ -839,12 +1023,16 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                 except Exception:
                     pass
 
-            if st.button("Load, Preprocess & Validate Data", type="primary", width="stretch"):
+            if load_action.button("Load, Preprocess & Validate Data", type="primary", width="stretch", disabled=not roi_selection_valid, key="load_dataset_btn", help="Load the selected source. A successful load replaces the active dataset and clears its analysis results."):
                 spinner_msg = "Loading dataset from cache..." if is_cached else "Executing loader & validation pipeline (extracting and caching)..."
                 with st.spinner(spinner_msg):
                     try:
                         loaded = loader_instance.load()
-                        
+                        n_loader_warnings = len(loaded.warnings)
+                        if drop_missing_subjects:
+                            loaded = drop_subjects_with_missing(loaded)
+                        load_notes = list(loaded.warnings[n_loader_warnings:])
+
                         # 1. Source Validation
                         report = validate_loaded_dataset(loaded, check_inference_ready=False)
                         if not report.ok:
@@ -886,12 +1074,16 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             if not final_report.ok:
                                 st.error(f"Inference validation failed: {final_report.errors}")
                             else:
+                                if roi_idx and any(r < 0 or r >= loaded.data.shape[1] for r in roi_idx):
+                                    st.error(f"The loaded dataset has {loaded.data.shape[1]} ROIs. Update the ROI selection before replacing the active dataset.")
+                                    return
                                 st.session_state.connectivity_data = loaded.data
                                 st.session_state.connectivity_data_kind = loaded.data_kind
                                 st.session_state.pheno_df = loaded.pheno
+                                st.session_state["dataset_load_notes"] = load_notes
                                 st.session_state["loaded_settings_hash"] = st.session_state.get("current_settings_hash")
                                 st.session_state["_just_loaded_data"] = True
-                                
+
                                 if loaded.atlas is not None:
                                     if base_atlas is not None:
                                         loaded.atlas = align_atlas_coordinates(loaded.atlas, base_atlas)
@@ -900,6 +1092,20 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 else:
                                     st.session_state.dataset_atlas = None
                                     st.session_state.sub_atlas = None
+
+                                st.session_state.loaded_reference_atlas = base_atlas
+                                st.session_state.loaded_atlas_signature = st.session_state.active_atlas_signature
+                                loaded_atlas = loaded.atlas if loaded.atlas is not None else base_atlas
+                                loaded_atlas_label = (
+                                    atlas_display_name(loaded_atlas, atlas_choice)
+                                    if loaded_atlas is not None else "No atlas metadata"
+                                )
+                                remember_dataset(
+                                    name=dataset_choice if ingest_mode == "Built-in data" else Path(manifest_file).stem,
+                                    source="Built-in dataset" if ingest_mode == "Built-in data" else str(manifest_file),
+                                    atlas=loaded_atlas_label, mode=ingest_mode,
+                                )
+                                reset_widget_scopes("design", "results", "annotation")
                                     
                                 clear_downstream_results()
                                 # A data reload starts a new analysis lineage.
@@ -911,6 +1117,8 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 st.session_state["_synthetic_scenario_name"] = None
                                 st.session_state["_synthetic_effect_mask"] = None
                                 st.session_state["_synthetic_confound_mask"] = None
+                                st.session_state["_synthetic_confound_name"] = None
+                                st.session_state["_empirical_corr"] = None
                                 
                                 if is_cached:
                                     st.success("✅ Dataset successfully loaded from local cache!")
@@ -923,88 +1131,6 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                         st.exception(e)
 
 
-
-    # Optional: Subnetwork selection
-    if ingest_mode != "Generate Synthetic Dataset":
-        st.markdown("#### 📐 Subnetwork Selection")
-        roi_input_method = st.radio(
-            "ROI Selection Input Method", 
-            ["Whole Brain (Default)", "Manual List (Comma-separated)", "Upload ROI List File (.csv, .txt)"], 
-            horizontal=True,
-            index=0
-        )
-        
-        roi_idx = None
-        
-        if roi_input_method == "Whole Brain (Default)":
-            pass
-        elif roi_input_method == "Manual List (Comma-separated)":
-            roi_indices_input = st.text_input(
-                "ROI Indices (comma-separated, e.g. 0,1,2,10,11 to restrict analysis to a subset of nodes)",
-                value=""
-            )
-            if roi_indices_input:
-                try:
-                    roi_idx = [int(x.strip()) for x in roi_indices_input.split(",") if x.strip()]
-                except ValueError:
-                    st.error("Please enter valid comma-separated integers.")
-        else:
-            roi_file = st.file_uploader("Upload ROI List File (.csv, .txt)", type=["csv", "txt"])
-            if roi_file:
-                try:
-                    content = roi_file.read().decode('utf-8')
-                    # Split by commas, newlines, semicolons, tabs
-                    raw_items = [x.strip() for x in re.split(r'[,\n;\r\t]+', content) if x.strip()]
-                    
-                    parsed_idx = []
-                    missing_labels = []
-                    for item in raw_items:
-                        # Skip typical CSV headers if present
-                        if item.lower() in {"roi", "rois", "roi_index", "roi_indices", "label", "labels", "roi_name", "roi_names"}:
-                            continue
-                        try:
-                            parsed_idx.append(int(item))
-                        except ValueError:
-                            # Try matching with atlas labels when metadata exists
-                            found = False
-                            clean_item = item.replace('"', '').replace("'", "").strip().lower()
-                            if base_atlas is not None:
-                                for idx_lbl, lbl in enumerate(base_atlas.labels):
-                                    if lbl.lower().strip() == clean_item:
-                                        parsed_idx.append(idx_lbl)
-                                        found = True
-                                        break
-                            if not found:
-                                missing_labels.append(item)
-                    
-                    if missing_labels:
-                        st.warning(f"Could not find matching ROIs in the selected atlas for these entries: {missing_labels}")
-                    
-                    if parsed_idx:
-                        roi_idx = sorted(list(set(parsed_idx)))
-                except Exception as e:
-                    st.error(f"Error parsing ROI file: {e}")
-
-        if roi_idx:
-            n_available_rois = (
-                st.session_state.connectivity_data.shape[1]
-                if st.session_state.connectivity_data is not None
-                else (len(base_atlas) if base_atlas is not None else 0)
-            )
-            invalid = [r for r in roi_idx if r < 0 or r >= n_available_rois]
-            if invalid:
-                st.error(f"Indices {invalid} are out of range for the active data ({n_available_rois} ROIs).")
-            else:
-                st.session_state.roi_indices = roi_idx
-                active_base = st.session_state.get("dataset_atlas") if st.session_state.get("dataset_atlas") is not None else base_atlas
-                st.session_state.sub_atlas = make_sub_atlas(active_base, roi_idx)
-                st.success(f"Subnetwork configured with {len(roi_idx)} ROIs.")
-        else:
-            st.session_state.roi_indices = None
-            st.session_state.sub_atlas = st.session_state.get("dataset_atlas")
-    else:
-        st.session_state.roi_indices = None
-        st.session_state.sub_atlas = st.session_state.get("dataset_atlas")
 
     # Display data summaries if populated
     if st.session_state.connectivity_data is not None:
@@ -1060,45 +1186,28 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
         if "cohort" in locals(): settings_parts.append(cohort)
         if "data_path" in locals(): settings_parts.append(data_path)
         if "pheno_path" in locals(): settings_parts.append(pheno_path)
-    elif ingest_mode == "Standard File/Directory Import":
-        if "input_format" in locals(): settings_parts.append(input_format)
-        if "data_path" in locals(): settings_parts.append(data_path)
-        if "pheno_path" in locals(): settings_parts.append(pheno_path)
-        if "dir_path" in locals(): settings_parts.append(dir_path)
+        source_fields = ("open_path", "close_path", "sub_list", "ihb_open_path", "ihb_close_path", "ihb_sub_list", "china_open_path", "china_close_path", "china_sub_list", "atlas", "final_params")
+        source_values = locals()
+        settings_parts.extend(f"{field}={source_values[field]}" for field in source_fields if field in source_values)
+    elif ingest_mode == "Dataset Manifest (data.yaml)":
+        # A different manifest or connectivity matrix is a different dataset.
+        if "manifest_file" in locals(): settings_parts.append(manifest_file)
+        if "selected_key" in locals(): settings_parts.append(selected_key)
     elif ingest_mode == "Generate Synthetic Dataset":
-        if "sim_type" in locals(): settings_parts.append(sim_type)
-        if "selected_scenario" in locals(): settings_parts.append(selected_scenario)
-        if "manual_n_nodes" in locals(): settings_parts.append(manual_n_nodes)
-        if "manual_n_modules" in locals(): settings_parts.append(manual_n_modules)
-        if "n_sub" in locals(): settings_parts.append(n_sub)
-        if "n_sub_per_group" in locals(): settings_parts.append(n_sub_per_group)
-        if "n_subjects" in locals(): settings_parts.append(n_subjects)
-        if "effect_sz" in locals(): settings_parts.append(effect_sz)
-        if "confound_effect_sz" in locals(): settings_parts.append(confound_effect_sz)
-        if "interest_confound_corr" in locals(): settings_parts.append(interest_confound_corr)
-        if "confound_scenario" in locals(): settings_parts.append(confound_scenario)
-        if "n_signals" in locals(): settings_parts.append(n_signals)
+        settings_parts = synthetic_settings
 
     # Preprocessing options
     if "corr_type" in locals(): settings_parts.append(corr_type)
     if "apply_fisher" in locals(): settings_parts.append(apply_fisher)
 
     # Subnetwork selection indices
-    if st.session_state.get("roi_indices") is not None:
-        settings_parts.append(tuple(st.session_state.roi_indices))
+    if roi_idx is not None:
+        settings_parts.append(tuple(roi_idx))
         
     current_settings_hash = "|".join(str(p) for p in settings_parts)
     st.session_state["current_settings_hash"] = current_settings_hash
     
     if os.getenv("CONNINFPY_STREAMLIT_DEBUG"):
-        try:
-            with open("scratch_debug.log", "a") as f:
-                f.write(f"loaded: {st.session_state.get('loaded_settings_hash')}\n")
-                f.write(f"current: {current_settings_hash}\n")
-                f.write(f"parts: {settings_parts}\n\n")
-        except Exception:
-            pass
-
         st.sidebar.markdown("### 🛠️ Hash Debug")
         st.sidebar.write("Loaded:", st.session_state.get("loaded_settings_hash"))
         st.sidebar.write("Current:", current_settings_hash)
@@ -1106,13 +1215,35 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
 
     if st.session_state.pop("_just_loaded_data", False):
         st.session_state["loaded_settings_hash"] = current_settings_hash
-    elif "loaded_settings_hash" in st.session_state and st.session_state["loaded_settings_hash"] != current_settings_hash:
-        st.session_state.connectivity_data = None
-        st.session_state.connectivity_data_kind = None
-        st.session_state.pheno_df = None
-        clear_downstream_results()
-        st.session_state.roi_indices = None
-        st.session_state.dataset_atlas = None
-        st.session_state.sub_atlas = None
-        # Remove it from state so we don't clear repeatedly
-        del st.session_state["loaded_settings_hash"]
+        st.session_state.roi_indices = roi_idx if roi_selection_valid else None
+        active_base = st.session_state.get("dataset_atlas")
+        if active_base is None:
+            active_base = st.session_state.get("loaded_reference_atlas")
+        st.session_state.sub_atlas = make_sub_atlas(active_base, roi_idx) if roi_idx and roi_selection_valid else st.session_state.get("dataset_atlas")
+    elif st.session_state.connectivity_data is not None and st.session_state.get("loaded_settings_hash") != current_settings_hash:
+        st.info("You have changed the settings for the next load. The active dataset and its results are unchanged.")
+
+    if loader_instance is None and ingest_mode != "Generate Synthetic Dataset":
+        load_action.button("Load, Preprocess & Validate Data", disabled=True, width="stretch", key="load_dataset_btn")
+    if st.session_state.connectivity_data is not None and st.session_state.get("loaded_settings_hash") == current_settings_hash:
+        # Once the selected data are ready, guide the user to the next step.
+        st.html("""<style>
+        .st-key-data_actions .st-key-load_dataset_btn button {
+            background: white; color: #31333f; border: 1px solid #bfc5cc;
+        }
+        .st-key-data_actions .st-key-generate_dataset_btn button {
+            background: white; color: #245d8c; border: 2px solid #4681ad;
+        }
+        .st-key-data_actions .st-key-generate_dataset_btn button:hover {
+            background: #eff7fc; color: #17486d; border-color: #245d8c;
+        }
+        .st-key-data_actions .st-key-btn_continue_to_design button {
+            background: #167345; color: white; border: 1px solid #167345;
+        }
+        .st-key-data_actions .st-key-btn_continue_to_design button:hover {
+            background: #105a35; color: white; border-color: #105a35;
+        }
+        </style>""")
+        if next_action.button("Continue to Design & Inference →", key="btn_continue_to_design", width="stretch"):
+            st.session_state.next_tab = tabs_list[1]
+            st.rerun()

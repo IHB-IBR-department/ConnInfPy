@@ -108,11 +108,13 @@ def clear_downstream_results():
 
 
 def active_analysis_atlas(base_atlas=None):
-    """Prefer ROI/dataset-specific atlas metadata over sidebar metadata."""
+    """Use the loaded ROI/dataset/reference atlas before draft sidebar metadata."""
     if st.session_state.get("sub_atlas") is not None:
         return st.session_state.sub_atlas
     if st.session_state.get("dataset_atlas") is not None:
         return st.session_state.dataset_atlas
+    if "loaded_reference_atlas" in st.session_state and st.session_state.get("connectivity_data") is not None:
+        return st.session_state.loaded_reference_atlas
     return base_atlas
 
 
@@ -134,22 +136,37 @@ def data_is_fisher_z():
 
 
 def result_is_stale(run_plan=None):
-    """True when current loaded data/sidebar atlas no longer match a result."""
+    """True when a result belongs to a different loaded dataset or atlas."""
     plan = run_plan if run_plan is not None else st.session_state.get("run_plan")
     if not plan:
         return False
-    current_hash = st.session_state.get("current_settings_hash")
+    current_hash = st.session_state.get("loaded_settings_hash")
     if plan.get("loaded_settings_hash") != current_hash:
         return True
-    current_atlas_sig = st.session_state.get("active_atlas_signature")
+    current_atlas_sig = st.session_state.get("loaded_atlas_signature", st.session_state.get("active_atlas_signature"))
     if plan.get("active_atlas_signature") != current_atlas_sig:
         return True
     return False
 
 
 def effect_direction_labels(run_plan=None):
-    """Return reader-facing labels for positive/negative statistical tails."""
+    """Return reader-facing labels for positive/negative statistical tails.
+
+    After a prespecified one-sided run (``run_plan['tested_tail']``) the
+    direction that was not tested is marked "(not tested)".
+    """
     plan = run_plan if run_plan is not None else (st.session_state.get("run_plan") or {})
+    labels = _direction_labels_for_question(plan)
+    tested = plan.get("tested_tail")
+    if tested in ("positive", "negative"):
+        other = "negative" if tested == "positive" else "positive"
+        labels[other] = f"{labels[other]} (not tested)"
+        labels[f"{other}_title"] = f"{labels[f'{other}_title']} (not tested)"
+    return labels
+
+
+def _direction_labels_for_question(plan):
+    """Positive/negative tail labels for the design's question type."""
     question = plan.get("question_type")
 
     if question == "Group Difference":
@@ -324,6 +341,21 @@ def make_sub_atlas(atlas, roi_idx):
 
 
 HELP_TEXT = {
+    "synthetic_dataset": """
+**Synthetic connectivity data**
+
+Generate artificial participants with connectivity matrices and a known pattern of affected connections. Use these data to explore the workflow and compare detected connections with the simulated ground truth.
+
+- **Simulation paradigm** chooses a two-group comparison, a two-group comparison with a confound, or a continuous variable with a confound.
+- For two-group simulations, set group sizes independently. **Group variability** adds independent noise to each subject and edge. Its variance is a percentage of the approximate original Fisher-z sampling variance: 0% adds nothing, 100% adds approximately the original variance again. The reference is `1 / (T − 3)` for Gaussian time series (T = 30), not each edge's observed variance; a confound can add further variability.
+- **Target scenario** controls where the signal is placed in the network. **Signal of interest** controls its strength; `0` means no signal of interest. A confound can still produce an effect when its strength is nonzero.
+- In both two-group paradigms, the signal is introduced in **Group 2** (`group = 1`) relative to **Group 1** (`group = 0`); the observed difference also reflects sampling variation and any confound.
+- In confound-enabled paradigms, choose its strength, its target correlation with the variable of interest, and its topology. The observed correlation can differ from the target.
+- The selected atlas determines the number of regions and, when available, network labels. Without an atlas, choose the number of regions and synthetic modules.
+- **Random seed** makes a dataset reproducible. A different seed changes the simulated data and may also change the affected connections in random scenarios.
+
+Choose Fisher-z output or correlation-scale output (r). Confound effects and variability adjustments are made on the Fisher-z scale before the optional conversion to r. These edgewise adjustments can produce matrices that are not valid correlation matrices, even though r values remain between −1 and 1. Synthetic data illustrate controlled scenarios; they do not represent real participants or establish how a method will perform on a real dataset.
+""",
     "data_source": """
 **Data Ingestion Methods**
 - **Generate Synthetic Dataset**: Simulates groups/conditions and connectivity changes for testing and debugging.
@@ -334,6 +366,7 @@ HELP_TEXT = {
 **Built-in Demo Datasets**
 - **ABIDE-mini**: Curated 5-site subset of ABIDE (204 subjects) preserving complete phenotypic columns and group balances.
 - **OpenClose**: Paired Eyes-Open vs. Eyes-Closed resting-state dataset using a 182-ROI unified Schaefer-200 mask.
+- **NBS-Schizophrenia**: The example of the MATLAB NBS toolbox (Zalesky et al., 2010): 12 people with schizophrenia and 15 healthy controls, 74 AAL regions. Its published result is known, so it serves as a reference check.
 *Note: Demo datasets are for trying out workflow features and diagnostic tests, not definitive scientific analysis. Full ABIDE, stress, and local/private datasets should be imported from a manifest.*
 """,
     "openclose_multisite": """
@@ -347,6 +380,31 @@ HELP_TEXT = {
 **China Close-Close Test-Retest Example**
 
 This is a paired null/control comparison of two Eyes-Closed runs from the same China participants. It is useful for checking method specificity: a valid Open-Close result should not be reproduced strongly when comparing repeated closed-eyes runs. One participant with an incomplete second run is excluded automatically.
+""",
+    "nbs_schizophrenia": """
+**NBS Schizophrenia Example (reference check)**
+
+The example data of the MATLAB NBS toolbox v1.2 (Zalesky, Fornito & Bullmore, 2010, *NeuroImage* 53:1197-1207): resting-state wavelet correlations for 12 people with schizophrenia (`SZ`) and 15 healthy controls (`HC`) in 74 AAL regions. The dataset brings its own AAL-74 atlas (MNI coordinates, no networks), so the sidebar atlas is not used; network-aware methods are unavailable.
+
+**Published result.** NBS tests one direction, controls > patients (contrast `[-1,1]`), with a pooled-variance t on the raw correlations, tau = 3.1: one component of 40 edges with weaker connectivity in schizophrenia, p ≈ 0.04 (NBS v1.2: extent 0.0398, intensity 0.0462). ConnInfPy gives the same edge t-statistics (to 1e-14), the same 40 edges and p within Monte-Carlo error for both component statistics (`tests/test_nbs_schizophrenia_reference.py`).
+
+To reproduce it in the app:
+1. **Group Difference**, group column `group`, reference `SZ`, target `HC`, no covariates.
+2. **Group variances: Equal (Student's t)**, the default, as in NBS. Welch's t gives 28 instead of 40 edges above tau here: on the r scale the patients' correlations are more variable and the groups are unbalanced (12 vs 15).
+3. **Hypothesis direction: One-sided: HC > SZ.**
+4. Method **Classical connected component (NBS)**, tau = 3.1, statistic `extent` (or `intensity`), 5000 permutations.
+5. Keep the raw correlations: the app analyses data on the scale they were loaded with, so do not press **Apply Fisher-z now**.
+
+Expected: one component of 40 edges, HC > SZ, p ≈ 0.04. The direction matters: with the same settings a two-sided test gives the same component with p ≈ 0.07, not significant at 0.05.
+
+| Scale | Direction | Edges above tau | Component p |
+|---|---|---|---|
+| r | one-sided (NBS) | 40 | ≈ 0.04 |
+| r | two-sided | 40 | ≈ 0.07 |
+| Fisher z | one-sided | 39 | ≈ 0.04 |
+| Fisher z | two-sided | 39 | ≈ 0.08 |
+
+Data: NBS v1.2 example, GNU GPL v3 or later; see `datasets/demo/NBS_schizophrenia/README.md`.
 """,
     "manifest_import": """
 **Manifest Ingestion**
@@ -415,11 +473,6 @@ Describes the ROIs and the detected connections with the Brainnetome atlas (BNA-
 - **BrainMap domains**: published forward-inference associations (which tasks activate a region in the literature). They are not the function of a region or of a connection; a region without terms has too few BrainMap studies.
 - **Summaries** put the detections next to the tested opportunities; nothing is tested and the correction is unchanged.
 - **Distance QC**: a contrast that covaries with head motion often shows short-range increases and long-range decreases.
-""",
-    "narrative_report": """
-**Narrative Report**
-- Generates a cautious narrative constrained by the statistical results and their Brainnetome annotation.
-- Describes where the connections are before any BrainMap literature context.
 """,
     "workspace_documentation": """
 **Workspace Documentation**

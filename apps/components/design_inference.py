@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 import streamlit as st
+from apps.utils.ui_state import persistent_key
+from apps.utils.workspace import DATA_TAB, go_to_step
 import threading
 import traceback
 from conninfpy.atlas import AtlasInfo
@@ -11,6 +13,7 @@ from apps.utils.helpers import (
     atlas_has_networks,
     clear_downstream_results,
     data_is_fisher_z,
+    effect_direction_labels,
     render_help,
 )
 
@@ -209,11 +212,32 @@ def _run_inference_background(
     annotation_atlas, alpha, question_choice, loaded_settings_hash, recipe_choice,
     effective_recipe_choice, group_col, ref_group, target_group, interest_var,
     subject_col, condition_col, baseline_val, target_val, confound_vars, site_col,
-    active_atlas_signature, data_kind
+    active_atlas_signature, data_kind, tested_tail=None, var_equal=None
 ):
-    """Worker thread body: run the inference and record status."""
+    """Worker thread body: run the inference and record status.
+
+    The data are analysed on the scale they were loaded with: raw
+    correlations stay correlations (``r_to_z=False``); Fisher z is applied
+    only by the explicit ingestion option or the Design-step button.
+    ``tested_tail`` (``'positive'`` / ``'negative'``) runs a prespecified
+    one-sided test: per-tail nulls (``two_tailed=False``) and the other
+    direction reported as not tested; ``None`` is two-sided.
+    ``var_equal`` (two-sample only) chooses Student's (True) or Welch's
+    (False) t in the two-sample permutation test.
+    """
     try:
         input_kind = {"correlation": "r", "fisher_z": "z"}.get(data_kind)
+        two_tailed = tested_tail is None
+        # Only the two-sample t-test has the choice; analyze() rejects it elsewhere.
+        variance_kwargs = (
+            {"var_equal": bool(var_equal)}
+            if test_type == "two-sample" and var_equal is not None
+            else {}
+        )
+        t_statistic = (
+            ("student" if var_equal else "welch") if variance_kwargs
+            else ("glm" if test_type == "glm" else None)
+        )
         task.progress_message = f"Executing primary method ({operator_choice.upper()}) permutation loops..."
         from conninfpy import analyze
         res = analyze(
@@ -226,16 +250,20 @@ def _run_inference_background(
             sites=sites,
             harmonize=harmonization_choice,
             input=input_kind,
-            two_tailed=True,
+            r_to_z=False,
+            two_tailed=two_tailed,
             method=operator_choice,
             n_permutations=n_perms,
             rng=seed_val,
             verbose=False,
             use_mp=use_mp,
             acceleration=None if acceleration_choice == "none" else acceleration_choice,
+            **variance_kwargs,
             **op_kwargs
         )
-        
+        if tested_tail is not None:
+            res = res.one_sided(tested_tail)
+
         edges = res.significant_edges(atlas=annotation_atlas, alpha=alpha)
         
         comp_res = None
@@ -246,7 +274,7 @@ def _run_inference_background(
             if comp_method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
                 comp_run_kwargs.setdefault("e", 0.4)
                 comp_run_kwargs.setdefault("h", 3.0)
-                comp_run_kwargs.setdefault("n", 10)
+                comp_run_kwargs.setdefault("n", 50)
                 if comp_method in ("ni_tfnbs", "fbc_tfnbs"):
                     comp_run_kwargs["net_labels"] = sc_net_labels if use_sc_prior else atlas.network_index()
             elif comp_method == "cnbs":
@@ -265,15 +293,19 @@ def _run_inference_background(
                 sites=sites,
                 harmonize=harmonization_choice,
                 input=input_kind,
-                two_tailed=True,
+                r_to_z=False,
+                two_tailed=two_tailed,
                 method=comp_method,
                 n_permutations=n_perms,
                 rng=seed_val,
                 verbose=False,
                 use_mp=use_mp,
                 acceleration=None if acceleration_choice == "none" else acceleration_choice,
+                **variance_kwargs,
                 **comp_run_kwargs
             )
+            if tested_tail is not None:
+                comp_res = comp_res.one_sided(tested_tail)
             comp_edges = comp_res.significant_edges(atlas=annotation_atlas, alpha=alpha)
             
         task.result = res
@@ -283,6 +315,7 @@ def _run_inference_background(
         
         task.run_plan = {
             "question_type": question_choice,
+            "alpha": alpha,
             "loaded_settings_hash": loaded_settings_hash,
             "design_family": test_type,
             "method": operator_choice,
@@ -303,7 +336,12 @@ def _run_inference_background(
             "active_atlas_signature": active_atlas_signature,
             "data_kind": data_kind,
             "input": input_kind,
-            "tail_policy": "two-sided",
+            # The scale the inference ran on: the loaded one, never converted here.
+            "analysis_scale": {"r": "correlation", "z": "fisher_z"}.get(input_kind),
+            "tail_policy": f"one-sided-{tested_tail}" if tested_tail else "two-sided",
+            "tested_tail": tested_tail,
+            # 'student' / 'welch' (two-sample test), 'glm' (pooled residual variance).
+            "t_statistic": t_statistic,
             "seed": seed_val,
             "method_parameters": _method_plan_parameters(operator_choice, op_kwargs),
             "companion_method": comp_method if run_sensitivity else None,
@@ -329,8 +367,12 @@ def render_design_inference_view(base_atlas, tabs_list):
         render_help("analysis_setup")
     
     if st.session_state.connectivity_data is None or st.session_state.pheno_df is None:
-        st.warning("Please upload or generate a dataset in Tab 1 first.")
+        st.info("Load a dataset to configure your analysis.")
+        go_to_step("Load data", DATA_TAB, key="design_load_data")
     else:
+        with st.container(key="design_actions"):
+            run_action, results_action = st.columns(2)
+            status_area = st.container()
         # 1. Advisory Classifier Heuristic
         recomm = "Group Difference"
         pheno_df = st.session_state.pheno_df
@@ -372,6 +414,8 @@ def render_design_inference_view(base_atlas, tabs_list):
         interest_var = None
         confound_vars = []
         site_col = None
+        tested_tail = None
+        var_equal = None  # two-sample only: True Student, False Welch
         recipe_choice = "No site handling"
         harmonization_choice = "none"
         effective_recipe_choice = "No site handling"
@@ -414,7 +458,8 @@ def render_design_inference_view(base_atlas, tabs_list):
                 "Select your analysis question:",
                 valid_choices,
                 format_func=lambda x: f"{x} (💡 Recommended)" if x == recomm else x,
-                index=default_idx
+                index=default_idx,
+                key=persistent_key('design:select_your_analysis_question', scope='design', options=valid_choices),
             )
             
             if question_choice == "Paired Condition":
@@ -425,24 +470,28 @@ def render_design_inference_view(base_atlas, tabs_list):
                 subject_col = st.selectbox(
                     "Subject ID Column (Required)",
                     cols,
-                    index=cols.index(sub_candidates[0]) if sub_candidates else 0
+                    index=cols.index(sub_candidates[0]) if sub_candidates else 0,
+                    key=persistent_key('design:subject_id_column_required', scope='design', options=cols),
                 )
                 condition_col = st.selectbox(
                     "Condition Column (Required)",
                     cols,
-                    index=cols.index(cond_candidates[0]) if cond_candidates else 0
+                    index=cols.index(cond_candidates[0]) if cond_candidates else 0,
+                    key=persistent_key('design:condition_column_required', scope='design', options=cols),
                 )
                 
                 unique_conds = list(pheno_df[condition_col].unique())
                 baseline_val = st.selectbox(
                     "Baseline Condition",
                     unique_conds,
-                    index=0
+                    index=0,
+                    key=persistent_key('design:baseline_condition', scope='design', options=unique_conds),
                 )
                 target_val = st.selectbox(
                     "Target Condition",
                     unique_conds,
-                    index=1 if len(unique_conds) > 1 else 0
+                    index=1 if len(unique_conds) > 1 else 0,
+                    key=persistent_key('design:target_condition', scope='design', options=unique_conds),
                 )
 
                 if not is_synthetic:
@@ -459,6 +508,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                         "Acquisition Site Column (Optional)",
                         site_options,
                         index=site_options.index(default_site) if default_site else 0,
+                        key=persistent_key('design:acquisition_site_column_optional', scope='design', options=site_options),
                     )
                 
                 st.info(f"**Contrast Direction:**\n• **Positive effect:** {target_val} > {baseline_val}\n• **Negative effect:** {baseline_val} > {target_val}\n\n*Uses sign-flip permutation within-subject. Subject-constant site effects cancel in differences.*")
@@ -470,24 +520,29 @@ def render_design_inference_view(base_atlas, tabs_list):
                 group_col = st.selectbox(
                     "Group Column",
                     cols,
-                    index=cols.index(group_candidates[0]) if group_candidates else 0
+                    index=cols.index(group_candidates[0]) if group_candidates else 0,
+                    key=persistent_key('design:group_column', scope='design', options=cols),
                 )
+                if is_synthetic and group_col == "group":
+                    st.caption("Synthetic data: generator Group 1 = 0; generator Group 2 = 1. The signal, if nonzero, was introduced in Group 2 relative to Group 1.")
                 unique_groups = list(pheno_df[group_col].unique())
                 ref_group = st.selectbox(
                     "Reference Group (Baseline)",
                     unique_groups,
-                    index=0
+                    index=0,
+                    key=persistent_key('design:reference_group_baseline', scope='design', options=unique_groups),
                 )
                 target_group = st.selectbox(
                     "Target Group (Contrast)",
                     unique_groups,
-                    index=1 if len(unique_groups) > 1 else 0
+                    index=1 if len(unique_groups) > 1 else 0,
+                    key=persistent_key('design:target_group_contrast', scope='design', options=unique_groups),
                 )
                 
                 other_cols = [c for c in cols if c not in (group_col, "subject_id", "subject", "sub_id")]
                 
                 if not is_synthetic:
-                    adjust_covariates = st.checkbox("Adjust for nuisance covariates (e.g. age, sex, motion) or scanner site differences", value=is_abide)
+                    adjust_covariates = st.checkbox("Adjust for nuisance covariates (e.g. age, sex, motion) or scanner site differences", value=is_abide, key=persistent_key('design:adjust_for_nuisance_covariates_e_g_age_sex_motion_or_scanner_site_diff', scope='design'))
                     if adjust_covariates:
                         confound_candidates = _numeric_covariate_candidates(pheno_df, exclude=[group_col])
                         default_confound_vars = _default_abide_confound_vars(confound_candidates) if is_abide else []
@@ -495,6 +550,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                             "Nuisance Covariates",
                             confound_candidates,
                             default=default_confound_vars,
+                            key=persistent_key('design:nuisance_covariates_2', scope='design', options=confound_candidates, multiple=True),
                         )
                         site_candidates = [c for c in cols if c not in [group_col] + confound_vars]
                         site_options = [None] + site_candidates
@@ -504,19 +560,42 @@ def render_design_inference_view(base_atlas, tabs_list):
                             "Acquisition Site Column (Optional)",
                             site_options,
                             index=site_default,
+                            key=persistent_key('design:acquisition_site_column_optional_2', scope='design', options=site_options),
                         )
                         test_type = "glm"
                     else:
-                        site_col = st.selectbox("Acquisition Site Column (Optional)", [None] + [c for c in cols if c != group_col])
+                        site_col = st.selectbox("Acquisition Site Column (Optional)", [None] + [c for c in cols if c != group_col], key=persistent_key('design:acquisition_site_column_optional_3', scope='design', options=[None] + [c for c in cols if c != group_col]))
                         test_type = "two-sample"
                 else:
                     if other_cols:
-                        confound_vars = st.multiselect("Nuisance Covariates", other_cols, default=other_cols)
+                        confound_vars = st.multiselect("Nuisance Covariates", other_cols, default=other_cols, key=persistent_key('design:nuisance_covariates_3', scope='design', options=other_cols, multiple=True))
                         test_type = "glm"
                     else:
                         test_type = "two-sample"
                     site_col = None
-                    
+
+                if test_type == "two-sample":
+                    variance_choice = st.radio(
+                        "Group variances",
+                        ["Equal: Student's t (pooled variance)", "Unequal: Welch's t"],
+                        index=0,
+                        horizontal=True,
+                        help=(
+                            "Student's t pools the two group variances (as in the MATLAB NBS "
+                            "toolbox); Welch's t keeps them separate. With equal group sizes "
+                            "they coincide. The permutation is the same group-label shuffle "
+                            "in both cases; it is exact when the groups are exchangeable under "
+                            "the null. With unequal sizes and variances neither is exact."
+                        ),
+                        key=persistent_key('design:group_variances', scope='design'),
+                    )
+                    var_equal = variance_choice.startswith("Equal")
+                else:
+                    st.caption(
+                        "With covariates the group effect is tested in the GLM, which uses a "
+                        "pooled (Student) residual variance."
+                    )
+
             elif question_choice == "Continuous Predictor":
                 st.markdown("##### Design Binding (Continuous Predictor)")
                 interest_candidates = _numeric_covariate_candidates(pheno_df)
@@ -526,22 +605,50 @@ def render_design_inference_view(base_atlas, tabs_list):
                 interest_var = st.selectbox(
                     "Predictor of Interest",
                     interest_candidates,
-                    index=0 if interest_candidates else 0
+                    index=0 if interest_candidates else 0,
+                    key=persistent_key('design:predictor_of_interest', scope='design', options=interest_candidates),
                 )
                 confound_candidates = _numeric_covariate_candidates(
                     pheno_df,
                     exclude=[interest_var],
                 )
-                confound_vars = st.multiselect("Nuisance Covariates", confound_candidates)
+                confound_vars = st.multiselect("Nuisance Covariates", confound_candidates, key=persistent_key('design:nuisance_covariates', scope='design', options=confound_candidates, multiple=True))
                 
                 if not is_synthetic:
-                    site_col = st.selectbox("Acquisition Site Column (Optional)", [None] + [c for c in cols if c not in [interest_var] + confound_vars and c.lower() not in ("subject", "subject_id", "sub", "id", "subj", "session")])
+                    site_col = st.selectbox("Acquisition Site Column (Optional)", [None] + [c for c in cols if c not in [interest_var] + confound_vars and c.lower() not in ("subject", "subject_id", "sub", "id", "subj", "session")], key=persistent_key('design:acquisition_site_column_optional_4', scope='design', options=[None] + [c for c in cols if c not in [interest_var] + confound_vars and c.lower() not in ('subject', 'subject_id', 'sub', 'id', 'subj', 'session')]))
                 else:
                     site_col = None
                 test_type = "glm"
-                
+
+            # Hypothesis direction: two-sided by default; a one-sided test
+            # must be prespecified (e.g. controls > patients in the NBS example).
+            direction_labels_now = effect_direction_labels({
+                "question_type": question_choice,
+                "target_group": target_group, "reference_group": ref_group,
+                "target_condition": target_val, "baseline_condition": baseline_val,
+                "interest_var": interest_var,
+            })
+            tail_options = {
+                "Two-sided (either direction)": None,
+                f"One-sided: {direction_labels_now['positive']}": "positive",
+                f"One-sided: {direction_labels_now['negative']}": "negative",
+            }
+            tail_choice = st.radio(
+                "Hypothesis direction",
+                list(tail_options),
+                index=0,
+                help=(
+                    "Two-sided tests both directions against one joint null. Choose a "
+                    "one-sided test only for a direction fixed before seeing the data: "
+                    "that direction gets its own null at the nominal alpha and the other "
+                    "direction is not tested (shown as no detections)."
+                ),
+                key=persistent_key('design:hypothesis_direction', scope='design', options=list(tail_options)),
+            )
+            tested_tail = tail_options[tail_choice]
+
             is_synthetic = st.session_state.get("_synthetic_scenario_name") is not None
-            
+
             if not is_synthetic:
                 st.markdown("#### 🌐 2. Site & Exchangeability Handling")
                 if question_choice == "Paired Condition":
@@ -570,7 +677,8 @@ def render_design_inference_view(base_atlas, tabs_list):
                     recipe_choice = st.selectbox(
                         "Select site handling recipe:",
                         ["ComBat + site-aware GLM", "Site-aware GLM", "ComBat-only", "No site handling"],
-                        index=0
+                        index=0,
+                        key=persistent_key('design:select_site_handling_recipe', scope='design'),
                     )
                     if recipe_choice == "ComBat + site-aware GLM":
                         harmonization_choice = "combat_site_dummies_glm"
@@ -607,7 +715,8 @@ def render_design_inference_view(base_atlas, tabs_list):
                     "Diagnostic baseline (t-stat max-permutation)",
                     "Fast edge-wise screen (BH-FDR)"
                 ],
-                index=0
+                index=0,
+                key=persistent_key('design:select_method_profile', scope='design'),
             )
             
             if "TFNBS" in profile_choice:
@@ -616,7 +725,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                 else:
                     operator_choice = "tfnbs"
             elif "FBC-TFNBS" in profile_choice:
-                sub_method = st.radio("Choose specific block method:", ["fbc_tfnbs", "cnbs"], horizontal=True)
+                sub_method = st.radio("Choose specific block method:", ["fbc_tfnbs", "cnbs"], horizontal=True, key=persistent_key('design:choose_specific_block_method', scope='design'))
                 operator_choice = sub_method
             elif "NBS" in profile_choice:
                 operator_choice = "nbs"
@@ -644,24 +753,24 @@ def render_design_inference_view(base_atlas, tabs_list):
             sc_prior_path = None
             with st.expander("Method Parameters", expanded=False):
                 if operator_choice in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
-                    e_exp = st.number_input("Extent exponent (E)", 0.1, 2.0, 0.6, 0.05)
-                    h_exp = st.number_input("Height exponent (H)", 1.0, 5.0, 2.0, 0.1)
-                    n_steps = st.number_input("Integration steps (n)", 5, 50, 10, 1)
+                    e_exp = st.number_input("Extent exponent (E)", 0.1, 2.0, 0.6, 0.05, key=persistent_key('design:extent_exponent_e', scope='design'))
+                    h_exp = st.number_input("Height exponent (H)", 1.0, 5.0, 2.0, 0.1, key=persistent_key('design:height_exponent_h', scope='design'))
+                    n_steps = st.number_input("Integration steps (n)", 5, 50, 50, 1, key=persistent_key('design:integration_steps_n', scope='design'))
                     op_kwargs["e"] = e_exp
                     op_kwargs["h"] = h_exp
                     op_kwargs["n"] = n_steps
 
                     if operator_choice == "fbc_tfnbs":
-                        m_min = st.number_input("Minimum block size (m_min)", 5, 100, 20)
+                        m_min = st.number_input("Minimum block size (m_min)", 5, 100, 20, key=persistent_key('design:minimum_block_size_m_min', scope='design'))
                         op_kwargs["min_cluster_size"] = m_min
                     elif operator_choice == "ni_tfnbs":
-                        ni_norm = st.selectbox("Normalization", ["sqrt", "none"], index=0)
+                        ni_norm = st.selectbox("Normalization", ["sqrt", "none"], index=0, key=persistent_key('design:normalization', scope='design'))
                         op_kwargs["normalization"] = ni_norm
 
                 elif operator_choice == "nbs":
-                    tau = st.number_input("Cluster-forming threshold (tau)", 1.0, 10.0, 3.0, 0.1)
+                    tau = st.number_input("Cluster-forming threshold (tau)", 1.0, 10.0, 3.0, 0.1, key=persistent_key('design:cluster_forming_threshold_tau', scope='design'))
                     op_kwargs["threshold"] = tau
-                    nbs_stat = st.selectbox("NBS statistic", ["extent", "intensity"], index=0)
+                    nbs_stat = st.selectbox("NBS statistic", ["extent", "intensity"], index=0, key=persistent_key('design:nbs_statistic', scope='design'))
                     op_kwargs["nbs_stat"] = nbs_stat
 
                 if operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs"):
@@ -669,11 +778,12 @@ def render_design_inference_view(base_atlas, tabs_list):
                         "SC Prior Matrix (.npy) (Overrides Atlas)",
                         value="",
                         help="Supply an empirical structural connectivity matrix to derive data-driven Louvain communities instead of using fixed atlas networks.",
+                        key=persistent_key('design:sc_prior_matrix_npy_overrides_atlas', scope='design'),
                     )
                 
             # Option to add sensitivity companion
             st.markdown("##### 🔄 Sensitivity Baseline Comparison")
-            run_sensitivity = st.checkbox("Include Sensitivity Companion Analysis", value=False, help="Run both the chosen method and a companion baseline method sequentially to compare results in Tab 3.")
+            run_sensitivity = st.checkbox("Include Sensitivity Companion Analysis", value=False, help="Run both the chosen method and a companion baseline method sequentially to compare results in Tab 3.", key=persistent_key('design:include_sensitivity_companion_analysis', scope='design'))
             
             comp_method = None
             if run_sensitivity:
@@ -704,27 +814,28 @@ def render_design_inference_view(base_atlas, tabs_list):
                     comp_options,
                     index=default_idx,
                     format_func=lambda x: all_methods[x],
-                    help="The baseline method to run sequentially alongside your primary method for comparison."
+                    help="The baseline method to run sequentially alongside your primary method for comparison.",
+                    key=persistent_key('design:select_companion_baseline_method', scope='design', options=comp_options),
                 )
 
                 with st.expander("Companion Method Parameters", expanded=False):
                     if comp_method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
-                        comp_e = st.number_input("Companion Extent exponent (E)", 0.1, 2.0, 0.6, 0.05, key="comp_e")
-                        comp_h = st.number_input("Companion Height exponent (H)", 1.0, 5.0, 2.0, 0.1, key="comp_h")
-                        comp_n = st.number_input("Companion Integration steps (n)", 5, 50, 10, 1, key="comp_n")
+                        comp_e = st.number_input("Companion Extent exponent (E)", 0.1, 2.0, 0.6, 0.05, key=persistent_key("comp_e", scope='design'))
+                        comp_h = st.number_input("Companion Height exponent (H)", 1.0, 5.0, 2.0, 0.1, key=persistent_key("comp_h", scope='design'))
+                        comp_n = st.number_input("Companion Integration steps (n)", 5, 50, 50, 1, key=persistent_key("comp_n", scope='design'))
                         comp_kwargs["e"] = comp_e
                         comp_kwargs["h"] = comp_h
                         comp_kwargs["n"] = comp_n
                         if comp_method == "fbc_tfnbs":
-                            comp_m_min = st.number_input("Companion Minimum block size (m_min)", 5, 100, 20, key="comp_m_min")
+                            comp_m_min = st.number_input("Companion Minimum block size (m_min)", 5, 100, 20, key=persistent_key("comp_m_min", scope='design'))
                             comp_kwargs["min_cluster_size"] = comp_m_min
                         elif comp_method == "ni_tfnbs":
-                            comp_ni_norm = st.selectbox("Companion Normalization", ["sqrt", "none"], index=0, key="comp_ni_norm")
+                            comp_ni_norm = st.selectbox("Companion Normalization", ["sqrt", "none"], index=0, key=persistent_key("comp_ni_norm", scope='design'))
                             comp_kwargs["normalization"] = comp_ni_norm
                     elif comp_method == "nbs":
-                        comp_tau = st.number_input("Companion Cluster-forming threshold (tau)", 1.0, 10.0, 3.0, 0.1, key="comp_tau")
+                        comp_tau = st.number_input("Companion Cluster-forming threshold (tau)", 1.0, 10.0, 3.0, 0.1, key=persistent_key("comp_tau", scope='design'))
                         comp_kwargs["threshold"] = comp_tau
-                        comp_nbs_stat = st.selectbox("Companion NBS statistic", ["extent", "intensity"], index=0, key="comp_nbs_stat")
+                        comp_nbs_stat = st.selectbox("Companion NBS statistic", ["extent", "intensity"], index=0, key=persistent_key("comp_nbs_stat", scope='design'))
                         comp_kwargs["nbs_stat"] = comp_nbs_stat
                 
             st.write("")
@@ -740,7 +851,8 @@ def render_design_inference_view(base_atlas, tabs_list):
                     "Custom"
                 ],
                 index=1,
-                horizontal=True
+                horizontal=True,
+                key=persistent_key('design:permutation_budget_preset', scope='design'),
             )
             budget_map = {
                 "Quick check (100 permutations)": 100,
@@ -748,14 +860,14 @@ def render_design_inference_view(base_atlas, tabs_list):
                 "Manuscript (5000 permutations)": 5000
             }
             if budget_choice == "Custom":
-                n_perms = st.number_input("Number of Permutations (B)", 10, 10000, 1000, 100)
+                n_perms = st.number_input("Number of Permutations (B)", 10, 10000, 1000, 100, key=persistent_key('design:number_of_permutations_b', scope='design'))
             else:
                 n_perms = budget_map[budget_choice]
                 
             with st.expander("Execution Options", expanded=False):
-                acceleration_choice = st.selectbox("Tail Acceleration", ["gpd", "gamma", "none"], index=0)
-                use_mp = st.checkbox("Parallel Execution (Multiprocessing)", value=True)
-                seed_val = st.number_input("Random Seed", 1, 10000, 42)
+                acceleration_choice = st.selectbox("Tail Acceleration", ["gpd", "gamma", "none"], index=0, key=persistent_key('design:tail_acceleration', scope='design'))
+                use_mp = st.checkbox("Parallel Execution (Multiprocessing)", value=True, key=persistent_key('design:parallel_execution_multiprocessing', scope='design'))
+                seed_val = st.number_input("Random Seed", 1, 10000, 42, key=persistent_key('design:random_seed', scope='design'))
                 
         with col_right:
             st.markdown("#### 📋 Review & Execute")
@@ -766,7 +878,11 @@ def render_design_inference_view(base_atlas, tabs_list):
                 if is_fisher_z:
                     st.success("✅ **Input scale:** Fisher-z connectivity")
                 else:
-                    st.warning("⚠️ **Input scale: raw correlation.** Preprocessing with Fisher r-to-z is recommended.")
+                    st.warning(
+                        "⚠️ **Input scale: raw correlation.** Inference runs on the correlations "
+                        "as loaded; no Fisher z is applied automatically. Fisher r-to-z is usually "
+                        "recommended (it stabilises the variance); apply it here to analyse z values."
+                    )
                     if st.button("⚡ Apply Fisher-z now", key="apply_fisher_z_btn"):
                         Y_clipped = np.clip(st.session_state.connectivity_data, -0.9999, 0.9999)
                         st.session_state.connectivity_data = np.arctanh(Y_clipped)
@@ -799,6 +915,8 @@ def render_design_inference_view(base_atlas, tabs_list):
 |---|---|
 | **Question** | {question_choice} |
 | **Statistical Path** | {test_type.upper() if not (question_choice == 'Group Difference' and adjust_covariates) else 'GLM (Promoted)'} |
+| **t statistic** | {("Student (pooled variance)" if var_equal else "Welch (separate variances)") if test_type == "two-sample" else ("GLM (pooled residual variance)" if test_type == "glm" else "one-sample / paired")} |
+| **Hypothesis Direction** | {"two-sided" if tested_tail is None else f"one-sided ({tested_tail})"} |
 | **Method Profile** | {profile_choice.split(' ')[0]} ({operator_choice}) |
 | **Method Parameters** | {method_parameters} |
 | **Atlas Metadata** | {'None' if active_analysis_atlas(base_atlas) is None else f"{len(active_analysis_atlas(base_atlas))} ROIs"} |
@@ -808,7 +926,7 @@ def render_design_inference_view(base_atlas, tabs_list):
 | **P-value Resolution** | ~{resolution:.4f} |
 """
                 st.markdown(plan_md)
-                st.caption("Runtime is a rough range; first runs, multiprocessing startup, and TFNBS scoring can move it substantially.")
+                st.caption("Runtime is a rough range; it does not account for the number of integration steps. First runs, multiprocessing startup, and TFNBS scoring can move it substantially.")
                 if site_strategy_note:
                     st.info(site_strategy_note)
                 
@@ -876,7 +994,9 @@ def render_design_inference_view(base_atlas, tabs_list):
                 
                 # Check status and draw corresponding elements
                 if task.status == "idle":
-                    if st.button(btn_label, type="primary", disabled=not run_enabled, key="run_inference_btn"):
+                    if not run_enabled:
+                        status_area.warning("Review the highlighted design or atlas settings below before running inference.")
+                    if run_action.button(btn_label, type="primary", disabled=not run_enabled, key="run_inference_btn", width="stretch"):
                         try:
                             Y = st.session_state.connectivity_data.copy()
                             atlas = active_analysis_atlas(base_atlas)
@@ -1016,8 +1136,10 @@ def render_design_inference_view(base_atlas, tabs_list):
                                     group_col=group_col, ref_group=ref_group, target_group=target_group,
                                     interest_var=interest_var, subject_col=subject_col, condition_col=condition_col,
                                     baseline_val=baseline_val, target_val=target_val, confound_vars=confound_vars,
-                                    site_col=site_col, active_atlas_signature=st.session_state.get("active_atlas_signature"),
-                                    data_kind=st.session_state.get("connectivity_data_kind")
+                                    site_col=site_col, active_atlas_signature=st.session_state.get("loaded_atlas_signature", st.session_state.get("active_atlas_signature")),
+                                    data_kind=st.session_state.get("connectivity_data_kind"),
+                                    tested_tail=tested_tail,
+                                    var_equal=var_equal,
                                 )
                             )
                             t.daemon = True
@@ -1028,6 +1150,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                             st.exception(e)
                             
                 elif task.status == "running":
+                    run_action.button("⏳ Inference running…", disabled=True, key="run_inference_running", width="stretch")
                     def render_running_status():
                         """Poll the thread state without restarting its inference work."""
                         current_task = st.session_state.inference_task
@@ -1049,11 +1172,12 @@ def render_design_inference_view(base_atlas, tabs_list):
 
                     # Fragment reruns are scoped to this status area, so
                     # they do not re-create the background worker thread.
-                    st.fragment(run_every=2.0)(render_running_status)()
+                    with status_area:
+                        st.fragment(run_every=2.0)(render_running_status)()
                 else:
                     # success or failed
-                    st.info(f"Inference run complete. Current status: **{task.status.upper()}**")
-                    if st.button("🚀 Configure & Run New Inference", key="run_inf_new_button"):
+                    status_area.info(f"Inference run complete. Current status: **{task.status.upper()}**")
+                    if run_action.button("🚀 Configure & Run New Inference", key="run_inf_new_button", width="stretch"):
                         task.status = "idle"
                         st.rerun()
                         
@@ -1071,7 +1195,20 @@ def render_design_inference_view(base_atlas, tabs_list):
                         st.rerun()
                 elif task.status == "failed":
                     st.error("❌ Inference failed!")
-                    st.text_area("Error Traceback", value=task.error or "Unknown error", height=150)
+                    st.text_area("Error Traceback", value=task.error or "Unknown error", height=150, key=persistent_key('design:error_traceback', scope='design'))
                     if st.button("Reset & Try Again", key="reset_failed_inf_task"):
                         task.status = "idle"
+                        st.rerun()
+
+                if st.session_state.inference_result is not None and task.status != "running":
+                    st.html("""<style>
+                    .st-key-design_actions .st-key-design_continue_results button {
+                        background: #167345; color: white; border: 1px solid #167345;
+                    }
+                    .st-key-design_actions .st-key-design_continue_results button:hover {
+                        background: #105a35; color: white; border-color: #105a35;
+                    }
+                    </style>""")
+                    if results_action.button("Continue to Results →", key="design_continue_results", width="stretch"):
+                        st.session_state.next_tab = tabs_list[2]
                         st.rerun()

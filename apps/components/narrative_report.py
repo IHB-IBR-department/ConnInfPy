@@ -1,5 +1,7 @@
 import os
 import streamlit as st
+from apps.utils.ui_state import persistent_key
+from apps.utils.workspace import require_analysis_step
 from conninfpy.interpret.evidence import validate_evidence
 from conninfpy.interpret.llm_narrative import LLMNarrator, check_narrative_terms
 from apps.utils.helpers import current_contrast_name, safe_filename_part, render_help, result_is_stale
@@ -16,19 +18,16 @@ def render_narrative_report_view():
 
     if is_stale:
         st.error("❌ **Stale Results:** The dataset configuration has changed. You must re-run inference in Tab 2 before generating the narrative report.")
-    elif st.session_state.evidence_packet is None:
-        st.warning("⚠️ **Narrative is waiting for the Brainnetome annotation.**")
-        st.info("Annotate the detected connections first (Tab 4).")
-        if st.button("Go to Annotation ➡️", key="go_to_annotation_btn", type="primary"):
-            st.session_state.active_tab = "4. Brainnetome Annotation"
-            st.rerun()
+    elif not require_analysis_step(annotation=True, key="report"):
+        return
     else:
         # Collapsible LLM Config
         with st.expander("🤖 LLM Settings & API Keys", expanded=False):
             provider = st.selectbox(
                 "Provider", 
                 ["mock", "openrouter", "gemini", "openai"], 
-                index=["mock", "openrouter", "gemini", "openai"].index(st.session_state.llm_provider)
+                index=["mock", "openrouter", "gemini", "openai"].index(st.session_state.llm_provider),
+                key=persistent_key('narrative:provider', scope='narrative'),
             )
             
             selected_models = []
@@ -46,21 +45,24 @@ def render_narrative_report_view():
                     "OpenRouter Model(s)",
                     available_models,
                     default=default_selection,
-                    help="Select one or more models to query sequentially and compare outputs."
+                    help="Select one or more models to query sequentially and compare outputs.",
+                    key=persistent_key('narrative:openrouter_model_s', scope='narrative', options=available_models, multiple=True),
                 )
                 model_val = selected_models[0] if selected_models else "deepseek/deepseek-v4-pro"
             else:
                 model_val = st.text_input(
                     "Model Name (Optional)", 
                     value=st.session_state.llm_model, 
-                    placeholder="e.g. gpt-4o-mini"
+                    placeholder="e.g. gpt-4o-mini",
+                    key=persistent_key('narrative:model_name_optional', scope='narrative'),
                 )
                 selected_models = [model_val] if model_val else []
                 
             api_key = st.text_input(
                 "API Key (Override)", 
                 value=st.session_state.llm_api_key, 
-                type="password"
+                type="password",
+                key=persistent_key('narrative:api_key_override', scope='narrative'),
             )
             
             # Save back to session state
@@ -157,7 +159,7 @@ def render_narrative_report_view():
                                 )
                             
                             # Export narrative report block
-                            report_block = f"""# Neuroimaging Decoding Report
+                            report_block = f"""# Brainnetome Interpretation Report
 Contrast: {st.session_state.evidence_packet['query']['contrast']}
 Atlas: {st.session_state.evidence_packet['query']['atlas']}
 Reference: {st.session_state.evidence_packet['reference']['atlas']}
