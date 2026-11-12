@@ -14,7 +14,15 @@ import pandas as pd
 
 nib = __import__("importlib").import_module("nibabel")
 
-from conninfpy.atlas import AtlasInfo, assign_coordinates
+from conninfpy.atlas import AtlasInfo, assign_coordinates as _assign_coordinates
+
+def assign_coordinates(coords, reference, **kwargs):
+    kwargs.setdefault("max_distance", 5.0)
+    return _assign_coordinates(coords, reference, space="synthetic", reference_space="synthetic", units="mm", **kwargs)
+
+def _from_coordinates(coords, reference=None, **kwargs):
+    kwargs.setdefault("max_distance", 5.0)
+    return AtlasInfo.from_coordinates(coords, reference, space="synthetic", reference_space="synthetic", units="mm", **kwargs)
 from conninfpy.results import summarize_by_network
 
 
@@ -127,19 +135,19 @@ class TestFromCoordinates(unittest.TestCase):
         self.assertEqual(t["region"].iloc[0], "unassigned")
 
     def test_groups_by_network_when_the_reference_has_networks(self):
-        rois = AtlasInfo.from_coordinates([self.inside, self.near, self.far], self.atlas)
+        rois = _from_coordinates([self.inside, self.near, self.far], self.atlas)
         self.assertEqual(rois.networks, ["Net1", "Net2", "unassigned"])
         self.assertEqual(rois.labels, ["ROI_1", "ROI_2", "ROI_3"])
         self.assertEqual(list(rois.assignment["roi"]), rois.labels)
-        rois = AtlasInfo.from_coordinates([self.inside, self.near], self.atlas, group_by="region")
+        rois = _from_coordinates([self.inside, self.near], self.atlas, group_by="region")
         self.assertEqual(rois.networks, ["L_A", "L_B"])
 
     def test_groups_by_region_when_the_reference_has_none(self):
-        rois = AtlasInfo.from_coordinates([self.inside, self.near], AtlasInfo.from_nifti(_label_image()))
+        rois = _from_coordinates([self.inside, self.near], AtlasInfo.from_nifti(_label_image()))
         self.assertEqual(rois.networks, ["region_1", "region_2"])
 
     def test_given_networks_override_the_grouping(self):
-        rois = AtlasInfo.from_coordinates([self.inside, self.near], self.atlas, networks=["DMN", "DMN"])
+        rois = _from_coordinates([self.inside, self.near], self.atlas, networks=["DMN", "DMN"])
         self.assertEqual(rois.networks, ["DMN", "DMN"])
         self.assertEqual(list(rois.assignment["region"]), ["L_A", "L_B"])
 
@@ -156,14 +164,14 @@ class TestFromCoordinates(unittest.TestCase):
         no_image = AtlasInfo(labels=self.atlas.labels, networks=self.atlas.networks, coords=self.atlas.coords)
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            t = assign_coordinates([self.inside], no_image)
+            t = assign_coordinates([self.inside], no_image, max_distance=20.0)
         self.assertTrue(any("nearest region centroid" in str(x.message) for x in w))
         self.assertEqual(t["method"].iloc[0], "centroid")
         self.assertEqual(t["region"].iloc[0], "L_A")
 
     def test_network_summary_aggregates_coordinate_rois(self):
         coords = [self.inside, _world(26, 9, 8), self.near, _world(12, 8, 8)]  # Net1, Net1, Net2, Net1
-        rois = AtlasInfo.from_coordinates(coords, self.atlas)
+        rois = _from_coordinates(coords, self.atlas)
         p = np.ones((4, 4))
         p[0, 1] = p[1, 0] = 0.01      # within Net1
         p[0, 2] = p[2, 0] = 0.01      # Net1-Net2
@@ -174,9 +182,9 @@ class TestFromCoordinates(unittest.TestCase):
 
     def test_rejects_bad_input(self):
         with self.assertRaisesRegex(ValueError, "shape"):
-            AtlasInfo.from_coordinates([[1, 2]], self.atlas)
+            _from_coordinates([[1, 2]], self.atlas)
         with self.assertRaisesRegex(ValueError, "reference atlas or the ROI networks"):
-            AtlasInfo.from_coordinates([self.inside])
+            _from_coordinates([self.inside])
 
 
 class TestBundledBrainnetomeImage(unittest.TestCase):

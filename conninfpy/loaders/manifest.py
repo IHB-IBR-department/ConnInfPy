@@ -209,8 +209,8 @@ class ManifestLoader(BaseDataLoader):
         
         return dataset
 
-def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]) -> LoadedDataset:
-    """Filter the loaded dataset time-series or correlation matrices to keep only specified ROIs."""
+def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str], *, by: str = "position") -> LoadedDataset:
+    """Filter by one-based positions (legacy) or explicit original atlas IDs."""
     keep_ids = []
     if isinstance(keep_rois, str):
         if os.path.exists(keep_rois):
@@ -236,8 +236,20 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
     if not keep_ids:
         return dataset
         
-    # Convert 1-indexed to 0-indexed
-    keep_idx = np.array([int(x) - 1 for x in keep_ids if x > 0], dtype=int)
+    if by not in ("position", "id"):
+        raise ValueError("by must be 'position' or 'id'")
+    if by == "id":
+        if dataset.atlas is None or dataset.atlas.label_ids is None:
+            raise ValueError("original atlas label IDs are unavailable")
+        ids = dataset.atlas.label_ids.tolist()
+        if len(set(ids)) != len(ids) or len(set(keep_ids)) != len(keep_ids):
+            raise ValueError("original and requested ROI IDs must be unique")
+        missing = [x for x in keep_ids if x not in ids]
+        if missing:
+            raise ValueError(f"requested ROI IDs are absent: {missing}")
+        keep_idx = np.array([ids.index(x) for x in keep_ids], dtype=int)
+    else:
+        keep_idx = np.array([int(x) - 1 for x in keep_ids if x > 0], dtype=int)
     n_rois = dataset.data.shape[-1]
     keep_idx = np.array([idx for idx in keep_idx if 0 <= idx < n_rois], dtype=int)
     
@@ -264,7 +276,11 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
             networks=networks,
             coords=coords,
             hemisphere=hemisphere,
-            source=f"{dataset.atlas.source} (filtered to {len(keep_idx)} ROIs)"
+            source=f"{dataset.atlas.source} (filtered to {len(keep_idx)} ROIs)",
+            image=dataset.atlas.image,
+            label_ids=(dataset.atlas.label_ids[keep_idx] if dataset.atlas.label_ids is not None else None),
+            assignment=(dataset.atlas.assignment.iloc[keep_idx].reset_index(drop=True).copy()
+                        if dataset.atlas.assignment is not None else None),
         )
         
     if dataset.roi_labels is not None:

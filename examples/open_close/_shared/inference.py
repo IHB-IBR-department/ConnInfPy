@@ -8,12 +8,12 @@ from examples.open_close._shared.data import OpenCloseDataset
 
 SELECTORS = {
     "tstat":     dict(method="tstat"),
-    "tfnbs":     dict(method="tfnbs", e=0.4, h=3.0, n=10),
+    "tfnbs":     dict(method="tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65),
     "nbs@2.0":   dict(method="nbs", threshold=2.0),
     "nbs@3.0":   dict(method="nbs", threshold=3.0),
     "cnbs":      dict(method="cnbs"),               # net_labels filled in later
-    "ni_tfnbs":  dict(method="ni_tfnbs", e=0.4, h=3.0, n=10),
-    "fbc_tfnbs": dict(method="fbc_tfnbs", e=0.4, h=3.0, n=10),          # net_labels filled in later
+    "ni_tfnbs":  dict(method="ni_tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65),
+    "fbc_tfnbs": dict(method="fbc_tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65),          # net_labels filled in later
     "bh_fdr":    dict(method="bh_fdr"),             # parametric, no permutations
 }
 

@@ -47,7 +47,7 @@ SCHAEFER_100 = Path.home() / "nilearn_data/schaefer_2018/Schaefer2018_100Parcels
 # analysis -> (results folder of its runner, stored paper map)
 ANALYSES = {"abide_age": (RESULTS / "age", RESULTS / "age/age_strategy_d.npz"),
             "abide_dx": (RESULTS / "diagnosis", RESULTS / "diagnosis/dx_strategy_d.npz")}
-TFNBS = dict(method="tfnbs", e=0.4, h=3.0, n=10, acceleration=None, rng=42, use_mp=True)
+TFNBS = dict(method="tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65, acceleration=None, rng=42, use_mp=True)
 
 
 def run(name, data, n_perm):

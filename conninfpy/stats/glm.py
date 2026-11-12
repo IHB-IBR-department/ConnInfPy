@@ -51,6 +51,10 @@ from conninfpy.enhance import (
     apply_ni_tfnbs,
     apply_tfnbs,
 )
+from conninfpy._provenance import (
+    capture_analysis_provenance,
+    refresh_model_identity,
+)
 from conninfpy.results import InferenceResult, OmnibusInferenceResult
 from conninfpy.stats import _degenerate as _degenerate
 from conninfpy.stats import _estimates as _estimates
@@ -79,6 +83,8 @@ from conninfpy.stats._types import (
     StatMethod,
     TestType,
     _grid_from_kwargs,
+    enhancement_provenance,
+    resolve_f_threshold,
 )
 from conninfpy.stats._workers import run_permutations
 from conninfpy.stats.acceleration import compute_p_values_accelerated
@@ -505,6 +511,7 @@ _ENHANCE_MAP = {
 # =============================================================================
 
 
+@capture_analysis_provenance
 def compute_p_val_glm(
     Y: npt.NDArray[np.float64],
     # --- Advanced API ---
@@ -530,8 +537,8 @@ def compute_p_val_glm(
     nbs_stat: str = DEFAULT_NBS_STAT,
     e: Union[float, List[float]] = DEFAULT_EXTENT_EXPONENT,
     h: Union[float, List[float]] = DEFAULT_HEIGHT_EXPONENT,
-    n: int = DEFAULT_N_THRESHOLDS,
-    start_thres: float = DEFAULT_START_THRESHOLD,
+    n: Optional[int] = DEFAULT_N_THRESHOLDS,
+    start_thres: Optional[float] = None,
     min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
     normalization: str = "sqrt",
     strata: Optional[npt.NDArray[Any]] = None,
@@ -540,6 +547,11 @@ def compute_p_val_glm(
     scheme: str = "auto",
     cnbs_correction: str = "bonferroni",
     design_columns: Optional[Sequence[str]] = None,
+    atlas: Optional[Any] = None,
+    roi_ids: Optional[Sequence[Any]] = None,
+    groupings: Optional[Dict[str, Sequence[Any]]] = None,
+    units: Optional[str] = None,
+    contrast_id: Optional[str] = None,
 ) -> Union[InferenceResult, OmnibusInferenceResult]:
     """
     Compute p-values for connectivity data using GLM with Freedman-Lane permutation.
@@ -597,6 +609,11 @@ def compute_p_val_glm(
         Network labels (required for cnbs, ni_tfnbs, fbc_tfnbs).
     threshold, nbs_stat, n, start_thres, min_cluster_size, normalization
         Method-specific parameters (see ``compute_p_val`` docstring).
+        For TFNBS with F, ``start_thres=None`` uses F's 0.90 quantile
+        with the tested degrees of freedom. When available-case edges have
+        different residual df, provide one common start explicitly. An
+        explicit F start below an applicable quantile emits a warning.
+        For t and beta, None resolves to 1.65 (beta uses coefficient units).
     e, h : float or sequence of float
         TFNBS extent and height exponents. Pass equal-length sequences to
         evaluate a whole ``(E, H)`` grid in one permutation pass. In grid
@@ -635,6 +652,9 @@ def compute_p_val_glm(
         (``result.beta``, ``result.design``). Defaults: ``intercept``,
         ``confound_1`` ... and ``interest`` for the convenience API, else
         ``intercept`` / ``x1`` ...
+    atlas, roi_ids, groupings, units, contrast_id : optional
+        Original ROI/effect/contrast metadata captured for ``to_bundle()``.
+        Multi-contrast results take contrast identities from dictionary keys.
 
     Returns
     -------
@@ -737,6 +757,18 @@ def compute_p_val_glm(
 
     _warn_beta_threshold_scale(stat_type_str, method_enum)
 
+    f_threshold_info = None
+    if method_enum in TFNBS_FAMILY:
+        if stat_type_str == GLMStatType.FSTAT.value:
+            # Missing-data df are determined from the tested patterns below.
+            if not (missing == "available_case" and np.isnan(Y).any()):
+                start_thres, f_threshold_info = resolve_f_threshold(
+                    start_thres, np.atleast_2d(contrast_vec).shape[0],
+                    [_residual_degrees_of_freedom(X)],
+                )
+        elif start_thres is None:
+            start_thres = DEFAULT_START_THRESHOLD
+
     if method_enum in CONSTRAINED_METHODS and net_labels is None:
         raise ValueError(f"Method '{method_str}' requires net_labels.")
 
@@ -792,7 +824,14 @@ def compute_p_val_glm(
         )
         block_report = report.pop("block_report", None)
         beta_ac = report.pop("beta")
+        f_threshold_info = report.pop("f_threshold", None)
+        if f_threshold_info is not None:
+            start_thres = f_threshold_info.pop("start_thres")
         design = _estimates.glm_design(X, contrast_vec, design_columns)
+        if method_enum in TFNBS_FAMILY:
+            design["enhancement"] = enhancement_provenance(e, h, n, start_thres, method_enum, normalization, min_cluster_size)
+            if f_threshold_info is not None:
+                design["enhancement"].update(f_threshold_info)
         design["available_case"] = (
             "each edge fitted with its own subjects; predictions use the "
             "full-sample column means"
@@ -855,6 +894,10 @@ def compute_p_val_glm(
     # Coefficient maps of the observed fit, saved with the p-maps
     beta = (X_pinv @ Y.reshape(n_subjects, -1)).reshape(X.shape[1], N, N)
     design = _estimates.glm_design(X, contrast_vec, design_columns)
+    if method_enum in TFNBS_FAMILY:
+        design["enhancement"] = enhancement_provenance(e, h, n, start_thres, method_enum, normalization, min_cluster_size)
+        if f_threshold_info is not None:
+            design["enhancement"].update(f_threshold_info)
 
     # ---- Compute observed statistics ----
     emp_stat_dict = compute_glm_stat(
@@ -1068,6 +1111,7 @@ def _multi_contrast_perm_task(
     return out
 
 
+@capture_analysis_provenance
 def compute_p_val_glm_multi(
     Y: npt.NDArray[np.float64],
     design_matrix: npt.NDArray[np.float64],
@@ -1090,8 +1134,8 @@ def compute_p_val_glm_multi(
     nbs_stat: str = DEFAULT_NBS_STAT,
     e: Union[float, List[float]] = DEFAULT_EXTENT_EXPONENT,
     h: Union[float, List[float]] = DEFAULT_HEIGHT_EXPONENT,
-    n: int = DEFAULT_N_THRESHOLDS,
-    start_thres: float = DEFAULT_START_THRESHOLD,
+    n: Optional[int] = DEFAULT_N_THRESHOLDS,
+    start_thres: Optional[float] = None,
     min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
     normalization: str = "sqrt",
     strata: Optional[npt.NDArray[Any]] = None,
@@ -1100,6 +1144,10 @@ def compute_p_val_glm_multi(
     scheme: str = "auto",
     cnbs_correction: str = "bonferroni",
     design_columns: Optional[Sequence[str]] = None,
+    atlas: Optional[Any] = None,
+    roi_ids: Optional[Sequence[Any]] = None,
+    groupings: Optional[Dict[str, Sequence[Any]]] = None,
+    units: Optional[str] = None,
 ) -> Dict[str, InferenceResult]:
     """Run several contrasts of one design in a single permutation pass.
 
@@ -1203,6 +1251,10 @@ def compute_p_val_glm_multi(
                 scheme=scheme,
                 cnbs_correction=cnbs_correction,
                 design_columns=design_columns,
+                atlas=atlas,
+                roi_ids=roi_ids,
+                groupings=groupings,
+                units=units,
             )
             for name, c in contrasts.items()
         }
@@ -1253,6 +1305,9 @@ def compute_p_val_glm_multi(
         )
 
     _warn_beta_threshold_scale(stat_type_str, method_enum)
+
+    if start_thres is None:
+        start_thres = DEFAULT_START_THRESHOLD
 
     if method_enum in CONSTRAINED_METHODS and net_labels is None:
         raise ValueError(f"Method {method_str!r} requires net_labels to be provided.")
@@ -1441,6 +1496,8 @@ def compute_p_val_glm_multi(
                 n_permutations=n_permutations, two_tailed=two_tailed,
             ),
         )
+        if method_enum in TFNBS_FAMILY:
+            out[name].design["enhancement"] = enhancement_provenance(e, h, n, start_thres, method_enum, normalization, min_cluster_size)
     return out
 
 
@@ -1615,6 +1672,7 @@ def compute_p_val_paired_glm(
             mean_a = np.nanmean(Y_A, axis=0)
         res.beta = np.concatenate([mean_a[None], res.beta])
         zeros = [0.0] * q
+        enhancement = res.design.get("enhancement")
         res.design = {
             "kind": "paired-glm",
             "columns": ["condition_A_mean"] + res.design["columns"],
@@ -1632,4 +1690,7 @@ def compute_p_val_paired_glm(
             "note": "B - A is modelled as delta_intercept + delta_confounds x (C_B - C_A); "
             "the tested effect is the change with no confound change.",
         }
+        if enhancement is not None:
+            res.design["enhancement"] = enhancement
+        refresh_model_identity(res)
     return res

@@ -24,6 +24,7 @@ from conninfpy.defaults import DEFAULT_EXTENT_EXPONENT
 from conninfpy.defaults import DEFAULT_HEIGHT_EXPONENT
 from conninfpy.defaults import DEFAULT_N_PERMUTATIONS
 from conninfpy.defaults import DEFAULT_N_THRESHOLDS_PERMUTATION
+from conninfpy._provenance import update_analysis_scale
 from conninfpy.results import InferenceResult
 from conninfpy.results import OmnibusInferenceResult
 from conninfpy._prepare import infer_input_kind
@@ -99,6 +100,10 @@ class AnalyzeResult:
         result over pairs of atlas networks.
         """
         return self.inference.network_summary(atlas, **kwargs)
+
+    def to_bundle(self, **kwargs: Any) -> "Any":
+        """Snapshot the completed inference; see ``ResultBundle.from_result``."""
+        return self.inference.to_bundle(**kwargs)
 
     def node_summary(self, *args: Any, **kwargs: Any) -> "Any":
         """Delegate to the underlying inference result's ``node_summary``:
@@ -322,12 +327,17 @@ def analyze(
     n_permutations: int = DEFAULT_N_PERMUTATIONS,
     e: Union[float, Sequence[float]] = DEFAULT_EXTENT_EXPONENT,
     h: Union[float, Sequence[float]] = DEFAULT_HEIGHT_EXPONENT,
-    n: int = DEFAULT_N_THRESHOLDS_PERMUTATION,
+    n: Optional[int] = DEFAULT_N_THRESHOLDS_PERMUTATION,
     rng: RngLike = None,
     verbose: bool = False,
     use_mp: bool = True,
     missing: str = "raise",
     min_coverage: float = 0.8,
+    atlas: Optional[Any] = None,
+    roi_ids: Optional[Sequence[Any]] = None,
+    groupings: Optional[Dict[str, Sequence[Any]]] = None,
+    units: Optional[str] = None,
+    contrast_id: Optional[str] = None,
     **method_kwargs: Any,
 ) -> Union[AnalyzeResult, Dict[str, AnalyzeResult]]:
     """Run the standard prepare → harmonize → GLM/two-sample → infer recipe.
@@ -463,19 +473,18 @@ def analyze(
     n_permutations : int, default ``1000``
         Permutations. The same defaults apply to every entry point
         (:mod:`conninfpy.defaults`).
-    e, h : float or sequence of float, default ``0.3``, ``3.0``
+    e, h : float or sequence of float, default ``0.4``, ``3.0``
         TFNBS exponents. Pass equal-length sequences to evaluate a
-        whole ``(E, H)`` grid in one call — the threshold loop runs
-        once and the per-cell scores are broadcast at the end, so
-        a K-cell grid costs ~the same wall-clock as a single cell.
+        whole ``(E, H)`` grid in one call. Exact integration evaluates
+        each parameter pair; cost increases with the number of pairs.
         When arrays are passed the returned :class:`InferenceResult`
         carries the parameter axis (``result.is_grid == True``,
         ``result.e_grid``, ``result.h_grid``); use
         ``result.select(param_idx)`` or pass ``param_idx=`` to
         ``significant_edges`` / ``to_csv`` to project to a single
-        cell. Validation-paper default ``(0.3, 3.0)``.
-    n : int, default ``10``
-        Threshold integration steps.
+        cell. Default ``(0.4, 3.0)``.
+    n : int or None, default None
+        Exact integral if None; a positive integer uses the historical right grid.
     rng : int, ``numpy.random.Generator``, or ``None``
         Reproducibility handle.
     verbose : bool, default ``False``
@@ -496,6 +505,18 @@ def analyze(
     min_coverage : float, default ``0.8``
         Minimum share of each group's subjects (or of the pairs) an edge
         needs under ``missing='available_case'``.
+    atlas : AtlasInfo, optional
+        ROI identities and network/hemisphere metadata in input matrix order.
+    roi_ids : sequence, optional
+        Explicit original ROI IDs when the input has no suitable atlas IDs.
+    groupings : dict of str to sequence, optional
+        Additional named per-ROI groupings retained alongside atlas groupings.
+    units : str, optional
+        Response units for the saved effect; defaults to the declared scale or
+        ``'unknown response units'`` for low-level calls without a scale.
+    contrast_id : str, optional
+        Original contrast/predictor name for a single result. Multi-contrast
+        results use their dictionary keys instead.
     **method_kwargs
         Forwarded to the underlying pipeline (e.g. ``net_labels``,
         ``min_cluster_size``, ``threshold``).
@@ -791,6 +812,8 @@ def analyze(
             )
 
     if multi_mode:
+        if contrast_id is not None:
+            raise ValueError("contrast_id is set by each predictor name in multi-contrast mode")
         # Several predictors in one design, each against its own null.
         # Build X = [intercept, confounds(+site dummies), *interest cols]
         # and a unit contrast per predictor. ComBat strategies already ran
@@ -804,12 +827,14 @@ def analyze(
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
+            atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,
             **method_kwargs,
         )
         out: Dict[str, AnalyzeResult] = {}
         for nm, res in results.items():
             if getattr(res, "design", None) is not None:
                 res.design["scale"] = analysis_scale
+                update_analysis_scale(res, analysis_scale, units)
             res.harmonized = (
                 strategy in (COMBAT_ONLY, COMBAT_SITE_DUMMIES_GLM)
                 and sites is not None
@@ -827,6 +852,8 @@ def analyze(
             )
         return out
 
+    if contrast_id is not None:
+        method_kwargs["contrast_id"] = contrast_id
     if glm_mode:
         result = compute_p_val_glm(
             Y, interest=interest, confounds=confounds,
@@ -835,6 +862,7 @@ def analyze(
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
+            atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,
             **method_kwargs,
         )
     elif paired_glm_mode:
@@ -847,6 +875,7 @@ def analyze(
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
+            atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,
             **method_kwargs,
         )
     else:
@@ -857,6 +886,7 @@ def analyze(
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
             var_equal=var_equal,
+            atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,
             **method_kwargs,
         )
 
@@ -878,6 +908,7 @@ def analyze(
     result.combat_diagnostics = combat_diag
     if getattr(result, "design", None) is not None:
         result.design["scale"] = analysis_scale
+        update_analysis_scale(result, analysis_scale, units)
     # strata_provided was set inside compute_p_val{,_glm} from the strata=
     # argument; preserved here for clarity.
 

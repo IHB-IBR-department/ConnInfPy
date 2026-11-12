@@ -136,15 +136,15 @@ the full range of thresholds:
 
 .. math::
 
-   \text{score}(e) \;=\; \sum_{\text{thresholds } h}
-       (\text{size of the component containing } e \text{ at } h)^{E}\;\cdot\; h^{H}
+   \text{score}(e) \;=\; \int_{h_0}^{w_e}
+       (\text{edge count in the component containing } e \text{ at } h)^{E}\, h^{H}\, dh
 
 At low thresholds an edge accrues weight from belonging to a spatially extended
 component; at high thresholds from its own magnitude. Summing across thresholds
 rewards an edge that is extended *or* strong, removing the dependence on any
 single cutoff. ``E`` controls the contribution of component size and ``H`` that
 of statistic height; they act as sensitivity parameters rather than fixed
-constants, and can be swept at negligible cost to report stability
+constants, and can be swept in one permutation pass to report stability
 (:ref:`wf-eh-stability`). This is the recommended default when there is no
 strong prior about where the effect is located.
 

@@ -166,7 +166,7 @@ def main():
             method=mname,
             n_permutations=args.n_permutations,
             acceleration="gpd",
-            e=e_list, h=h_list, n=10,
+            e=e_list, h=h_list, n=10, start_thres=1.65,
             use_mp=True, rng=args.seed,
             **kwargs
         )

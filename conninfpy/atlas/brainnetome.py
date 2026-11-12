@@ -371,10 +371,13 @@ def _sphere_on_grid(
     """World coordinates of grid voxel centres within ``radius`` of ``center``."""
     inv = np.linalg.inv(affine)
     c_vox = (inv @ np.r_[center, 1.0])[:3]
-    step = np.abs(np.diag(affine)[:3])
-    half = np.ceil(radius / step).astype(int) + 1
-    lo = np.maximum(np.floor(c_vox).astype(int) - half, 0)
-    hi = np.minimum(np.ceil(c_vox).astype(int) + half, np.array(shape) - 1)
+    # Include lattice points outside the reference field of view: labels_at
+    # assigns them to background, so coverage uses the whole sphere rather
+    # than overstating overlap at an image boundary. Row norms also support
+    # rotated and oblique affines.
+    half = np.ceil(radius * np.linalg.norm(inv[:3, :3], axis=1)).astype(int) + 1
+    lo = np.floor(c_vox).astype(int) - half
+    hi = np.ceil(c_vox).astype(int) + half
     if np.any(hi < lo):
         return np.zeros((0, 3))
     grid = np.stack(

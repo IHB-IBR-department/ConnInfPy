@@ -503,9 +503,9 @@ ABIDE section:
     p-values were returned instead. With the sign fixed the fitted tail is
     used and is unbiased for light, exponential and heavy tails (median
     p/true 0.86–1.04 over 200 runs).
-11. **Package default E = 0.3 vs the paper's E = 0.4.** The paper scripts now
-    pass E explicitly; decide whether the package default should match the
-    setting the paper recommends. `open_close/paper_validation/run_eh_sensitivity.py`
+11. **Historical package default E = 0.3 vs the paper's E = 0.4.** The paper
+    scripts pass E explicitly; the library default is now 0.4.
+    `open_close/paper_validation/run_eh_sensitivity.py`
     (not in the manuscript) still uses GPD with 200 permutations.
 
 Resolved by this revision: null calibration design and size, per-direction
@@ -535,3 +535,16 @@ the GLM changes: identical (256 edges, max |Δp| = 0).
 | Rounding asymmetry scored ~0.5% of maps as directed | re-checked: no flag or map changed |
 
 The refactored Open-Close `openclose` stage generates paired maps and plots without fitting classifiers. The existing transfer experiment is the separate `mltransfer` stage; `all` includes it. Atlas contrast stability remains an independent example.
+
+## TFNBS integration and historical configurations
+
+The library default now uses the exact integral of the existing piecewise
+support function (``n=None``). Paper scripts that specify a positive ``n``
+retain the historical right-endpoint grid and pass their t-scale start of
+1.65 explicitly. Simulation configurations preserve their own n, E/H and
+start values; for example the GLM configuration uses n=50, while the FPR
+configuration uses n=10. The legacy scripts use the package's automatic
+backend selection, so exact bitwise reproduction across software versions and
+Numba availability is not guaranteed. No published results were recomputed
+for this integration change. Earlier runs with undocumented inherited
+settings require their original configuration and environment to reproduce.

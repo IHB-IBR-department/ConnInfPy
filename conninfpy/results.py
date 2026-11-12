@@ -43,6 +43,7 @@ from conninfpy._export import build_network_summary
 from conninfpy._export import build_omnibus_dataframe
 from conninfpy._export import build_tailed_dataframe
 from conninfpy._export import network_summary_matrix
+from conninfpy._provenance import project_analysis_provenance
 
 
 def summarize_by_network(
@@ -193,6 +194,9 @@ class InferenceResult(TailResult):
         Columns, column means, contrast, named covariate profiles and the
         comparison used for coupling changes (see :meth:`predicted`,
         :meth:`coupling`), and the response ``scale``.
+    analysis_provenance : dict or None
+        Producer-captured identities, correction family, validity masks and
+        coverage used by :meth:`to_bundle`; ``None`` for legacy results.
     """
 
     method: str
@@ -217,6 +221,7 @@ class InferenceResult(TailResult):
     tested_tail: Optional[str]
     beta: Optional[npt.NDArray[np.float64]]
     design: Optional[Dict[str, Any]]
+    analysis_provenance: Optional[Dict[str, Any]]
 
     def __new__(
         cls,
@@ -242,6 +247,7 @@ class InferenceResult(TailResult):
         two_tailed: bool = False,
         beta: Optional[npt.NDArray[np.float64]] = None,
         design: Optional[Dict[str, Any]] = None,
+        analysis_provenance: Optional[Dict[str, Any]] = None,
         tested_tail: Optional[str] = None,
         component_report: Optional[Dict[str, Any]] = None,
     ) -> "InferenceResult":
@@ -270,6 +276,7 @@ class InferenceResult(TailResult):
         instance.tested_tail = tested_tail
         instance.beta = beta
         instance.design = design
+        instance.analysis_provenance = analysis_provenance
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
@@ -390,6 +397,9 @@ class InferenceResult(TailResult):
             beta=getattr(self, "beta", None),
             design=getattr(self, "design", None),
             tested_tail=direction,
+            analysis_provenance=project_analysis_provenance(
+                getattr(self, "analysis_provenance", None), tested_tail=direction
+            ),
             component_report=restrict_component_report(
                 getattr(self, "component_report", None), direction
             ),
@@ -483,6 +493,9 @@ class InferenceResult(TailResult):
             beta=getattr(self, "beta", None),
             design=getattr(self, "design", None),
             tested_tail=getattr(self, "tested_tail", None),
+            analysis_provenance=project_analysis_provenance(
+                getattr(self, "analysis_provenance", None), param_idx=param_idx
+            ),
             component_report=getattr(self, "component_report", None),
         )
 
@@ -548,6 +561,15 @@ class InferenceResult(TailResult):
         if beta is None or design is None:
             return None
         return effect(beta, design["contrast"])
+
+    def to_bundle(self, **kwargs: Any) -> "Any":
+        """Snapshot this result for independent post-analysis reporting.
+
+        See :meth:`conninfpy.post_analysis.ResultBundle.from_result`. Captured
+        analysis metadata is used automatically; explicit overrides are checked.
+        """
+        from conninfpy.post_analysis import ResultBundle
+        return ResultBundle.from_result(self, **kwargs)
 
     def coupling(
         self,
@@ -996,6 +1018,7 @@ class OmnibusInferenceResult(TailResult):
     preserve_provided: bool
     strata_provided: bool
     combat_diagnostics: Optional[Dict[str, Any]]
+    analysis_provenance: Optional[Dict[str, Any]]
     # See InferenceResult.component_report (single tail, 'omnibus').
     component_report: Optional[Dict[str, Any]] = None
 
@@ -1018,6 +1041,7 @@ class OmnibusInferenceResult(TailResult):
         block_report: Optional[Dict[str, Any]] = None,
         beta: Optional[npt.NDArray[np.float64]] = None,
         design: Optional[Dict[str, Any]] = None,
+        analysis_provenance: Optional[Dict[str, Any]] = None,
         component_report: Optional[Dict[str, Any]] = None,
     ) -> "OmnibusInferenceResult":
         instance = super().__new__(cls)
@@ -1040,6 +1064,7 @@ class OmnibusInferenceResult(TailResult):
         instance.component_report = component_report
         instance.beta = beta
         instance.design = design
+        instance.analysis_provenance = analysis_provenance
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
@@ -1059,6 +1084,11 @@ class OmnibusInferenceResult(TailResult):
     def omnibus(self) -> npt.NDArray[np.float64]:
         """Corrected p-values of the omnibus test (FWER or FDR by method)."""
         return self["omnibus"]
+
+    def to_bundle(self, **kwargs: Any) -> "Any":
+        """Snapshot this unsigned omnibus result for post-analysis reporting."""
+        from conninfpy.post_analysis import ResultBundle
+        return ResultBundle.from_result(self, **kwargs)
 
     @property
     def tail_policy(self) -> str:

@@ -106,6 +106,7 @@ from conninfpy.interpret.annotate import (
 )
 from conninfpy.loaders import load
 from conninfpy.results import InferenceResult, OmnibusInferenceResult
+from conninfpy.post_analysis import ResultBundle, brainnetome_crosswalk
 from conninfpy.sim.datasets import (
     ModularDatasetGenerator,
     generate_fc_matrices,
@@ -151,6 +152,8 @@ __all__ = [
     "AnalyzeResult",
     "InferenceResult",
     "OmnibusInferenceResult",
+    "ResultBundle",
+    "brainnetome_crosswalk",
     # data in
     "load",
     "AtlasInfo",

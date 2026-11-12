@@ -8,6 +8,34 @@ import numpy as np
 import numpy.typing as npt
 
 
+try:
+    from numba import njit
+except ImportError:
+    def njit(*args, **kwargs):
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return lambda fn: fn
+
+
+@njit(cache=True)
+def _extract_numba(matrix, cutoff, symmetric):
+    n = matrix.shape[0]
+    count = 0
+    for i in range(n):
+        for j in range(i + 1 if symmetric else 0, n):
+            if i != j and matrix[i, j] > cutoff:
+                count += 1
+    rows = np.empty(count, dtype=np.int64)
+    cols = np.empty(count, dtype=np.int64)
+    weights = np.empty(count, dtype=matrix.dtype)
+    k = 0
+    for i in range(n):
+        for j in range(i + 1 if symmetric else 0, n):
+            if i != j and matrix[i, j] > cutoff:
+                rows[k], cols[k], weights[k] = i, j, matrix[i, j]
+                k += 1
+    return rows, cols, weights
+
 def _is_symmetric(matrix: npt.NDArray[np.floating], rtol: float = 1e-8) -> bool:
     """True when the matrix equals its transpose up to rounding.
 
@@ -49,12 +77,15 @@ def _get_edges(
     edge_weights : ndarray
         Edge weight values.
     """
+    # Inputs have already been rounded by the calling scorer. Keep the
+    # NumPy path for nonstandard dtypes unsupported by Numba.
+    if t_stats.dtype in (np.dtype("float64"), np.dtype("float32"), np.dtype("int64")):
+        return _extract_numba(t_stats, start_thres, symmetric)
     if symmetric:
         rows, cols = np.triu_indices_from(t_stats, k=1)
     else:
         nroi = t_stats.shape[0]
         rows, cols = np.where(~np.eye(nroi, dtype=bool))
-
     weights = t_stats[rows, cols]
     valid_mask = weights > start_thres
     return rows[valid_mask], cols[valid_mask], weights[valid_mask]

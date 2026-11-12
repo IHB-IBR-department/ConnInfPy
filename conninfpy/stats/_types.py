@@ -9,6 +9,49 @@ import numpy as np
 import numpy.typing as npt
 
 
+def enhancement_provenance(e, h, n, start_thres, method=None,
+                           normalization=None, min_cluster_size=None):
+    """Serializable effective TFNBS parameters, not inferred historical values."""
+    def plain(value):
+        return value.tolist() if isinstance(value, np.ndarray) else value
+    result = {"integration": "exact" if n is None else "right-grid",
+              "n": n, "e": plain(e), "h": plain(h), "start_thres": start_thres,
+              "backend": "auto"}
+    if method is not None:
+        method = method.value if hasattr(method, "value") else method
+        result["method"] = method
+        if method == "ni_tfnbs":
+            result["normalization"] = normalization
+        elif method == "fbc_tfnbs":
+            result["min_cluster_size"] = min_cluster_size
+    return result
+
+
+def resolve_f_threshold(start, df1, dfs):
+    """Resolve a common F threshold against the tested residual df values."""
+    import warnings
+    from scipy.stats import f
+
+    dfs = sorted(set(int(df) for df in dfs))
+    if not dfs:
+        raise ValueError("No tested residual degrees of freedom for the F threshold.")
+    critical = [float(f.ppf(0.90, df1, df)) for df in dfs]
+    if start is None:
+        if len(dfs) != 1:
+            raise ValueError("F TFNBS with differing tested residual degrees of freedom "
+                             "requires an explicit common start_thres.")
+        value = critical[0]
+        source = "F0.90"
+    else:
+        value = float(start)
+        source = "explicit"
+        if any(value < cutoff for cutoff in critical):
+            warnings.warn("Explicit F start_thres is below F0.90 for at least one "
+                          "tested residual degree of freedom.", RuntimeWarning, stacklevel=3)
+    return value, {"df1": int(df1), "df2": dfs, "f_critical_0.90": critical,
+                   "threshold_source": source}
+
+
 class TestType(str, Enum):
     """Statistical test types for permutation testing."""
 
