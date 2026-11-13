@@ -21,6 +21,10 @@ inference:                   # any conninfpy.analyze() keyword
   n_permutations: 200
   acceleration: gpd          # remove for exact empirical p-values (then use ~5000)
   rng: 42
+  # two_tailed: false        # legacy: separate one-sided families per direction
+                             # (combined-direction FWER is then not alpha; use alpha/2 per tail)
+  # tested_tail: positive    # a one-sided hypothesis fixed before the run; the
+                             # other direction is then reported as not tested
 
 atlas: schaefer_100_yeo7     # built-in name or a CSV path; omit to use the manifest's
 alpha: 0.05

@@ -832,8 +832,21 @@ class TestAnalyzeDelegation(unittest.TestCase):
         self.assertIs(out.component_report, out.inference.component_report)
         self.assertIsNotNone(out.component_report)
         pd.testing.assert_frame_equal(out.component_table(), out.inference.component_table())
-        one = out.one_sided("positive")
+        # Restricting a finished result needs the legacy separate families;
+        # a direction fixed before the run uses analyze(tested_tail=...).
+        with self.assertRaisesRegex(ValueError, "two_tailed=False"):
+            out.one_sided("positive")
+        legacy = analyze(Y=np.concatenate([g1, g2]), interest=np.r_[np.zeros(12), np.ones(12)],
+                         method="nbs", threshold=TAU, n_permutations=B, rng=SEED, use_mp=False,
+                         input="z", acceleration=None, two_tailed=False)
+        one = legacy.one_sided("positive")
         self.assertEqual(one.component_table()["tail"].unique().tolist(), ["positive"])
+        self.assertEqual(one.inference.tail_selection, "post-hoc")
+        pre = analyze(Y=np.concatenate([g1, g2]), interest=np.r_[np.zeros(12), np.ones(12)],
+                      method="nbs", threshold=TAU, n_permutations=B, rng=SEED, use_mp=False,
+                      input="z", acceleration=None, tested_tail="positive")
+        self.assertEqual(pre.component_table()["tail"].unique().tolist(), ["positive"])
+        self.assertEqual(pre.inference.tail_selection, "prespecified")
 
     def test_other_methods_report_none(self):
         g1, g2 = planted_groups()

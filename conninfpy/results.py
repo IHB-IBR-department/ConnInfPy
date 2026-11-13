@@ -183,8 +183,19 @@ class InferenceResult(TailResult):
         Whether positive and negative directions form one two-sided family.
         Each enhancement parameter setting and contrast is corrected separately.
     tested_tail : {'positive', 'negative'} or None
-        Set by :meth:`one_sided`: the one prespecified direction. The other
-        direction was not tested and its p-values are reported as 1.
+        The one tested direction of a one-sided result: set by
+        :meth:`one_sided` (post hoc) or by a prespecified
+        ``analyze(..., tested_tail=...)`` run. The other direction was not
+        tested and its p-values are reported as 1.
+    tail_selection : {'prespecified', 'post-hoc'} or None
+        How ``tested_tail`` came about, so a directional restriction can never
+        masquerade as a hypothesis fixed in advance. ``'prespecified'``: the
+        direction was declared before the inference ran
+        (``analyze(..., tested_tail=...)``). ``'post-hoc'``: the direction was
+        chosen on a finished result through :meth:`one_sided` after the run.
+        ``None`` for unrestricted results and for results saved before the
+        marker existed (their policy is reported as it was saved, never
+        re-labelled).
     beta : ndarray of shape (p, N, N) or None
         Coefficient maps of the tested model on the response scale (GLM
         coefficients; for pairwise tests the equivalent design: group-1
@@ -219,6 +230,9 @@ class InferenceResult(TailResult):
     component_report: Optional[Dict[str, Any]] = None
     two_tailed: bool
     tested_tail: Optional[str]
+    # Same pickle-compatibility pattern: results saved before this marker
+    # reload with None (no selection claim), not with this version's default.
+    tail_selection: Optional[str] = None
     beta: Optional[npt.NDArray[np.float64]]
     design: Optional[Dict[str, Any]]
     analysis_provenance: Optional[Dict[str, Any]]
@@ -250,6 +264,7 @@ class InferenceResult(TailResult):
         analysis_provenance: Optional[Dict[str, Any]] = None,
         tested_tail: Optional[str] = None,
         component_report: Optional[Dict[str, Any]] = None,
+        tail_selection: Optional[str] = None,
     ) -> "InferenceResult":
         instance = super().__new__(cls)
         TailResult.__init__(
@@ -274,6 +289,7 @@ class InferenceResult(TailResult):
         instance.component_report = component_report
         instance.two_tailed = two_tailed
         instance.tested_tail = tested_tail
+        instance.tail_selection = tail_selection
         instance.beta = beta
         instance.design = design
         instance.analysis_provenance = analysis_provenance
@@ -331,18 +347,26 @@ class InferenceResult(TailResult):
         return "two-sided" if getattr(self, "two_tailed", False) else "separate-one-sided"
 
     def one_sided(self, direction: str) -> "InferenceResult":
-        """Restrict the result to one prespecified direction.
+        """Restrict a finished result to one direction — a post hoc selection.
 
-        For a directional hypothesis (e.g. controls > patients, as in the
-        MATLAB NBS toolbox's t-test) only one tail is tested. Run the
-        inference with ``two_tailed=False``, so each tail has its own
-        max-statistic null, and keep the hypothesised tail: its p-values
-        are the one-sided FWER-corrected p-values at the nominal level.
-        The other tail's p-values are set to 1, so tables, summaries and
-        plots report no detections in the direction that was not tested;
-        the statistic maps are kept unchanged. For ``method='nbs'`` the
-        component report lists the tested tail's components only, with the
-        same component ids.
+        .. warning:: The direction is chosen **after** the run, so the copy is
+            marked ``tail_selection='post-hoc'`` in its provenance and exports;
+            it is not a prespecified hypothesis. For a directional hypothesis
+            fixed before seeing the data, declare it at launch with
+            :func:`conninfpy.analyze`'s ``tested_tail=`` argument (the run
+            then uses per-tail nulls and is marked ``'prespecified'``), or call
+            the low-level pipeline with ``two_tailed=False``.
+
+        Only a result computed with ``two_tailed=False`` can be restricted:
+        each tail then has its own max-statistic null, and the kept tail's
+        p-values are one-sided FWER-corrected at the nominal level. The other
+        tail's p-values are set to 1, so tables, summaries and plots report no
+        detections in the direction that was not tested; the statistic maps
+        are kept unchanged. For ``method='nbs'`` the component report lists
+        the tested tail's components only, with the same component ids;
+        for ``method='cnbs'`` the block report keeps all blocks of the
+        family while marking the tested direction and dropping untested-tail
+        p-values.
 
         Parameters
         ----------
@@ -352,8 +376,9 @@ class InferenceResult(TailResult):
         Returns
         -------
         InferenceResult
-            A copy with ``tested_tail = direction`` and
-            ``tail_policy = 'one-sided-<direction>'``.
+            A copy with ``tested_tail = direction``,
+            ``tail_policy = 'one-sided-<direction>'`` and
+            ``tail_selection = 'post-hoc'``.
 
         Raises
         ------
@@ -362,6 +387,12 @@ class InferenceResult(TailResult):
             p-values come from the joint null of both tails, which is not
             the null of a one-sided test.
         """
+        return self._restricted_to_tail(direction, selection="post-hoc")
+
+    def _restricted_to_tail(self, direction: str, *, selection: str) -> "InferenceResult":
+        """Shared body of :meth:`one_sided` (post hoc) and the prespecified
+        ``analyze(..., tested_tail=...)`` restriction. ``selection`` records
+        whether the direction was fixed before the run or chosen after it."""
         if direction not in ("positive", "negative"):
             raise ValueError(f"direction must be 'positive' or 'negative'; got {direction!r}.")
         if getattr(self, "two_tailed", False):
@@ -369,6 +400,13 @@ class InferenceResult(TailResult):
                 "one_sided() needs a result computed with two_tailed=False: a "
                 "two-sided result's p-values come from the joint null of both tails."
             )
+        existing_tail = getattr(self, "tested_tail", None)
+        if existing_tail not in (None, direction):
+            raise ValueError(
+                f"result is already restricted to the {existing_tail!r} tail; "
+                "call one_sided() on the unrestricted two_tailed=False result."
+            )
+        from conninfpy.stats._cnbs import restrict_block_report
         from conninfpy.stats._components import restrict_component_report
 
         other = "negative" if direction == "positive" else "positive"
@@ -392,16 +430,20 @@ class InferenceResult(TailResult):
             e_grid=self.e_grid,
             h_grid=self.h_grid,
             missing_report=self.missing_report,
-            block_report=self.block_report,
+            block_report=restrict_block_report(
+                getattr(self, "block_report", None), direction, selection=selection
+            ),
             two_tailed=False,
             beta=getattr(self, "beta", None),
             design=getattr(self, "design", None),
             tested_tail=direction,
+            tail_selection=selection,
             analysis_provenance=project_analysis_provenance(
-                getattr(self, "analysis_provenance", None), tested_tail=direction
+                getattr(self, "analysis_provenance", None), tested_tail=direction,
+                tail_selection=selection,
             ),
             component_report=restrict_component_report(
-                getattr(self, "component_report", None), direction
+                getattr(self, "component_report", None), direction, selection=selection
             ),
         )
 
@@ -493,6 +535,7 @@ class InferenceResult(TailResult):
             beta=getattr(self, "beta", None),
             design=getattr(self, "design", None),
             tested_tail=getattr(self, "tested_tail", None),
+            tail_selection=getattr(self, "tail_selection", None),
             analysis_provenance=project_analysis_provenance(
                 getattr(self, "analysis_provenance", None), param_idx=param_idx
             ),

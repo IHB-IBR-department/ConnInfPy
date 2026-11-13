@@ -118,7 +118,9 @@ class ResultBundle:
         if isinstance(family, str) and not family:
             raise ValueError("the original correction family must be declared")
         if isinstance(family, dict):
-            family = {**deepcopy(family), "tail_policy": result.tail_policy}
+            family = {**deepcopy(family), "tail_policy": result.tail_policy,
+                      "tested_tail": getattr(result, "tested_tail", None),
+                      "tail_selection": getattr(result, "tail_selection", None)}
         groups = {str(k): tuple(v) for k, v in groupings.items()}
         if annotation is not None:
             for name, values in annotation.get("groupings", {}).items():
@@ -176,6 +178,8 @@ class ResultBundle:
         meta = {"model_id": model_id, "contrast_id": contrast_id, "design": design, "software_version": __version__,
                 "method": result.method, "correction": result.correction, "family": deepcopy(family),
                 "inference_unit": unit, "native_report": report, "tail_policy": result.tail_policy,
+                "tested_tail": getattr(result, "tested_tail", None),
+                "tail_selection": getattr(result, "tail_selection", None),
                 "n_permutations": result.n_permutations, "acceleration": result.acceleration,
                 "e_grid": deepcopy(e_grid), "h_grid": deepcopy(h_grid),
                 "identity": deepcopy(provenance.get("identity", {"roi_id_kind": "explicit_input_id"})),
@@ -304,6 +308,8 @@ class ResultBundle:
                          "tail": tail, "param_idx": param_idx, "alpha": alpha, "zero_band": zero_band,
                          "model_id": self.metadata["model_id"], "method": self.metadata["method"],
                          "correction": self.metadata["correction"], "tail_policy": self.metadata["tail_policy"],
+                         "tested_tail": self.metadata.get("tested_tail"),
+                         "tail_selection": self.metadata.get("tail_selection"),
                          "inference_unit": self.metadata["inference_unit"], "family": deepcopy(self.metadata["family"]),
                          "note": "descriptive projected locations; no new significance"})
         if param_idx is not None:
@@ -362,6 +368,9 @@ class ResultBundle:
         frame = pd.DataFrame(rows)
         frame.attrs.update({"tail": tail, "param_idx": param_idx, "alpha": alpha,
                             "inference_unit": self.metadata["inference_unit"],
+                            "tail_policy": self.metadata["tail_policy"],
+                            "tested_tail": self.metadata.get("tested_tail"),
+                            "tail_selection": self.metadata.get("tail_selection"),
                             "family": deepcopy(self.metadata["family"]),
                             "note": "projected locations; endpoint terms describe reference regions only"})
         return frame

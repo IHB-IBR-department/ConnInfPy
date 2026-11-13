@@ -11,11 +11,16 @@ writes three files to the output directory:
   ``beta_columns``, ``effect`` (the contrast c' beta) and the predicted
   connectivity at the two compared profiles (``fc[<profile>]``)
 - ``provenance.json`` — package version, the analysis file, data and design
-  summary, resolved tail/correction/native-unit policy, warnings (``flags``),
-  and run time
+  summary, resolved tail/correction/native-unit policy, the significance
+  level ``alpha``, warnings (``flags``), and run time
 
-Both directions are reported, so ``inference.two_tailed`` defaults to True.
-Set it explicitly to False for separate prespecified one-sided families.
+Both directions are reported, so ``inference.two_tailed`` defaults to True
+(one two-sided family; a single alpha covers both directions). Set it
+explicitly to False for the legacy separate one-sided families (each at the
+nominal alpha; the combined-direction FWER is then not the nominal alpha).
+A directional hypothesis fixed before the run is declared with
+``inference.tested_tail: positive`` (or ``negative``): that direction is
+tested against its own null and the other is reported as not tested.
 
 Example analysis file: ``examples/abide/configs/abide_mini_age.yaml``.
 """
@@ -330,9 +335,12 @@ def run(
     dataset = load(base / cfg["data"])
     kwargs, summary = build_analysis(dataset, cfg)
     inference = dict(cfg.get("inference") or {})
-    # CSV/report output includes both signs: declare one two-sided family.
-    # A prespecified one-sided analysis can explicitly request False.
-    inference.setdefault("two_tailed", True)
+    # CSV/report output includes both signs: declare one two-sided family
+    # (one alpha over both directions) unless the file says otherwise.
+    # A prespecified one-sided analysis declares inference.tested_tail
+    # instead; forcing two_tailed=True there would contradict it.
+    if "tested_tail" not in inference:
+        inference.setdefault("two_tailed", True)
     if n_permutations is not None:
         inference["n_permutations"] = n_permutations
     if use_mp is not None:
@@ -382,6 +390,8 @@ def run(
             "n_significant": inf.n_significant(alpha),
             "method": inf.method,
             "tail_policy": inf.tail_policy,
+            "tested_tail": getattr(inf, "tested_tail", None),
+            "tail_selection": getattr(inf, "tail_selection", None),
             "correction": inf.correction,
             "inference_unit": inf.inference_unit,
             "n_permutations": inf.n_permutations,

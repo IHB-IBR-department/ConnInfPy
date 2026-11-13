@@ -88,6 +88,30 @@ class AnalyzeResult:
             )
         return self.inference.omnibus
 
+    @property
+    def tail_policy(self) -> str:
+        """The declared directional family of the wrapped result
+        (``'two-sided'``, ``'separate-one-sided'``, ``'one-sided-<tail>'`` or
+        ``'omnibus'``); see :attr:`InferenceResult.tail_policy`."""
+        return self.inference.tail_policy
+
+    @property
+    def tested_tail(self) -> Optional[str]:
+        """The one tested direction of a one-sided result, or ``None``."""
+        return getattr(self.inference, "tested_tail", None)
+
+    @property
+    def tail_selection(self) -> Optional[str]:
+        """How ``tested_tail`` was fixed: ``'prespecified'`` (declared before
+        the run via ``analyze(..., tested_tail=...)``), ``'post-hoc'``
+        (:meth:`one_sided` on a finished result) or ``None``."""
+        return getattr(self.inference, "tail_selection", None)
+
+    @property
+    def two_tailed(self) -> bool:
+        """Whether both directions were corrected as one two-sided family."""
+        return bool(getattr(self.inference, "two_tailed", False))
+
     def significant_edges(self, *args: Any, **kwargs: Any) -> "Any":
         """Delegate to the underlying inference result's
         :meth:`~conninfpy.InferenceResult.significant_edges`.
@@ -113,6 +137,13 @@ class AnalyzeResult:
         return self.inference.node_summary(*args, **kwargs)
 
     @property
+    def block_report(self) -> Optional[Dict[str, Any]]:
+        """The underlying result's cNBS block report (``None`` for other
+        methods); see :attr:`~conninfpy.InferenceResult.block_report`.
+        """
+        return getattr(self.inference, "block_report", None)
+
+    @property
     def component_report(self) -> Optional[Dict[str, Any]]:
         """The underlying result's NBS component report (``None`` for other
         methods); see :attr:`~conninfpy.InferenceResult.component_report`.
@@ -133,9 +164,9 @@ class AnalyzeResult:
         return self.inference.to_csv(path, **kwargs)
 
     def one_sided(self, direction: str) -> "AnalyzeResult":
-        """Copy restricted to one prespecified direction; see
-        :meth:`~conninfpy.InferenceResult.one_sided`.
-        """
+        """Copy restricted to one direction chosen after the run (post hoc);
+        see :meth:`~conninfpy.InferenceResult.one_sided`. To fix the direction
+        before the run, call :func:`analyze` with ``tested_tail=``."""
         if isinstance(self.inference, OmnibusInferenceResult):
             raise ValueError("An F-stat omnibus result has no direction to restrict.")
         return replace(self, inference=self.inference.one_sided(direction))
@@ -324,6 +355,8 @@ def analyze(
     r_to_z: bool = True,
     var_equal: bool = False,
     method: Union[str, StatMethod] = "tfnbs",
+    two_tailed: Optional[bool] = None,
+    tested_tail: Optional[str] = None,
     acceleration: Optional[str] = DEFAULT_ACCELERATION,
     n_permutations: int = DEFAULT_N_PERMUTATIONS,
     e: Union[float, Sequence[float]] = DEFAULT_EXTENT_EXPONENT,
@@ -476,6 +509,30 @@ def analyze(
         tests have one group, so ``var_equal=True`` raises there.
     method : str, default ``'tfnbs'``
         Enhancement method.
+    two_tailed : bool or None, default None
+        Directional family of the corrected p-values. ``None`` (the default)
+        and ``True`` test **one two-sided family**: positive and negative
+        directions are corrected against the joint max null, so one nominal
+        alpha covers both directions. ``False`` keeps the legacy contract of
+        two separate one-sided families, each corrected at the nominal alpha
+        — two families at α=0.05 do **not** promise a combined-direction FWER
+        of 0.05 (use α/2 per tail for that). F-stat omnibus runs have no
+        direction and ignore this setting. The low-level
+        :func:`~conninfpy.compute_p_val` / :func:`~conninfpy.compute_p_val_glm`
+        entry-points keep their own ``two_tailed=False`` default; passing
+        ``two_tailed=False`` here explicitly reproduces them exactly.
+    tested_tail : {'positive', 'negative'} or None, default None
+        A directional hypothesis fixed **before** the run: the inference uses
+        per-tail nulls (``two_tailed=False`` at the kernel level) and the
+        result is restricted to that direction — the other direction is not
+        tested (p = 1, no detections). The result records
+        ``tail_policy = 'one-sided-<tested_tail>'`` and
+        ``tail_selection = 'prespecified'``, which provenance and exports
+        report honestly. Cannot be combined with ``two_tailed=True`` or with
+        an F-stat contrast (F is non-directional). Choosing a direction only
+        after inspecting a finished run is a post hoc selection: use
+        :meth:`~conninfpy.InferenceResult.one_sided` on that result, which is
+        marked ``tail_selection = 'post-hoc'`` instead.
     acceleration : str or None, default ``None``
         ``None`` gives exact empirical permutation p-values. ``'gpd'`` /
         ``'gamma'`` replace the p-values that fewer than 10 permutations
@@ -545,6 +602,39 @@ def analyze(
     """
     flags: list = []
     combat_diag: Optional[Dict[str, Any]] = None
+
+    # ---- Tail policy: two-sided by default, prespecified direction opt-in ----
+    if tested_tail is not None:
+        if tested_tail not in ("positive", "negative"):
+            raise ValueError(
+                f"tested_tail must be 'positive' or 'negative'; got {tested_tail!r}."
+            )
+        if two_tailed:
+            raise ValueError(
+                "tested_tail=... declares a one-sided hypothesis and needs per-tail "
+                "nulls; do not also pass two_tailed=True."
+            )
+        stat_type_arg = method_kwargs.get("stat_type", "tstat")
+        stat_type_arg = getattr(stat_type_arg, "value", stat_type_arg)
+        if str(stat_type_arg) == "fstat":
+            raise ValueError(
+                "tested_tail=... is undefined for an F-stat omnibus contrast: "
+                "F is non-negative and has no direction."
+            )
+    effective_two_tailed = (
+        False if tested_tail is not None else (True if two_tailed is None else bool(two_tailed))
+    )
+    if tested_tail is not None:
+        flags.append(
+            f"prespecified one-sided test ({tested_tail}): the direction was fixed "
+            "before the run and the other direction was not tested."
+        )
+    elif two_tailed is False:
+        flags.append(
+            "two_tailed=False: positive and negative are corrected as separate "
+            "one-sided families, each at the nominal alpha; the combined-direction "
+            "FWER is not the nominal alpha (use alpha/2 per tail for that)."
+        )
 
     # A repeated-measures regression has one observation per subject.  Do
     # the nonlinear transform before subtraction, never on the difference.
@@ -911,6 +1001,7 @@ def analyze(
             Y, design_matrix=X, contrasts=contrasts,
             design_columns=_design_names(confounds, confound_names, list(interest)),
             method=method, n_permutations=n_permutations,
+            two_tailed=effective_two_tailed,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
@@ -927,6 +1018,8 @@ def analyze(
                 if centered_means is not None:
                     res.design["predictor_centering_means"] = centered_means.copy()
                 update_analysis_scale(res, analysis_scale, units or ("Fisher z difference (B - A)" if derived_scale else None))
+            if tested_tail is not None:
+                res = res._restricted_to_tail(tested_tail, selection="prespecified")
             res.harmonized = (
                 strategy in (COMBAT_ONLY, COMBAT_SITE_DUMMIES_GLM)
                 and sites is not None
@@ -951,6 +1044,7 @@ def analyze(
             Y, interest=interest, confounds=confounds,
             design_columns=_design_names(confounds, confound_names, ["interest"]),
             method=method, n_permutations=n_permutations,
+            two_tailed=effective_two_tailed,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
@@ -964,6 +1058,7 @@ def analyze(
             group1, group2,
             confounds_A=confounds_group1, confounds_B=confounds_group2,
             method=method, n_permutations=n_permutations,
+            two_tailed=effective_two_tailed,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
@@ -974,6 +1069,7 @@ def analyze(
         result = compute_p_val(
             group1, group2, test_type=test_type,
             method=method, n_permutations=n_permutations,
+            two_tailed=effective_two_tailed,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
@@ -1006,6 +1102,11 @@ def analyze(
         if centered_means is not None:
             result.design["predictor_centering_means"] = centered_means.copy()
         update_analysis_scale(result, analysis_scale, units or ("Fisher z difference (B - A)" if derived_scale else None))
+    # A prespecified direction restricts the finished result after the
+    # provenance threading above, so the restriction itself is recorded in
+    # provenance and exports ('prespecified', never a post hoc relabelling).
+    if tested_tail is not None:
+        result = result._restricted_to_tail(tested_tail, selection="prespecified")
     # strata_provided was set inside compute_p_val{,_glm} from the strata=
     # argument; preserved here for clarity.
 

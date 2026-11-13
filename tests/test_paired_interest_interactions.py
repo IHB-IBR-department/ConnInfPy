@@ -69,7 +69,11 @@ def test_interaction_matches_manual_design_and_null(monkeypatch):
     results = analyze(y, interest={'a': a, 'b': b}, confounds=c,
                       interactions=[('a', 'b')], input='z', **FAST)
     multi_null = captured[-1]
-    manual = compute_p_val_glm(y, design_matrix=X, contrast=np.array([0, 0, 0, 0, 1]), **FAST)
+    # analyze() defaults to the two-sided family; the manual low-level
+    # oracle must declare the same family explicitly.
+    manual = compute_p_val_glm(y, design_matrix=X,
+                               contrast=np.array([0, 0, 0, 0, 1]),
+                               two_tailed=True, **FAST)
     compare(results['a:b'].inference, manual)
     for tail in ('positive', 'negative'):
         np.testing.assert_allclose(multi_null[tail], captured[-1][tail], atol=1e-12)

@@ -122,13 +122,18 @@ def test_app_worker_runs_on_loaded_scale_with_chosen_direction(tested_tail):
     calls = run.call_args_list
     assert len(calls) == 2
     assert all(c.kwargs["input"] == "r" and c.kwargs["r_to_z"] is False for c in calls)
-    assert all(c.kwargs["two_tailed"] is (tested_tail is None) for c in calls)
-    assert restricted == ([] if tested_tail is None else [tested_tail, tested_tail])
+    # The direction is declared to analyze() before the run (prespecified);
+    # the worker never restricts a finished result post hoc.
+    assert all(c.kwargs["tested_tail"] is tested_tail for c in calls)
+    assert all("two_tailed" not in c.kwargs for c in calls)
+    assert restricted == []
     assert task.run_plan["analysis_scale"] == "correlation"
     assert task.run_plan["tested_tail"] == tested_tail
     assert task.run_plan["tail_policy"] == (
         "two-sided" if tested_tail is None else f"one-sided-{tested_tail}"
     )
+    assert task.run_plan["two_tailed"] is (tested_tail is None)
+    assert task.run_plan["tail_selection"] == ("prespecified" if tested_tail else None)
     # GLM run: no variance choice is passed (the GLM t is pooled).
     assert all("var_equal" not in c.kwargs for c in calls)
     assert task.run_plan["t_statistic"] == "glm"

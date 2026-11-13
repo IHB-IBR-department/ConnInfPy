@@ -301,7 +301,10 @@ def test_app_primary_and_companion_dispatch_scale_and_tail(kind, expected):
     assert run.call_count == 2
     assert [c.kwargs["input"] for c in run.call_args_list] == [expected, expected]
     assert [c.kwargs["min_cluster_size"] for c in run.call_args_list] == [20, 22]
-    assert all(c.kwargs["two_tailed"] for c in run.call_args_list)
+    # Two-sided is analyze()'s default; the worker declares the direction
+    # before the run (tested_tail=None here) instead of passing two_tailed.
+    assert all("two_tailed" not in c.kwargs for c in run.call_args_list)
+    assert all(c.kwargs["tested_tail"] is None for c in run.call_args_list)
     assert task.run_plan["tail_policy"] == "two-sided"
 
 

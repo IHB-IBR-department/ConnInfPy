@@ -19,6 +19,34 @@ from apps.utils.helpers import (
     render_help,
 )
 
+def _run_alpha():
+    """The α fixed at run time (``run_plan``); result views must not re-choose it.
+
+    Older session states without a recorded alpha fall back to 0.05, the
+    value those runs were displayed at.
+    """
+    return (st.session_state.get("run_plan") or {}).get("alpha", 0.05)
+
+
+def _family_caption(res):
+    """One line explaining which family the run's α applies to."""
+    policy = res.tail_policy
+    if policy == "two-sided":
+        return ("Two-sided family: α covers both directions jointly "
+                "(FWER over positive and negative together).")
+    if policy == "separate-one-sided":
+        return ("Separate one-sided families: α applies to each direction's family "
+                "separately; the combined-direction FWER is not α (use α/2 per tail).")
+    if policy == "omnibus":
+        return "Omnibus F family: α applies to the non-directional F test."
+    tested = getattr(res, "tested_tail", None)
+    selection = getattr(res, "tail_selection", None)
+    origin = ("fixed before the run" if selection == "prespecified"
+              else "selected after the run (post hoc)" if selection == "post-hoc"
+              else "selection origin not recorded")
+    return f"One-sided family ({tested}, {origin}): α applies to the tested direction only."
+
+
 def _render_one_sentence_summary(res, edges_df, method_name, direction_labels):
     """Render the single-sentence plain-language result summary."""
     pos_count = 0
@@ -42,27 +70,29 @@ def _render_one_sentence_summary(res, edges_df, method_name, direction_labels):
         f"and **{neg_count}** edges for **{direction_labels['negative']}** using {n_perms} permutations."
     )
 
-def _render_summary_metrics(res, edges_df, method_name, direction_labels):
-    """Render the headline metric row for one result."""
-    st.markdown(f"##### 📊 {method_name} Summary")
-    nsig = res.n_significant(0.05)
+def _shown_tail_counts(res, alpha):
+    """Per-tail counts with an untested direction labelled 'not tested'."""
+    nsig = res.n_significant(alpha)
     tested = getattr(res, "tested_tail", None)
-    shown = {
+    return {
         tail: ("not tested" if tested is not None and tail != tested else nsig[tail])
         for tail in ("positive", "negative")
     }
+
+
+def _render_summary_metrics(res, edges_df, method_name, direction_labels):
+    """Render the headline metric row for one result."""
+    st.markdown(f"##### 📊 {method_name} Summary")
+    alpha = _run_alpha()
+    shown = _shown_tail_counts(res, alpha)
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(direction_labels["positive"], shown["positive"], help="Edges significant in the positive statistical tail.")
+        st.metric(direction_labels["positive"], shown["positive"], help=f"Edges significant in the positive statistical tail at α = {alpha:g}.")
     with col2:
-        st.metric(direction_labels["negative"], shown["negative"], help="Edges significant in the negative statistical tail.")
+        st.metric(direction_labels["negative"], shown["negative"], help=f"Edges significant in the negative statistical tail at α = {alpha:g}.")
     with col3:
         st.metric("Permutations Completed", res.n_permutations)
-    if tested is not None:
-        st.caption(
-            f"Prespecified one-sided test ({res.tail_policy}): the {tested} direction has its own "
-            "max-statistic null at the nominal alpha; the opposite direction was not tested."
-        )
+    st.caption(f"Detections at α = {alpha:g}. {_family_caption(res)}")
 
 def _render_ground_truth_metrics(edges_df, effect_mask, method_name):
     """Render precision/recall against the planted effect mask, if any."""
@@ -114,7 +144,7 @@ def _render_ground_truth_metrics(edges_df, effect_mask, method_name):
 def _render_heatmaps(res, base_atlas, method_name):
     """Render the positive/negative p-value heatmaps."""
     st.markdown(f"##### 🗺️ Connectivity Maps ({method_name})")
-    
+    alpha = _run_alpha()
     stat_map = res.stat_signed
     p_pos = res["positive"]
     p_neg = res["negative"]
@@ -130,11 +160,11 @@ def _render_heatmaps(res, base_atlas, method_name):
         # Heatmap 2: -log10 thresholded p-values
         min_p = np.minimum(p_pos, p_neg)
         log_p = -np.log10(min_p + 1e-10)
-        log_p[min_p > 0.05] = 0.0  # Hide non-significant
+        log_p[min_p > alpha] = 0.0  # Hide non-significant
         
         im2 = ax2.imshow(log_p, cmap="inferno", aspect="auto")
         fig.colorbar(im2, ax=ax2)
-        ax2.set_title("Significant Edges (-log10 p-value)")
+        ax2.set_title(f"Significant Edges at α = {alpha:g} (-log10 p)")
         
         st.pyplot(fig)
         plt.close(fig)
@@ -208,9 +238,24 @@ def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction
         return
 
     network_options = list(dict.fromkeys(str(n) for n in atlas.networks)) if atlas_has_networks(atlas) else []
+    alpha_key = f"{method_name}_graph_alpha"
+    direction_key = f"{method_name}_graph_direction"
+    result_key = f"_{method_name}_graph_result_id"
+    run_alpha_key = f"_{method_name}_graph_run_alpha"
+    run_alpha = float(_run_alpha())
+    if (
+        st.session_state.get(result_key) != id(res)
+        or st.session_state.get(run_alpha_key) != run_alpha
+    ):
+        st.session_state.pop(alpha_key, None)
+        st.session_state.pop(direction_key, None)
+        st.session_state[result_key] = id(res)
+        st.session_state[run_alpha_key] = run_alpha
     ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([1, 1, 1, 1])
     with ctrl1:
-        alpha = st.slider("Graph p-value cutoff", 0.001, 0.100, 0.050, 0.001, key=persistent_key(f"{method_name}_graph_alpha", scope='results'))
+        alpha = st.slider("Graph p-value cutoff", 0.001, 0.100, run_alpha, 0.001,
+                          help="Defaults to the α of the run; raise or lower it only to show more or fewer edges.",
+                          key=persistent_key(alpha_key, scope='results'))
         top_n = st.slider("Top edges per direction", 10, 500, 100, 10, key=persistent_key(f"{method_name}_graph_top_n", scope='results'))
     with ctrl2:
         display_mode = st.selectbox("Brain view", ["z", "ortho", "x", "y"], index=0, key=persistent_key(f"{method_name}_graph_display", scope='results'))
@@ -236,11 +281,6 @@ def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction
         for tail in tails
     }
     default_tail = max(tails, key=lambda tail: len(filtered[tail]))
-    direction_key = f"{method_name}_graph_direction"
-    result_key = f"_{method_name}_graph_result_id"
-    if st.session_state.get(result_key) != id(res):
-        st.session_state.pop(direction_key, None)
-        st.session_state[result_key] = id(res)
     tail = st.radio(
         "Effect direction", tails, index=tails.index(default_tail), horizontal=True,
         format_func=lambda value: f"{direction_labels[value]} ({len(filtered[value])} edges)",
@@ -301,7 +341,7 @@ def _render_components_table(res, base_atlas, method_name, contrast_name, direct
     if report is None:
         return
     st.markdown(f"##### 🧩 NBS Components ({method_name})")
-    alpha = (st.session_state.get("run_plan") or {}).get("alpha", 0.05)
+    alpha = _run_alpha()
     n_nodes = next(iter(report["labels"].values())).shape[0]
     atlas = atlas_for_annotation(_active_atlas(base_atlas), n_nodes, warn=False)
     table = res.component_table(atlas=atlas, alpha=alpha)
@@ -332,20 +372,22 @@ def _render_components_table(res, base_atlas, method_name, contrast_name, direct
 def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, primary_name, comp_name, base_atlas, effect_mask, direction_labels):
     """Render the side-by-side two-method comparison view."""
     st.markdown("#### 🔄 Side-by-Side Comparison")
+    alpha = _run_alpha()
+    st.caption(f"Detections and maps at the run's α = {alpha:g}. {_family_caption(primary_res)}")
     
     # 1. Compare summary metrics in two columns
     col_p, col_c = st.columns(2)
     with col_p:
         st.markdown(f"**Primary Analysis ({primary_name})**")
-        nsig_p = primary_res.n_significant(0.05)
-        st.write(f"- **{direction_labels['positive']}:** `{nsig_p['positive']}`")
-        st.write(f"- **{direction_labels['negative']}:** `{nsig_p['negative']}`")
+        shown_p = _shown_tail_counts(primary_res, alpha)
+        st.write(f"- **{direction_labels['positive']}:** `{shown_p['positive']}`")
+        st.write(f"- **{direction_labels['negative']}:** `{shown_p['negative']}`")
         st.write(f"- **Permutations:** `{primary_res.n_permutations}`")
     with col_c:
         st.markdown(f"**Sensitivity Companion ({comp_name})**")
-        nsig_c = comp_res.n_significant(0.05)
-        st.write(f"- **{direction_labels['positive']}:** `{nsig_c['positive']}`")
-        st.write(f"- **{direction_labels['negative']}:** `{nsig_c['negative']}`")
+        shown_c = _shown_tail_counts(comp_res, alpha)
+        st.write(f"- **{direction_labels['positive']}:** `{shown_c['positive']}`")
+        st.write(f"- **{direction_labels['negative']}:** `{shown_c['negative']}`")
         st.write(f"- **Permutations:** `{comp_res.n_permutations}`")
         
     # 2. Compare ground truth side-by-side if synthetic
@@ -402,20 +444,20 @@ def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, p
     p_neg_p = primary_res["negative"]
     min_p_p = np.minimum(p_pos_p, p_neg_p)
     log_p_p = -np.log10(min_p_p + 1e-10)
-    log_p_p[min_p_p > 0.05] = 0.0
+    log_p_p[min_p_p > alpha] = 0.0
     im1 = ax1.imshow(log_p_p, cmap="inferno", aspect="auto")
     fig.colorbar(im1, ax=ax1)
-    ax1.set_title(f"{primary_name} Significant Edges")
+    ax1.set_title(f"{primary_name} Significant Edges (α = {alpha:g})")
     
     # Companion Map
     p_pos_c = comp_res["positive"]
     p_neg_c = comp_res["negative"]
     min_p_c = np.minimum(p_pos_c, p_neg_c)
     log_p_c = -np.log10(min_p_c + 1e-10)
-    log_p_c[min_p_c > 0.05] = 0.0
+    log_p_c[min_p_c > alpha] = 0.0
     im2 = ax2.imshow(log_p_c, cmap="inferno", aspect="auto")
     fig.colorbar(im2, ax=ax2)
-    ax2.set_title(f"{comp_name} Significant Edges")
+    ax2.set_title(f"{comp_name} Significant Edges (α = {alpha:g})")
     
     st.pyplot(fig)
     plt.close(fig)

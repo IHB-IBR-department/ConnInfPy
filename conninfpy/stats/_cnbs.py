@@ -22,6 +22,7 @@ tail, or ``two_tailed=True``, for one two-sided family).
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any, Dict, Optional, Tuple
 
@@ -171,9 +172,45 @@ def block_p_values(
         "statistic": "mean signed edge statistic per block (Noble & Scheinost, 2020)",
         "correction": correction,
         "tail_policy": "two-sided" if two_sided_p is not None else "separate-one-sided",
+        "tested_tail": None,
         "n_blocks": blocks.n_blocks,
         "n_blocks_tested": m,
         "n_permutations": B,
         "blocks": rows,
     }
     return p_edges, report
+
+
+def restrict_block_report(
+    report: Optional[Dict[str, Any]], tail: str, *, selection: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Copy a cNBS block report restricted to one tested direction.
+
+    All blocks remain in ``blocks`` (keeping ``n_blocks``, ``n_blocks_tested``,
+    ``correction``, ``node_labels``, and signed ``mean_stat`` unchanged), while
+    the untested direction's p-value keys are omitted so the report cannot be
+    read as containing tested findings in that tail.
+    """
+    if report is None:
+        return None
+    if tail not in ("positive", "negative"):
+        raise ValueError(f"tail must be 'positive' or 'negative'; got {tail!r}.")
+    other = "negative" if tail == "positive" else "positive"
+    drop_keys = {
+        f"p_{other}",
+        f"p_{other}_uncorrected",
+        "p_two_sided",
+        "p_two_sided_uncorrected",
+    }
+    restricted = copy.deepcopy(report)
+    restricted["tail_policy"] = f"one-sided-{tail}"
+    restricted["tested_tail"] = tail
+    if selection is not None:
+        restricted["tail_selection"] = selection
+    else:
+        restricted.pop("tail_selection", None)
+    restricted["blocks"] = [
+        {k: v for k, v in row.items() if k not in drop_keys}
+        for row in restricted.get("blocks", ())
+    ]
+    return restricted

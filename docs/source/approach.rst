@@ -107,10 +107,11 @@ reasonable thresholds); report results at several thresholds when using it.
 
 The inference unit is the component. Its statistic is compared with the
 permutation distribution of the *largest* component statistic (family-wise
-error control): with separate one-sided families (the default,
-``two_tailed=False``) each tail has its own null of maxima; with
-``two_tailed=True`` the two tails share one null, the larger of the two
-tails' maxima in every permutation. Every edge of a component carries the
+error control): with ``two_tailed=True`` (the ``analyze()`` default) the two
+tails share one null, the larger of the two tails' maxima in every
+permutation; with separate one-sided families (the low-level pipelines'
+default, ``two_tailed=False``) each tail has its own null of maxima. Every
+edge of a component carries the
 component's p-value, so a significant component is a claim about the set, not
 about each of its edges. ``result.component_report`` (and
 ``result.component_table(atlas)``) lists every observed component of each tail:
@@ -401,13 +402,25 @@ for pairwise and GLM inference. Max-statistic methods pool positive/negative
 null maxima, cNBS tests absolute block means before across-block correction,
 and pairwise BH methods correct two-sided marginal p-values across eligible
 edges. Directional maps retain the p-value in the observed direction and 1
-in the opposite direction. The default ``False`` keeps separate one-sided
-families; use alpha/2 per directional family for combined-direction FWER.
+in the opposite direction. :func:`~conninfpy.analysis.analyze` defaults to
+this two-sided family — one nominal alpha covers both directions jointly.
+Its ``two_tailed=False`` keeps the legacy separate one-sided families, each
+corrected at the nominal alpha; two families at α=0.05 do not promise a
+combined-direction FWER of 0.05 (use α/2 per tail for that). The low-level
+:func:`~conninfpy.compute_p_val` / :func:`~conninfpy.compute_p_val_glm`
+entry-points keep ``two_tailed=False`` as their own default.
+
 For a single prespecified direction (e.g. controls > patients, as in the
-MATLAB NBS toolbox's t-test), run with ``two_tailed=False`` and call
-``result.one_sided('positive')`` (or ``'negative'``): the tested tail keeps its
-own-null p-values at the nominal alpha, the other direction is reported as not
-tested (p = 1), and ``tail_policy`` reads ``'one-sided-positive'``.
+MATLAB NBS toolbox's t-test), declare it before the run:
+``analyze(..., tested_tail='positive')`` (or ``'negative'``). The run uses
+per-tail nulls, the tested tail keeps its own-null p-values at the nominal
+alpha, the other direction is reported as not tested (p = 1), and the
+result records ``tail_policy = 'one-sided-positive'`` with
+``tail_selection = 'prespecified'``, which provenance, exports and the app
+carry through. Choosing a direction only after inspecting a finished run is
+a post hoc selection: ``result.one_sided('positive')`` performs it and is
+marked ``tail_selection = 'post-hoc'`` instead, so a restriction made after
+seeing the p-values is never reported as a hypothesis fixed in advance.
 Each enhancement setting and contrast is corrected separately; selecting
 among settings or contrasts requires an additional declared correction.
 

@@ -109,6 +109,28 @@ class TestRun(unittest.TestCase):
         prov = json.loads(written["provenance"].read_text())
         self.assertEqual(prov["results"]["result"]["tail_policy"], "separate-one-sided")
 
+    def test_prespecified_tested_tail_config(self):
+        study = _Study(self.tmp, _pheno(12), _correlations(12))
+        cfg = study.analysis({"type": "glm", "interest": "age"})
+        config = yaml.safe_load(cfg.read_text())
+        config["inference"]["tested_tail"] = "positive"
+        cfg.write_text(yaml.safe_dump(config))
+        written = self._quiet_run(cfg)
+        info = json.loads(written["provenance"].read_text())["results"]["result"]
+        self.assertEqual(info["tail_policy"], "one-sided-positive")
+        self.assertEqual(info["tested_tail"], "positive")
+        self.assertEqual(info["tail_selection"], "prespecified")
+
+    def test_alpha_and_tail_selection_recorded_in_provenance(self):
+        study = _Study(self.tmp, _pheno(12), _correlations(12))
+        cfg = study.analysis({"type": "glm", "interest": "age"}, alpha=0.01)
+        written = self._quiet_run(cfg)
+        prov = json.loads(written["provenance"].read_text())
+        self.assertEqual(prov["alpha"], 0.01)
+        self.assertEqual(prov["results"]["result"]["tail_policy"], "two-sided")
+        self.assertIsNone(prov["results"]["result"]["tested_tail"])
+        self.assertIsNone(prov["results"]["result"]["tail_selection"])
+
     def test_rows_with_missing_values_are_dropped(self):
         pheno = _pheno(24)
         pheno.loc[3, "age"] = np.nan
@@ -165,6 +187,52 @@ class TestRun(unittest.TestCase):
         cfg = study.analysis({"type": "glm", "interest": "age"}, desing={"typo": 1})
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(main(["run", str(cfg)]), 1)
+
+    def test_cnbs_prespecified_tested_tail_exports_consistent_native_report(self):
+        data = _correlations(24, N=6, seed=7)
+        pheno = _pheno(24, seed=7)
+        # Plant a strong positive shift in block (0, 0) (ROIs 0-1) for group 'pt'.
+        pt = (pheno["group"] == "pt").to_numpy()
+        data[pt, 0, 1] += 0.85
+        data[pt, 1, 0] += 0.85
+        study = _Study(self.tmp, pheno, data)
+        cfg = study.analysis(
+            {"type": "two-sample", "group": "group", "levels": ["hc", "pt"]},
+            inference={
+                "method": "cnbs",
+                "net_labels": [0, 0, 1, 1, 2, 2],
+                "tested_tail": "negative",
+                "n_permutations": 63,
+                "use_mp": False,
+                "rng": 20,
+            },
+        )
+        written = self._quiet_run(cfg)
+        prov = json.loads(written["provenance"].read_text())
+        res_prov = prov["results"]["result"]
+        self.assertEqual(res_prov["method"], "cnbs")
+        self.assertEqual(res_prov["tail_policy"], "one-sided-negative")
+        self.assertEqual(res_prov["tested_tail"], "negative")
+        self.assertEqual(res_prov["tail_selection"], "prespecified")
+        self.assertEqual(res_prov["n_significant"]["positive"], 0)
+
+        edges = pd.read_csv(written["edges"])
+        self.assertFalse((edges["tail"] == "positive").any())
+        with np.load(written["pvals"]) as z:
+            self.assertTrue(np.all(z["positive"] == 1.0))
+
+        from conninfpy import ResultBundle
+        bundle = ResultBundle.load(written["bundle"])
+        native = bundle.metadata["native_report"]
+        self.assertEqual(native["tail_policy"], "one-sided-negative")
+        self.assertEqual(native["tested_tail"], "negative")
+        self.assertEqual(native["tail_selection"], "prespecified")
+        self.assertEqual(native["n_blocks"], 6)
+        self.assertEqual(len(native["blocks"]), 6)
+        for row in native["blocks"]:
+            self.assertIn("p_negative", row)
+            self.assertNotIn("p_positive", row)
+            self.assertNotIn("p_positive_uncorrected", row)
 
 
 class TestCommand(unittest.TestCase):
