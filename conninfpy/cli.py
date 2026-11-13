@@ -397,7 +397,9 @@ def run(
             "n_permutations": inf.n_permutations,
             "acceleration": inf.acceleration,
             "flags": list(res.flags),
+            "resolved_strategy": getattr(res, "resolved_strategy", None),
             "combat_diagnostics": res.combat_diagnostics,
+            "design_diagnostics": res.design_diagnostics,
             "design": None if design is None else {
                 k: design.get(k) for k in ("kind", "columns", "contrast", "column_means", "profiles",
                                            "comparison", "interest", "scale", "estimable_columns",

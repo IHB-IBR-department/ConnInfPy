@@ -47,6 +47,207 @@ def _family_caption(res):
     return f"One-sided family ({tested}, {origin}): α applies to the tested direction only."
 
 
+
+
+def _extract_result_diagnostics_summary(res_wrapper, run_plan=None):
+    """Extract flags, backend-resolved strategy, combat_diagnostics, and design_diagnostics.
+
+    ``resolved_strategy`` always reflects the actual backend execution decision
+    recorded on the result / ``combat_diagnostics`` (or ``'unknown / not recorded'``
+    for legacy results lacking backend markers). Requested ``run_plan`` arguments
+    are reported separately and are never substituted as the resolved strategy.
+    """
+    from conninfpy._compat import TailResult
+
+    inner = getattr(res_wrapper, "inference", res_wrapper)
+    meta = getattr(res_wrapper, "metadata", None)
+    if isinstance(res_wrapper, dict) and not isinstance(res_wrapper, TailResult):
+        flags = list(res_wrapper.get("flags") or [])
+        combat_diag = res_wrapper.get("combat_diagnostics")
+        design_diag = res_wrapper.get("design_diagnostics")
+        explicit_resolved = res_wrapper.get("resolved_strategy")
+    elif isinstance(meta, dict):
+        flags = list(meta.get("flags") or [])
+        combat_diag = meta.get("combat_diagnostics")
+        design_diag = meta.get("design_diagnostics")
+        explicit_resolved = meta.get("resolved_strategy")
+    else:
+        flags = list(
+            getattr(res_wrapper, "flags", None)
+            if getattr(res_wrapper, "flags", None) is not None
+            else (getattr(inner, "flags", None) or [])
+        )
+        combat_diag = getattr(res_wrapper, "combat_diagnostics", None)
+        if combat_diag is None:
+            combat_diag = getattr(inner, "combat_diagnostics", None)
+        design_diag = getattr(res_wrapper, "design_diagnostics", None)
+        if design_diag is None:
+            design_diag = getattr(inner, "design_diagnostics", None)
+        explicit_resolved = getattr(res_wrapper, "resolved_strategy", None)
+        if explicit_resolved is None:
+            explicit_resolved = getattr(inner, "resolved_strategy", None)
+
+    plan = run_plan or {}
+    if isinstance(explicit_resolved, str) and explicit_resolved.strip():
+        resolved_strategy = explicit_resolved.strip()
+    elif isinstance(combat_diag, dict) and combat_diag.get("strategy"):
+        resolved_strategy = str(combat_diag.get("strategy"))
+    elif getattr(inner, "harmonized", None) is True:
+        resolved_strategy = "combat (strategy not recorded)"
+    else:
+        resolved_strategy = "unknown / not recorded"
+
+    return {
+        "resolved_strategy": str(resolved_strategy),
+        "site_recipe": plan.get("site_recipe"),
+        "effective_site_recipe": plan.get("effective_site_recipe"),
+        "harmonize_requested": plan.get("harmonize"),
+        "flags": flags,
+        "combat_diagnostics": combat_diag,
+        "design_diagnostics": design_diag,
+    }
+
+
+def _format_inference_df_display(design_diag):
+    """Format inference-level df cleanly without conflating Welch/available_case with n - rank."""
+    kind = design_diag.get("inference_df_kind")
+    inf_df = design_diag.get("inference_df")
+    if kind == "shared_design_residual_df" and inf_df is not None:
+        return str(inf_df)
+    if kind in ("varying_welch_satterthwaite", "available_case_welch_satterthwaite"):
+        return "Per-edge (Welch)"
+    if kind == "available_case_per_edge":
+        ac = design_diag.get("available_case")
+        if isinstance(ac, dict) and ac.get("edge_residual_df_min") is not None and ac.get("edge_residual_df_max") is not None:
+            lo, hi = ac["edge_residual_df_min"], ac["edge_residual_df_max"]
+            return f"{lo}" if lo == hi else f"{lo}–{hi} (per edge)"
+        return "Per-edge (available-case)"
+    return "See scope note"
+
+
+def _render_analyze_decisions_and_diagnostics(res_wrapper, run_plan=None, method_name=""):
+    """Render analyze() flags, resolved strategy, combat_diagnostics, and design_diagnostics."""
+    info = _extract_result_diagnostics_summary(res_wrapper, run_plan=run_plan)
+    flags = info["flags"]
+    combat_diag = info["combat_diagnostics"]
+    design_diag = info["design_diagnostics"]
+
+    has_any = bool(
+        flags
+        or combat_diag is not None
+        or design_diag is not None
+        or info["harmonize_requested"] is not None
+        or info["effective_site_recipe"] is not None
+        or info["resolved_strategy"] not in ("none", "unknown / not recorded")
+    )
+    if not has_any:
+        return
+
+    title_suffix = f" ({method_name})" if method_name else ""
+    with st.expander(f"🔎 Analyze Decisions, Harmonization & Design Diagnostics{title_suffix}", expanded=True):
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Resolved Strategy", info["resolved_strategy"])
+        if info["harmonize_requested"] is not None:
+            c2.metric("Requested Harmonize", str(info["harmonize_requested"]))
+        elif info["effective_site_recipe"]:
+            c2.metric("Requested Site Recipe", str(info["effective_site_recipe"]))
+        else:
+            c2.metric("Requested Harmonize", "not recorded")
+
+        if isinstance(combat_diag, dict) and combat_diag.get("between_site_variance_ratio_after_over_before") is not None:
+            c3.metric(
+                "Between-Site Var Ratio (After/Before)",
+                f"{combat_diag['between_site_variance_ratio_after_over_before']:.3f}",
+            )
+        elif design_diag is not None:
+            c3.metric(
+                "Design Rank / Columns",
+                f"{design_diag.get('matrix_rank', '?')} / {design_diag.get('n_columns', '?')}",
+            )
+        if info["effective_site_recipe"] and info["harmonize_requested"] is not None:
+            st.caption(f"Requested App Site Recipe: `{info['effective_site_recipe']}`")
+
+        if flags:
+            st.markdown("**Analyze Decision Flags (`flags`):**")
+            for fl in flags:
+                st.info(str(fl))
+
+        if isinstance(combat_diag, dict):
+            st.markdown("**ComBat / Site Adjustment Diagnostics (`combat_diagnostics`):**")
+            cd_rows = [
+                {"Metric": str(k), "Value": str(v)}
+                for k, v in combat_diag.items()
+                if not isinstance(v, (dict, list))
+            ]
+            if cd_rows:
+                st.dataframe(pd.DataFrame(cd_rows), hide_index=True, width="stretch")
+
+        if isinstance(design_diag, dict):
+            st.markdown("**Design Diagnostics (`design_diagnostics`):**")
+            d1, d2, d3, d4, d5 = st.columns(5)
+            d1.metric("Observations", design_diag.get("n_observations", "—"))
+            d2.metric(
+                "Design df (n − rank)",
+                design_diag.get("design_residual_df", design_diag.get("residual_df", "—")),
+            )
+            d3.metric("Inference df", _format_inference_df_display(design_diag))
+            d4.metric("Rank Deficient", "Yes" if design_diag.get("rank_deficient") else "No")
+            vmax = design_diag.get("vif_max")
+            d5.metric("Max VIF", f"{vmax:.2f}" if isinstance(vmax, (int, float)) else "—")
+
+            st.caption(
+                f"Design: `{design_diag.get('design_kind')}` | "
+                f"Unit: `{design_diag.get('unit_of_observation')}` | "
+                f"Scope: `{design_diag.get('scope')}`"
+            )
+            if design_diag.get("design_note"):
+                st.caption(design_diag["design_note"])
+            if design_diag.get("inference_df_note"):
+                st.caption(design_diag["inference_df_note"])
+            if design_diag.get("scope_note"):
+                st.caption(design_diag["scope_note"])
+
+            cond_raw = design_diag.get("condition_number_XtX")
+            cond_std = design_diag.get("condition_number_standardized")
+            cond_raw_str = "∞" if design_diag.get("condition_number_XtX_infinite") else (f"{cond_raw:.2f}" if isinstance(cond_raw, (int, float)) else "—")
+            cond_std_str = f"{cond_std:.2f}" if isinstance(cond_std, (int, float)) else "—"
+            st.caption(
+                f"Raw cond(X'X) = {cond_raw_str} | Standardized cond = {cond_std_str} — "
+                + str(design_diag.get("condition_number_note", ""))
+            )
+
+            col_summaries = design_diag.get("column_summaries") or []
+            if col_summaries:
+                st.dataframe(pd.DataFrame(col_summaries), hide_index=True, width="stretch")
+
+            ss = design_diag.get("site_summary")
+            if isinstance(ss, dict):
+                if ss.get("site_by_interest_table"):
+                    st.markdown("**Site × Group / Factor Counts:**")
+                    tbl_df = pd.DataFrame.from_dict(ss["site_by_interest_table"], orient="index").reset_index().rename(columns={"index": "Site"})
+                    st.dataframe(tbl_df, hide_index=True, width="stretch")
+                elif ss.get("site_by_interest_stats"):
+                    st.markdown("**Site × Predictor Stats:**")
+                    st_df = pd.DataFrame.from_dict(ss["site_by_interest_stats"], orient="index").reset_index().rename(columns={"index": "Site"})
+                    st.dataframe(st_df, hide_index=True, width="stretch")
+                    if ss.get("descriptive_r2_site_on_interest") is not None:
+                        st.caption(f"Descriptive between-site R² on predictor: {ss['descriptive_r2_site_on_interest']:.3f}")
+
+            ac = design_diag.get("available_case")
+            if isinstance(ac, dict):
+                df_part = ""
+                if ac.get("edge_residual_df_min") is not None and ac.get("edge_residual_df_max") is not None:
+                    df_part = f"; per-edge residual df = {ac.get('edge_residual_df_min')}–{ac.get('edge_residual_df_max')}"
+                st.caption(
+                    f"Available-case edge coverage: {ac.get('n_edges_tested')} tested, "
+                    f"{ac.get('n_edges_untested')} untested; "
+                    f"per-edge n = {ac.get('edge_n_min')}–{ac.get('edge_n_max')} (median {ac.get('edge_n_median')}){df_part}."
+                )
+
+            for dfl in design_diag.get("flags") or []:
+                st.warning(f"Design diagnostic: {dfl}")
+
+
 def _render_one_sentence_summary(res, edges_df, method_name, direction_labels):
     """Render the single-sentence plain-language result summary."""
     pos_count = 0
@@ -504,6 +705,7 @@ def render_inference_results_view(base_atlas):
                 
                 _render_one_sentence_summary(res, edges_df, primary_method, direction_labels)
                 _render_summary_metrics(res, edges_df, primary_method, direction_labels)
+                _render_analyze_decisions_and_diagnostics(res_wrapper, st.session_state.get("run_plan"), primary_method)
                 _render_ground_truth_metrics(edges_df, effect_mask, primary_method)
                 _render_heatmaps(res, base_atlas, primary_method)
                 _render_brain_connectome_graphs(edges_df, base_atlas, primary_method, direction_labels, res)
@@ -516,6 +718,7 @@ def render_inference_results_view(base_atlas):
                 
                 _render_one_sentence_summary(res, edges_df, companion_method, direction_labels)
                 _render_summary_metrics(res, edges_df, companion_method, direction_labels)
+                _render_analyze_decisions_and_diagnostics(companion_res_wrapper, st.session_state.get("run_plan"), companion_method)
                 _render_ground_truth_metrics(edges_df, effect_mask, companion_method)
                 _render_heatmaps(res, base_atlas, companion_method)
                 _render_brain_connectome_graphs(edges_df, base_atlas, companion_method, direction_labels, res)
@@ -529,6 +732,7 @@ def render_inference_results_view(base_atlas):
                 comp_edges = st.session_state.companion_edges_df
                 
                 _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, primary_method, companion_method, base_atlas, effect_mask, direction_labels)
+                _render_analyze_decisions_and_diagnostics(st.session_state.inference_result, st.session_state.get("run_plan"), primary_method)
                 
                 # Show tables in tabs
                 tab_p, tab_c = st.tabs([f"Primary Edges ({primary_method})", f"Companion Edges ({companion_method})"])
@@ -546,6 +750,7 @@ def render_inference_results_view(base_atlas):
             
             _render_one_sentence_summary(res, edges_df, primary_method, direction_labels)
             _render_summary_metrics(res, edges_df, primary_method, direction_labels)
+            _render_analyze_decisions_and_diagnostics(res_wrapper, st.session_state.get("run_plan"), primary_method)
             _render_ground_truth_metrics(edges_df, effect_mask, primary_method)
             _render_heatmaps(res, base_atlas, primary_method)
             _render_brain_connectome_graphs(edges_df, base_atlas, primary_method, direction_labels, res)

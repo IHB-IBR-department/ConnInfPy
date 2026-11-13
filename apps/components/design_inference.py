@@ -7,6 +7,7 @@ import threading
 import traceback
 from conninfpy.atlas import AtlasInfo
 from conninfpy import analyze
+from conninfpy.harmonize.diagnostics import analyze_design_diagnostics
 from conninfpy.defaults import (
     DEFAULT_ACCELERATION,
     DEFAULT_EXTENT_EXPONENT,
@@ -161,6 +162,338 @@ def _method_plan_parameters(method, method_kwargs):
     if method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
         result["integration"] = "exact" if method_kwargs.get("n") is None else "right-grid"
     return result
+
+
+def _build_prelaunch_design_qc_summary(
+    pheno_df,
+    connectivity_data,
+    *,
+    question_choice,
+    test_type,
+    group_col=None,
+    ref_group=None,
+    target_group=None,
+    interest_var=None,
+    subject_col=None,
+    condition_col=None,
+    baseline_val=None,
+    target_val=None,
+    confound_vars=None,
+    site_col=None,
+    harmonization_choice=None,
+    roi_indices=None,
+):
+    """Build pre-launch sample/group, site cross-tab, QC, and rank/VIF summary without mutating data."""
+    confound_vars = list(confound_vars or [])
+    summary = {
+        "n_total_rows": 0 if pheno_df is None else int(len(pheno_df)),
+        "n_complete_rows": 0,
+        "n_dropped_na": 0,
+        "na_counts": {},
+        "sample_counts": {},
+        "interest_stats": None,
+        "site_table": None,
+        "site_summary_kind": None,
+        "site_notes": [],
+        "qc_rows": [],
+        "connectivity_qc": None,
+        "design_preview": None,
+        "warnings": [],
+    }
+    if pheno_df is None or len(pheno_df) == 0:
+        return summary
+
+    req_cols = []
+    if test_type == "glm":
+        if question_choice == "Group Difference" and group_col:
+            req_cols.append(group_col)
+        elif interest_var:
+            req_cols.append(interest_var)
+        req_cols.extend(confound_vars)
+    elif test_type == "paired":
+        for c in (condition_col, subject_col):
+            if c:
+                req_cols.append(c)
+    elif test_type == "two-sample" and group_col:
+        req_cols.append(group_col)
+    if site_col:
+        req_cols.append(site_col)
+    req_cols = [c for c in dict.fromkeys(req_cols) if c in pheno_df.columns]
+
+    if req_cols:
+        na_counts = {c: int(pheno_df[c].isna().sum()) for c in req_cols if int(pheno_df[c].isna().sum()) > 0}
+        summary["na_counts"] = na_counts
+        valid_mask = pheno_df[req_cols].notna().all(axis=1).to_numpy()
+    else:
+        valid_mask = np.ones(len(pheno_df), dtype=bool)
+
+    summary["n_complete_rows"] = int(valid_mask.sum())
+    summary["n_dropped_na"] = int(len(pheno_df) - valid_mask.sum())
+    if summary["n_dropped_na"] > 0:
+        summary["warnings"].append(
+            f"{summary['n_dropped_na']} subject(s) have NaN in selected model columns and will be dropped before inference."
+        )
+
+    df_valid = pheno_df.loc[valid_mask].reset_index(drop=True)
+    Y_active = None
+    if connectivity_data is not None:
+        Y_active = connectivity_data
+        if roi_indices is not None:
+            Y_active = Y_active[:, roi_indices][:, :, roi_indices]
+        Y_valid = Y_active[valid_mask]
+    else:
+        Y_valid = None
+
+    active_df = df_valid
+    active_Y = Y_valid
+    sites_vec = None
+    interest_vec = None
+    group_labels = None
+
+    if question_choice == "Group Difference" and group_col and group_col in df_valid.columns:
+        g_mask = df_valid[group_col].isin([ref_group, target_group]).to_numpy()
+        active_df = df_valid.loc[g_mask].reset_index(drop=True)
+        if Y_valid is not None:
+            active_Y = Y_valid[g_mask]
+        n_ref = int((active_df[group_col] == ref_group).sum())
+        n_target = int((active_df[group_col] == target_group).sum())
+        summary["sample_counts"] = {
+            f"Reference ({ref_group})": n_ref,
+            f"Target ({target_group})": n_target,
+            "Total in Contrast": int(len(active_df)),
+        }
+        group_labels = [str(v) for v in active_df[group_col].tolist()]
+        interest_vec = (active_df[group_col] == target_group).to_numpy(dtype=np.float64)
+        if n_ref < 2 or n_target < 2:
+            summary["warnings"].append("At least one group has fewer than 2 observations.")
+        if site_col and site_col in active_df.columns:
+            sites_vec = active_df[site_col].astype(str).tolist()
+            ct = pd.crosstab(active_df[site_col].astype(str), active_df[group_col].astype(str))
+            for g in (str(ref_group), str(target_group)):
+                if g not in ct.columns:
+                    ct[g] = 0
+            cols_order = [str(ref_group)] if str(ref_group) == str(target_group) else [str(ref_group), str(target_group)]
+            ct = ct[cols_order]
+            ct["Total"] = ct.sum(axis=1)
+            summary["site_table"] = ct.reset_index().rename(columns={active_df[site_col].name or "row_0": "Site", "row_0": "Site"})
+            if summary["site_table"].columns[0] != "Site":
+                summary["site_table"] = summary["site_table"].rename(columns={summary["site_table"].columns[0]: "Site"})
+            summary["site_summary_kind"] = "site_by_group"
+            zero_cells = int((ct[cols_order] == 0).sum().sum())
+            if zero_cells > 0:
+                summary["site_notes"].append(f"{zero_cells} empty site × group cell(s) detected.")
+
+    elif question_choice == "Continuous Predictor" and interest_var and interest_var in df_valid.columns:
+        vals = pd.to_numeric(df_valid[interest_var], errors="coerce").to_numpy(dtype=np.float64)
+        finite = vals[np.isfinite(vals)]
+        summary["sample_counts"] = {"Subjects": int(len(df_valid))}
+        if finite.size:
+            summary["interest_stats"] = {
+                "predictor": interest_var,
+                "n": int(finite.size),
+                "mean": float(np.mean(finite)),
+                "sd": float(np.std(finite)),
+                "min": float(np.min(finite)),
+                "max": float(np.max(finite)),
+                "n_unique": int(np.unique(finite).size),
+            }
+        interest_vec = vals
+        if site_col and site_col in df_valid.columns:
+            sites_vec = df_valid[site_col].astype(str).tolist()
+            site_df = pd.DataFrame({"Site": sites_vec, "val": vals}).dropna()
+            if not site_df.empty:
+                grp = site_df.groupby("Site")["val"].agg(
+                    n="count",
+                    mean="mean",
+                    sd=lambda x: float(np.std(x, ddof=0)),
+                    min="min",
+                    max="max",
+                ).reset_index()
+                summary["site_table"] = grp
+                summary["site_summary_kind"] = "site_by_interest"
+                ss_tot = float(np.sum((site_df["val"] - site_df["val"].mean()) ** 2))
+                ss_within = float(site_df.groupby("Site")["val"].apply(lambda s: np.sum((s - s.mean()) ** 2)).sum())
+                if ss_tot > 1e-12:
+                    r2 = max(0.0, min(1.0, 1.0 - ss_within / ss_tot))
+                    summary["site_notes"].append(f"Descriptive between-site variance share in {interest_var}: R² = {r2:.3f}.")
+
+    elif question_choice == "Paired Condition" and subject_col and condition_col and subject_col in df_valid.columns and condition_col in df_valid.columns:
+        df_base = df_valid[df_valid[condition_col] == baseline_val]
+        df_targ = df_valid[df_valid[condition_col] == target_val]
+        base_subs = set(df_base[subject_col])
+        targ_subs = set(df_targ[subject_col])
+        common = sorted(base_subs & targ_subs)
+        unpaired = len((base_subs | targ_subs) - set(common))
+        summary["sample_counts"] = {
+            f"Baseline ({baseline_val}) rows": int(len(df_base)),
+            f"Target ({target_val}) rows": int(len(df_targ)),
+            "Paired Subjects": int(len(common)),
+            "Unpaired Excluded": int(unpaired),
+        }
+        if unpaired > 0:
+            summary["warnings"].append(f"{unpaired} subject(s) lack one of the two paired conditions and will be excluded.")
+        if site_col and site_col in df_valid.columns and common:
+            idx_b = [df_base[df_base[subject_col] == s].index[0] for s in common]
+            idx_t = [df_targ[df_targ[subject_col] == s].index[0] for s in common]
+            b_sites = df_valid.loc[idx_b, site_col].astype(str).tolist()
+            t_sites = df_valid.loc[idx_t, site_col].astype(str).tolist()
+            mismatch = [s for s, bs, ts in zip(common, b_sites, t_sites) if bs != ts]
+            if mismatch:
+                summary["warnings"].append(
+                    "Site mismatch between paired conditions for: " + ", ".join(map(str, mismatch[:5]))
+                )
+            site_counts = pd.Series(b_sites).value_counts().rename_axis("Site").reset_index(name="Paired Subjects")
+            summary["site_table"] = site_counts
+            summary["site_summary_kind"] = "paired_sites"
+        if Y_valid is not None and common:
+            idx_all = sorted(
+                {df_base[df_base[subject_col] == s].index[0] for s in common}
+                | {df_targ[df_targ[subject_col] == s].index[0] for s in common}
+            )
+            active_Y = Y_valid[idx_all]
+            active_df = df_valid.loc[idx_all].reset_index(drop=True)
+
+    # Available QC from pheno + connectivity
+    if active_Y is not None and active_Y.ndim == 3 and active_Y.shape[0] > 0:
+        n_sub, n_roi, _ = active_Y.shape
+        iu = np.triu_indices(n_roi, k=1)
+        upper = active_Y[:, iu[0], iu[1]]
+        nonfinite = ~np.isfinite(upper)
+        subj_missing = int(nonfinite.any(axis=1).sum())
+        edge_missing = int(nonfinite.any(axis=0).sum())
+        pct_missing = float(100.0 * nonfinite.mean()) if nonfinite.size else 0.0
+        summary["connectivity_qc"] = {
+            "n_subjects": int(n_sub),
+            "n_rois": int(n_roi),
+            "subjects_with_nan": subj_missing,
+            "edges_with_nan": edge_missing,
+            "pct_missing_entries": pct_missing,
+        }
+        if subj_missing > 0:
+            summary["warnings"].append(
+                f"Connectivity contains NaN in {subj_missing}/{n_sub} subject(s) ({edge_missing} edge(s)); configure missing='available_case' or inspect data if unintended."
+            )
+
+    qc_candidates = []
+    for col in active_df.columns:
+        low = str(col).lower()
+        if pd.api.types.is_numeric_dtype(active_df[col]) and (
+            low in ("n_valid_tr", "delta_s")
+            or any(tok in low for tok in ("motion", "framewise", "mean_fd", "dvars"))
+            or low == "fd"
+        ):
+            qc_candidates.append(col)
+    for col in dict.fromkeys(qc_candidates):
+        vals = pd.to_numeric(active_df[col], errors="coerce").dropna().to_numpy(dtype=np.float64)
+        if vals.size:
+            row = {
+                "Metric": str(col),
+                "n": int(vals.size),
+                "Mean": round(float(np.mean(vals)), 4),
+                "Median": round(float(np.median(vals)), 4),
+                "Min": round(float(np.min(vals)), 4),
+                "Max": round(float(np.max(vals)), 4),
+            }
+            if str(col) == "n_valid_tr" and int((vals < 50).sum()) > 0:
+                summary["warnings"].append(f"{int((vals < 50).sum())} subject(s) have n_valid_tr < 50.")
+            summary["qc_rows"].append(row)
+
+    # Pre-launch design preview (rank / VIF / balance) for GLM paths
+    if test_type == "glm" and interest_vec is not None and len(active_df) >= 2:
+        try:
+            blocks = [np.ones((len(active_df), 1), dtype=np.float64)]
+            col_names = ["intercept"]
+            roles = {"intercept": "intercept"}
+            if confound_vars:
+                c_mat = active_df[confound_vars].to_numpy(dtype=np.float64)
+                blocks.append(c_mat)
+                for cv in confound_vars:
+                    col_names.append(str(cv))
+                    roles[str(cv)] = "confound"
+            if sites_vec is not None and harmonization_choice in ("combat_site_dummies_glm", "site_dummies_glm"):
+                s_arr = np.asarray(sites_vec)
+                uniq, inv = np.unique(s_arr, return_inverse=True)
+                if len(uniq) >= 2:
+                    s_dum = np.zeros((len(s_arr), len(uniq) - 1), dtype=np.float64)
+                    for j in range(1, len(uniq)):
+                        s_dum[inv == j, j - 1] = 1.0
+                    blocks.append(s_dum)
+                    for u in uniq[1:]:
+                        nm = f"site[{u}]"
+                        col_names.append(nm)
+                        roles[nm] = "site_dummy"
+            iv_col = interest_vec.reshape(-1, 1)
+            blocks.append(iv_col)
+            target_nm = str(group_col if question_choice == "Group Difference" else interest_var)
+            if target_nm in col_names:
+                target_nm = f"interest:{target_nm}"
+            col_names.append(target_nm)
+            roles[target_nm] = "interest"
+            X_prev = np.hstack(blocks)
+            c_prev = np.zeros(X_prev.shape[1], dtype=np.float64)
+            c_prev[-1] = 1.0
+            summary["design_preview"] = analyze_design_diagnostics(
+                design_kind="glm_prelaunch_preview",
+                unit_of_observation="subject",
+                X=X_prev,
+                names=col_names,
+                column_roles=roles,
+                contrast=c_prev,
+                focus_contrast=target_nm,
+                sites=sites_vec,
+                group_labels=group_labels,
+                interest_name=target_nm,
+                interest_values=interest_vec,
+            )
+        except Exception:
+            summary["design_preview"] = None
+
+    return summary
+
+
+def _render_prelaunch_design_qc_summary(summary):
+    """Render pre-launch sample sizes, site cross-tabs, QC metrics, and rank/VIF warnings."""
+    with st.container(border=True):
+        st.markdown("**Pre-Launch Sample, Site & QC Check:**")
+        if summary["sample_counts"]:
+            cols = st.columns(min(len(summary["sample_counts"]), 4))
+            for idx, (label, val) in enumerate(summary["sample_counts"].items()):
+                cols[idx % len(cols)].metric(label, val)
+        if summary["interest_stats"]:
+            ist = summary["interest_stats"]
+            st.caption(
+                f"Predictor `{ist['predictor']}` (n={ist['n']}): "
+                f"mean = {ist['mean']:.3g}, SD = {ist['sd']:.3g}, "
+                f"range = [{ist['min']:.3g}, {ist['max']:.3g}] ({ist['n_unique']} unique values)"
+            )
+        if summary["site_table"] is not None:
+            st.caption(
+                "Site × Group Breakdown:" if summary["site_summary_kind"] == "site_by_group"
+                else "Site × Predictor Breakdown:" if summary["site_summary_kind"] == "site_by_interest"
+                else "Paired Subjects by Site:"
+            )
+            st.dataframe(summary["site_table"], hide_index=True, width="stretch")
+            for note in summary["site_notes"]:
+                st.caption(note)
+        cqc = summary.get("connectivity_qc")
+        if cqc is not None:
+            st.caption(
+                f"Connectivity QC ({cqc['n_subjects']} × {cqc['n_rois']}×{cqc['n_rois']}): "
+                f"{cqc['subjects_with_nan']} subject(s) with NaN, "
+                f"{cqc['edges_with_nan']} edge(s) with NaN ({cqc['pct_missing_entries']:.2f}% missing entries)."
+            )
+        if summary["qc_rows"]:
+            st.caption("Available Phenotype / Signal QC:")
+            st.dataframe(pd.DataFrame(summary["qc_rows"]), hide_index=True, width="stretch")
+        dp = summary.get("design_preview")
+        if dp is not None:
+            rank_txt = f"rank {dp['matrix_rank']}/{dp['n_columns']} (df={dp['residual_df']})"
+            vif_txt = f"max VIF = {dp['vif_max']:.2f} ({dp['vif_max_col']})" if dp.get("vif_max") is not None else "VIF n/a"
+            st.caption(f"GLM Design Preview: {rank_txt} | {vif_txt}")
+            for fl in dp.get("flags", []):
+                st.warning(f"Design check: {fl}")
+        for w in summary.get("warnings", []):
+            st.warning(w)
 
 
 def _format_method_plan_parameters(method, method_kwargs):
@@ -569,7 +902,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                         key=persistent_key('design:acquisition_site_column_optional', scope='design', options=site_options),
                     )
                 
-                st.info(f"**Contrast Direction:**\n• **Positive effect:** {target_val} > {baseline_val}\n• **Negative effect:** {baseline_val} > {target_val}\n\n*Uses sign-flip permutation within-subject. Subject-constant site effects cancel in differences.*")
+                st.info(f"**Contrast Direction:**\n• **Positive effect:** {target_val} > {baseline_val}\n• **Negative effect:** {baseline_val} > {target_val}\n\n*Uses within-subject sign-flip permutation (stratum-invariant by construction). Subject-constant additive site effects cancel in differences, though arbitrary site × condition interactions are not controlled.*")
                 test_type = "paired"
                 
             elif question_choice == "Group Difference":
@@ -714,13 +1047,15 @@ def render_design_inference_view(base_atlas, tabs_list):
                         recipe_choice = "Paired within-subject + site blocks"
                         effective_recipe_choice = recipe_choice
                         site_strategy_note = (
-                            "Site labels are checked to be constant within each subject and "
-                            "passed as paired exchangeability/provenance blocks. ComBat is not "
-                            "applied because additive site effects cancel in within-subject differences."
+                            "Site labels are verified to be constant within each subject and recorded in provenance. "
+                            "Within-subject sign-flip permutations are stratum-invariant by construction (unlike "
+                            "between-subject paired-interest GLMs, where strata permutes subjects within site). "
+                            "Subject-constant additive site effects cancel in differences, though arbitrary "
+                            "site × condition interactions are not automatically controlled."
                         )
                         st.write(
                             "• **Strategy Selected:** `Paired within-subject + site blocks` "
-                            "(site is retained for validation and exchangeability provenance; no ComBat needed)"
+                            "(site is verified per subject and recorded for provenance; sign-flip is stratum-invariant and additive site effects cancel)"
                         )
                     else:
                         recipe_choice = "Paired within-subject"
@@ -1002,6 +1337,25 @@ def render_design_inference_view(base_atlas, tabs_list):
                         run_sensitivity=run_sensitivity,
                     )
                 
+                prelaunch_summary = _build_prelaunch_design_qc_summary(
+                    pheno_df,
+                    st.session_state.connectivity_data,
+                    question_choice=question_choice,
+                    test_type=test_type,
+                    group_col=group_col,
+                    ref_group=ref_group,
+                    target_group=target_group,
+                    interest_var=interest_var,
+                    subject_col=subject_col,
+                    condition_col=condition_col,
+                    baseline_val=baseline_val,
+                    target_val=target_val,
+                    confound_vars=confound_vars,
+                    site_col=site_col,
+                    harmonization_choice=harmonization_choice,
+                    roi_indices=st.session_state.get("roi_indices"),
+                )
+                _render_prelaunch_design_qc_summary(prelaunch_summary)
                 st.markdown("**Structured Run Plan:**")
                 method_parameters = _format_method_plan_parameters(operator_choice, op_kwargs)
                 plan_md = f"""
@@ -1188,6 +1542,11 @@ def render_design_inference_view(base_atlas, tabs_list):
                                 g2_mask = (pheno_df[group_col] == target_group)
                                 group1 = Y[g1_mask.to_numpy()]
                                 group2 = Y[g2_mask.to_numpy()]
+                                if site_col:
+                                    sites = (
+                                        list(pheno_df.loc[g1_mask, site_col].values)
+                                        + list(pheno_df.loc[g2_mask, site_col].values)
+                                    )
                                 
                             if operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs"):
                                 if use_sc_prior:
