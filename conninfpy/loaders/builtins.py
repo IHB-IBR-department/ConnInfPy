@@ -84,7 +84,7 @@ class NumpyLoader(BaseDataLoader):
         warnings = []
         if not os.path.exists(self.data_path):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], None, None, [f"File not found: {self.data_path}"])
-        
+
         try:
             # Check if it is a pickled dict (like ABIDE)
             d = np.load(self.data_path, allow_pickle=True)
@@ -96,12 +96,12 @@ class NumpyLoader(BaseDataLoader):
                     file_sizes_mb=os.path.getsize(self.data_path) / (1024 * 1024),
                     warnings=["This file appears to contain a pickled dictionary. Please use AbideSchaeferLoader instead."]
                 )
-            
+
             shape = d.shape
             n_obs = shape[0]
             n_rois = shape[2] if len(shape) == 3 else None
             n_tp = shape[1] if len(shape) == 3 and self.data_kind == "timeseries" else None
-            
+
             return DatasetPreview(
                 n_subjects=n_obs,
                 n_observations=n_obs,
@@ -121,13 +121,13 @@ class NumpyLoader(BaseDataLoader):
         """Load the dataset into a :class:`LoadedDataset`."""
         if not os.path.exists(self.data_path):
             raise FileNotFoundError(f"File not found: {self.data_path}")
-            
+
         data = np.load(self.data_path, allow_pickle=True)
         if data.ndim == 0:
             raise ValueError("This numpy file contains a pickled dictionary. Use AbideSchaeferLoader.")
-            
+
         n_obs = data.shape[0]
-        
+
         # Load pheno or generate a default one
         if self.pheno_path and os.path.exists(self.pheno_path):
             pheno = pd.read_csv(self.pheno_path)
@@ -135,7 +135,7 @@ class NumpyLoader(BaseDataLoader):
             pheno = pd.DataFrame({
                 "subject_id": [f"sub_{i:02d}" for i in range(n_obs)]
             })
-            
+
         subject_ids = list(pheno["subject_id"].values) if "subject_id" in pheno.columns else [f"sub_{i:02d}" for i in range(n_obs)]
 
         atlas = None
@@ -184,9 +184,9 @@ class CSVDirectoryLoader(BaseDataLoader):
         files = self._get_files()
         if not files:
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["No CSV or TSV files found in directory."])
-            
+
         total_size = sum(os.path.getsize(f) for f in files) / (1024 * 1024)
-        
+
         # Read a sample file to guess shapes
         try:
             sample_file = files[0]
@@ -200,13 +200,13 @@ class CSVDirectoryLoader(BaseDataLoader):
                     header_choice = None  # No header
                 except ValueError:
                     header_choice = 0  # First row is header
-            
+
             df = pd.read_csv(sample_file, sep=self.sep, header=header_choice)
             n_timepoints, n_rois = df.shape
-            
+
             # Extract sample subject IDs
             subject_ids_sample = [os.path.basename(f).split(".")[0] for f in files[:5]]
-            
+
             return DatasetPreview(
                 n_subjects=len(files),
                 n_observations=len(files),
@@ -227,7 +227,7 @@ class CSVDirectoryLoader(BaseDataLoader):
         files = self._get_files()
         if not files:
             raise FileNotFoundError(f"No CSV/TSV files found in {self.dir_path}")
-            
+
         # Determine header
         header_choice = self.header
         if header_choice is None:
@@ -241,7 +241,7 @@ class CSVDirectoryLoader(BaseDataLoader):
 
         data_list = []
         subject_ids = []
-        
+
         for f in files:
             df = pd.read_csv(f, sep=self.sep, header=header_choice)
             data_list.append(df.values)
@@ -250,10 +250,10 @@ class CSVDirectoryLoader(BaseDataLoader):
             # Strip common timeseries suffixes if present
             sub_id = re.sub(r'(_ts|_timeseries|_Brainnetome|_Schaefer\d+)', '', sub_id)
             subject_ids.append(sub_id)
-            
+
         data = _pack_timeseries(data_list)
         pheno = pd.DataFrame({"subject_id": subject_ids})
-        
+
         return LoadedDataset(
             data=data,
             pheno=pheno,
@@ -338,11 +338,11 @@ class NiftiDirectoryLoader(BaseDataLoader):
                         if m:
                             sub_id = m.group(1)
                     subject_ids.append(f"{grp}/{sub_id}")
-            
+
             n_rois = None
             if self.atlas_image_path and os.path.isdir(self.atlas_image_path):
                 n_rois = len(glob.glob(os.path.join(self.atlas_image_path, "*.nii*")))
-                
+
             return DatasetPreview(
                 n_subjects=total_files,
                 n_observations=total_files,
@@ -360,9 +360,9 @@ class NiftiDirectoryLoader(BaseDataLoader):
         files = self._get_files()
         if not files:
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["No NIfTI files found in directory."])
-            
+
         total_size = sum(os.path.getsize(f) for f in files) / (1024 * 1024)
-        
+
         # Check cache status
         cache_key = compute_dir_hash(files, {
             "atlas": self.atlas_image_path,
@@ -375,11 +375,11 @@ class NiftiDirectoryLoader(BaseDataLoader):
         })
         cache_file = os.path.join(self.cache_dir, f"{cache_key}.pkl")
         cached_msg = " [Cached]" if os.path.exists(cache_file) else " [Extraction Needed]"
-        
+
         n_rois = None
         if self.atlas_image_path and os.path.isdir(self.atlas_image_path):
             n_rois = len(glob.glob(os.path.join(self.atlas_image_path, "*.nii*")))
-        
+
         subject_ids_sample = []
         for f in files[:5]:
             sub_id = os.path.basename(f).split(".")[0]
@@ -388,7 +388,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
                 if m:
                     sub_id = m.group(1)
             subject_ids_sample.append(sub_id)
-        
+
         return DatasetPreview(
             n_subjects=len(files),
             n_observations=len(files),
@@ -431,15 +431,15 @@ class NiftiDirectoryLoader(BaseDataLoader):
                 all_data.append(sub_ds.data)
                 all_subject_ids.extend(sub_ds.subject_ids)
                 all_groups.extend([grp] * len(sub_ds.subject_ids))
-            
+
             # Keep each observation's available frames across cohorts.
             data = _pack_timeseries([ts for group in all_data for ts in group])
-            
+
             pheno = pd.DataFrame({
                 "subject_id": all_subject_ids,
                 "group": all_groups
             })
-            
+
             if self.pheno_path and os.path.exists(self.pheno_path):
                 if self.pheno_path.endswith(".xlsx"):
                     ext_pheno = pd.read_excel(self.pheno_path)
@@ -451,9 +451,9 @@ class NiftiDirectoryLoader(BaseDataLoader):
                     ext_pheno["subject_id"] = ext_pheno["subject_id"].astype(str)
                     pheno["subject_id"] = pheno["subject_id"].astype(str)
                     pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
-            
+
             atlas = _load_atlas_if_present(self.atlas_metadata)
-            
+
             return LoadedDataset(
                 data=data,
                 pheno=pheno,
@@ -470,7 +470,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
         files = self._get_files()
         if not files:
             raise FileNotFoundError(f"No NIfTI files found in {self.dir_path}")
-            
+
         os.makedirs(self.cache_dir, exist_ok=True)
         cache_key = compute_dir_hash(files, {
             "atlas": self.atlas_image_path,
@@ -482,7 +482,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
             "extraction_strategy": self.extraction_strategy
         })
         cache_file = os.path.join(self.cache_dir, f"{cache_key}.pkl")
-        
+
         if os.path.exists(cache_file):
             with open(cache_file, 'rb') as f:
                 return pickle.load(f)
@@ -509,12 +509,12 @@ class NiftiDirectoryLoader(BaseDataLoader):
                     if len(m.groups()) >= 2:
                         group_val = m.group(2)
             subject_ids.append(sub_id)
-            
+
             if self.group_from_folder:
                 group_val = os.path.basename(os.path.dirname(f))
             if group_val:
                 groups.append(group_val)
-                
+
             confounds = None
             if self.confounds_pattern:
                 parent_dir = os.path.dirname(f)
@@ -534,7 +534,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
             else:
                 masker = NiftiLabelsMasker(labels_img=self.atlas_image_path, standardize=std_val, detrend=self.detrend)
                 timeseries = masker.fit_transform(f, confounds=confounds)
-                
+
             data_list.append(timeseries)
 
         data = _pack_timeseries(data_list)
@@ -542,7 +542,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
         pheno = pd.DataFrame({"subject_id": subject_ids})
         if groups:
             pheno["group"] = groups
-            
+
         if self.pheno_path and os.path.exists(self.pheno_path):
             if self.pheno_path.endswith(".xlsx"):
                 ext_pheno = pd.read_excel(self.pheno_path)
@@ -592,7 +592,7 @@ class AbideSchaeferLoader(BaseDataLoader):
         """Cheap preview of the dataset without a full load."""
         if not os.path.exists(self.data_path):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["File not found."])
-            
+
         try:
             d = np.load(self.data_path, allow_pickle=True).item()
             keys = list(d.keys())
@@ -600,7 +600,7 @@ class AbideSchaeferLoader(BaseDataLoader):
             ts = d[sample_key]["time_series"]
             # ts is shape (timepoints, rois)
             n_tp, n_rois = ts.shape
-            
+
             return DatasetPreview(
                 n_subjects=len(keys),
                 n_observations=len(keys),
@@ -619,7 +619,7 @@ class AbideSchaeferLoader(BaseDataLoader):
     def load(self) -> LoadedDataset:
         """Load the dataset into a :class:`LoadedDataset`."""
         d = np.load(self.data_path, allow_pickle=True).item()
-        
+
         subject_ids = list(d.keys())
         labels = []
         sites = []
@@ -634,12 +634,12 @@ class AbideSchaeferLoader(BaseDataLoader):
             "group_interest": labels,
             "site": sites
         })
-        
+
         # Merge with external phenotypic CSV if provided
         if self.pheno_csv_path and os.path.exists(self.pheno_csv_path):
             try:
                 ext_pheno = pd.read_csv(self.pheno_csv_path)
-                
+
                 # The .npy keys correspond to FILE_ID in the ABIDE dataset.
                 if "FILE_ID" in ext_pheno.columns:
                     ext_pheno["FILE_ID"] = ext_pheno["FILE_ID"].astype(str)
@@ -653,22 +653,22 @@ class AbideSchaeferLoader(BaseDataLoader):
                     if sub_col:
                         ext_pheno[sub_col] = ext_pheno[sub_col].astype(str)
                         pheno = pheno.merge(ext_pheno, left_on="subject_id", right_on=sub_col, how="left")
-                
+
                 # Filter down to core ABIDE columns to prevent UI clutter
                 core_columns = [
-                    "subject_id", "site", "group_interest", "DX_GROUP", 
-                    "AGE_AT_SCAN", "SEX", "FIQ", "func_mean_fd", 
+                    "subject_id", "site", "group_interest", "DX_GROUP",
+                    "AGE_AT_SCAN", "SEX", "FIQ", "func_mean_fd",
                     "ADOS_TOTAL", "SRS_RAW_TOTAL"
                 ]
                 keep_cols = [c for c in core_columns if c in pheno.columns]
                 pheno = pheno[keep_cols]
-                
+
                 # Coerce target columns to numeric (except DX_GROUP which we map to categorical strings)
                 numeric_cols = ["AGE_AT_SCAN", "SEX", "FIQ", "func_mean_fd", "ADOS_TOTAL", "SRS_RAW_TOTAL"]
                 for nc in numeric_cols:
                     if nc in pheno.columns:
                         pheno[nc] = pd.to_numeric(pheno[nc], errors='coerce')
-                
+
                 # Rename columns for clarity in the UI
                 rename_map = {
                     "DX_GROUP": "Diagnosis",
@@ -677,15 +677,15 @@ class AbideSchaeferLoader(BaseDataLoader):
                     "func_mean_fd": "Motion_FD"
                 }
                 pheno = pheno.rename(columns=rename_map)
-                
+
                 # Map Diagnosis to match group_interest string values (1 -> autism, 2 -> healthy_control)
                 if "Diagnosis" in pheno.columns:
                     pheno["Diagnosis"] = pheno["Diagnosis"].map({1: "autism", 2: "healthy_control"})
-                
+
             except Exception as e:
                 # Add warning but continue
                 pass
-                
+
         from conninfpy.connectivity import connectivity_from_dataset
         dataset = LoadedDataset(
             data=series, pheno=pheno, data_kind="timeseries", subject_ids=subject_ids,
@@ -698,29 +698,29 @@ class AbideSchaeferLoader(BaseDataLoader):
 def build_fmriprep_confounds(img_path: str, strategy: int, n_compcor: int | None = 10, use_GSR: bool = False) -> tuple[pd.DataFrame, np.ndarray]:
     """Build an fMRIPrep confound regressor matrix for one image."""
     from nilearn.interfaces.fmriprep import load_confounds
-    
+
     assert strategy in [1, 2, 3, 4, 5, 6], "Strategy must be 1-6"
-    
+
     strategy_1 = {'strategy': ['motion'], 'motion': 'full'}
     strategy_2 = {'strategy': ['motion', 'compcor', 'high_pass'], 'motion': 'derivatives', 'compcor': 'anat_combined', 'n_compcor': n_compcor}
     strategy_3 = {'strategy': ['motion', 'compcor', 'high_pass'], 'motion': 'derivatives', 'compcor': 'anat_combined', 'n_compcor': 'all'}
     strategy_4 = {'strategy': ['motion', 'compcor', 'high_pass'], 'motion': 'full', 'compcor': 'anat_combined', 'n_compcor': n_compcor}
     strategy_5 = {'strategy': ['motion', 'compcor', 'high_pass'], 'motion': 'full', 'compcor': 'anat_combined', 'n_compcor': 'all'}
     strategy_6 = {'strategy': ['motion', 'compcor', 'high_pass'], 'motion': 'full', 'compcor': 'temporal_anat_combined', 'n_compcor': 'all'}
-    
+
     strategy_dict = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6][strategy - 1].copy()
-    
+
     if use_GSR:
         strategy_dict['strategy'] = list(strategy_dict['strategy']) + ['global_signal']
         strategy_dict['global_signal'] = 'full'
-        
+
     return load_confounds(img_path, **strategy_dict)
 
 
 class FmriprepDerivativesLoader(BaseDataLoader):
     """Loader for fMRIPrep derivatives, performing atlas extraction and confound regression."""
     name = "FmriprepDerivativesLoader"
-    
+
     def __init__(
         self,
         derivatives: dict[str, str] | None = None,
@@ -751,23 +751,23 @@ class FmriprepDerivativesLoader(BaseDataLoader):
         """Sorted list of data files in the loader's directory."""
         if not os.path.exists(base_dir):
             return []
-        
+
         bold_files = glob.glob(os.path.join(base_dir, self.bold_pattern))
         if not bold_files:
             bold_files = glob.glob(os.path.join(base_dir, "**", self.bold_pattern), recursive=True)
-            
+
         results = []
         for bf in sorted(bold_files):
             sub_id = "sub-.*"
             m = re.search(self.subject_regex, os.path.basename(bf))
             if m:
                 sub_id = m.group(1)
-            
+
             parent_dir = os.path.dirname(bf)
             confound_files = glob.glob(os.path.join(parent_dir, f"*confounds*.tsv"))
             if not confound_files:
                 confound_files = glob.glob(os.path.join(base_dir, "**", f"sub-{sub_id}*confounds*.tsv"), recursive=True)
-            
+
             cf = confound_files[0] if confound_files else None
             results.append((bf, cf))
         return results
@@ -779,7 +779,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
             dirs_to_scan = self.derivatives
         elif self.derivatives_dir:
             dirs_to_scan = {"all": self.derivatives_dir}
-            
+
         total_files = 0
         total_size = 0.0
         sample_subs = []
@@ -791,11 +791,11 @@ class FmriprepDerivativesLoader(BaseDataLoader):
             for bf, _ in pairs[:3]:
                 sub_id = os.path.basename(bf).split("_")[0]
                 sample_subs.append(f"{grp}/{sub_id}")
-                
+
         n_rois = None
         if self.atlas_image_path and os.path.isdir(self.atlas_image_path):
             n_rois = len(glob.glob(os.path.join(self.atlas_image_path, "*.nii*")))
-            
+
         return DatasetPreview(
             n_subjects=total_files,
             n_observations=total_files,
@@ -819,16 +819,16 @@ class FmriprepDerivativesLoader(BaseDataLoader):
             dirs_to_scan = self.derivatives
         elif self.derivatives_dir:
             dirs_to_scan = {"all": self.derivatives_dir}
-            
+
         all_data = []
         all_subject_ids = []
         all_groups = []
-        
+
         strategy = self.denoising.get("strategy", 4)
         n_compcor = self.denoising.get("n_compcor", 10)
         use_GSR = self.denoising.get("use_GSR", False)
         smoothing = self.denoising.get("smoothing", None)
-        
+
         is_mask_dir = self.atlas_image_path and os.path.isdir(self.atlas_image_path)
         if is_mask_dir:
             mask_files = sorted(glob.glob(os.path.join(self.atlas_image_path, "*.nii*")))
@@ -842,7 +842,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                 m = re.search(self.subject_regex, os.path.basename(bf))
                 if m:
                     sub_id = m.group(1)
-                
+
                 cache_key = compute_dir_hash([bf, cf] if cf else [bf], {
                     "atlas": self.atlas_image_path,
                     "strategy": strategy,
@@ -854,7 +854,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                 })
                 os.makedirs(self.cache_dir, exist_ok=True)
                 cache_file = os.path.join(self.cache_dir, f"fmriprep_{cache_key}.npy")
-                
+
                 if os.path.exists(cache_file):
                     timeseries = np.load(cache_file)
                 else:
@@ -863,7 +863,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                     confounds, sample_mask = None, None
                     if cf:
                         confounds, sample_mask = build_fmriprep_confounds(bf, strategy, n_compcor, use_GSR)
-                    
+
                     if is_mask_dir:
                         ts_cols = []
                         for mask_file in mask_files:
@@ -878,9 +878,9 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                         if smoothing is not None:
                             masker.set_params(smoothing_fwhm=smoothing)
                         timeseries = masker.fit_transform(bf, confounds=confounds, sample_mask=sample_mask)
-                    
+
                     np.save(cache_file, timeseries)
-                    
+
                 all_data.append(timeseries)
                 all_subject_ids.append(sub_id)
                 if self.derivatives:
@@ -889,7 +889,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                     all_groups.append(os.path.basename(os.path.dirname(os.path.dirname(bf))))
                 else:
                     all_groups.append("control")
-                    
+
         n_volumes = [int(ts.shape[0]) for ts in all_data]
         data = _pack_timeseries(all_data)
 
@@ -897,7 +897,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
             "subject_id": all_subject_ids,
             "group": all_groups
         })
-        
+
         if self.pheno_path and os.path.exists(self.pheno_path):
             if self.pheno_path.endswith(".xlsx"):
                 ext_pheno = pd.read_excel(self.pheno_path)
@@ -909,10 +909,12 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                 ext_pheno["subject_id"] = ext_pheno["subject_id"].astype(str)
                 pheno["subject_id"] = pheno["subject_id"].astype(str)
                 pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
-                
+
         atlas = _load_atlas_if_present(self.atlas_metadata)
-                
-        return LoadedDataset(
+
+        from conninfpy.preprocessing import SOURCE_LOADER_DENOISING, attach_preprocessing, fact
+
+        result = LoadedDataset(
             data=data,
             pheno=pheno,
             data_kind="timeseries",
@@ -927,12 +929,16 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                 "truncated_to": n_volumes[0] if len(set(n_volumes)) == 1 else None,
             }
         )
+        # The denoising (incl. its global-signal option) is performed by this
+        # loader's pipeline; the fact records what was actually configured.
+        attach_preprocessing(result, gsr=fact(bool(use_GSR), SOURCE_LOADER_DENOISING))
+        return result
 
 
 class TimeseriesDirectoryLoader(BaseDataLoader):
     """Loader for directories containing already extracted time-series CSV/NPY files."""
     name = "TimeseriesDirectoryLoader"
-    
+
     def __init__(
         self,
         dir_path: str | None = None,
@@ -978,7 +984,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
         total_files = sum(len(f) for f in all_groups_files.values())
         if total_files == 0:
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["No files matched pattern."])
-            
+
         first_grp = list(all_groups_files.keys())[0]
         first_file = all_groups_files[first_grp][0]
         n_tp, n_rois = None, None
@@ -992,7 +998,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
                 n_tp, n_rois = df.shape
         except Exception:
             pass
-            
+
         subject_ids = []
         for grp, files in all_groups_files.items():
             for f in files[:3]:
@@ -1001,11 +1007,11 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
                 if m:
                     sub_id = m.group(1)
                 subject_ids.append(f"{grp}/{sub_id}")
-                
+
         total_sizes = 0.0
         for grp, files in all_groups_files.items():
             total_sizes += sum(os.path.getsize(f) for f in files) / (1024 * 1024)
-            
+
         return DatasetPreview(
             n_subjects=total_files,
             n_observations=total_files,
@@ -1025,13 +1031,13 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
         total_files = sum(len(f) for f in all_groups_files.values())
         if total_files == 0:
             raise FileNotFoundError(f"No files matched pattern: {self.pattern}")
-            
+
         data_list = []
         subject_ids = []
         groups = []
-        
+
         hdr = 0 if self.header == "infer" or self.header is True else None
-        
+
         for grp, files in all_groups_files.items():
             for f in files:
                 sub_id = os.path.basename(f).split(".")[0]
@@ -1040,7 +1046,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
                     sub_id = m.group(1)
                 subject_ids.append(sub_id)
                 groups.append(grp)
-                
+
                 if f.endswith(".npy"):
                     arr = np.asarray(np.load(f), dtype=np.float64)
                 else:
@@ -1055,14 +1061,14 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
                             "Check the manifest 'header' and 'sep' settings."
                         ) from exc
                 data_list.append(arr)
-            
+
         data = _pack_timeseries(data_list)
-        
+
         pheno = pd.DataFrame({
             "subject_id": subject_ids,
             "group": groups
         })
-        
+
         if self.pheno_path and os.path.exists(self.pheno_path):
             if self.pheno_path.endswith(".xlsx"):
                 ext_pheno = pd.read_excel(self.pheno_path)
@@ -1074,9 +1080,9 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
                 ext_pheno["subject_id"] = ext_pheno["subject_id"].astype(str)
                 pheno["subject_id"] = pheno["subject_id"].astype(str)
                 pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
-                
+
         atlas = _load_atlas_if_present(self.atlas)
-                
+
         return LoadedDataset(
             data=data,
             pheno=pheno,
@@ -1094,7 +1100,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
 class ConditionTimeseriesArrayLoader(BaseDataLoader):
     """Loader for paired-condition arrays (e.g. Open-Close) in .npy format."""
     name = "ConditionTimeseriesArrayLoader"
-    
+
     def __init__(
         self,
         data_dir: str,
@@ -1137,7 +1143,7 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
         sub_list = self._get_subject_order()
         if not sub_list:
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["Subject order list empty or missing."])
-            
+
         cond = self.conditions[0]
         fname = self.file_template.format(
             site=self.site, condition=cond, atlas_token=self.atlas_token,
@@ -1146,13 +1152,13 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
         fpath = os.path.join(self.data_dir, fname)
         if not os.path.exists(fpath):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, [f"File not found: {fname}"])
-            
+
         try:
             arr = np.load(fpath)
             n_sub = arr.shape[0]
             n_tp = arr.shape[1]
             n_rois = arr.shape[2]
-            
+
             return DatasetPreview(
                 n_subjects=len(sub_list),
                 n_observations=len(sub_list) * len(self.conditions),
@@ -1173,11 +1179,11 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
         sub_list = self._get_subject_order()
         if not sub_list:
             raise FileNotFoundError(f"Subject list not found: {self.subject_order_path}")
-            
+
         all_series = []
         all_conditions = []
         all_pheno_subs = []
-        
+
         for cond in self.conditions:
             fname = self.file_template.format(
                 site=self.site, condition=cond, atlas_token=self.atlas_token,
@@ -1186,9 +1192,9 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
             fpath = os.path.join(self.data_dir, fname)
             if not os.path.exists(fpath):
                 raise FileNotFoundError(f"Missing file for condition '{cond}': {fpath}")
-                
+
             arr = np.load(fpath)
-            
+
             if arr.ndim == 4:
                 if self.close_session_policy == "first":
                     arr = arr[:, :, :, 0]
@@ -1196,24 +1202,29 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
                     arr = arr.mean(axis=-1)
                 else:
                     raise ValueError(f"Unsupported session policy: {self.close_session_policy}")
-            
+
             all_series.extend(arr)
             all_conditions.extend([cond] * len(sub_list))
             all_pheno_subs.extend(sub_list)
-            
+
         data = _pack_timeseries(all_series)
         pheno = pd.DataFrame({
             "subject_id": all_pheno_subs,
             "condition": all_conditions
         })
-        
+
         atlas = _load_atlas_if_present(self.atlas)
-                
+
         from conninfpy.connectivity import connectivity_from_dataset
         dataset = LoadedDataset(
             data=data, pheno=pheno, data_kind="timeseries", subject_ids=all_pheno_subs,
             conditions=self.conditions, condition_column="condition", atlas=atlas,
             provenance={"data_dir": self.data_dir, "strategy": self.strategy})
+        # The file-name token declares the upstream denoising variant; it was
+        # not performed by this library (no inference from the matrix values).
+        from conninfpy.preprocessing import SOURCE_FILE_TOKEN, attach_preprocessing, fact, gsr_from_file_token
+        gsr_status = gsr_from_file_token(self.gsr)
+        attach_preprocessing(dataset, gsr=fact(gsr_status, SOURCE_FILE_TOKEN) if gsr_status is not None else None)
         options = {} if self.shrinkage == "auto" else {"shrinkage": self.shrinkage}
         return connectivity_from_dataset(dataset, kind=self.connectivity_kind, **options)
 
@@ -1222,7 +1233,7 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
 class ConnectivityMatrixLoader(BaseDataLoader):
     """Loader for inference-ready connectivity matrices (.npy or .npz)."""
     name = "ConnectivityMatrixLoader"
-    
+
     def __init__(
         self,
         data_path: str | None = None,
@@ -1244,7 +1255,7 @@ class ConnectivityMatrixLoader(BaseDataLoader):
             nl = NumpyLoader(data_path=self.data_paths[first_grp], pheno_path=self.pheno_path, data_kind=self.data_kind)
             prev = nl.preview()
             prev.atlas_guess = os.path.basename(self.atlas) if self.atlas else None
-            
+
             total_observations = 0
             total_sizes = 0.0
             for grp, pth in self.data_paths.items():
@@ -1279,15 +1290,15 @@ class ConnectivityMatrixLoader(BaseDataLoader):
                 all_data.append(ds.data)
                 all_groups.extend([grp] * len(ds.data))
                 all_subject_ids.extend([f"{grp}_{sid}" for sid in ds.subject_ids])
-                
+
             data = np.vstack(all_data)
             pheno = pd.DataFrame({
                 "subject_id": all_subject_ids,
                 "group": all_groups
             })
-            
+
             atlas = _load_atlas_if_present(self.atlas)
-                    
+
             return LoadedDataset(
                 data=data,
                 pheno=pheno,
@@ -1299,14 +1310,14 @@ class ConnectivityMatrixLoader(BaseDataLoader):
         else:
             nl = NumpyLoader(data_path=self.data_path, pheno_path=self.pheno_path, data_kind=self.data_kind)
             dataset = nl.load()
-            
+
             if self.atlas and os.path.exists(self.atlas):
                 try:
                     dataset.atlas = AtlasInfo.from_csv(self.atlas)
                     dataset.roi_labels = dataset.atlas.labels
                 except Exception:
                     pass
-                    
+
             return dataset
 
 

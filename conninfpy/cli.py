@@ -129,6 +129,10 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
     if design.get("group") and "group_column" not in options:
         options["group_column"] = design["group"]
     Y, scale = _connectivity(dataset, options if dataset.data_kind == "timeseries" else cfg.get("connectivity"))
+    # Three-state preprocessing facts (gsr / estimator / standardize /
+    # shrinkage / tr_seconds, each with a source) recorded by the loaders and
+    # the connectivity backend; kept unknown where no explicit source exists.
+    preprocessing_record = dataset.provenance.get("preprocessing")
     pheno = dataset.pheno.reset_index(drop=True)
     if design.get("group") and "n_valid_tr" in pheno:
         from conninfpy.connectivity import warn_group_diagnostics
@@ -141,6 +145,8 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
     confound_cols = _as_list(design.get("confounds"))
     site_col = design.get("sites")
     kwargs: Dict[str, Any] = {"input": input_kind}
+    if preprocessing_record:
+        kwargs["preprocessing"] = preprocessing_record
     encoding_frame = None
     encoding_columns: List[str] = []
     if design.get("harmonize") is not None:
@@ -281,6 +287,7 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
         "input": input_kind,
         "categorical_coding": categorical_coding,
         "connectivity": dataset.provenance.get("connectivity"),
+        "preprocessing": dataset.provenance.get("preprocessing"),
         "connectivity_diagnostics": dataset.pheno[[c for c in ("n_valid_tr", "delta_s") if c in dataset.pheno]].to_dict(orient="list"),
         "loader_warnings": dataset.warnings,
     }
@@ -400,6 +407,8 @@ def run(
             "resolved_strategy": getattr(res, "resolved_strategy", None),
             "combat_diagnostics": res.combat_diagnostics,
             "design_diagnostics": res.design_diagnostics,
+            "fisher": (inf.analysis_provenance.get("fisher")
+                       if isinstance(getattr(inf, "analysis_provenance", None), dict) else None),
             "design": None if design is None else {
                 k: design.get(k) for k in ("kind", "columns", "contrast", "column_means", "profiles",
                                            "comparison", "interest", "scale", "estimable_columns",

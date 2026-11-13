@@ -26,6 +26,7 @@ from apps.utils.helpers import (
     clear_downstream_results,
     data_is_fisher_z,
     effect_direction_labels,
+    fisher_clip_note,
     render_help,
 )
 
@@ -560,7 +561,8 @@ def _run_inference_background(
     annotation_atlas, alpha, question_choice, loaded_settings_hash, recipe_choice,
     effective_recipe_choice, group_col, ref_group, target_group, interest_var,
     subject_col, condition_col, baseline_val, target_val, confound_vars, site_col,
-    active_atlas_signature, data_kind, tested_tail=None, var_equal=None
+    active_atlas_signature, data_kind, tested_tail=None, var_equal=None,
+    preprocessing=None, fisher_history=None
 ):
     """Worker thread body: run the inference and record status.
 
@@ -642,6 +644,8 @@ def _run_inference_background(
             use_mp=use_mp,
             tested_tail=tested_tail,
             acceleration=effective_acceleration,
+            preprocessing=preprocessing,
+            fisher_history=fisher_history if input_kind == "z" else None,
             **variance_kwargs,
             **primary_run_kwargs
         )
@@ -692,6 +696,8 @@ def _run_inference_background(
                 use_mp=use_mp,
                 tested_tail=tested_tail,
                 acceleration=effective_acceleration,
+                preprocessing=preprocessing,
+                fisher_history=fisher_history if input_kind == "z" else None,
                 **variance_kwargs,
                 **comp_run_kwargs
             )
@@ -727,6 +733,12 @@ def _run_inference_background(
             "input": input_kind,
             # The scale the inference ran on: the loaded one, never converted here.
             "analysis_scale": {"r": "correlation", "z": "fisher_z"}.get(input_kind),
+            "preprocessing": preprocessing,
+            # Upstream Fisher transforms captured at load/button time (the
+            # full record — applied here + upstream — lives on the result and
+            # its provenance/exports).
+            "fisher_history": fisher_history,
+            "fisher": getattr(res, "fisher", None),
             "tail_policy": f"one-sided-{tested_tail}" if tested_tail else "two-sided",
             "tested_tail": tested_tail,
             "tail_selection": "prespecified" if tested_tail else None,
@@ -1306,6 +1318,9 @@ def render_design_inference_view(base_atlas, tabs_list):
             with st.container(border=True):
                 if is_fisher_z:
                     st.success("✅ **Input scale:** Fisher-z connectivity")
+                    clip_note = st.session_state.get("last_fisher_clip_note")
+                    if clip_note:
+                        st.warning(clip_note)
                 else:
                     st.warning(
                         "⚠️ **Input scale: raw correlation.** Inference runs on the correlations "
@@ -1313,12 +1328,35 @@ def render_design_inference_view(base_atlas, tabs_list):
                         "recommended (it stabilises the variance); apply it here to analyse z values."
                     )
                     if st.button("⚡ Apply Fisher-z now", key="apply_fisher_z_btn"):
-                        Y_clipped = np.clip(st.session_state.connectivity_data, -0.9999, 0.9999)
-                        st.session_state.connectivity_data = np.arctanh(Y_clipped)
-                        st.session_state.connectivity_data_kind = "fisher_z"
-                        clear_downstream_results()
-                        st.success("Fisher r-to-z transform applied to dataset in-memory!")
-                        st.rerun()
+                        # The historical in-app policy, now explicit and shared:
+                        # clip the correlations at ±0.9999 before arctanh
+                        # (z bounded by atanh(0.9999) ≈ 4.95); the API's
+                        # default clip-z-at-±5 policy is a different policy.
+                        # Invalid correlations (|r| > 1) are rejected by the
+                        # shared helper; the dataset, its kind and metadata
+                        # stay untouched when that happens.
+                        try:
+                            from conninfpy import fisher_r_to_z
+                            from conninfpy._prepare import make_fisher_entry
+                            z, fisher_report = fisher_r_to_z(
+                                st.session_state.connectivity_data,
+                                clip_r=0.9999, return_report=True,
+                            )
+                        except ValueError as exc:
+                            st.error(f"Fisher r-to-z not applied: {exc}")
+                        else:
+                            st.session_state.connectivity_data = z
+                            st.session_state.connectivity_data_kind = "fisher_z"
+                            clear_downstream_results()
+                            st.session_state["last_fisher_clip_note"] = fisher_clip_note(fisher_report)
+                            # Structured upstream provenance of THIS transform;
+                            # analyze() will carry it into the result without
+                            # transforming or counting again.
+                            st.session_state["dataset_fisher_history"] = [make_fisher_entry(
+                                stage="app_design_button", scope="dataset_in_memory",
+                                report=fisher_report)]
+                            st.success("Fisher r-to-z transform applied to dataset in-memory!")
+                            st.rerun()
                         
                 resolution = 1.0 / (n_perms + 1)
                 
@@ -1598,6 +1636,8 @@ def render_design_inference_view(base_atlas, tabs_list):
                                     data_kind=st.session_state.get("connectivity_data_kind"),
                                     tested_tail=tested_tail,
                                     var_equal=var_equal,
+                                    preprocessing=st.session_state.get("dataset_preprocessing"),
+                                    fisher_history=st.session_state.get("dataset_fisher_history"),
                                 )
                             )
                             t.daemon = True

@@ -123,6 +123,20 @@ def render_dataset_card():
     cols[1].metric("ROIs", info["n_rois"])
     cols[2].metric("Subjects", info.get("subjects") or "—")
     st.caption(f"{info['source']} · {info['atlas']} · Validated")
+    record = st.session_state.get("dataset_preprocessing")
+    from apps.utils.helpers import describe_per_site_facts, describe_preprocessing_facts
+    with st.expander("Preprocessing facts (known / unknown)", expanded=False):
+        for label, value, source in describe_preprocessing_facts(record):
+            st.markdown(f"- **{label}:** {value} — *{source}*")
+        per_site = describe_per_site_facts(record)
+        if per_site:
+            st.markdown("Per-site facts (combined dataset; no common value is claimed):")
+            for site, value, source in per_site:
+                st.markdown(f"- **Site `{site}` GSR:** {value} — *{source}*")
+        st.caption(
+            "Only facts with an explicit recorded source are stated; everything else is "
+            "unknown and is never inferred from the connectivity values."
+        )
 
 
 def render_data_table(frame, **kwargs):

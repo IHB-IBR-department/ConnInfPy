@@ -62,12 +62,16 @@ class ResultBundle:
     def from_result(cls, result: Any, *, roi_ids: Any = None, groupings: Any = None,
                     eligible: Any = None, estimable: Any = None, tested: Any = None,
                     model_id: Any = None, contrast_id: Any = None, units: Any = None,
-                    scale: Any = None, family: Any = None, annotation: Any = None) -> "ResultBundle":
+                    scale: Any = None, family: Any = None, annotation: Any = None,
+                    preprocessing: Any = None, fisher: Any = None) -> "ResultBundle":
         """Snapshot captured analysis metadata, with checked overrides for import.
 
         New producer results need no mask or family arguments. Legacy results
         require explicit metadata; nothing is reconstructed from p-values,
-        zero-filled statistics or absent tails.
+        zero-filled statistics or absent tails. ``preprocessing`` and
+        ``fisher`` may be supplied explicitly for legacy results without
+        captured records; a conflict with the captured record is rejected,
+        and nothing is ever defaulted into existence.
         """
         outer = result
         result = getattr(result, "inference", result)
@@ -106,6 +110,28 @@ class ResultBundle:
         units = resolve("units", units)
         scale = resolve("scale", scale)
         family = resolve("family", family)
+        from conninfpy.preprocessing import normalize_preprocessing_record
+        if preprocessing is None:
+            preprocessing = deepcopy(provenance.get("preprocessing"))
+        elif provenance.get("preprocessing") is not None:
+            captured = normalize_preprocessing_record(provenance["preprocessing"])
+            supplied = normalize_preprocessing_record(preprocessing)
+            if supplied != captured:
+                raise ValueError("explicit preprocessing conflicts with the captured analysis")
+            preprocessing = deepcopy(captured)
+        else:
+            preprocessing = normalize_preprocessing_record(preprocessing)
+        from conninfpy._prepare import normalize_fisher_record
+        if fisher is None:
+            fisher = deepcopy(provenance.get("fisher"))
+        elif provenance.get("fisher") is not None:
+            captured_f = normalize_fisher_record(provenance["fisher"])
+            supplied_f = normalize_fisher_record(fisher)
+            if supplied_f != captured_f:
+                raise ValueError("explicit fisher record conflicts with the captured analysis")
+            fisher = deepcopy(captured_f)
+        else:
+            fisher = normalize_fisher_record(fisher)
         required = (roi_ids, groupings, eligible, estimable, tested,
                     model_id, contrast_id, units, scale, family)
         if any(value is None for value in required):
@@ -185,6 +211,8 @@ class ResultBundle:
                 "e_grid": deepcopy(e_grid), "h_grid": deepcopy(h_grid),
                 "identity": deepcopy(provenance.get("identity", {"roi_id_kind": "explicit_input_id"})),
                 "coverage": deepcopy(provenance.get("coverage")),
+                "preprocessing": deepcopy(preprocessing),
+                "fisher": deepcopy(fisher),
                 "missing_report": deepcopy(getattr(result, "missing_report", None)),
                 "design_diagnostics": deepcopy(
                     getattr(outer, "design_diagnostics", None)

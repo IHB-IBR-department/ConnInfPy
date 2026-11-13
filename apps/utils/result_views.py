@@ -49,6 +49,48 @@ def _matrix_node_count(res: Any) -> int:
     raise ValueError("Cannot determine matrix node count from inference result.")
 
 
+def _summarize_fisher_entry(entry: Any) -> str:
+    counts = entry.get("counts") or {}
+    off = counts.get("off_diagonal") or {}
+    diag = counts.get("diagonal") or {}
+    policy = entry.get("policy")
+    scope = entry.get("scope")
+    if policy == "unbounded":
+        infinity = counts.get("left_at_infinity") or {}
+        inf_off = (infinity.get("off_diagonal") or {}).get("n_cells", 0) or 0
+        return f"{scope}: unbounded, {int(inf_off)} off-diagonal cell(s) left at ±∞"
+    n_off = int(off.get("n_cells_clipped", 0) or 0)
+    n_edges = int(off.get("n_unique_undirected_edges_clipped", 0) or 0)
+    n_diag = int(diag.get("n_cells_clipped", 0) or 0)
+    params = entry.get("parameters") or {}
+    if policy == "clip_r":
+        bound = f"clip r at ±{params.get('clip_r', 0.9999):g}"
+    else:
+        bound = f"clip z at ±{params.get('max_z', 5):g}"
+    parts = [f"{scope}: {bound}"]
+    if n_off or n_diag:
+        parts.append(f"{n_off} off-diagonal matrix cell(s) clipped"
+                     + (f", {n_edges} unique undirected edge(s)" if n_edges else "")
+                     + (f", {n_diag} structural diagonal cell(s)" if n_diag else ""))
+    return ", ".join(parts)
+
+
+def summarize_fisher_record(record: Any) -> Optional[str]:
+    """One-line summary of the captured Fisher-transform provenance, or None."""
+    if not isinstance(record, dict):
+        return None
+    applied = record.get("applied") or []
+    upstream = record.get("upstream")
+    pieces = []
+    if applied:
+        pieces.append("Applied here (" + "; ".join(_summarize_fisher_entry(e) for e in applied) + ")")
+    if upstream == "unknown":
+        pieces.append("upstream transform not recorded")
+    elif isinstance(upstream, list) and upstream:
+        pieces.append("Upstream (" + "; ".join(_summarize_fisher_entry(e) for e in upstream) + ")")
+    return " · ".join(pieces) or None
+
+
 def describe_result_scale_and_stat(res_wrapper: Any, run_plan: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Return explicit statistic symbols, response scale, and inference unit labels."""
     inner = unwrap_result(res_wrapper)
@@ -80,6 +122,26 @@ def describe_result_scale_and_stat(res_wrapper: Any, run_plan: Optional[Dict[str
     if scale not in ("fisher_z", "correlation", "difference_fisher_z"):
         scale = "unknown"
 
+    # Known preprocessing facts (three-state): the estimator that produced the
+    # matrices, when explicitly recorded; unknown stays unknown.
+    facts = None
+    for source in (provenance if isinstance(provenance, dict) else None,
+                   run_plan if isinstance(run_plan, dict) else None):
+        value = source.get("preprocessing") if isinstance(source, dict) else None
+        if isinstance(value, dict):
+            facts = value
+            break
+    method_fact = facts.get("connectivity_method") if facts else None
+    estimator = method_fact.get("value") if isinstance(method_fact, dict) else None
+
+    fisher_record = None
+    for source in (provenance if isinstance(provenance, dict) else None,
+                   run_plan if isinstance(run_plan, dict) else None):
+        value = source.get("fisher") if isinstance(source, dict) else None
+        if isinstance(value, dict):
+            fisher_record = value
+            break
+
     scale_labels = {
         "fisher_z": "Fisher z",
         "correlation": "Pearson correlation (r)",
@@ -92,6 +154,27 @@ def describe_result_scale_and_stat(res_wrapper: Any, run_plan: Optional[Dict[str
         "difference_fisher_z": "c' β (Fisher z difference units)",
         "unknown": "c' β (unknown response units)",
     }
+    scale_note = ""
+    if estimator == "partial":
+        scale_labels["fisher_z"] = "Fisher z (atanh of partial r)"
+        scale_labels["correlation"] = "partial correlation (r)"
+        effect_units["fisher_z"] = "c' β (Δz, atanh of partial r)"
+        effect_units["correlation"] = "c' β (Δ partial r, correlation units)"
+        scale_note = (
+            "Fisher z here is atanh(partial r): a scale transform that stabilizes the "
+            "variance of partial correlations. It is not the exact standard z of a "
+            "marginal Pearson r, and the sign/magnitude of partial correlations does "
+            "not by itself carry physiological or causal meaning."
+        )
+    elif estimator == "spearman":
+        scale_labels["fisher_z"] = "Fisher z (atanh of Spearman ρ)"
+        scale_labels["correlation"] = "Spearman rank correlation (ρ)"
+        effect_units["fisher_z"] = "c' β (Δz, atanh of Spearman ρ)"
+        effect_units["correlation"] = "c' β (Δρ, rank correlation units)"
+        scale_note = (
+            "Fisher z here is atanh(Spearman ρ): a scale transform for variance "
+            "stabilization, not the exact standard z of a Pearson correlation."
+        )
 
     method = str(getattr(inner, "method", "") or "").lower()
     unit = getattr(inner, "inference_unit", None)
@@ -119,7 +202,11 @@ def describe_result_scale_and_stat(res_wrapper: Any, run_plan: Optional[Dict[str
 
     effect_label = effect_units[scale]
     recorded_units = provenance.get("units") if isinstance(provenance, dict) else None
-    default_units = {"Fisher z", "Pearson correlation (r)", "unknown response units"}
+    default_units = {
+        "Fisher z", "Pearson correlation (r)", "unknown response units",
+        "Fisher z (atanh of partial r)", "Fisher z (atanh of Spearman ρ)",
+        "partial correlation (r)", "Spearman rank correlation (ρ)",
+    }
     if isinstance(recorded_units, str) and recorded_units.strip() and recorded_units not in default_units:
         effect_label = f"c' β ({recorded_units})"
 
@@ -130,6 +217,9 @@ def describe_result_scale_and_stat(res_wrapper: Any, run_plan: Optional[Dict[str
         "scale": scale,
         "scale_label": scale_labels[scale],
         "effect_unit_label": effect_label,
+        "scale_note": scale_note,
+        "fisher": fisher_record,
+        "fisher_note": summarize_fisher_record(fisher_record),
         "inference_unit": unit,
         "inference_unit_note": unit_notes[unit],
     }
@@ -752,11 +842,40 @@ def prepare_predicted_coupling_summary(
     else:
         scope_label = "profiles only (no two-profile comparison defined)"
 
+    coupling_note = None
+    if classes_arr is not None:
+        facts = None
+        for source in (provenance, run_plan if isinstance(run_plan, dict) else None):
+            value = source.get("preprocessing") if isinstance(source, dict) else None
+            if isinstance(value, dict):
+                facts = value
+                break
+        gsr = None
+        estimator_note = None
+        if facts:
+            gsr_fact = facts.get("gsr")
+            gsr = gsr_fact.get("value") if isinstance(gsr_fact, dict) else None
+            method_fact = facts.get("connectivity_method")
+            if isinstance(method_fact, dict) and method_fact.get("value") == "partial":
+                estimator_note = "Classes describe changes in partial correlation, which conditions on the other ROIs."
+        if gsr is True:
+            gsr_note = "Global-signal regression was applied (recorded); it removes shared variance and can itself induce negative correlations."
+        elif gsr is False:
+            gsr_note = "Global-signal regression was not applied (recorded); the shared global signal can make anticorrelations common even between unrelated regions."
+        else:
+            gsr_note = "Whether global-signal regression was applied is unknown for this dataset."
+        coupling_note = " ".join(part for part in (
+            estimator_note,
+            "Coupling classes are descriptive labels on the recorded scale; anticorrelations depend on the preprocessing and do not by themselves imply a physiological or causal relationship.",
+            gsr_note,
+        ) if part)
+
     return {
         "available": True,
         "reason": None,
         **meta,
         "scale_explanation": scale_explanation,
+        "coupling_note": coupling_note,
         "profiles": profile_names,
         "comparison": tuple(comparison) if comparison and len(comparison) == 2 else None,
         "profile_summaries": profile_summaries,

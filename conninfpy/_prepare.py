@@ -24,7 +24,8 @@ graphs.
 """
 from __future__ import annotations
 
-from typing import Optional
+from copy import deepcopy
+from typing import Any, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -229,9 +230,110 @@ def infer_input_kind(*arrays: npt.NDArray[np.float64]) -> Optional[str]:
     return None
 
 
+def make_fisher_entry(*, stage: str, scope: str, report: dict,
+                     source: str = "conninfpy.fisher_r_to_z") -> dict:
+    """Structured provenance entry for one actually applied Fisher transform.
+
+    ``stage`` names where in the pipeline the transform ran (e.g.
+    ``analysis_prepare``, ``analysis_prepare_before_difference``,
+    ``app_ingestion_option``, ``app_design_button``); ``scope`` names the
+    array it was applied to (``Y`` / ``group1`` / ``group2`` /
+    ``dataset_in_memory``); ``report`` is the ``fisher_r_to_z`` report of
+    that same call (policy, parameters, counts with explicit units). The
+    default ``source`` is legitimate only because this factory is called on
+    the actual shared-helper call; entries supplied from outside must state
+    their own source (see :func:`normalize_fisher_history`). The returned
+    entry deep-copies the report, so later mutation of the caller's dict
+    cannot rewrite provenance.
+    """
+    if not isinstance(stage, str) or not stage.strip():
+        raise ValueError("a fisher entry needs a nonempty stage")
+    if not isinstance(scope, str) or not scope.strip():
+        raise ValueError("a fisher entry needs a nonempty scope")
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("a fisher entry needs a nonempty source")
+    if not isinstance(report, dict) or not isinstance(report.get("policy"), str):
+        raise ValueError("a fisher entry needs the fisher_r_to_z report of the applied call")
+    return {
+        "stage": stage,
+        "scope": scope,
+        "source": source,
+        "policy": report["policy"],
+        "parameters": deepcopy(report.get("parameters") or {}),
+        "counts": deepcopy(report),
+    }
+
+
+def normalize_fisher_history(history: Any) -> "list[dict] | None":
+    """Validate a *supplied* Fisher history (list of entries) or ``None``.
+
+    Nothing is invented or overwritten: every supplied entry must carry an
+    explicit nonempty ``source`` (upstream work is never silently attributed
+    to this library), a nonempty ``stage``/``scope`` and the ``counts``
+    report of the call it describes, and its top-level ``policy``/
+    ``parameters`` — when present — must AGREE with that report instead of
+    contradicting it. A dict is accepted only as a full fisher record and
+    passes its schema check (a future-version record cannot sneak through
+    the convenience branch). ``None`` stays ``None``.
+    """
+    if history is None:
+        return None
+    if isinstance(history, dict):
+        return normalize_fisher_record(history)["applied"]
+    if not isinstance(history, (list, tuple)):
+        raise ValueError("fisher history must be a list of entry dicts or None")
+    out = []
+    for entry in history:
+        if not isinstance(entry, dict):
+            raise ValueError("each fisher history entry must be a dict")
+        source = entry.get("source")
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError(
+                "a supplied fisher history entry needs an explicit nonempty source; "
+                "upstream work is not attributed to this library by default")
+        counts = entry.get("counts")
+        if not isinstance(counts, dict) or not isinstance(counts.get("policy"), str):
+            raise ValueError("each fisher history entry needs the counts report of its call")
+        if "policy" in entry and entry["policy"] != counts["policy"]:
+            raise ValueError("fisher history entry policy contradicts its counts report")
+        if "parameters" in entry and dict(entry["parameters"] or {}) != dict(counts.get("parameters") or {}):
+            raise ValueError("fisher history entry parameters contradict its counts report")
+        out.append(make_fisher_entry(
+            stage=entry.get("stage"), scope=entry.get("scope"),
+            report=counts, source=source,
+        ))
+    return out
+
+
+def normalize_fisher_record(record: Any) -> "dict | None":
+    """Validate a Fisher provenance record (or ``None``) and return a copy.
+
+    ``{'schema_version': 1, 'applied': [entries], 'upstream': [entries] |
+    'unknown' | None}``. Future schema versions are rejected rather than
+    silently rewritten.
+    """
+    if record is None:
+        return None
+    if not isinstance(record, dict):
+        raise ValueError("the fisher record must be a dict or None")
+    version = record.get("schema_version", 1)
+    if version != 1:
+        raise ValueError(f"unsupported fisher record schema_version {version!r}; supported: 1")
+    unknown_keys = set(record) - {"schema_version", "applied", "upstream"}
+    if unknown_keys:
+        raise ValueError(f"unknown fisher record key(s): {sorted(unknown_keys)}")
+    upstream = record.get("upstream")
+    if upstream is not None and upstream != "unknown":
+        upstream = normalize_fisher_history(upstream)
+    return {"schema_version": 1,
+            "applied": normalize_fisher_history(record.get("applied") or []),
+            "upstream": upstream}
+
+
 def prepare_connectivity(
-    Y: npt.ArrayLike, input: str, name: str = "Y", allow_missing: bool = False
-) -> npt.NDArray[np.float64]:
+    Y: npt.ArrayLike, input: str, name: str = "Y", allow_missing: bool = False,
+    *, stage: str = "analysis_prepare", return_report: bool = False,
+) -> "npt.NDArray[np.float64] | tuple[npt.NDArray[np.float64], Optional[dict]]":
     """Check ``Y``, zero its diagonal, and apply Fisher r→z once if needed.
 
     Parameters
@@ -243,17 +345,33 @@ def prepare_connectivity(
         already on the analysis scale (left unchanged apart from the
         diagonal).
     name : str, optional
-        Argument name used in error messages.
+        Argument name used in error messages; also the ``scope`` of the
+        captured Fisher entry.
+    allow_missing : bool, optional
+        Accept NaN / infinite off-diagonal values (``available_case`` paths).
+    stage : str, optional
+        Provenance stage recorded on the Fisher entry (default
+        ``analysis_prepare``; the paired-interest path records
+        ``analysis_prepare_before_difference``).
+    return_report : bool, optional
+        Additionally return the structured Fisher entry of the transform
+        this call actually applied (``None`` when ``input='z'``: nothing is
+        transformed here). Default False returns only the array.
 
     Returns
     -------
     np.ndarray of shape (n_subjects, N, N)
-        Prepared float64 stack with a zero diagonal.
+        Prepared float64 stack with a zero diagonal (plus the entry dict
+        when ``return_report=True``).
     """
     if input not in ("r", "z"):
         raise ValueError(f"input must be 'r' or 'z'; got {input!r}.")
     arr = check_connectivity(Y, name, allow_missing=allow_missing)
+    entry: Optional[dict] = None
     if input == "r":
-        # Diagonal is already zero, so arctanh never sees r = 1 there.
-        arr = fisher_r_to_z(arr)
-    return arr
+        # Diagonal is already zero, so arctanh never sees r = 1 there. The
+        # report comes from the same call that transforms (no extra pass,
+        # same numbers, same warnings).
+        arr, report = fisher_r_to_z(arr, return_report=True)
+        entry = make_fisher_entry(stage=stage, scope=name, report=report)
+    return (arr, entry) if return_report else arr

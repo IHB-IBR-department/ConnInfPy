@@ -46,7 +46,7 @@ def resolve_path(p: Any, manifest_dir: Path) -> Any:
 
             resolved = builtin_atlas_path(p.split(":", 1)[1])
             return str(resolved) if resolved is not None else p
-        
+
         path_obj = Path(p)
         if path_obj.is_absolute():
             return p
@@ -112,34 +112,34 @@ def load_manifest(path: str) -> DatasetManifest:
 class ManifestLoader(BaseDataLoader):
     """Loader wrapper that parses data.yaml manifests and delegates to real loaders."""
     name = "ManifestLoader"
-    
+
     def __init__(self, manifest_path: str):
         self.manifest_path = manifest_path
         self.manifest = load_manifest(manifest_path)
-        
+
         manifest_dir = Path(manifest_path).resolve().parent
         self.resolved_paths = resolve_path(self.manifest.paths, manifest_dir)
-        
-        
+
+
         loader_name = self.manifest.loader
         if not loader_name:
             raise ValueError("Manifest does not specify a loader.")
         loader_class = get_loader(loader_name)
-        
+
         # Build kwargs: merge resolved_paths and params
         kwargs = {}
         kwargs.update(self.resolved_paths)
         kwargs.update(self.manifest.params)
-        
+
         # Filter kwargs to match constructor signature
         sig = inspect.signature(loader_class.__init__)
         valid_args = list(sig.parameters.keys())
-        
+
         filtered_kwargs = {}
         for k, v in kwargs.items():
             if k in valid_args or 'kwargs' in valid_args:
                 filtered_kwargs[k] = v
-                
+
         self.target_loader = loader_class(**filtered_kwargs)
 
     def set_runtime_matrix_key(self, matrix_key: str) -> dict[str, Any]:
@@ -153,7 +153,7 @@ class ManifestLoader(BaseDataLoader):
         if "expected_rois" in self.manifest.checks:
             self.manifest.checks["expected_rois"] = selected["n_rois"]
         return selected
-        
+
     def preview(self) -> DatasetPreview:
         """Cheap preview of the dataset without a full load."""
         preview = self.target_loader.preview()
@@ -176,11 +176,11 @@ class ManifestLoader(BaseDataLoader):
             except Exception:
                 pass
         return preview
-        
+
     def load(self) -> LoadedDataset:
         """Load the dataset into a :class:`LoadedDataset`."""
         dataset = self.target_loader.load()
-        
+
         # Atlas Auto-Loading
         if not dataset.atlas:
             atlas_path = self.resolved_paths.get("atlas") or self.resolved_paths.get("atlas_metadata") or self.resolved_paths.get("atlas_image_path")
@@ -190,7 +190,7 @@ class ManifestLoader(BaseDataLoader):
                     dataset.roi_labels = dataset.atlas.labels
                 except Exception:
                     pass
-                    
+
         # Apply ROI filtering if keep_rois is specified
         keep_rois = self.resolved_paths.get("keep_rois") or self.manifest.params.get("keep_rois")
         if keep_rois is not None:
@@ -213,10 +213,16 @@ class ManifestLoader(BaseDataLoader):
             dataset = drop_subjects_with_missing(dataset)
         elif missing != "raise":
             raise ValueError(f"params.missing must be 'raise' or 'drop_subjects'; got {missing!r}.")
-            
+
         # Apply checks/validations from manifest
         validate_manifest_dataset(dataset, self.manifest)
-        
+
+        # Manifest declarations about upstream preprocessing fill only the
+        # facts the loaders could not state themselves (library/loader facts
+        # performed at load time take precedence over declarations).
+        from conninfpy.preprocessing import attach_preprocessing, record_from_manifest_applied
+        attach_preprocessing(dataset, **record_from_manifest_applied(self.manifest.preprocessing.get("applied")))
+
         return dataset
 
 def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str], *, by: str = "position") -> LoadedDataset:
@@ -242,10 +248,10 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
         keep_ids = list(keep_rois)
     else:
         return dataset
-        
+
     if not keep_ids:
         return dataset
-        
+
     if by not in ("position", "id"):
         raise ValueError("by must be 'position' or 'id'")
     if by == "id":
@@ -262,11 +268,11 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
         keep_idx = np.array([int(x) - 1 for x in keep_ids if x > 0], dtype=int)
     n_rois = dataset.data[0].shape[-1] if isinstance(dataset.data, list) else dataset.data.shape[-1]
     keep_idx = np.array([idx for idx in keep_idx if 0 <= idx < n_rois], dtype=int)
-    
+
     if len(keep_idx) == 0:
         dataset.warnings.append("No valid ROI indices found to keep; skipping ROI filtering.")
         return dataset
-        
+
     # Filter data tensor
     if isinstance(dataset.data, list):
         dataset.data = [x[:, keep_idx] for x in dataset.data]
@@ -275,14 +281,14 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
             dataset.data = dataset.data[:, keep_idx, :][:, :, keep_idx]
         else:
             dataset.data = dataset.data[:, :, keep_idx]
-            
+
     # Filter atlas metadata
     if dataset.atlas is not None:
         labels = [dataset.atlas.labels[i] for i in keep_idx if i < len(dataset.atlas.labels)]
         networks = [dataset.atlas.networks[i] for i in keep_idx if i < len(dataset.atlas.networks)]
         coords = dataset.atlas.coords[keep_idx] if dataset.atlas.coords is not None else None
         hemisphere = [dataset.atlas.hemisphere[i] for i in keep_idx if i < len(dataset.atlas.hemisphere)] if dataset.atlas.hemisphere is not None else None
-        
+
         dataset.atlas = AtlasInfo(
             labels=labels,
             networks=networks,
@@ -294,10 +300,10 @@ def filter_dataset_rois(dataset: LoadedDataset, keep_rois: Union[List[int], str]
             assignment=(dataset.atlas.assignment.iloc[keep_idx].reset_index(drop=True).copy()
                         if dataset.atlas.assignment is not None else None),
         )
-        
+
     if dataset.roi_labels is not None:
         dataset.roi_labels = [dataset.roi_labels[i] for i in keep_idx if i < len(dataset.roi_labels)]
-        
+
     return dataset
 
 def drop_subjects_with_missing(dataset: LoadedDataset) -> LoadedDataset:
@@ -342,23 +348,23 @@ def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest)
     checks = manifest.checks
     if not checks:
         return
-        
+
     errors = []
-    
+
     # expected_rois
     if "expected_rois" in checks:
         expected_rois = checks["expected_rois"]
         n_rois = dataset.data[0].shape[-1] if isinstance(dataset.data, list) else dataset.data.shape[-1]
         if n_rois != expected_rois:
             errors.append(f"ROI count mismatch: expected {expected_rois}, found {n_rois}")
-            
+
     # min_subjects
     if "min_subjects" in checks:
         min_subjects = checks["min_subjects"]
         n_subs = len(dataset.data)
         if n_subs < min_subjects:
             errors.append(f"Subject count below minimum: expected at least {min_subjects}, found {n_subs}")
-            
+
     # Timepoints mean complete retained frames after construction.
     if "min_timepoints" in checks:
         minimum = checks["min_timepoints"]
@@ -377,7 +383,7 @@ def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest)
         for col in req_cols:
             if col not in dataset.pheno.columns:
                 errors.append(f"Missing required phenotype column: {col}")
-                
+
     # allowed_conditions
     if "allowed_conditions" in checks:
         allowed = checks["allowed_conditions"]
@@ -391,7 +397,7 @@ def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest)
                     invalid = dataset.pheno[~dataset.pheno[col].isin(vals)]
                     if not invalid.empty:
                         errors.append(f"Found invalid values in '{col}': {invalid[col].unique()}")
-                        
+
     # require_symmetric
     if checks.get("require_symmetric", False):
         if isinstance(dataset.data, np.ndarray) and dataset.data.ndim == 3:
@@ -400,7 +406,7 @@ def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest)
                 if not np.allclose(mat, mat.T, atol=1e-5, equal_nan=True):
                     errors.append(f"Matrix at index {idx} is not symmetric.")
                     break
-                    
+
     # require_zero_diagonal
     if checks.get("require_zero_diagonal", False):
         if isinstance(dataset.data, np.ndarray) and dataset.data.ndim == 3:
@@ -422,6 +428,6 @@ def validate_manifest_dataset(dataset: LoadedDataset, manifest: DatasetManifest)
         elif isinstance(expected_subs, int):
             if len(dataset.data) != expected_subs:
                 errors.append(f"Subject count mismatch: expected {expected_subs}, found {len(dataset.data)}")
-                
+
     if errors:
         raise ValueError("Manifest validation failed:\n" + "\n".join(errors))
