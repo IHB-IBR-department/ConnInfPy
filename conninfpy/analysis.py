@@ -13,6 +13,7 @@ fits and you want one line of code.
 from __future__ import annotations
 
 import warnings
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Sequence, Union
 
@@ -25,6 +26,8 @@ from conninfpy.defaults import DEFAULT_HEIGHT_EXPONENT
 from conninfpy.defaults import DEFAULT_N_PERMUTATIONS
 from conninfpy.defaults import DEFAULT_N_THRESHOLDS_PERMUTATION
 from conninfpy._provenance import update_analysis_scale
+from conninfpy._prepare import normalize_fisher_history
+from conninfpy.preprocessing import normalize_preprocessing_record
 from conninfpy.results import InferenceResult
 from conninfpy.results import OmnibusInferenceResult
 from conninfpy._prepare import infer_input_kind
@@ -109,6 +112,30 @@ class AnalyzeResult:
         the run via ``analyze(..., tested_tail=...)``), ``'post-hoc'``
         (:meth:`one_sided` on a finished result) or ``None``."""
         return getattr(self.inference, "tail_selection", None)
+
+    @property
+    def preprocessing(self) -> Optional[Dict[str, Any]]:
+        """Known preprocessing facts (each with a source), or ``None``.
+
+        The record captured by ``analyze(preprocessing=...)``: three-state
+        (missing/None = unknown), never inferred from the data values. See
+        :mod:`conninfpy.preprocessing`. Also preserved in bundle exports.
+        """
+        provenance = getattr(self.inference, "analysis_provenance", None)
+        return provenance.get("preprocessing") if isinstance(provenance, dict) else None
+
+    @property
+    def fisher(self) -> Optional[Dict[str, Any]]:
+        """Fisher-transform provenance: applied entries + upstream history.
+
+        ``{'applied': [...], 'upstream': [...] | 'unknown' | None}`` — the
+        transforms this call actually applied (policy, parameters, clipping
+        counts with explicit units) and, for already-transformed input, the
+        caller-supplied upstream history (or ``'unknown'``). Never invented;
+        preserved in bundle exports.
+        """
+        provenance = getattr(self.inference, "analysis_provenance", None)
+        return provenance.get("fisher") if isinstance(provenance, dict) else None
 
     @property
     def two_tailed(self) -> bool:
@@ -339,6 +366,37 @@ def _resolve_strategy(
     )
 
 
+def _thread_preprocessing(result: Any, record: Dict[str, Any]) -> None:
+    """Attach the normalized preprocessing record to a result's provenance."""
+    provenance = getattr(result, "analysis_provenance", None)
+    if provenance is not None:
+        provenance["preprocessing"] = deepcopy(record)
+
+
+def _thread_fisher(result: Any, record: Optional[Dict[str, Any]]) -> None:
+    """Attach the Fisher-transform provenance record to a result."""
+    provenance = getattr(result, "analysis_provenance", None)
+    if provenance is not None:
+        provenance["fisher"] = deepcopy(record)
+
+
+def _estimator_aware_units(scale: str, record: Dict[str, Any]) -> Optional[str]:
+    """Default response units that name the estimator when it is known."""
+    method_fact = record.get("connectivity_method") if record else None
+    method = method_fact.get("value") if isinstance(method_fact, dict) else None
+    if scale == "fisher_z":
+        if method == "partial":
+            return "Fisher z (atanh of partial r)"
+        if method == "spearman":
+            return "Fisher z (atanh of Spearman ρ)"
+    elif scale == "correlation":
+        if method == "partial":
+            return "partial correlation (r)"
+        if method == "spearman":
+            return "Spearman rank correlation (ρ)"
+    return None
+
+
 def analyze(
     Y: Optional[npt.NDArray[np.float64]] = None,
     *,
@@ -377,6 +435,8 @@ def analyze(
     groupings: Optional[Dict[str, Sequence[Any]]] = None,
     units: Optional[str] = None,
     contrast_id: Optional[str] = None,
+    preprocessing: Optional[Dict[str, Any]] = None,
+    fisher_history: Optional[Sequence[Mapping[str, Any]]] = None,
     **method_kwargs: Any,
 ) -> Union[AnalyzeResult, Dict[str, AnalyzeResult]]:
     """Run the standard prepare → harmonize → GLM/two-sample → infer recipe.
@@ -590,6 +650,21 @@ def analyze(
     contrast_id : str, optional
         Original contrast/predictor name for a single result. Multi-contrast
         results use their dictionary keys instead.
+    preprocessing : dict, optional
+        Known preprocessing facts to attach to the result's provenance
+        (three-state: each fact carries a value and a source; ``None`` or a
+        missing fact means unknown, never "not applied"). Typically
+        ``dataset.provenance['preprocessing']`` from a loader; see
+        :mod:`conninfpy.preprocessing`. Nothing is inferred from the
+        connectivity values themselves.
+    fisher_history : sequence of dicts, optional
+        Structured provenance of Fisher transforms applied to the input
+        *before* this call (e.g. the app's ingestion option or design-step
+        button). Only meaningful with already-transformed (``input='z'``)
+        data; the entries are preserved verbatim as the result's upstream
+        history — this call never re-transforms or re-counts them.
+        ``input='z'`` without a history records the upstream transform as
+        unknown; ``input='r'`` transforms here and records its own entry.
     **method_kwargs
         Forwarded to the underlying pipeline (e.g. ``net_labels``,
         ``min_cluster_size``, ``threshold``).
@@ -607,6 +682,16 @@ def analyze(
     """
     flags: list = []
     combat_diag: Optional[Dict[str, Any]] = None
+    # Known preprocessing facts (three-state, with sources); normalized once so
+    # every result and export carries the same record. None stays unknown.
+    preprocessing_record = normalize_preprocessing_record(preprocessing)
+    # Upstream Fisher transforms (applied before this call, e.g. by the app);
+    # validated once. Whether they are *applicable* depends on the resolved
+    # input scale below.
+    fisher_upstream = normalize_fisher_history(fisher_history)
+    fisher_applied: List[Dict[str, Any]] = []
+    fisher_upstream_state: Any = None  # list of entries | "unknown" | None
+    fisher_upstream_decided = False     # paired-interest resolves it on its own
 
     # ---- Tail policy: two-sided by default, prespecified direction opt-in ----
     if tested_tail is not None:
@@ -675,8 +760,20 @@ def analyze(
                           "condition_confound_columns": n_condition_confounds,
                           "condition_confound_transform": "B - A"}
         allow_missing_pair = missing == "available_case"
-        Y = (prepare_connectivity(b, original_kind, "group2", allow_missing=allow_missing_pair)
-             - prepare_connectivity(a, original_kind, "group1", allow_missing=allow_missing_pair))
+        # Fisher is applied to each condition separately, never to the
+        # difference; the captured entries record exactly that (stage
+        # 'analysis_prepare_before_difference', scopes group1/group2).
+        b_pre, fisher_entry_b = prepare_connectivity(
+            b, original_kind, "group2", allow_missing=allow_missing_pair,
+            stage="analysis_prepare_before_difference", return_report=True)
+        a_pre, fisher_entry_a = prepare_connectivity(
+            a, original_kind, "group1", allow_missing=allow_missing_pair,
+            stage="analysis_prepare_before_difference", return_report=True)
+        Y = b_pre - a_pre
+        fisher_applied = [e for e in (fisher_entry_a, fisher_entry_b) if e is not None]
+        if original_kind == "z":
+            fisher_upstream_state = fisher_upstream if fisher_upstream is not None else "unknown"
+        fisher_upstream_decided = True
         derived_scale = "difference_fisher_z"
         derived_transform = "Fisher r-to-z separately for each condition, then B minus A" if original_kind == "r" else "B minus A of Fisher z conditions"
         group1 = group2 = confounds_group1 = confounds_group2 = None
@@ -881,6 +978,12 @@ def analyze(
     # ---- Input preparation: zero diagonal, Fisher r→z exactly once ----
     stacks = [Y] if glm_mode else [g for g in (group1, group2) if g is not None]
     kind = _resolve_input_kind(input, fisher_z, stacks)
+    # Already-transformed input: nothing is applied here. The upstream
+    # transform is the caller's history when supplied, else explicitly
+    # unknown — never an invented policy or zero-count clip. (The
+    # paired-interest path decided this above on the original conditions.)
+    if kind == "z" and not fisher_upstream_decided:
+        fisher_upstream_state = fisher_upstream if fisher_upstream is not None else "unknown"
     analysis_scale = "correlation" if (kind == "r" and not r_to_z) else "fisher_z"
     if derived_scale:
         analysis_scale = derived_scale
@@ -892,12 +995,26 @@ def analyze(
         raise ValueError(f"missing must be 'raise' or 'available_case'; got {missing!r}.")
     allow_missing = missing == "available_case"
     if glm_mode:
-        Y = prepare_connectivity(Y, kind, "Y", allow_missing=allow_missing)
+        Y, _fisher_entry_y = prepare_connectivity(
+            Y, kind, "Y", allow_missing=allow_missing, return_report=True)
+        if _fisher_entry_y is not None:
+            fisher_applied.append(_fisher_entry_y)
     else:
         if group1 is not None:
-            group1 = prepare_connectivity(group1, kind, "group1", allow_missing=allow_missing)
+            group1, _fisher_entry_g1 = prepare_connectivity(
+                group1, kind, "group1", allow_missing=allow_missing, return_report=True)
+            if _fisher_entry_g1 is not None:
+                fisher_applied.append(_fisher_entry_g1)
         if group2 is not None:
-            group2 = prepare_connectivity(group2, kind, "group2", allow_missing=allow_missing)
+            group2, _fisher_entry_g2 = prepare_connectivity(
+                group2, kind, "group2", allow_missing=allow_missing, return_report=True)
+            if _fisher_entry_g2 is not None:
+                fisher_applied.append(_fisher_entry_g2)
+    fisher_record: Dict[str, Any] = {
+        "schema_version": 1,
+        "applied": fisher_applied,
+        "upstream": fisher_upstream_state,
+    }
 
     # ---- ComBat strategies: preserve = confounds only ----
     # The tested variable is deliberately omitted from ComBat so the
@@ -1087,7 +1204,9 @@ def analyze(
                     res.design["paired_difference"] = paired_details.copy()
                 if centered_means is not None:
                     res.design["predictor_centering_means"] = centered_means.copy()
-                update_analysis_scale(res, analysis_scale, units or ("Fisher z difference (B - A)" if derived_scale else None))
+                update_analysis_scale(res, analysis_scale, units or _estimator_aware_units(analysis_scale, preprocessing_record) or ("Fisher z difference (B - A)" if derived_scale else None))
+                _thread_preprocessing(res, preprocessing_record)
+                _thread_fisher(res, fisher_record)
             if tested_tail is not None:
                 res = res._restricted_to_tail(tested_tail, selection="prespecified")
             res.harmonized = (
@@ -1311,7 +1430,9 @@ def analyze(
             result.design["paired_difference"] = paired_details.copy()
         if centered_means is not None:
             result.design["predictor_centering_means"] = centered_means.copy()
-        update_analysis_scale(result, analysis_scale, units or ("Fisher z difference (B - A)" if derived_scale else None))
+        update_analysis_scale(result, analysis_scale, units or _estimator_aware_units(analysis_scale, preprocessing_record) or ("Fisher z difference (B - A)" if derived_scale else None))
+        _thread_preprocessing(result, preprocessing_record)
+        _thread_fisher(result, fisher_record)
     # A prespecified direction restricts the finished result after the
     # provenance threading above, so the restriction itself is recorded in
     # provenance and exports ('prespecified', never a post hoc relabelling).

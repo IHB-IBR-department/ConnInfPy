@@ -592,6 +592,12 @@ def _render_predicted_and_coupling(res, base_atlas, method_name, contrast_name, 
         return
 
     st.caption(info["scale_explanation"])
+    if info.get("scale_note"):
+        st.caption(info["scale_note"])
+    if info.get("fisher_note"):
+        st.caption(f"Fisher transform: {info['fisher_note']}")
+    if info.get("coupling_note"):
+        st.info(info["coupling_note"])
     if info["profile_summaries"] is not None and not info["profile_summaries"].empty:
         st.markdown("**Covariate Profiles (whole-connectome summary):**")
         st.dataframe(info["profile_summaries"], width="stretch", hide_index=True)

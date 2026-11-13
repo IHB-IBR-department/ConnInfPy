@@ -30,6 +30,7 @@ from apps.utils.helpers import (
     LOADER_CLASSES,
     atlas_has_networks,
     clear_downstream_results,
+    fisher_clip_note,
     load_custom_datasets,
     local_dataset_templates_enabled,
     make_sub_atlas,
@@ -303,6 +304,10 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                         st.session_state.connectivity_data = Y_z if synthetic_fisher else np.tanh(Y_z)
                         st.session_state.connectivity_data_kind = "fisher_z" if synthetic_fisher else "correlation"
                         st.session_state.pheno_df = pheno
+                        # Synthetic ground truth: no real preprocessing facts exist.
+                        st.session_state["dataset_preprocessing"] = None
+                        st.session_state["last_fisher_clip_note"] = None
+                        st.session_state["dataset_fisher_history"] = []
                         st.session_state["loaded_settings_hash"] = st.session_state.get("current_settings_hash")
                         st.session_state["_just_loaded_data"] = True
                         st.session_state.dataset_atlas = None
@@ -1093,20 +1098,30 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                     opts["standardize"] = manifest_params["connectivity_standardize"]
                                 connectivity_from_dataset(loaded, kind=kind, **opts)
                                 if corr_type == "Spearman correlation":
+                                    from conninfpy.preprocessing import SOURCE_APP_RANKS, fact, set_preprocessing_facts
+                                    set_preprocessing_facts(loaded, connectivity_method=fact("spearman", SOURCE_APP_RANKS))
                                     loaded.provenance["connectivity"]["kind"] = "spearman"
                                 load_notes = list(loaded.warnings)
                                 Y = loaded.data
 
                             # Apply Fisher z if checked
+                            ingestion_fisher_entry = None
                             if loaded.data_kind == "correlation":
                                 # Always zero out the diagonal before Fisher z-transform to prevent infinity values
                                 for i in range(loaded.data.shape[0]):
                                     np.fill_diagonal(loaded.data[i], 0.0)
                                     
                                 if apply_fisher:
+                                    from conninfpy._prepare import make_fisher_entry
                                     from conninfpy.utils import fisher_r_to_z
-                                    loaded.data = fisher_r_to_z(loaded.data)
+                                    loaded.data, fisher_report = fisher_r_to_z(loaded.data, return_report=True)
                                     loaded.data_kind = "fisher_z"
+                                    ingestion_fisher_entry = make_fisher_entry(
+                                        stage="app_ingestion_option", scope="dataset",
+                                        report=fisher_report)
+                                    note = fisher_clip_note(fisher_report)
+                                    if note:
+                                        load_notes.append(note)
                                 
                             # 3. Final Inference-Ready Validation
                             final_report = validate_loaded_dataset(loaded, check_inference_ready=True)
@@ -1120,6 +1135,14 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 st.session_state.connectivity_data_kind = loaded.data_kind
                                 st.session_state.pheno_df = loaded.pheno
                                 st.session_state["dataset_load_notes"] = load_notes
+                                st.session_state["dataset_preprocessing"] = loaded.provenance.get("preprocessing")
+                                st.session_state["last_fisher_clip_note"] = next(
+                                    (n for n in load_notes if n.startswith("Fisher r-to-z:")), None)
+                                # A new dataset resets any older transform history; the
+                                # ingestion option's own entry (if it ran) is the only
+                                # upstream Fisher provenance for this dataset.
+                                st.session_state["dataset_fisher_history"] = (
+                                    [ingestion_fisher_entry] if ingestion_fisher_entry is not None else [])
                                 st.session_state["loaded_settings_hash"] = st.session_state.get("current_settings_hash")
                                 st.session_state["_just_loaded_data"] = True
 

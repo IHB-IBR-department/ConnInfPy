@@ -628,8 +628,13 @@ class InferenceResult(TailResult):
         otherwise), and the class of each edge: stronger / weaker positive
         coupling, stronger / weaker anticorrelation, sign change, or, with a
         prespecified ``near_zero`` band, emerges from / returns to ~0.
-        Negative baselines depend on preprocessing (global-signal regression
-        induces anticorrelations).
+        The classes are descriptive labels on the recorded scale.
+        Negative baselines depend on preprocessing (global-signal
+        regression both removes and induces anticorrelations); neither
+        they nor their classes carry physiological or causal meaning by
+        themselves. With partial-correlation input the scale is
+        atanh(partial r), a variance-stabilizing transform — not the exact
+        standard z of a marginal Pearson r.
         """
         from conninfpy.stats._estimates import coupling_change
 

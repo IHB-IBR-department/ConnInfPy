@@ -63,3 +63,4 @@ Utilities and constants:
 
    conninfpy.defaults
    conninfpy.utils
+   conninfpy.preprocessing

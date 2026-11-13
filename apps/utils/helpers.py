@@ -73,6 +73,139 @@ def safe_filename_part(text):
     slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(text)).strip("_")
     return slug or "connectivity_analysis"
 
+
+def fisher_clip_note(report):
+    """One-line Fisher clipping summary with explicit count units.
+
+    Separates observed off-diagonal saturation from the structural
+    r = 1 diagonal; matrix cells and unique undirected edges are counted
+    and labelled as such (see ``fisher_r_to_z(..., return_report=True)``).
+    Under the unbounded policy nothing is clipped: the note reports the
+    values left at ±infinity instead, never as "clipped".
+    """
+    if not isinstance(report, dict):
+        return None
+    off = report.get("off_diagonal") or {}
+    diag = report.get("diagonal") or {}
+    n_off = int(off.get("n_cells_clipped", 0) or 0)
+    n_diag = int(diag.get("n_cells_clipped", 0) or 0)
+    unbounded = report.get("policy") == "unbounded"
+    if unbounded:
+        infinity = report.get("left_at_infinity") or {}
+        inf_diag = (infinity.get("diagonal") or {}).get("n_cells", 0) or 0
+        inf_off = (infinity.get("off_diagonal") or {}).get("n_cells", 0) or 0
+        if not inf_off and not inf_diag:
+            return None
+        parts = [f"Fisher r-to-z: {int(inf_off)} off-diagonal matrix cell(s) at r = ±1 left as ±infinity (unbounded policy)"]
+        n_edges = int((infinity.get("off_diagonal") or {}).get("n_unique_undirected_edges", 0) or 0)
+        if n_edges:
+            parts.append(f"{n_edges} unique undirected edge(s) affected")
+        if inf_diag:
+            parts.append(f"{int(inf_diag)} diagonal cell(s) (r = 1 by construction, not observed edge saturation)")
+        return "; ".join(parts) + "."
+    if not n_off and not n_diag:
+        return None
+    params = report.get("parameters") or {}
+    if report.get("policy") == "clip_r":
+        bound = f"|r| > {params.get('clip_r', 0.9999):g}"
+    elif report.get("policy") == "clip_z":
+        bound = f"|z| > {params.get('max_z', 5):g}"
+    else:
+        bound = "unbounded"
+    n_obs = report.get("n_observations")
+    obs = f" across {n_obs} observation matrices" if n_obs else ""
+    parts = [f"Fisher r-to-z: {n_off} off-diagonal matrix cell(s){obs} at {bound} were clipped"]
+    n_edges = int(off.get("n_unique_undirected_edges_clipped", 0) or 0)
+    if n_edges:
+        parts.append(f"{n_edges} unique undirected edge(s) affected")
+    if n_diag:
+        parts.append(f"{n_diag} diagonal cell(s) (r = 1 by construction, not observed edge saturation)")
+    return "; ".join(parts) + "."
+
+
+_SOURCE_LABELS = {
+    "computed_by_conninfpy": "computed by the connectivity backend",
+    "loader_denoising_pipeline": "applied by the loader denoising pipeline",
+    "input_file_name_token": "declared by the input file name",
+    "input_manifest_declared": "declared by the dataset manifest",
+    "app_rank_correlation_pipeline": "ranks computed at load time in the app",
+}
+
+
+def _source_label(source):
+    source = str(source or "")
+    return _SOURCE_LABELS.get(source, source)
+
+
+def describe_per_site_facts(record):
+    """Per-site GSR lines ``[(site, value, source)]`` from ``per_site``, or [].
+
+    Shows the heterogeneous context a combined dataset carries (each site's
+    own known value and source) without claiming a common value: the global
+    record stays unknown where the sites disagree.
+    """
+    per_site = (record or {}).get("per_site")
+    if not isinstance(per_site, dict):
+        return []
+    rows = []
+    for site in sorted(per_site):
+        gsr = (per_site[site] or {}).get("gsr")
+        if isinstance(gsr, dict) and isinstance(gsr.get("value"), bool):
+            rows.append((site, "yes" if gsr["value"] else "no", _source_label(gsr.get("source"))))
+        else:
+            rows.append((site, "unknown", "no explicit source recorded"))
+    return rows
+
+
+def describe_preprocessing_facts(record):
+    """Rows ``[(label, value, source)]`` for the dataset card; unknown stays unknown.
+
+    Only known facts are stated with their source; everything else is
+    explicitly unknown — never guessed from the connectivity values
+    (e.g. GSR is never inferred from negative edges).
+    """
+    from conninfpy.preprocessing import normalize_preprocessing_record
+
+    record = normalize_preprocessing_record(record) if record else {}
+
+    def known(key):
+        fact = record.get(key)
+        return (fact.get("value"), _source_label(fact.get("source"))) if isinstance(fact, dict) else (None, None)
+
+    rows = []
+    gsr, gsr_source = known("gsr")
+    rows.append(("Global-signal regression (GSR)",
+                 "yes" if gsr is True else "no" if gsr is False else "unknown",
+                 gsr_source or "no explicit source recorded"))
+    method, method_source = known("connectivity_method")
+    method_names = {"pearson": "Pearson correlation", "partial": "partial correlation",
+                    "spearman": "Spearman rank correlation"}
+    rows.append(("Connectivity estimator", method_names.get(method, "unknown"),
+                 method_source or "no explicit source recorded"))
+    standardize, std_source = known("standardize")
+    rows.append(("Connectivity standardization",
+                 "on" if standardize is True else "off" if standardize is False else "unknown",
+                 std_source or "no explicit source recorded"))
+    shrinkage_fact = record.get("shrinkage")
+    if isinstance(shrinkage_fact, dict):
+        value = shrinkage_fact.get("value")
+        if value is None:
+            text = "none"
+        elif value == "ledoit_wolf":
+            text = "Ledoit–Wolf (intensity estimated per observation)"
+        elif value == "oas":
+            text = "OAS (intensity estimated per observation)"
+        else:
+            text = f"fixed intensity δ = {float(value):g}"
+        rows.append(("Covariance shrinkage", text, _source_label(shrinkage_fact.get("source"))))
+    else:
+        rows.append(("Covariance shrinkage", "unknown", "no explicit source recorded"))
+    tr, tr_source = known("tr_seconds")
+    rows.append(("Repetition time (TR)",
+                 f"{float(tr):g} s" if isinstance(tr, (int, float)) else "unknown",
+                 tr_source or "no explicit source recorded (frame counts are not TRs)"))
+    return rows
+
 def current_contrast_name():
     """Build a stable label for exports and evidence packets."""
     plan = st.session_state.get("run_plan") or {}
@@ -409,6 +542,7 @@ Data: NBS v1.2 example, GNU GPL v3 or later; see `datasets/demo/NBS_schizophreni
     "manifest_import": """
 **Manifest Ingestion**
 - A `data.yaml` file declares `schema_version`, `name`, a supported `loader`, and its file `paths`. Add `params` for loader options, `preprocessing` for requested connectivity construction, and `checks` for expected dimensions.
+- Known preprocessing facts (GSR yes/no, estimator, standardize, shrinkage, TR) are carried from loaders and manifests into the analysis record; `preprocessing.applied` in the manifest declares what was done upstream (a declaration — the record keeps it separate from what this pipeline computed), while anything undeclared stays **unknown** and is never inferred from the connectivity values.
 - Relative paths are resolved from the manifest's own folder. Use `BUILTIN:<file>` for packaged atlas assets, for example `BUILTIN:bna246.csv`.
 - For ready connectivity matrices, choose the matching loader and include atlas metadata whenever ROI labels, networks, coordinates, or brain plots are needed.
 - **Prepared Zerssen example:** use `loader: CustomPreparedZerssenLoader`; under `paths`, provide `prepared_npz`, `set84_bnt_ids`, and `atlas_metadata: BUILTIN:bna246.csv`. Set `params.matrix_key` to select the analysis array. `connectivity_pearson_z`, `connectivity_tangent`, and `connectivity_tangent_hc_ref` use the full 246-ROI BNA atlas; `set84m_pearson_z` and `set84w_pearson_z` use the ordered 84-ROI BNA subset defined by BNT IDs. Set `data_kind: fisher_z` for the Pearson-z arrays and `data_kind: correlation` for tangent arrays. Update `checks.expected_rois` to match the selected 84- or 246-ROI matrix.

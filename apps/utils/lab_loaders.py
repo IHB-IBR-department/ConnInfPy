@@ -23,6 +23,10 @@ from conninfpy.loaders.builtins import (
     NiftiDirectoryLoader,
     _load_atlas_if_present,
 )
+from conninfpy.preprocessing import (
+    aggregate_preprocessing_records,
+    normalize_preprocessing_record,
+)
 
 
 class OpenCloseLoader(BaseDataLoader):
@@ -124,10 +128,18 @@ class OpenCloseLoader(BaseDataLoader):
         atlas = _load_atlas_if_present(self.atlas)
         
         from conninfpy.connectivity import connectivity_from_dataset
+        from conninfpy.preprocessing import SOURCE_FILE_TOKEN, attach_preprocessing, fact, gsr_from_file_name
         ds = LoadedDataset(data=data, pheno=pheno, data_kind="timeseries",
             subject_ids=subject_ids * 2, conditions=["open", "close"],
             condition_column="condition", atlas=atlas,
             provenance={"open_path": self.open_path, "close_path": self.close_path})
+        # File-name tokens declare the upstream denoising variant (…_GSR.npy);
+        # not performed here, and never inferred from the matrix values.
+        gsr_status = gsr_from_file_name(self.open_path)
+        close_status = gsr_from_file_name(self.close_path)
+        if gsr_status != close_status:
+            gsr_status = None  # conflicting declarations state nothing
+        attach_preprocessing(ds, gsr=fact(gsr_status, SOURCE_FILE_TOKEN) if gsr_status is not None else None)
         options = {} if self.shrinkage == "auto" else {"shrinkage": self.shrinkage}
         return connectivity_from_dataset(ds, kind=self.connectivity_kind, **options)
 
@@ -246,7 +258,28 @@ class MultiSiteOpenCloseLoader(BaseDataLoader):
                 "sites": list(self.site_configs),
                 "paired_within_site": True,
                 "site_configs": self.site_configs,
+                # All sites are constructed by the same loader settings, so the
+                # estimator provenance is shared by construction.
                 "connectivity": datasets[0][1].provenance.get("connectivity"),
+                # Site-level preprocessing facts differ where the sites' file
+                # names differ (e.g. GSR vs noGSR): a global fact is asserted
+                # only when every site states the same value, otherwise it
+                # stays unknown here and the per-site records keep the
+                # heterogeneity inspectable. Never copied from the first site.
+                # The per-site detail travels INSIDE the record so the
+                # ordinary loader → analyze → bundle/CLI/app channel carries
+                # it; the separate provenance key is kept for direct readers.
+                "preprocessing": normalize_preprocessing_record({
+                    **aggregate_preprocessing_records(
+                        {site: dataset.provenance.get("preprocessing")
+                         for site, dataset in datasets}),
+                    "per_site": {site: dataset.provenance.get("preprocessing")
+                                 for site, dataset in datasets},
+                }),
+                "preprocessing_per_site": {
+                    site: dataset.provenance.get("preprocessing")
+                    for site, dataset in datasets
+                },
             },
         )
         from conninfpy.connectivity import warn_group_diagnostics

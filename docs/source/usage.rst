@@ -47,7 +47,14 @@ Input conventions
   constant shift between paired conditions) the t or F statistic is infinite
   and the entry points raise an error naming the edges: such values usually
   come from duplicated subjects or preprocessing. Set those edges to NaN and
-  pass ``missing='available_case'`` to leave them untested.
+  pass ``missing='available_case'`` to leave them untested. "Zero" is judged
+  by a **scale-relative degeneracy floor**: an edge's residual variance counts
+  as zero when it falls below ``RTOL`` (= 1e-10) times that edge's own mean
+  square, so the classification is invariant to the units/scale of the data
+  (z, r, or arbitrary units) — floating-point sums leave ~1e-16 relative
+  noise where the exact variance is zero, and a standard deviation below
+  roughly 1e-5 of the root mean square is never real connectivity data. The
+  floor value is a fixed numerical guard, not a tunable analysis parameter.
 - GLM contrasts must be estimable (``C = C X⁺X``). With collinear columns,
   e.g. two copies of a variable or a group indicator nested in site dummies,
   a coefficient on one column alone is not identified and is rejected; test
@@ -131,6 +138,98 @@ must instead receive its settings in the manifest. In the app, choose the
 estimator and shrinkage before loading. Fisher transformation remains an
 independent option. The built-in demo picker contains ABIDE-mini and OpenClose;
 other datasets can be loaded through a manifest.
+
+Preprocessing provenance
+------------------------
+
+Loaders, the connectivity backend, ``analyze()`` and result bundles carry a
+**three-state preprocessing record**
+(``dataset.provenance['preprocessing']`` → ``analyze(preprocessing=...)`` →
+``result.analysis_provenance['preprocessing']`` → ``bundle.metadata``). Each
+fact is either unknown (absent) or known **with an explicit source**::
+
+    {
+      "gsr":                  {"value": false, "source": "loader_denoising_pipeline"},
+      "connectivity_method":  {"value": "pearson", "source": "computed_by_conninfpy"},
+      "standardize":          {"value": true, "source": "computed_by_conninfpy"},
+      "shrinkage":            {"value": null, "source": "computed_by_conninfpy"},
+      "tr_seconds":           {"value": 2.0, "source": "input_manifest_declared"}
+    }
+
+Sources separate what this library did (``computed_by_conninfpy``,
+``loader_denoising_pipeline``) from mere declarations (``input_file_name_token``
+for names like ``..._GSR.npy`` / ``..._noGSR.npy`` / ``..._no_GSR.npy``,
+``input_manifest_declared`` for the manifest's ``preprocessing.applied``
+block). Precedence is fact-wise: when the connectivity backend actually
+computes matrices, its **estimator facts** (``connectivity_method``,
+``standardize``, ``shrinkage``) state what that computation resolved and
+override any older declaration about the same facts, while independent
+upstream facts (``gsr``, ``tr_seconds``) and their declaration sources are
+kept unchanged. A missing fact is **unknown**, never "not applied" — an
+explicitly recorded ``use_GSR: false`` stays ``False``. When several
+constituents are combined (e.g. the multi-site Open/Close loader), a fact is
+asserted globally only if **every** site states the same value; differing
+values, or a mix of known and unknown, leave the global fact unknown —
+per-site records are kept alongside: inside the record's optional
+``per_site`` mapping — so the ordinary loader → ``analyze()`` → bundle /
+``conninfpy run`` / app channel carries them without any extra parameter —
+and as the loader's ``preprocessing_per_site`` provenance key for direct
+readers. Site records carry each site's own known values and sources (a
+``None`` site record reads as all-unknown) and cannot nest ``per_site``
+again. The first site is never silently copied. Nothing is inferred from the connectivity values themselves (GSR is
+never guessed from negative edges). ``tr_seconds`` is only recorded from an
+explicit declaration; the per-observation phenotype columns ``n_valid_tr``
+(complete frames) and ``delta_s`` (shrinkage intensity in [0, 1]) are
+diagnostics, not repetition times. ``conninfpy run`` writes the record to
+``provenance.json`` (next to ``connectivity`` and
+``connectivity_diagnostics``) and into the saved bundle; the app shows it on
+the dataset card and keeps it in the run plan. An explicit record
+``schema_version`` other than 1 is rejected rather than silently rewritten.
+
+Fisher transformation policies
+------------------------------
+
+:func:`conninfpy.fisher_r_to_z` is the single implementation, with two explicit
+clipping policies:
+
+- **clip-z** (default, ``handle_bounds=True, max_z=5``): transform first, then
+  clip z at ±5 (|r| > tanh(5) ≈ 0.99991 and r = ±1); a warning names the
+  number of clipped values. This is what ``analyze(input='r')`` and the app's
+  ingestion option apply.
+- **clip-r** (``clip_r=0.9999``): clip the correlations to ±0.9999 *before*
+  arctanh (z bounded by ≈ 4.9517), silently. This is the historical in-app
+  "Apply Fisher-z now" policy, which now goes through the same function.
+
+The two policies give different numbers near the bounds (e.g. r = 0.99995 →
+z = 5 under clip-z but 4.9517 under clip-r), so existing behaviour is kept
+per call site. ``return_report=True`` additionally returns a report separating
+the **structural diagonal** (r = 1 by construction — expected, not observed
+saturation) from **observed off-diagonal** clipped values, with explicit units:
+matrix cells (counted per observation matrix), unique undirected edges
+(upper-triangle positions clipped in at least one observation), and the number
+of observations. NaN values pass through untouched under both policies, and
+input outside [-1, 1] raises (including under ``clip_r``: invalid
+correlations are rejected, not silently clipped).
+
+Fisher transforms are also **provenance**: ``analyze()`` records the transform
+it actually applied (stage, scope, policy, parameters and the clipping
+counts above) as ``result.analysis_provenance['fisher'] =
+{'applied': [...], 'upstream': [...] | 'unknown' | None}``, preserved into
+bundle exports and ``conninfpy run``'s ``provenance.json``. Already-
+transformed input (``input='z'``) records the caller-supplied upstream
+history (``analyze(fisher_history=[...])``, e.g. the app's captured button
+entry) without transforming or counting again — or ``'unknown'`` when no
+history exists; nothing is invented. Supplied histories are validated, not
+repaired: each entry must carry its own nonempty ``source`` (upstream work
+is never attributed to this library by default) and its top-level
+``policy``/``parameters`` must agree with its counts report, so a
+contradictory record cannot be normalized away; a dict is accepted only as
+a full schema-checked record. Paired designs transform each condition
+*before* the B − A difference (stage
+``analysis_prepare_before_difference``), never the difference itself. Under
+the unbounded policy (``handle_bounds=False``) nothing is clipped: the
+report's clipped counts are zero and values left at ±infinity are reported
+separately (``left_at_infinity``, same count units).
 
 Missing connectivity
 --------------------
@@ -724,7 +823,12 @@ sign change; :meth:`~conninfpy.results.InferenceResult.coupling` names which
 anticorrelation``, ``sign change``, and with a prespecified ``near_zero``
 band, ``emerges from / returns to ~0``) and gives the change in correlation
 units, Δr = tanh(z_b) − tanh(z_a). Negative baselines depend on preprocessing
-(global-signal regression induces anticorrelations). ``annotated_edges`` and
+(global-signal regression both removes and induces anticorrelations); coupling
+classes are descriptive labels on the recorded scale and never by themselves
+carry physiological or causal meaning. When the estimator was a *partial*
+correlation, Fisher z means atanh(partial r) — a scale transform stabilizing
+its variance — not the exact standard z of a marginal Pearson r, and
+back-transformed values remain partial correlations, not marginal ones. ``annotated_edges`` and
 ``summarize_annotation`` add these classes when the result defines a
 comparison, and ``conninfpy run`` writes ``beta``, ``effect`` and the two
 predicted maps to ``pvals.npz``.

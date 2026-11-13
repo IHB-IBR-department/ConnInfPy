@@ -154,6 +154,10 @@ def compute_connectivity(ts, kind="correlation", shrinkage=_DEFAULT, standardize
 def connectivity_from_dataset(dataset, *, kind="correlation", shrinkage=_DEFAULT,
                               standardize=True, group_column=None, min_valid_tr=10):
     """Convert a timeseries dataset in place and attach diagnostics to phenotype."""
+    from conninfpy.preprocessing import (
+        SOURCE_COMPUTED, connectivity_method_from_kind, fact, set_preprocessing_facts,
+    )
+
     if dataset.data_kind != "timeseries":
         raise ValueError("Connectivity construction requires timeseries data.")
     matrices, info = compute_connectivity(dataset.data, kind, shrinkage, standardize,
@@ -168,6 +172,17 @@ def connectivity_from_dataset(dataset, *, kind="correlation", shrinkage=_DEFAULT
     dataset.pheno["n_valid_tr"] = info["n_valid_tr"]
     dataset.pheno["delta_s"] = info["delta_s"]
     dataset.provenance["connectivity"] = {k: v for k, v in info.items() if k not in ("n_valid_tr", "delta_s")}
+    # Three-state preprocessing facts with an explicit source. The estimator
+    # facts state what THIS call actually resolved and therefore override any
+    # older declaration about the same facts (a manifest may declare what some
+    # upstream pipeline did; these matrices were just computed here). Facts
+    # about the upstream data itself (gsr, tr_seconds) are untouched.
+    set_preprocessing_facts(
+        dataset,
+        connectivity_method=fact(connectivity_method_from_kind(info["kind"]), SOURCE_COMPUTED),
+        shrinkage=fact(info["shrinkage"], SOURCE_COMPUTED),
+        standardize=fact(bool(info["standardize"]), SOURCE_COMPUTED),
+    )
     warn_group_diagnostics(dataset, group_column)
     return dataset
 

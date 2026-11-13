@@ -24,9 +24,88 @@ __all__ = [
 ]
 
 
+def _clipped_mask(r: npt.NDArray[np.float64], *, policy: str, max_z: float,
+                    clip_r: Optional[float], z: Optional[npt.NDArray[np.float64]]) -> npt.NDArray[np.bool_]:
+    """Boolean mask of the values the active policy replaces (NaN: False)."""
+    if policy == "clip_r":
+        return np.abs(r) > clip_r
+    # clip_z policy: |z| beyond max_z (r = ±1 gives |z| = inf, so it is included)
+    return np.abs(z) > max_z
+
+
+def _clip_report(mask: npt.NDArray[np.bool_], r: npt.NDArray[np.float64], *,
+                 policy: str, max_z: float, clip_r: Optional[float],
+                 z: Optional[npt.NDArray[np.float64]] = None) -> dict:
+    """Explicit clipping counts with separate units.
+
+    ``matrix cells`` are counted per observation matrix (a cell clipped in
+    two subjects counts twice); ``n_unique_undirected_edges_clipped`` counts
+    upper-triangle positions (i < j) clipped in at least one observation;
+    ``n_observations`` is the number of leading (N, N) matrices. The
+    correlation diagonal (r = 1 by construction) is reported separately from
+    observed off-diagonal values, so a structural diagonal is never reported
+    as saturation of measured edges. Under the unbounded policy nothing is
+    clipped: the clipped counts are zero and the values left at ±infinity
+    are reported separately in ``left_at_infinity`` (same count units).
+    """
+    report: dict = {
+        "policy": policy,
+        "parameters": {"clip_r": float(clip_r)} if policy == "clip_r"
+                      else ({} if policy == "unbounded" else {"max_z": float(max_z)}),
+        "n_values_clipped": int(mask.sum()),
+        "matrix_shape": None,
+        "n_observations": None,
+        "diagonal": None,
+        "off_diagonal": None,
+        "left_at_infinity": None,
+        "count_units": (
+            "n_values_clipped counts matrix cells when the input is a stack of "
+            "(N, N) matrices (each cell counted once per observation); "
+            "diagonal/off_diagonal n_cells count matrix cells; "
+            "n_unique_undirected_edges_clipped counts upper-triangle positions "
+            "(i < j) clipped in at least one observation; n_observations is the "
+            "number of (N, N) matrices in the input stack."
+        ),
+    }
+    arr = np.asarray(r)
+    if arr.ndim < 2 or arr.shape[-2] != arr.shape[-1]:
+        return report
+    n = arr.shape[-1]
+    cells = mask.reshape(-1, n, n)
+    report["matrix_shape"] = (n, n)
+    report["n_observations"] = int(cells.shape[0])
+    diag_mask = np.zeros_like(cells)
+    idx = np.arange(n)
+    diag_mask[:, idx, idx] = cells[:, idx, idx]
+    off_mask = cells & ~diag_mask
+    report["diagonal"] = {"n_cells_clipped": int(diag_mask.sum())}
+    iu, ju = np.triu_indices(n, k=1)
+    upper = off_mask[:, iu, ju] | off_mask[:, ju, iu]  # either symmetric cell
+    report["off_diagonal"] = {
+        "n_cells_clipped": int(off_mask.sum()),
+        "n_unique_undirected_edges_clipped": int(np.any(upper, axis=0).sum()),
+    }
+    if policy == "unbounded" and z is not None:
+        inf_cells = np.isinf(np.asarray(z)).reshape(-1, n, n)
+        inf_diag = np.zeros_like(inf_cells)
+        inf_diag[:, idx, idx] = inf_cells[:, idx, idx]
+        inf_off = inf_cells & ~inf_diag
+        report["left_at_infinity"] = {
+            "n_values": int(inf_cells.sum()),
+            "diagonal": {"n_cells": int(inf_diag.sum())},
+            "off_diagonal": {
+                "n_cells": int(inf_off.sum()),
+                "n_unique_undirected_edges": int(np.any(
+                    inf_off[:, iu, ju] | inf_off[:, ju, iu], axis=0).sum()),
+            },
+        }
+    return report
+
+
 def fisher_r_to_z(
-    r: npt.NDArray[np.float64], handle_bounds: bool = True, max_z: float = 5
-) -> npt.NDArray[np.float64]:
+    r: npt.NDArray[np.float64], handle_bounds: bool = True, max_z: float = 5,
+    *, clip_r: Optional[float] = None, return_report: bool = False,
+) -> "npt.NDArray[np.float64] | tuple[npt.NDArray[np.float64], dict]":
     """
     Apply Fisher r-to-z transformation to correlation coefficients, handling boundary cases.
 
@@ -36,29 +115,50 @@ def fisher_r_to_z(
         Array of correlation coefficients with values in ``[-1, 1]``.
         Can be any shape (scalar, 1D, 2D, ...).
     handle_bounds : bool, optional
-        If True, clip z to ``[-max_z, max_z]`` (this also makes ``r = ±1``
-        finite). If False, keep the exact transform, with infinities at
-        ``r = ±1`` and a warning. (default: True).
+        Clip-z policy: if True (default), clip z to ``[-max_z, max_z]``
+        (this also makes ``r = ±1`` finite). If False, keep the exact
+        transform, with infinities at ``r = ±1`` and a warning.
     max_z : float
-        Clipping bound when ``handle_bounds=True`` (default: 5, i.e.
+        Clipping bound of the clip-z policy (default: 5, i.e.
         ``|r| > tanh(5) ≈ 0.99991``). Every value beyond it is clipped, so
         the transform stays monotone in ``r``.
+    clip_r : float, optional
+        Clip-r policy: clip correlations to ``[-clip_r, clip_r]`` *before*
+        ``arctanh`` instead of clipping z afterwards (``0 < clip_r < 1``).
+        This is the historical in-app "Apply Fisher-z now" behaviour
+        (``clip_r=0.9999``, z bounded by ``atanh(0.9999) ≈ 4.9517``, no
+        warning). Mutually exclusive with ``handle_bounds=False``; out-of-
+        range input still raises.
+    return_report : bool, optional
+        Also return a report dict with the number of clipped values,
+        separating the structural diagonal (``r = 1`` by construction) from
+        observed off-diagonal values, with explicit count units (matrix
+        cells vs unique undirected edges vs observations). Under the
+        unbounded policy nothing is clipped: the clipped counts are zero
+        and values left at ±infinity are reported separately
+        (``left_at_infinity``). Default False returns only the transformed
+        array.
 
     Returns
     -------
     z : np.ndarray
-        Array of z-scores with the same shape as ``r``.
+        Array of z-scores with the same shape as ``r`` (plus the report
+        dict when ``return_report=True``).
 
     Raises
     ------
     ValueError
-        If any value in ``r`` is outside ``[-1, 1]``.
+        If any value in ``r`` is outside ``[-1, 1]``, or ``clip_r`` is not
+        a number in (0, 1), or both ``clip_r`` and
+        ``handle_bounds=False`` are given.
 
     Warnings
     --------
     UserWarning
-        If ``r`` contains ``±1``, indicating boundary values were
-        encountered.
+        Under the clip-z policy: if ``r`` contains ``±1`` or values beyond
+        ``tanh(max_z)``. With ``handle_bounds=False``: if ``r`` contains
+        ``±1`` (infinities are kept). The clip-r policy stays silent, as it
+        has always been; use ``return_report`` for its counts.
 
     Notes
     -----
@@ -78,8 +178,24 @@ def fisher_r_to_z(
     """
     r = np.asarray(r, dtype=np.float64)
 
+    if clip_r is not None:
+        if isinstance(clip_r, bool) or not isinstance(clip_r, (int, float)) or not (0 < clip_r < 1):
+            raise ValueError("clip_r must be a number in (0, 1).")
+        if not handle_bounds:
+            raise ValueError("clip_r and handle_bounds=False are mutually exclusive policies.")
+
     if np.any((r < -1) | (r > 1)):
         raise ValueError("Correlation coefficients must be in the range [-1, 1].")
+
+    if clip_r is not None:
+        # Clip-r policy: bound the correlations first, then transform. The
+        # bounded r makes z finite by construction; no clipping of z, no
+        # warning (historical in-app behaviour; counts via return_report).
+        clipped = np.abs(r) > clip_r  # NaN compares False
+        z = np.arctanh(np.clip(r, -clip_r, clip_r))
+        report = _clip_report(clipped, r, policy="clip_r", max_z=max_z, clip_r=float(clip_r)) \
+            if return_report else None
+        return (z, report) if return_report else z
 
     with np.errstate(
         divide="ignore", invalid="ignore"
@@ -95,13 +211,19 @@ def fisher_r_to_z(
                 UserWarning,
             )
             z = np.clip(z, -max_z, max_z)
-    elif np.any(np.isinf(z)):
-        warnings.warn(
-            "Input contains r = ±1, resulting in infinite z-values. Left as infinity.",
-            UserWarning,
-        )
+        report = _clip_report(over, r, policy="clip_z", max_z=max_z, clip_r=None) \
+            if return_report else None
+    else:
+        if np.any(np.isinf(z)):
+            warnings.warn(
+                "Input contains r = ±1, resulting in infinite z-values. Left as infinity.",
+                UserWarning,
+            )
+        report = _clip_report(np.zeros_like(np.isinf(z)), r, policy="unbounded",
+                              max_z=max_z, clip_r=None, z=z) \
+            if return_report else None
 
-    return z
+    return (z, report) if return_report else z
 
 
 def fisher_z_to_r(z: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
