@@ -79,7 +79,18 @@ def render_bna_annotation_view(base_atlas):
         purity = c2.slider("Minimum label purity", 0.3, 0.9, saved.get("purity", 0.5), 0.05,
                            help="A level (subregion, gyrus, lobe) is assigned when it holds this share of "
                                 "the ROI's labelled tissue; otherwise the ROI is 'mixed'.", key=persistent_key('annotation:purity_for_a_label', scope='annotation'))
-        alpha = c3.number_input("Detection threshold (α)", 0.001, 0.2, saved.get("alpha", 0.05), 0.005, format="%.3f", help="Select detections using the corrected p-values already computed by inference. This does not change the correction.", key=persistent_key('annotation:alpha', scope='annotation'))
+        run_alpha = float((st.session_state.get("run_plan") or {}).get("alpha", 0.05))
+        ann_res_key = "_annotation_result_id"
+        ann_run_alpha_key = "_annotation_run_alpha"
+        if (
+            st.session_state.get(ann_res_key) != id(result)
+            or st.session_state.get(ann_run_alpha_key) != run_alpha
+        ):
+            if not saved:
+                st.session_state.pop("annotation:alpha", None)
+            st.session_state[ann_res_key] = id(result)
+            st.session_state[ann_run_alpha_key] = run_alpha
+        alpha = c3.number_input("Detection threshold (α)", 0.001, 0.2, float(saved.get("alpha", run_alpha)), 0.005, format="%.3f", help="Select detections using the corrected p-values already computed by inference, at the α of the run by default. This does not change the correction.", key=persistent_key('annotation:alpha', scope='annotation'))
         space = st.selectbox(
             "Template the signals were extracted in", list(_SPACES), format_func=_SPACES.get,
             index=list(_SPACES).index(saved.get("space", "MNI152")),

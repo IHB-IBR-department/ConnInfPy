@@ -189,17 +189,21 @@ def _component_p_values(
 
 
 def restrict_component_report(
-    report: Optional[Dict[str, Any]], tail: str
+    report: Optional[Dict[str, Any]], tail: str, *, selection: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """The report of a one-sided result: only the tested tail's components.
 
     :meth:`InferenceResult.one_sided` sets the other tail's p-values to 1 (not
     tested); its components are not reported either. Component numbers are
-    kept, so a component keeps its id.
+    kept, so a component keeps its id. ``selection`` records how the
+    direction was chosen (``'prespecified'`` before the run,
+    ``'post-hoc'`` after it) as ``tail_selection`` in the report; ``None``
+    (the default) leaves the marker unset, as in reports saved before it
+    existed.
     """
     if report is None:
         return None
-    return {
+    restricted = {
         **report,
         "tail_policy": f"one-sided-{tail}",
         "tested_tail": tail,
@@ -207,6 +211,9 @@ def restrict_component_report(
         "components": [dict(r) for r in report["components"] if r["tail"] == tail],
         "labels": {tail: report["labels"][tail]} if tail in report["labels"] else {},
     }
+    if selection is not None:
+        restricted["tail_selection"] = selection
+    return restricted
 
 
 def component_edge_columns(
@@ -325,6 +332,8 @@ def component_table(
             "statistic_type": report["stat_type"],
             "edge_statistic": report["edge_statistic"],
             "tail_policy": report["tail_policy"],
+            "tested_tail": report.get("tested_tail"),
+            "tail_selection": report.get("tail_selection"),
             "n_permutations": report["n_permutations"],
             "alpha": alpha,
         }

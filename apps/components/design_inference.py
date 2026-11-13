@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import streamlit as st
-from apps.utils.ui_state import persistent_key
+from apps.utils.ui_state import persistent_key, reset_widget_scopes
 from apps.utils.workspace import DATA_TAB, go_to_step
 import threading
 import traceback
@@ -223,15 +223,17 @@ def _run_inference_background(
     The data are analysed on the scale they were loaded with: raw
     correlations stay correlations (``r_to_z=False``); Fisher z is applied
     only by the explicit ingestion option or the Design-step button.
-    ``tested_tail`` (``'positive'`` / ``'negative'``) runs a prespecified
-    one-sided test: per-tail nulls (``two_tailed=False``) and the other
-    direction reported as not tested; ``None`` is two-sided.
+    ``tested_tail`` (``'positive'`` / ``'negative'``) is the prespecified
+    one-sided hypothesis chosen in the design step: it is declared to
+    ``analyze()`` *before* the permutation run, which uses per-tail nulls
+    and marks the restriction ``prespecified`` in provenance; the other
+    direction is reported as not tested. ``None`` is the two-sided default
+    (one joint family; the single alpha covers both directions).
     ``var_equal`` (two-sample only) chooses Student's (True) or Welch's
     (False) t in the two-sample permutation test.
     """
     try:
         input_kind = {"correlation": "r", "fisher_z": "z"}.get(data_kind)
-        two_tailed = tested_tail is None
         # Only the two-sample t-test has the choice; analyze() rejects it elsewhere.
         variance_kwargs = (
             {"var_equal": bool(var_equal)}
@@ -256,19 +258,16 @@ def _run_inference_background(
             input=input_kind,
             atlas=atlas,
             r_to_z=False,
-            two_tailed=two_tailed,
             method=operator_choice,
             n_permutations=n_perms,
             rng=seed_val,
             verbose=False,
             use_mp=use_mp,
+            tested_tail=tested_tail,
             acceleration=None if acceleration_choice == "none" else acceleration_choice,
             **variance_kwargs,
             **op_kwargs
         )
-        if tested_tail is not None:
-            res = res.one_sided(tested_tail)
-
         edges = res.significant_edges(atlas=annotation_atlas, alpha=alpha)
         
         comp_res = None
@@ -301,18 +300,16 @@ def _run_inference_background(
                 input=input_kind,
             atlas=atlas,
                 r_to_z=False,
-                two_tailed=two_tailed,
                 method=comp_method,
                 n_permutations=n_perms,
                 rng=seed_val,
                 verbose=False,
                 use_mp=use_mp,
+                tested_tail=tested_tail,
                 acceleration=None if acceleration_choice == "none" else acceleration_choice,
                 **variance_kwargs,
                 **comp_run_kwargs
             )
-            if tested_tail is not None:
-                comp_res = comp_res.one_sided(tested_tail)
             comp_edges = comp_res.significant_edges(atlas=annotation_atlas, alpha=alpha)
             
         task.result = res
@@ -347,6 +344,8 @@ def _run_inference_background(
             "analysis_scale": {"r": "correlation", "z": "fisher_z"}.get(input_kind),
             "tail_policy": f"one-sided-{tested_tail}" if tested_tail else "two-sided",
             "tested_tail": tested_tail,
+            "tail_selection": "prespecified" if tested_tail else None,
+            "two_tailed": tested_tail is None,
             # 'student' / 'welch' (two-sample test), 'glm' (pooled residual variance).
             "t_statistic": t_statistic,
             "seed": seed_val,
@@ -876,6 +875,31 @@ def render_design_inference_view(base_atlas, tabs_list):
                 n_perms = st.number_input("Number of Permutations (B)", 10, 10000, 1000, 100, key=persistent_key('design:number_of_permutations_b', scope='design'))
             else:
                 n_perms = budget_map[budget_choice]
+
+            alpha_options = [0.001, 0.01, 0.05, 0.1]
+            alpha = st.selectbox(
+                "Significance level (α)",
+                alpha_options,
+                index=2,
+                format_func=lambda a: f"α = {a:g}",
+                help=(
+                    "The alpha every result view of this run uses: tables, counters, "
+                    "heatmaps, graphs and annotation. With the two-sided default, one "
+                    "alpha covers both directions jointly (FWER). A prespecified "
+                    "one-sided run applies alpha to the tested direction only."
+                ),
+                key=persistent_key('design:significance_level_alpha', scope='design', options=alpha_options),
+            )
+            if tested_tail is None:
+                st.caption(
+                    "Two-sided family: α is shared by both directions — detections in "
+                    "either direction are FWER-controlled at α jointly."
+                )
+            else:
+                st.caption(
+                    f"One-sided family ({tested_tail}): α applies to the tested direction "
+                    "only; the other direction is not tested."
+                )
                 
             with st.expander("Execution Options", expanded=False):
                 acceleration_choice = st.selectbox("Tail Acceleration", ["gpd", "gamma", "none"], index=0, key=persistent_key('design:tail_acceleration', scope='design'))
@@ -929,7 +953,8 @@ def render_design_inference_view(base_atlas, tabs_list):
 | **Question** | {question_choice} |
 | **Statistical Path** | {test_type.upper() if not (question_choice == 'Group Difference' and adjust_covariates) else 'GLM (Promoted)'} |
 | **t statistic** | {("Student (pooled variance)" if var_equal else "Welch (separate variances)") if test_type == "two-sample" else ("GLM (pooled residual variance)" if test_type == "glm" else "one-sample / paired")} |
-| **Hypothesis Direction** | {"two-sided" if tested_tail is None else f"one-sided ({tested_tail})"} |
+| **Hypothesis Direction** | {"two-sided — one joint α-family" if tested_tail is None else f"one-sided ({tested_tail}), fixed before the run"} |
+| **Significance Level** | α = {alpha:g} |
 | **Method Profile** | {profile_choice.split(' ')[0]} ({operator_choice}) |
 | **Method Parameters** | {method_parameters} |
 | **Atlas Metadata** | {'None' if active_analysis_atlas(base_atlas) is None else f"{len(active_analysis_atlas(base_atlas))} ROIs"} |
@@ -1112,8 +1137,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                                     op_kwargs["net_labels"] = sc_net_labels
                                 else:
                                     op_kwargs["net_labels"] = atlas.network_index()
-                                    
-                            alpha = 0.05
+
                             annotation_atlas = atlas_for_annotation(atlas, Y.shape[1])
                             
                             task.status = "running"
@@ -1124,13 +1148,18 @@ def render_design_inference_view(base_atlas, tabs_list):
                             task.comp_edges = None
                             task.error = None
                             
-                            # Reset in-session results
+                            # Reset in-session results and downstream views/widgets
                             st.session_state.inference_result = None
                             st.session_state.edges_df = None
                             st.session_state.companion_inference_result = None
                             st.session_state.companion_edges_df = None
                             st.session_state.companion_method = None
                             st.session_state.run_plan = None
+                            st.session_state.annotation = None
+                            st.session_state.evidence_packet = None
+                            st.session_state.narrative_text = None
+                            st.session_state.narrative_results = None
+                            reset_widget_scopes("results", "annotation")
                             
                             # Start thread
                             t = threading.Thread(

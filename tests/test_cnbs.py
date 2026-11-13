@@ -19,7 +19,14 @@ import warnings
 import numpy as np
 
 from conninfpy import compute_p_val
+import copy
+import pickle
+import tempfile
+from pathlib import Path
+
+from conninfpy import ResultBundle, analyze
 from conninfpy._cnbs import block_p_values
+from conninfpy.stats._cnbs import restrict_block_report
 from conninfpy.enhance import apply_cnbs
 from conninfpy.glm_stats import compute_p_val_glm
 from conninfpy.nbs_score import cnbs_block_means, cnbs_blocks, get_cnbs_score
@@ -157,6 +164,176 @@ class TestInference(unittest.TestCase):
                               n_permutations=199, rng=0, use_mp=False, missing="available_case")
         self.assertIsNotNone(r.block_report)
         self.assertLessEqual(r.block_report["blocks"][0]["p_positive"], 0.05)
+
+
+
+class TestBlockReportRestriction(unittest.TestCase):
+    """Directional restriction keeps cNBS active/exported block_report honest."""
+
+    def test_restrict_block_report_contract_and_non_mutation(self):
+        self.assertIsNone(restrict_block_report(None, "positive"))
+        observed = np.array([3.5, -2.5, 0.2])
+        null = np.random.default_rng(3).normal(size=(19, 3))
+        _, raw = block_p_values(
+            {"positive": observed, "negative": -observed},
+            {"positive": null, "negative": -null},
+            np.array([0, 0, 1, 1]),
+            4,
+            correction="bh",
+            two_tailed=False,
+        )
+        raw_snapshot = copy.deepcopy(raw)
+        with self.assertRaises(ValueError):
+            restrict_block_report(raw, "both")
+
+        neg = restrict_block_report(raw, "negative", selection="prespecified")
+        self.assertEqual(raw, raw_snapshot)
+        self.assertEqual(neg["tail_policy"], "one-sided-negative")
+        self.assertEqual(neg["tested_tail"], "negative")
+        self.assertEqual(neg["tail_selection"], "prespecified")
+        self.assertEqual(neg["correction"], "bh")
+        self.assertEqual(neg["n_blocks"], 3)
+        self.assertEqual(neg["n_blocks_tested"], 3)
+        self.assertEqual(len(neg["blocks"]), 3)
+        for r_orig, r_neg in zip(raw["blocks"], neg["blocks"]):
+            self.assertEqual((r_neg["network_a"], r_neg["network_b"]),
+                             (r_orig["network_a"], r_orig["network_b"]))
+            self.assertEqual(r_neg["n_edges"], r_orig["n_edges"])
+            self.assertEqual(r_neg["mean_stat"], r_orig["mean_stat"])
+            self.assertEqual(r_neg["p_negative"], r_orig["p_negative"])
+            self.assertEqual(r_neg["p_negative_uncorrected"], r_orig["p_negative_uncorrected"])
+            self.assertNotIn("p_positive", r_neg)
+            self.assertNotIn("p_positive_uncorrected", r_neg)
+
+        # Deep copy independence: mutating restricted report cannot leak back.
+        neg["node_labels"][0] = 99
+        neg["blocks"][0]["p_negative"] = -1.0
+        self.assertEqual(raw, raw_snapshot)
+
+    def test_real_cnbs_untested_significant_block_both_directions_and_roundtrips(self):
+        # Small 4-ROI two-group cNBS dataset with a strongly positive block (0-0)
+        # so testing only the negative tail encounters an untested-significant source block.
+        rng = np.random.default_rng(20)
+        n = 18
+        g1 = rng.normal(0.0, 0.25, (n, 4, 4))
+        g2 = rng.normal(0.0, 0.25, (n, 4, 4))
+        g1 = 0.5 * (g1 + g1.transpose(0, 2, 1))
+        g2 = 0.5 * (g2 + g2.transpose(0, 2, 1))
+        g2[:, 0, 1] += 0.9
+        g2[:, 1, 0] += 0.9
+        idx = np.arange(4)
+        g1[:, idx, idx] = 0.0
+        g2[:, idx, idx] = 0.0
+        labels = [0, 0, 1, 1]
+
+        sep_out = analyze(
+            group1=g1, group2=g2, input="z", method="cnbs", net_labels=labels,
+            two_tailed=False, n_permutations=63, rng=20, use_mp=False, acceleration=None,
+        )
+        sep = sep_out.inference
+        sep_snapshot = copy.deepcopy(sep.block_report)
+        self.assertLessEqual(sep.block_report["blocks"][0]["p_positive"], 0.05)
+
+        for tail in ("negative", "positive"):
+            other = "positive" if tail == "negative" else "negative"
+            pre_out = analyze(
+                group1=g1, group2=g2, input="z", method="cnbs", net_labels=labels,
+                tested_tail=tail, n_permutations=63, rng=20, use_mp=False, acceleration=None,
+            )
+            post_out = sep_out.one_sided(tail)
+            for mode, out in (("prespecified", pre_out), ("post-hoc", post_out)):
+                res = out.inference
+                self.assertEqual(res.tail_policy, f"one-sided-{tail}")
+                self.assertEqual(res.tested_tail, tail)
+                self.assertEqual(res.tail_selection, mode)
+                self.assertIs(out.block_report, res.block_report)
+                np.testing.assert_array_equal(res[tail], sep[tail])
+                np.testing.assert_array_equal(res[other], np.ones_like(sep[other]))
+                np.testing.assert_array_equal(res.stat_signed, sep.stat_signed)
+                np.testing.assert_array_equal(res.effect_map(), sep.effect_map())
+                np.testing.assert_array_equal(res.stat_positive, sep.stat_positive)
+                np.testing.assert_array_equal(res.stat_negative, sep.stat_negative)
+                np.testing.assert_array_equal(res.beta, sep.beta)
+                self.assertEqual(res.null_max_dist, sep.null_max_dist)
+
+                rep = res.block_report
+                self.assertEqual(rep["tail_policy"], f"one-sided-{tail}")
+                self.assertEqual(rep["tested_tail"], tail)
+                self.assertEqual(rep["tail_selection"], mode)
+                self.assertEqual(rep["n_blocks"], sep_snapshot["n_blocks"])
+                self.assertEqual(rep["n_blocks_tested"], sep_snapshot["n_blocks_tested"])
+                self.assertEqual(rep["correction"], sep_snapshot["correction"])
+                self.assertEqual(rep["node_labels"], labels)
+                self.assertEqual(len(rep["blocks"]), 3)
+                for b_src, b_res in zip(sep_snapshot["blocks"], rep["blocks"]):
+                    self.assertEqual((b_res["network_a"], b_res["network_b"]),
+                                     (b_src["network_a"], b_src["network_b"]))
+                    self.assertEqual(b_res["n_edges"], b_src["n_edges"])
+                    self.assertEqual(b_res["mean_stat"], b_src["mean_stat"])
+                    self.assertEqual(b_res[f"p_{tail}"], b_src[f"p_{tail}"])
+                    self.assertEqual(b_res[f"p_{tail}_uncorrected"], b_src[f"p_{tail}_uncorrected"])
+                    self.assertIsNone(b_res.get(f"p_{other}"))
+                    self.assertNotIn(f"p_{other}", b_res)
+                    self.assertNotIn(f"p_{other}_uncorrected", b_res)
+
+                # Bundle + pickle roundtrip keeps native_report consistent.
+                with tempfile.TemporaryDirectory() as tmp:
+                    bpath = Path(tmp) / "bundle.pkl"
+                    res.to_bundle().save(bpath)
+                    loaded_bundle = ResultBundle.load(bpath)
+                    native = loaded_bundle.metadata["native_report"]
+                    self.assertEqual(native["tail_policy"], f"one-sided-{tail}")
+                    self.assertEqual(native["tested_tail"], tail)
+                    self.assertEqual(native["tail_selection"], mode)
+                    self.assertEqual(len(native["blocks"]), 3)
+                    self.assertTrue(all(f"p_{other}" not in b for b in native["blocks"]))
+                    csv_path = Path(tmp) / "edges.csv"
+                    res.to_csv(csv_path, alpha=0.05)
+                    if tail == "negative":
+                        self.assertEqual(len(res.significant_edges(alpha=0.05)), 0)
+                    else:
+                        edges = res.significant_edges(alpha=0.05)
+                        self.assertTrue((edges["tail"] == "positive").all())
+
+                ns = res.node_summary(sort="roi")
+                self.assertEqual(ns.attrs["tails"], [tail])
+                with self.assertRaises(ValueError):
+                    res.node_summary(tail=other)
+                with self.assertRaises(ValueError):
+                    res.one_sided(other)
+
+        # Original separate result and its block_report were never mutated.
+        self.assertEqual(sep.block_report, sep_snapshot)
+
+    def test_legacy_loaded_cnbs_result_not_auto_reinterpreted_until_explicit_restriction(self):
+        g1, g2, labels = _planted()
+        sep = compute_p_val(
+            g1, g2, test_type="two-sample", method="cnbs", net_labels=labels,
+            n_permutations=39, rng=0, use_mp=False, two_tailed=False,
+        )
+        # Simulate an older saved restricted result whose block_report still carried
+        # separate-one-sided metadata and lacked tail_selection.
+        legacy = pickle.loads(pickle.dumps(sep))
+        legacy.__dict__.pop("tail_selection", None)
+        legacy.block_report.pop("tested_tail", None)
+        legacy_pre = copy.deepcopy(legacy)
+        legacy_pre.tested_tail = "negative"
+        legacy_pre.__dict__["negative"] = np.ones_like(legacy["negative"])
+        reloaded_pre = pickle.loads(pickle.dumps(legacy_pre))
+        self.assertEqual(reloaded_pre.block_report["tail_policy"], "separate-one-sided")
+        self.assertIn("p_positive", reloaded_pre.block_report["blocks"][0])
+
+        # Reloaded unrestricted legacy separate result stays untouched, while an
+        # explicit derived restriction builds a consistent restricted block_report.
+        reloaded_sep = pickle.loads(pickle.dumps(legacy))
+        self.assertEqual(reloaded_sep.block_report["tail_policy"], "separate-one-sided")
+        derived = reloaded_sep.one_sided("negative")
+        self.assertEqual(derived.block_report["tail_policy"], "one-sided-negative")
+        self.assertEqual(derived.block_report["tested_tail"], "negative")
+        self.assertEqual(derived.block_report["tail_selection"], "post-hoc")
+        self.assertTrue(all("p_positive" not in b for b in derived.block_report["blocks"]))
+        self.assertEqual(reloaded_sep.block_report["tail_policy"], "separate-one-sided")
+        self.assertIn("p_positive", reloaded_sep.block_report["blocks"][0])
 
 
 if __name__ == "__main__":

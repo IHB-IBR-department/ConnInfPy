@@ -225,7 +225,16 @@ def refresh_model_identity(result: Any) -> None:
 
 
 def project_analysis_provenance(provenance: Optional[dict], *, param_idx: Optional[int] = None,
-                                tested_tail: Optional[str] = None) -> Optional[dict]:
+                                tested_tail: Optional[str] = None,
+                                tail_selection: Optional[str] = None) -> Optional[dict]:
+    """Project captured provenance along with a result projection.
+
+    ``tested_tail`` restricts the reported family to one direction;
+    ``tail_selection`` records how that direction was chosen
+    (``'prespecified'`` before the run, ``'post-hoc'`` on a finished
+    result), so exports can distinguish a declared hypothesis from a
+    selection made after seeing the p-values.
+    """
     if provenance is None:
         return None
     projected = deepcopy(provenance)
@@ -237,6 +246,8 @@ def project_analysis_provenance(provenance: Optional[dict], *, param_idx: Option
     if tested_tail is not None:
         projected["tested"] = {tested_tail: projected["tested"][tested_tail]}
         projected["family"]["tail_policy"] = f"one-sided-{tested_tail}"
+        if tail_selection is not None:
+            projected["family"]["tail_selection"] = tail_selection
     return projected
 
 

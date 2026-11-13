@@ -5,8 +5,10 @@ Start with :func:`conninfpy.analyze`: it takes per-subject connectivity and a
 design, prepares the input, optionally harmonizes sites, and runs permutation
 inference. The pipelines it is built from live in :mod:`conninfpy.stats` and
 share one contract: edge-wise statistics → topology-aware enhancement →
-permutation null → FWER / FDR-corrected p-values, with positive and negative
-effects tested separately.
+permutation null → FWER / FDR-corrected p-values. :func:`conninfpy.analyze`
+tests positive and negative effects jointly against a two-sided null by
+default (see :doc:`approach`), while :mod:`conninfpy.stats` entry points keep
+separate per-tail nulls unless ``two_tailed=True`` is passed.
 
 Quick reference:
 
@@ -532,6 +534,8 @@ warnings, run time):
      n_permutations: 200
      acceleration: gpd
      rng: 42
+     # two_tailed: false                  # legacy: separate one-sided families
+     # tested_tail: positive              # a one-sided hypothesis fixed before the run
    atlas: schaefer_100_yeo7               # built-in name or CSV path
    output: results/abide_mini_age
 
