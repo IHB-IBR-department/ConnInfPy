@@ -235,7 +235,7 @@ Phipson–Smyth correction.
        test_type='two-sample',             # or 'paired', 'one-sample'
        method='tfnbs',
        n_permutations=1000,
-       e=0.3, h=3.0, n=10,                 # example legacy grid
+       e=0.4, h=3.0, n=None,               # shared defaults (n=None: exact; pass int n for legacy grid)
        use_mp=True, rng=42,
    )
    # p['positive'] : (N, N) p-map for group2 > group1
@@ -269,7 +269,7 @@ Convenience API (recommended):
        stat_type='tstat',                                 # or 'beta', 'fstat'
        method='tfnbs',
        n_permutations=1000,
-       e=0.3, h=3.0, n=10,
+       e=0.4, h=3.0, n=None,
        use_mp=True, rng=42,
    )
    # p['positive'] : edges where age ↑ → connectivity ↑
@@ -363,7 +363,7 @@ that differ between conditions (e.g. condition-level motion):
        confounds_A=np.column_stack([motion_A, drowsiness_A]),
        confounds_B=np.column_stack([motion_B, drowsiness_B]),
        method='tfnbs', n_permutations=1000,
-       e=0.3, h=3.0, n=10,
+       e=0.4, h=3.0, n=None,
    )
 
 With no confounds, this delegates to ``compute_p_val(test_type='paired')``
@@ -436,7 +436,7 @@ End-to-end with confound-aware GLM:
        Y, interest=age,
        confounds=np.column_stack([sex, mean_fd]),
        stat_type='tstat', method='tfnbs',
-       e=0.3, h=3.0, n=10,
+       e=0.4, h=3.0, n=None,
        n_permutations=200, acceleration='gpd',
        use_mp=True, rng=42,
    )
@@ -508,7 +508,7 @@ Apply an enhancement operator to a statistic map you computed yourself
    from conninfpy import enhance, stats
 
    t = stats.compute_t_stat(group1_z, group2_z, test_type="two-sample")
-   scores = enhance.apply_tfnbs(t, e=0.3, h=3.0, n=100)   # {'positive', 'negative'}
+   scores = enhance.apply_tfnbs(t, e=0.4, h=3.0, n=None)  # {'positive', 'negative'} (shared defaults; int n for legacy grid)
 
 
 Command line — ``conninfpy run``

@@ -7,6 +7,17 @@ import threading
 import traceback
 from conninfpy.atlas import AtlasInfo
 from conninfpy import analyze
+from conninfpy.defaults import (
+    DEFAULT_ACCELERATION,
+    DEFAULT_EXTENT_EXPONENT,
+    DEFAULT_HEIGHT_EXPONENT,
+    DEFAULT_MIN_CLUSTER_SIZE,
+    DEFAULT_NBS_STAT,
+    DEFAULT_NBS_THRESHOLD,
+    DEFAULT_N_PERMUTATIONS,
+    DEFAULT_N_THRESHOLDS_PERMUTATION,
+    DEFAULT_START_THRESHOLD,
+)
 from apps.utils.helpers import (
     active_analysis_atlas,
     atlas_for_annotation,
@@ -246,6 +257,39 @@ def _run_inference_background(
         )
         task.progress_message = f"Executing primary method ({operator_choice.upper()}) permutation loops..."
         from conninfpy import analyze
+        from conninfpy.defaults import (
+            DEFAULT_ACCELERATION,
+            DEFAULT_EXTENT_EXPONENT,
+            DEFAULT_HEIGHT_EXPONENT,
+            DEFAULT_MIN_CLUSTER_SIZE,
+            DEFAULT_NBS_STAT,
+            DEFAULT_NBS_THRESHOLD,
+            DEFAULT_N_PERMUTATIONS,
+            DEFAULT_N_THRESHOLDS_PERMUTATION,
+            DEFAULT_START_THRESHOLD,
+        )
+        effective_n_perms = DEFAULT_N_PERMUTATIONS if n_perms is None else n_perms
+        effective_acceleration = (
+            DEFAULT_ACCELERATION
+            if acceleration_choice in (None, "none")
+            else acceleration_choice
+        )
+        primary_run_kwargs = dict(op_kwargs or {})
+        if operator_choice in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
+            primary_run_kwargs.setdefault("e", DEFAULT_EXTENT_EXPONENT)
+            primary_run_kwargs.setdefault("h", DEFAULT_HEIGHT_EXPONENT)
+            primary_run_kwargs.setdefault("n", DEFAULT_N_THRESHOLDS_PERMUTATION)
+            primary_run_kwargs.setdefault("start_thres", DEFAULT_START_THRESHOLD)
+            if operator_choice == "fbc_tfnbs":
+                primary_run_kwargs.setdefault("min_cluster_size", DEFAULT_MIN_CLUSTER_SIZE)
+        elif operator_choice == "nbs":
+            primary_run_kwargs.setdefault("threshold", DEFAULT_NBS_THRESHOLD)
+            primary_run_kwargs.setdefault("nbs_stat", DEFAULT_NBS_STAT)
+        if operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs") and "net_labels" not in primary_run_kwargs:
+            if use_sc_prior and sc_net_labels is not None:
+                primary_run_kwargs["net_labels"] = sc_net_labels
+            elif atlas is not None:
+                primary_run_kwargs["net_labels"] = atlas.network_index()
         res = analyze(
             Y=Y if test_type == "glm" else None,
             interest=interest,
@@ -259,14 +303,14 @@ def _run_inference_background(
             atlas=atlas,
             r_to_z=False,
             method=operator_choice,
-            n_permutations=n_perms,
+            n_permutations=effective_n_perms,
             rng=seed_val,
             verbose=False,
             use_mp=use_mp,
             tested_tail=tested_tail,
-            acceleration=None if acceleration_choice == "none" else acceleration_choice,
+            acceleration=effective_acceleration,
             **variance_kwargs,
-            **op_kwargs
+            **primary_run_kwargs
         )
         edges = res.significant_edges(atlas=annotation_atlas, alpha=alpha)
         
@@ -274,19 +318,27 @@ def _run_inference_background(
         comp_edges = None
         if run_sensitivity and comp_method:
             task.progress_message = f"Executing sensitivity companion ({comp_method.upper()}) permutation loops..."
-            comp_run_kwargs = dict(comp_kwargs)
+            comp_run_kwargs = dict(comp_kwargs or {})
             if comp_method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
-                comp_run_kwargs.setdefault("e", 0.4)
-                comp_run_kwargs.setdefault("h", 3.0)
-                comp_run_kwargs.setdefault("n", None)
-                comp_run_kwargs.setdefault("start_thres", 1.65)
-                if comp_method in ("ni_tfnbs", "fbc_tfnbs"):
-                    comp_run_kwargs["net_labels"] = sc_net_labels if use_sc_prior else atlas.network_index()
-            elif comp_method == "cnbs":
-                comp_run_kwargs["net_labels"] = sc_net_labels if use_sc_prior else atlas.network_index()
+                comp_run_kwargs.setdefault("e", DEFAULT_EXTENT_EXPONENT)
+                comp_run_kwargs.setdefault("h", DEFAULT_HEIGHT_EXPONENT)
+                comp_run_kwargs.setdefault("n", DEFAULT_N_THRESHOLDS_PERMUTATION)
+                comp_run_kwargs.setdefault("start_thres", DEFAULT_START_THRESHOLD)
+                if comp_method == "fbc_tfnbs":
+                    comp_run_kwargs.setdefault("min_cluster_size", DEFAULT_MIN_CLUSTER_SIZE)
+                if comp_method in ("ni_tfnbs", "fbc_tfnbs") and "net_labels" not in comp_run_kwargs:
+                    if use_sc_prior and sc_net_labels is not None:
+                        comp_run_kwargs["net_labels"] = sc_net_labels
+                    elif atlas is not None:
+                        comp_run_kwargs["net_labels"] = atlas.network_index()
+            elif comp_method == "cnbs" and "net_labels" not in comp_run_kwargs:
+                if use_sc_prior and sc_net_labels is not None:
+                    comp_run_kwargs["net_labels"] = sc_net_labels
+                elif atlas is not None:
+                    comp_run_kwargs["net_labels"] = atlas.network_index()
             elif comp_method == "nbs":
-                comp_run_kwargs.setdefault("threshold", 3.0)
-                comp_run_kwargs.setdefault("nbs_stat", "extent")
+                comp_run_kwargs.setdefault("threshold", DEFAULT_NBS_THRESHOLD)
+                comp_run_kwargs.setdefault("nbs_stat", DEFAULT_NBS_STAT)
                 
             comp_res = analyze(
                 Y=Y if test_type == "glm" else None,
@@ -298,15 +350,15 @@ def _run_inference_background(
                 sites=sites,
                 harmonize=harmonization_choice,
                 input=input_kind,
-            atlas=atlas,
+                atlas=atlas,
                 r_to_z=False,
                 method=comp_method,
-                n_permutations=n_perms,
+                n_permutations=effective_n_perms,
                 rng=seed_val,
                 verbose=False,
                 use_mp=use_mp,
                 tested_tail=tested_tail,
-                acceleration=None if acceleration_choice == "none" else acceleration_choice,
+                acceleration=effective_acceleration,
                 **variance_kwargs,
                 **comp_run_kwargs
             )
@@ -323,7 +375,7 @@ def _run_inference_background(
             "loaded_settings_hash": loaded_settings_hash,
             "design_family": test_type,
             "method": operator_choice,
-            "n_permutations": n_perms,
+            "n_permutations": effective_n_perms,
             "site_recipe": recipe_choice,
             "effective_site_recipe": effective_recipe_choice,
             "harmonize": harmonization_choice,
@@ -349,7 +401,7 @@ def _run_inference_background(
             # 'student' / 'welch' (two-sample test), 'glm' (pooled residual variance).
             "t_statistic": t_statistic,
             "seed": seed_val,
-            "method_parameters": _method_plan_parameters(operator_choice, op_kwargs),
+            "method_parameters": _method_plan_parameters(operator_choice, primary_run_kwargs),
             "companion_method": comp_method if run_sensitivity else None,
             "companion_method_parameters": (
                 _method_plan_parameters(comp_method, comp_run_kwargs)
@@ -427,10 +479,10 @@ def render_design_inference_view(base_atlas, tabs_list):
         effective_recipe_choice = "No site handling"
         site_strategy_note = None
         operator_choice = "tfnbs"
-        n_perms = 1000
+        n_perms = DEFAULT_N_PERMUTATIONS
         seed_val = 42
         use_mp = True
-        acceleration_choice = "gpd"
+        acceleration_choice = "none" if DEFAULT_ACCELERATION is None else DEFAULT_ACCELERATION
         op_kwargs = {}
         comp_kwargs = {}
         
@@ -725,14 +777,13 @@ def render_design_inference_view(base_atlas, tabs_list):
                 key=persistent_key('design:select_method_profile', scope='design'),
             )
             
-            if "TFNBS" in profile_choice:
-                if "NI-TFNBS" in profile_choice:
-                    operator_choice = "ni_tfnbs"
-                else:
-                    operator_choice = "tfnbs"
-            elif "FBC-TFNBS" in profile_choice:
+            if "FBC-TFNBS" in profile_choice:
                 sub_method = st.radio("Choose specific block method:", ["fbc_tfnbs", "cnbs"], horizontal=True, key=persistent_key('design:choose_specific_block_method', scope='design'))
                 operator_choice = sub_method
+            elif "NI-TFNBS" in profile_choice:
+                operator_choice = "ni_tfnbs"
+            elif "TFNBS" in profile_choice:
+                operator_choice = "tfnbs"
             elif "NBS" in profile_choice:
                 operator_choice = "nbs"
             elif "t-stat" in profile_choice:
@@ -757,29 +808,33 @@ def render_design_inference_view(base_atlas, tabs_list):
                 st.warning("⚠️ **Active Method:** `FDR Correction` (Unenhanced)\n\n*Edge-level Benjamini-Hochberg False Discovery Rate correction. No network/topological enhancement is applied.*")
 
             sc_prior_path = None
+            integration_options = ["exact", "right-grid"]
+            default_integration = "exact" if DEFAULT_N_THRESHOLDS_PERMUTATION is None else "right-grid"
+            default_n_grid = 50 if DEFAULT_N_THRESHOLDS_PERMUTATION is None else int(DEFAULT_N_THRESHOLDS_PERMUTATION)
+            nbs_stat_options = ["extent", "intensity"]
             with st.expander("Method Parameters", expanded=False):
                 if operator_choice in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
-                    e_exp = st.number_input("Extent exponent (E)", 0.1, 2.0, 0.4, 0.05, key=persistent_key('design:extent_exponent_e', scope='design'))
-                    h_exp = st.number_input("Height exponent (H)", 1.0, 5.0, 3.0, 0.1, key=persistent_key('design:height_exponent_h', scope='design'))
-                    integration = st.selectbox("Integration", ["exact", "right-grid"], key=persistent_key('design:integration_mode', scope='design'))
-                    n_steps = st.number_input("Integration steps (n)", 1, 10000, 50, 1, key=persistent_key('design:integration_steps_n', scope='design')) if integration == "right-grid" else None
-                    start = st.number_input("Start threshold (t)", 0.0, 100.0, 1.65, 0.05, key=persistent_key('design:start_threshold', scope='design'))
+                    e_exp = st.number_input("Extent exponent (E)", 0.1, 2.0, float(DEFAULT_EXTENT_EXPONENT), 0.05, key=persistent_key('design:extent_exponent_e', scope='design'))
+                    h_exp = st.number_input("Height exponent (H)", 1.0, 5.0, float(DEFAULT_HEIGHT_EXPONENT), 0.1, key=persistent_key('design:height_exponent_h', scope='design'))
+                    integration = st.selectbox("Integration", integration_options, index=integration_options.index(default_integration), key=persistent_key('design:integration_mode', scope='design', options=integration_options))
+                    n_steps = st.number_input("Integration steps (n)", 1, 10000, default_n_grid, 1, key=persistent_key('design:integration_steps_n', scope='design')) if integration == "right-grid" else DEFAULT_N_THRESHOLDS_PERMUTATION
+                    start = st.number_input("Start threshold (t)", 0.0, 100.0, float(DEFAULT_START_THRESHOLD), 0.05, key=persistent_key('design:start_threshold', scope='design'))
                     op_kwargs["e"] = e_exp
                     op_kwargs["h"] = h_exp
                     op_kwargs["n"] = n_steps
                     op_kwargs["start_thres"] = start
 
                     if operator_choice == "fbc_tfnbs":
-                        m_min = st.number_input("Minimum block size (m_min)", 5, 100, 20, key=persistent_key('design:minimum_block_size_m_min', scope='design'))
+                        m_min = st.number_input("Minimum block size (m_min)", 1, 100, int(DEFAULT_MIN_CLUSTER_SIZE), 1, key=persistent_key('design:minimum_block_size_m_min', scope='design'))
                         op_kwargs["min_cluster_size"] = m_min
                     elif operator_choice == "ni_tfnbs":
                         ni_norm = st.selectbox("Normalization", ["sqrt", "none"], index=0, key=persistent_key('design:normalization', scope='design'))
                         op_kwargs["normalization"] = ni_norm
 
                 elif operator_choice == "nbs":
-                    tau = st.number_input("Cluster-forming threshold (tau)", 1.0, 10.0, 3.0, 0.1, key=persistent_key('design:cluster_forming_threshold_tau', scope='design'))
+                    tau = st.number_input("Cluster-forming threshold (tau)", 0.0, 10.0, float(DEFAULT_NBS_THRESHOLD), 0.1, key=persistent_key('design:cluster_forming_threshold_tau', scope='design'))
                     op_kwargs["threshold"] = tau
-                    nbs_stat = st.selectbox("NBS statistic", ["extent", "intensity"], index=0, key=persistent_key('design:nbs_statistic', scope='design'))
+                    nbs_stat = st.selectbox("NBS statistic", nbs_stat_options, index=nbs_stat_options.index(DEFAULT_NBS_STAT), key=persistent_key('design:nbs_statistic', scope='design', options=nbs_stat_options))
                     op_kwargs["nbs_stat"] = nbs_stat
 
                 if operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs"):
@@ -829,25 +884,25 @@ def render_design_inference_view(base_atlas, tabs_list):
 
                 with st.expander("Companion Method Parameters", expanded=False):
                     if comp_method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
-                        comp_e = st.number_input("Companion Extent exponent (E)", 0.1, 2.0, 0.4, 0.05, key=persistent_key("comp_e", scope='design'))
-                        comp_h = st.number_input("Companion Height exponent (H)", 1.0, 5.0, 3.0, 0.1, key=persistent_key("comp_h", scope='design'))
-                        comp_integration = st.selectbox("Companion integration", ["exact", "right-grid"], key=persistent_key("comp_integration", scope='design'))
-                        comp_n = st.number_input("Companion Integration steps (n)", 1, 10000, 50, 1, key=persistent_key("comp_n", scope='design')) if comp_integration == "right-grid" else None
-                        comp_start = st.number_input("Companion start threshold (t)", 0.0, 100.0, 1.65, 0.05, key=persistent_key("comp_start", scope='design'))
+                        comp_e = st.number_input("Companion Extent exponent (E)", 0.1, 2.0, float(DEFAULT_EXTENT_EXPONENT), 0.05, key=persistent_key("comp_e", scope='design'))
+                        comp_h = st.number_input("Companion Height exponent (H)", 1.0, 5.0, float(DEFAULT_HEIGHT_EXPONENT), 0.1, key=persistent_key("comp_h", scope='design'))
+                        comp_integration = st.selectbox("Companion integration", integration_options, index=integration_options.index(default_integration), key=persistent_key("comp_integration", scope='design', options=integration_options))
+                        comp_n = st.number_input("Companion Integration steps (n)", 1, 10000, default_n_grid, 1, key=persistent_key("comp_n", scope='design')) if comp_integration == "right-grid" else DEFAULT_N_THRESHOLDS_PERMUTATION
+                        comp_start = st.number_input("Companion start threshold (t)", 0.0, 100.0, float(DEFAULT_START_THRESHOLD), 0.05, key=persistent_key("comp_start", scope='design'))
                         comp_kwargs["e"] = comp_e
                         comp_kwargs["h"] = comp_h
                         comp_kwargs["n"] = comp_n
                         comp_kwargs["start_thres"] = comp_start
                         if comp_method == "fbc_tfnbs":
-                            comp_m_min = st.number_input("Companion Minimum block size (m_min)", 5, 100, 20, key=persistent_key("comp_m_min", scope='design'))
+                            comp_m_min = st.number_input("Companion Minimum block size (m_min)", 1, 100, int(DEFAULT_MIN_CLUSTER_SIZE), 1, key=persistent_key("comp_m_min", scope='design'))
                             comp_kwargs["min_cluster_size"] = comp_m_min
                         elif comp_method == "ni_tfnbs":
                             comp_ni_norm = st.selectbox("Companion Normalization", ["sqrt", "none"], index=0, key=persistent_key("comp_ni_norm", scope='design'))
                             comp_kwargs["normalization"] = comp_ni_norm
                     elif comp_method == "nbs":
-                        comp_tau = st.number_input("Companion Cluster-forming threshold (tau)", 1.0, 10.0, 3.0, 0.1, key=persistent_key("comp_tau", scope='design'))
+                        comp_tau = st.number_input("Companion Cluster-forming threshold (tau)", 0.0, 10.0, float(DEFAULT_NBS_THRESHOLD), 0.1, key=persistent_key("comp_tau", scope='design'))
                         comp_kwargs["threshold"] = comp_tau
-                        comp_nbs_stat = st.selectbox("Companion NBS statistic", ["extent", "intensity"], index=0, key=persistent_key("comp_nbs_stat", scope='design'))
+                        comp_nbs_stat = st.selectbox("Companion NBS statistic", nbs_stat_options, index=nbs_stat_options.index(DEFAULT_NBS_STAT), key=persistent_key("comp_nbs_stat", scope='design', options=nbs_stat_options))
                         comp_kwargs["nbs_stat"] = comp_nbs_stat
                 
             st.write("")
@@ -868,11 +923,11 @@ def render_design_inference_view(base_atlas, tabs_list):
             )
             budget_map = {
                 "Quick check (100 permutations)": 100,
-                "Exploratory (1000 permutations)": 1000,
+                "Exploratory (1000 permutations)": DEFAULT_N_PERMUTATIONS,
                 "Manuscript (5000 permutations)": 5000
             }
             if budget_choice == "Custom":
-                n_perms = st.number_input("Number of Permutations (B)", 10, 10000, 1000, 100, key=persistent_key('design:number_of_permutations_b', scope='design'))
+                n_perms = st.number_input("Number of Permutations (B)", 10, 10000, int(DEFAULT_N_PERMUTATIONS), 100, key=persistent_key('design:number_of_permutations_b', scope='design'))
             else:
                 n_perms = budget_map[budget_choice]
 
@@ -901,8 +956,10 @@ def render_design_inference_view(base_atlas, tabs_list):
                     "only; the other direction is not tested."
                 )
                 
+            accel_options = ["none", "gpd", "gamma"]
+            default_accel = "none" if DEFAULT_ACCELERATION is None else DEFAULT_ACCELERATION
             with st.expander("Execution Options", expanded=False):
-                acceleration_choice = st.selectbox("Tail Acceleration", ["gpd", "gamma", "none"], index=0, key=persistent_key('design:tail_acceleration', scope='design'))
+                acceleration_choice = st.selectbox("Tail Acceleration", accel_options, index=accel_options.index(default_accel), key=persistent_key('design:tail_acceleration', scope='design', options=accel_options))
                 use_mp = st.checkbox("Parallel Execution (Multiprocessing)", value=True, key=persistent_key('design:parallel_execution_multiprocessing', scope='design'))
                 seed_val = st.number_input("Random Seed", 1, 10000, 42, key=persistent_key('design:random_seed', scope='design'))
                 
