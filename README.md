@@ -210,8 +210,13 @@ Pass `method=` to `analyze()` (or to the advanced pipelines):
 | `"bonferroni"` / `"bh_fdr"` | Parametric baselines, no permutation | — |
 | `"bh_fdr_perm"` | Permutation-calibrated BH-FDR | — |
 
-Defaults are shared by every entry point (`conninfpy.defaults`):
-1000 permutations with exact empirical p-values, TFNBS `e=0.3`, `h=3.0`.
+Shared numerical defaults (`conninfpy.defaults`):
+1000 permutations with exact empirical p-values (`acceleration=None`), exact
+TFNBS integration (`n=None`) with `e=0.4`, `h=3.0`, `start_thres=1.65`
+(asymptotic normal reference; NBS `threshold=2.0`, `nbs_stat="extent"`;
+FBC-TFNBS `min_cluster_size=3`). `analyze()` uses a single two-sided family
+(`two_tailed=True`) by default, while the low-level `compute_p_val*`
+functions retain `two_tailed=False` for backwards compatibility.
 For fast exploratory runs use `n_permutations=200, acceleration="gpd"`.
 
 ## Results

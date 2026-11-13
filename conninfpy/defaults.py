@@ -36,7 +36,7 @@ DEFAULT_HEIGHT_EXPONENT: float = 3.0
 """Default height exponent H."""
 
 DEFAULT_START_THRESHOLD: float = 1.65
-"""Initial threshold for cluster formation (p < 0.05 one-tailed)."""
+"""Initial t-threshold for cluster formation (asymptotic normal z ≈ 1.645 reference, one-tailed p ≈ 0.05 at large df; not a universal finite-df p-value)."""
 
 # =============================================================================
 # Integration resolution (path-specific)
