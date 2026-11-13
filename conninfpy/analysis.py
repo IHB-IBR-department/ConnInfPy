@@ -30,10 +30,12 @@ from conninfpy.results import OmnibusInferenceResult
 from conninfpy._prepare import infer_input_kind
 from conninfpy._prepare import prepare_connectivity
 from conninfpy._shared.rng import RngLike
+from conninfpy.stats._design import build_design_matrix
 from conninfpy.stats.glm import compute_p_val_glm
 from conninfpy.stats.glm import compute_p_val_glm_multi
 from conninfpy.stats.glm import compute_p_val_paired_glm
 from conninfpy.harmonize import combat_harmonize
+from conninfpy.harmonize.diagnostics import analyze_design_diagnostics
 from conninfpy.stats._types import StatMethod
 from conninfpy.stats.pairwise import compute_p_val
 
@@ -51,6 +53,7 @@ class AnalyzeResult:
     combat_diagnostics: Optional[Dict[str, Any]] = None
     design_diagnostics: Optional[Dict[str, Any]] = None
     flags: list = field(default_factory=list)
+    resolved_strategy: Optional[str] = None
 
     def __getitem__(self, key: str) -> Any:
         # Forward dict-style access to the underlying result so
@@ -127,7 +130,9 @@ class AnalyzeResult:
 
     def to_bundle(self, **kwargs: Any) -> "Any":
         """Snapshot the completed inference; see ``ResultBundle.from_result``."""
-        return self.inference.to_bundle(**kwargs)
+        from conninfpy.post_analysis import ResultBundle
+
+        return ResultBundle.from_result(self, **kwargs)
 
     def node_summary(self, *args: Any, **kwargs: Any) -> "Any":
         """Delegate to the underlying inference result's ``node_summary``:
@@ -464,7 +469,7 @@ def analyze(
 
         * ``'combat_only'`` — fit ComBat with
           ``preserve = confounds`` only, then test on the harmonized matrix
-          without adding site dummies to the downstream GLM. Use this to
+          without adding site dummies to the GLM. Use this to
           isolate what the ComBat transform itself contributes.
         * ``'combat_site_dummies_glm'`` — primary site-aware recipe. Fit ComBat with ``preserve = confounds``
           only, deliberately excluding the tested variable, then append site
@@ -795,6 +800,9 @@ def analyze(
             "nuisance covariates promote to GLM with a binary interest= column."
         )
 
+    had_user_confounds = confounds is not None
+    n_user_confounds = 0 if confounds is None else _as_2d(confounds).shape[1]
+
     strategy = _resolve_strategy(
         harmonize,
         glm_mode=glm_mode,
@@ -803,11 +811,17 @@ def analyze(
         confounds_provided=confounds is not None,
     )
     if paired_interest:
-        # Site labels still constrain subject permutations, but subject-constant
-        # additive site effects cancel in the condition difference.
+        # Site labels constrain between-subject permutations, while
+        # subject-constant additive site effects cancel in B - A.
         strategy = None
         if sites is not None:
-            flags.append("paired differences: ComBat skipped; sites stratify subject permutations")
+            flags.append(
+                "paired differences (GLM on B - A): ComBat skipped — "
+                "subject-constant additive site effects cancel in B - A "
+                "(arbitrary site × condition interactions are not automatically "
+                "controlled unless modeled); sites= stratifies between-subject "
+                "permutations."
+            )
 
     # Explicit ComBat guards (only fire for explicit requests; 'auto'
     # resolves to combat_site_dummies_glm only when these guards are satisfied).
@@ -841,9 +855,9 @@ def analyze(
             "preserve). For combat_site_dummies_glm, promote to GLM "
             "with a binary interest indicator."
         )
-    # Paired + sites: additive site effects are subject-constant across the
-    # two conditions and cancel in the within-subject difference, so ComBat
-    # is unnecessary. sites= still auto-stratifies the permutation below.
+    # Paired + sites: subject-constant additive site effects cancel in
+    # group2 - group1 (not arbitrary site × condition effects), and
+    # within-subject sign-flip permutations are stratum-invariant by construction.
     if (
         ttest_mode
         and test_type == "paired"
@@ -851,9 +865,11 @@ def analyze(
         and harmonize in ("auto", None)
     ):
         flags.append(
-            "paired + sites: ComBat skipped — additive site effects cancel in "
-            "the within-subject difference; sites= still stratifies the "
-            "permutation."
+            "paired + sites: ComBat skipped — subject-constant additive site "
+            "effects cancel in the within-subject difference (arbitrary site × "
+            "condition interactions are not automatically controlled); "
+            "within-subject sign-flip permutations are stratum-invariant by "
+            "construction, so sites/strata do not alter the sign-flip null."
         )
     if strategy is None and preserve is not None:
         flags.append(
@@ -921,6 +937,7 @@ def analyze(
             )
 
     confound_names: Optional[List[str]] = None
+    n_site_dummies = 0
     # ---- Site dummies → GLM nuisance for the site-GLM strategies ----
     # combat_site_dummies_glm: ComBat harmonized the matrix but did not see interest;
     # site dummies in the GLM still help in case any site-correlated noise
@@ -934,6 +951,7 @@ def analyze(
         site_dum = _site_dummies(np.asarray(sites))
         if site_dum.shape[1] > 0:
             n_user = 0 if confounds is None else _as_2d(confounds).shape[1]
+            n_site_dummies = int(site_dum.shape[1])
             site_names = [f"site[{u}]" for u in np.unique(np.asarray(sites))[1:]]
             confound_names = [f"confound_{k + 1}" for k in range(n_user)] + site_names
             if confounds is None:
@@ -951,9 +969,16 @@ def analyze(
                     "ComBat does not run."
                 )
                 preserve = None
-            flags.append(
-                "site_dummies_glm: no ComBat; site dummies appended to GLM nuisance."
-            )
+            if harmonize == "auto" and not had_user_confounds:
+                flags.append(
+                    "site_dummies_glm: no ComBat (harmonize='auto' without confounds= "
+                    "skips ComBat because no non-site covariates were given to "
+                    "preserve); site dummies appended to GLM nuisance."
+                )
+            else:
+                flags.append(
+                    "site_dummies_glm: no ComBat; site dummies appended to GLM nuisance."
+                )
             combat_diag = {
                 "strategy": SITE_DUMMIES_GLM,
                 "preserve_columns": None,
@@ -961,10 +986,12 @@ def analyze(
 
     # ---- Inference ----
     # Auto-stratify the permutation engine on sites when present (PALM -eb
-    # semantics). This is the second half of the harmonization-stratification
-    # pair: ComBat fits site means then permutation respects site structure.
-    # An explicit strata= passed via **method_kwargs wins (e.g. for
-    # study-specific blocking that doesn't match the site label).
+    # semantics). For two-sample / GLM / paired_interest this constrains
+    # label/row permutations within site; for paired / one-sample sign-flip
+    # permutations, the sign-flip null is stratum-invariant by construction
+    # and `strata` is recorded for provenance and per-subject site checks.
+    # An explicit strata= passed via **method_kwargs wins.
+    signflip_mode = ttest_mode and test_type in ("paired", "one-sample")
     if "strata" in method_kwargs:
         user_strata = method_kwargs.pop("strata")
         auto_strata = (
@@ -983,10 +1010,50 @@ def analyze(
                     "For paired inference, sites/strata must provide one label per "
                     f"paired subject ({group1.shape[0]}), got {auto_strata.shape[0]}."
                 )
-            flags.append(
-                "strata= auto-set to `sites`; pass strata= explicitly "
-                "(or strata=None) to override."
+            if signflip_mode:
+                flags.append(
+                    "strata= auto-set to `sites` (validated and recorded for "
+                    "provenance; within-subject/one-sample sign-flip permutations "
+                    "are stratum-invariant by construction); pass strata= "
+                    "explicitly (or strata=None) to override."
+                )
+            else:
+                flags.append(
+                    "strata= auto-set to `sites` (restricts label/row permutations "
+                    "within site); pass strata= explicitly (or strata=None) to "
+                    "override."
+                )
+
+    def _strata_note_text() -> Optional[str]:
+        if auto_strata is None:
+            return None
+        if signflip_mode:
+            return (
+                "Within-subject / one-sample sign-flip permutations are "
+                "stratum-invariant by construction; strata is validated and "
+                "recorded for provenance without altering the sign-flip null."
             )
+        if paired_interest:
+            return (
+                "paired_interest tests a between-subject predictor on (B - A); "
+                "strata constrains between-subject Freedman-Lane permutations "
+                "within site/stratum."
+            )
+        return "Constrains between-subject permutations within each stratum/site."
+
+    def _glm_column_roles(col_names: Sequence[str], interest_cols: Sequence[str]) -> Dict[str, str]:
+        roles: Dict[str, str] = {}
+        interest_set = set(interest_cols)
+        for idx, nm in enumerate(col_names):
+            if idx == 0 and nm == "intercept":
+                roles[nm] = "intercept"
+            elif nm in interest_set:
+                roles[nm] = "interest"
+            elif idx > n_user_confounds and idx <= n_user_confounds + n_site_dummies:
+                roles[nm] = "site_dummy"
+            else:
+                roles[nm] = "confound"
+        return roles
 
     if multi_mode:
         if contrast_id is not None:
@@ -996,10 +1063,13 @@ def analyze(
         # and a unit contrast per predictor. ComBat strategies already ran
         # above with preserve=confounds, excluding *all* tested columns.
         assert isinstance(interest, dict)
+        interest_keys = list(interest.keys())
         X, contrasts = _build_multi_design(interest, confounds)
+        multi_col_names = _design_names(confounds, confound_names, interest_keys)
+        multi_roles = _glm_column_roles(multi_col_names, interest_keys)
         results = compute_p_val_glm_multi(
             Y, design_matrix=X, contrasts=contrasts,
-            design_columns=_design_names(confounds, confound_names, list(interest)),
+            design_columns=multi_col_names,
             method=method, n_permutations=n_permutations,
             two_tailed=effective_two_tailed,
             acceleration=acceleration,
@@ -1026,23 +1096,50 @@ def analyze(
             )
             res.preserve_provided = preserve is not None
             res.combat_diagnostics = combat_diag
+            design_diag = analyze_design_diagnostics(
+                design_kind="paired_interest_multi" if paired_interest else "glm_multi",
+                unit_of_observation="subject_pair_difference" if paired_interest else "subject",
+                X=X,
+                names=multi_col_names,
+                column_roles=multi_roles,
+                contrast=contrasts,
+                focus_contrast=nm,
+                sites=sites,
+                strata=auto_strata,
+                interest_name=nm,
+                interest_values=np.asarray(interest[nm], dtype=np.float64),
+                missing_report=getattr(res, "missing_report", None),
+                design_note=(
+                    "Repeated-measures GLM on B - A across named predictors."
+                    if paired_interest
+                    else "Multi-contrast GLM; each predictor is tested adjusted for intercept, confounds, and all other predictors."
+                ),
+                strata_note=_strata_note_text(),
+            )
             res_flags = list(flags)
             if getattr(res, "missing_report", None) is not None:
                 from conninfpy.stats._missing_pairwise import describe
                 res_flags.append(describe(res.missing_report))
+            backend_resolved_strategy = strategy if strategy is not None else "none"
+            res.resolved_strategy = backend_resolved_strategy
+            res.design_diagnostics = design_diag
+            res.flags = list(res_flags)
             out[nm] = AnalyzeResult(
                 inference=res,
                 combat_diagnostics=combat_diag,
+                design_diagnostics=design_diag,
                 flags=res_flags,
+                resolved_strategy=backend_resolved_strategy,
             )
         return out
 
     if contrast_id is not None:
         method_kwargs["contrast_id"] = contrast_id
     if glm_mode:
+        col_names = _design_names(confounds, confound_names, ["interest"])
         result = compute_p_val_glm(
             Y, interest=interest, confounds=confounds,
-            design_columns=_design_names(confounds, confound_names, ["interest"]),
+            design_columns=col_names,
             method=method, n_permutations=n_permutations,
             two_tailed=effective_two_tailed,
             acceleration=acceleration,
@@ -1050,6 +1147,27 @@ def analyze(
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
             atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,
             **method_kwargs,
+        )
+        X_diag, c_diag = build_design_matrix(interest, confounds)
+        design_diag = analyze_design_diagnostics(
+            design_kind="paired_interest" if paired_interest else "glm",
+            unit_of_observation="subject_pair_difference" if paired_interest else "subject",
+            X=X_diag,
+            names=col_names,
+            column_roles=_glm_column_roles(col_names, ["interest"]),
+            contrast=c_diag,
+            focus_contrast=contrast_id or "interest",
+            sites=sites,
+            strata=auto_strata,
+            interest_name=contrast_id or "interest",
+            interest_values=np.asarray(interest, dtype=np.float64).ravel(),
+            missing_report=getattr(result, "missing_report", None),
+            design_note=(
+                "Between-subject predictor regressed on within-subject difference B - A (additive subject-constant site effects cancel in B - A; arbitrary site × condition interactions are not controlled unless modeled)."
+                if paired_interest
+                else "Single-contrast Freedman-Lane GLM."
+            ),
+            strata_note=_strata_note_text(),
         )
     elif paired_glm_mode:
         # Repeated-measures GLM on Δ = group2 − group1, so `positive` keeps
@@ -1065,6 +1183,34 @@ def analyze(
             atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,
             **method_kwargs,
         )
+        ca = np.asarray(confounds_group1, dtype=np.float64)
+        cb = np.asarray(confounds_group2, dtype=np.float64)
+        if ca.ndim == 1:
+            ca = ca[:, np.newaxis]
+            cb = cb[:, np.newaxis]
+        delta_c = cb - ca
+        X_diag = np.column_stack([np.ones((group1.shape[0], 1), dtype=np.float64), delta_c])
+        col_names = ["intercept"] + [f"delta_confound_{k + 1}" for k in range(delta_c.shape[1])]
+        c_diag = np.zeros(X_diag.shape[1], dtype=np.float64)
+        c_diag[0] = 1.0
+        design_diag = analyze_design_diagnostics(
+            design_kind="paired_glm",
+            unit_of_observation="subject_pair_difference",
+            X=X_diag,
+            names=col_names,
+            column_roles={"intercept": "condition_difference", **{nm: "confound_difference" for nm in col_names[1:]}},
+            contrast=c_diag,
+            focus_contrast=contrast_id or "condition_difference",
+            sites=sites,
+            strata=auto_strata,
+            missing_report=getattr(result, "missing_report", None),
+            design_note=(
+                "Repeated-measures GLM on within-subject difference (group2 - group1) adjusted for "
+                "condition-varying confound differences; subject-constant additive site effects cancel "
+                "in differences, though arbitrary site × condition interactions are not controlled."
+            ),
+            strata_note=_strata_note_text(),
+        )
     else:
         result = compute_p_val(
             group1, group2, test_type=test_type,
@@ -1077,6 +1223,70 @@ def analyze(
             atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,
             **method_kwargs,
         )
+        if test_type == "two-sample":
+            assert group1 is not None and group2 is not None
+            n1, n2 = group1.shape[0], group2.shape[0]
+            X_diag = np.column_stack([
+                np.ones(n1 + n2, dtype=np.float64),
+                np.concatenate([np.zeros(n1, dtype=np.float64), np.ones(n2, dtype=np.float64)]),
+            ])
+            design_diag = analyze_design_diagnostics(
+                design_kind="two-sample",
+                unit_of_observation="subject",
+                X=X_diag,
+                names=["intercept", "group"],
+                column_roles={"intercept": "intercept", "group": "group_indicator"},
+                contrast=np.array([0.0, 1.0], dtype=np.float64),
+                focus_contrast=contrast_id or "group2 - group1",
+                sites=sites,
+                strata=auto_strata,
+                group_labels=["group1"] * n1 + ["group2"] * n2,
+                missing_report=getattr(result, "missing_report", None),
+                var_equal=var_equal,
+                design_note=(
+                    f"Two-sample {'Student (pooled variance)' if var_equal else 'Welch (separate variances)'} "
+                    "t-test; indicator matrix [intercept, group] shown for balance/site/rank diagnostics."
+                ),
+                strata_note=_strata_note_text(),
+            )
+        elif test_type == "paired":
+            assert group1 is not None
+            n_pairs = group1.shape[0]
+            design_diag = analyze_design_diagnostics(
+                design_kind="paired",
+                unit_of_observation="subject_pair_difference",
+                X=np.ones((n_pairs, 1), dtype=np.float64),
+                names=["intercept"],
+                column_roles={"intercept": "condition_difference"},
+                contrast=np.array([1.0], dtype=np.float64),
+                focus_contrast=contrast_id or "group2 - group1",
+                sites=sites,
+                strata=auto_strata,
+                missing_report=getattr(result, "missing_report", None),
+                design_note=(
+                    "Paired within-subject sign-flip test on (group2 - group1). "
+                    "Subject-constant additive site effects cancel in differences, "
+                    "though arbitrary site × condition interactions are not controlled."
+                ),
+                strata_note=_strata_note_text(),
+            )
+        else:
+            assert group1 is not None
+            n1 = group1.shape[0]
+            design_diag = analyze_design_diagnostics(
+                design_kind="one-sample",
+                unit_of_observation="subject",
+                X=np.ones((n1, 1), dtype=np.float64),
+                names=["intercept"],
+                column_roles={"intercept": "intercept"},
+                contrast=np.array([1.0], dtype=np.float64),
+                focus_contrast=contrast_id or "mean != 0",
+                sites=sites,
+                strata=auto_strata,
+                missing_report=getattr(result, "missing_report", None),
+                design_note="One-sample within-subject sign-flip test against zero.",
+                strata_note=_strata_note_text(),
+            )
 
     if getattr(result, "missing_report", None) is not None:
         from conninfpy.stats._missing_pairwise import describe
@@ -1109,11 +1319,17 @@ def analyze(
         result = result._restricted_to_tail(tested_tail, selection="prespecified")
     # strata_provided was set inside compute_p_val{,_glm} from the strata=
     # argument; preserved here for clarity.
+    backend_resolved_strategy = strategy if strategy is not None else "none"
+    result.resolved_strategy = backend_resolved_strategy
+    result.design_diagnostics = design_diag
+    result.flags = list(flags)
 
     return AnalyzeResult(
         inference=result,
         combat_diagnostics=combat_diag,
+        design_diagnostics=design_diag,
         flags=flags,
+        resolved_strategy=backend_resolved_strategy,
     )
 
 

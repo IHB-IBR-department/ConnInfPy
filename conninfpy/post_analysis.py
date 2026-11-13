@@ -69,6 +69,7 @@ class ResultBundle:
         require explicit metadata; nothing is reconstructed from p-values,
         zero-filled statistics or absent tails.
         """
+        outer = result
         result = getattr(result, "inference", result)
         provenance = getattr(result, "analysis_provenance", None) or {}
 
@@ -184,7 +185,45 @@ class ResultBundle:
                 "e_grid": deepcopy(e_grid), "h_grid": deepcopy(h_grid),
                 "identity": deepcopy(provenance.get("identity", {"roi_id_kind": "explicit_input_id"})),
                 "coverage": deepcopy(provenance.get("coverage")),
-                "missing_report": deepcopy(getattr(result, "missing_report", None))}
+                "missing_report": deepcopy(getattr(result, "missing_report", None)),
+                "design_diagnostics": deepcopy(
+                    getattr(outer, "design_diagnostics", None)
+                    if getattr(outer, "design_diagnostics", None) is not None
+                    else getattr(result, "design_diagnostics", None)
+                ),
+                "combat_diagnostics": deepcopy(
+                    getattr(outer, "combat_diagnostics", None)
+                    if getattr(outer, "combat_diagnostics", None) is not None
+                    else getattr(result, "combat_diagnostics", None)
+                ),
+                "resolved_strategy": (
+                    getattr(outer, "resolved_strategy", None)
+                    if getattr(outer, "resolved_strategy", None) is not None
+                    else (
+                        getattr(result, "resolved_strategy", None)
+                        if getattr(result, "resolved_strategy", None) is not None
+                        else (
+                            (
+                                getattr(outer, "combat_diagnostics", None)
+                                or getattr(result, "combat_diagnostics", None)
+                                or {}
+                            ).get("strategy")
+                            if isinstance(
+                                getattr(outer, "combat_diagnostics", None)
+                                or getattr(result, "combat_diagnostics", None),
+                                dict,
+                            )
+                            else None
+                        )
+                    )
+                ),
+                "flags": deepcopy(
+                    list(
+                        getattr(outer, "flags", None)
+                        if getattr(outer, "flags", None) is not None
+                        else (getattr(result, "flags", None) or [])
+                    )
+                )}
         spec = {"name": "contrast_beta", "definition": "cᵀβ", "units": units,
                 "scale": scale, "standardizer": None, "available": effect is not None}
         if annotation is not None and tuple(annotation.get("roi_ids", ())) != ids:
