@@ -15,6 +15,7 @@ from apps.utils.helpers import (
     result_is_stale,
     safe_filename_part,
 )
+from apps.utils.result_views import build_unit_annotation_context, get_2d_result, unwrap_result
 from conninfpy.interpret.annotate import (aggregate_connections, annotate_bna_regions, annotate_rois,
                                           bna_region_ids, summarize_annotation)
 from conninfpy.atlas.brainnetome import BrainnetomeReference
@@ -49,7 +50,11 @@ def render_bna_annotation_view(base_atlas):
         return
     if not require_analysis_step(key="annotation"):
         return
-    result = st.session_state.inference_result
+    result = unwrap_result(st.session_state.inference_result)
+    if hasattr(result, "keys") and "omnibus" in result and "positive" not in result:
+        st.info("Brainnetome directional connection annotation and connectogram require directional t/β contrasts (not yet defined for non-directional omnibus F-tests).")
+        return
+
     atlas = active_analysis_atlas(base_atlas)
     n_nodes = len(result["positive"])
     if atlas is None or not atlas_has_coords(atlas) or len(atlas) != n_nodes:
@@ -123,9 +128,16 @@ def render_bna_annotation_view(base_atlas):
             else:
                 rois = annotate_rois(atlas.coords, support=support,
                                      radius_mm=radius if support == "sphere" else None, **common)
-            summary = summarize_annotation(result, rois, alpha=alpha, level=level, param_idx=param_idx)
+            tested_tail = getattr(result, "tested_tail", None)
+            tail_arg = tested_tail if tested_tail in ("positive", "negative") else "both"
+            summary = summarize_annotation(result, rois, alpha=alpha, tail=tail_arg, level=level, param_idx=param_idx)
             edges = summary["edges"]
-            detected = edges[(edges["p_positive"] <= alpha) | (edges["p_negative"] <= alpha)]
+            if tested_tail == "positive":
+                detected = edges[edges["p_positive"] <= alpha]
+            elif tested_tail == "negative":
+                detected = edges[edges["p_negative"] <= alpha]
+            else:
+                detected = edges[(edges["p_positive"] <= alpha) | (edges["p_negative"] <= alpha)]
             evidence = build_annotation_evidence(
                 detected, rois, contrast_name=current_contrast_name(),
                 source_atlas=getattr(atlas, "source", None) or "user atlas",
@@ -143,6 +155,8 @@ def render_bna_annotation_view(base_atlas):
         return
     rois, summary, detected = ann["rois"], ann["summary"], ann["detected"]
     meta = summary["meta"]
+    result_2d, _ = get_2d_result(result, ann.get("param_idx"))
+    unit_ctx = build_unit_annotation_context(result_2d, detected, rois, alpha=ann["alpha"])
     with summary_slot:
         endpoint_rois = set(detected.get("i_roi", [])) | set(detected.get("j_roi", []))
         c1, c2, c3 = st.columns(3)
@@ -153,6 +167,7 @@ def render_bna_annotation_view(base_atlas):
             f"Inference unit: **{meta['inference_unit']}**. Descriptive annotation; corrected p-values "
             "are unchanged. No enrichment test is performed."
         )
+        st.caption(unit_ctx["roi_selection_rule"])
         if st.session_state.evidence_packet is not None:
             st.info(describe_coverage(st.session_state.evidence_packet)["report_sentence"])
         elif detected.empty:
@@ -164,10 +179,25 @@ def render_bna_annotation_view(base_atlas):
                                    file_name=f"bna_connections_{safe_filename_part(current_contrast_name())}.csv", mime="text/csv")
         exports[1].download_button("ROI annotation · CSV", rois.table.to_csv(index=False),
                                    file_name=f"bna_rois_{safe_filename_part(current_contrast_name())}.csv", mime="text/csv")
+        if not unit_ctx["unit_table"].empty:
+            st.markdown(f"**Aggregated {meta['inference_unit'].capitalize()} Annotation Context**")
+            render_data_table(unit_ctx["unit_table"], width="stretch", hide_index=True)
+            st.download_button(
+                f"{meta['inference_unit'].capitalize()} context · CSV",
+                unit_ctx["unit_table"].to_csv(index=False),
+                file_name=f"bna_{meta['inference_unit']}_context_{safe_filename_part(current_contrast_name())}.csv",
+                mime="text/csv",
+                key="bna_unit_context_csv",
+            )
 
     tab_c, tab_r, tab_rel, tab_dom, tab_qc = st.tabs(
         ["Detected connections", "ROIs", "Relations", "BrainMap domains", "Distance QC"])
     with tab_c:
+        if meta["inference_unit"] in ("component", "block"):
+            st.caption(
+                f"Member edges belonging to detected {meta['inference_unit']}s (shown descriptively; "
+                "not independent edge-level tests)."
+            )
         cols = ["i_roi", "j_roi", "i_bna", "j_bna", "t_signed", "p_positive", "p_negative",
                 "hemispheric_relation", "anatomical_relation", "circuit", "distance_mm",
                 "shared_support", "sc", "network_relation", "shared_domains"]
@@ -194,7 +224,7 @@ def render_bna_annotation_view(base_atlas):
 
     st.markdown("#### Connectogram")
     cc1, cc2, cc3 = st.columns(3)
-    tested_tail = getattr(getattr(result, "inference", result), "tested_tail", None)
+    tested_tail = getattr(result, "tested_tail", None)
     tail_options = [tested_tail] if tested_tail else ["positive", "negative"]
     if st.session_state.get("bna_connectogram_tail") not in (None, *tail_options):
         st.session_state.pop("bna_connectogram_tail")   # left over from an earlier run

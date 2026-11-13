@@ -18,6 +18,23 @@ from apps.utils.helpers import (
     safe_filename_part,
     render_help,
 )
+from apps.utils.result_views import (
+    build_cnbs_block_figure,
+    build_companion_agreement_figure,
+    build_connectivity_maps_figure,
+    build_network_summary_figure,
+    build_null_max_figure,
+    check_companion_compatibility,
+    describe_result_scale_and_stat,
+    get_2d_result,
+    prepare_cnbs_blocks_table,
+    prepare_network_summary,
+    prepare_node_summary,
+    prepare_predicted_coupling_summary,
+    recorded_native_detection_count,
+    unwrap_result,
+)
+
 
 def _run_alpha():
     """The α fixed at run time (``run_plan``); result views must not re-choose it.
@@ -47,6 +64,32 @@ def _family_caption(res):
     return f"One-sided family ({tested}, {origin}): α applies to the tested direction only."
 
 
+def _is_omnibus_result(res):
+    inner = unwrap_result(res)
+    return hasattr(inner, "keys") and "omnibus" in inner and "positive" not in inner
+
+
+def _select_grid_slice(res_wrapper, slot):
+    """If ``res`` is a parameter-grid result, let the user pick one (E, H) slice."""
+    inner = unwrap_result(res_wrapper)
+    if not getattr(inner, "is_grid", False):
+        return inner, None
+    raw_e = getattr(inner, "e_grid", None)
+    raw_h = getattr(inner, "h_grid", None)
+    e_grid = list(raw_e) if raw_e is not None else []
+    h_grid = list(raw_h) if raw_h is not None else []
+    n_cells = len(e_grid)
+    if n_cells <= 1:
+        return get_2d_result(inner, 0)
+    options = list(range(n_cells))
+    idx = st.selectbox(
+        "TFNBS parameter-grid cell (E, H)",
+        options,
+        index=0,
+        format_func=lambda k: f"Cell {k}: E={e_grid[k]:g}, H={h_grid[k]:g}" if k < len(h_grid) else f"Cell {k}",
+        key=persistent_key(f"results:grid_idx:{slot}", scope="results", options=options),
+    )
+    return get_2d_result(inner, idx)
 
 
 def _extract_result_diagnostics_summary(res_wrapper, run_plan=None):
@@ -250,30 +293,58 @@ def _render_analyze_decisions_and_diagnostics(res_wrapper, run_plan=None, method
 
 def _render_one_sentence_summary(res, edges_df, method_name, direction_labels):
     """Render the single-sentence plain-language result summary."""
+    alpha = _run_alpha()
+    meta = describe_result_scale_and_stat(res, st.session_state.get("run_plan"))
+    n_perms = getattr(res, "n_permutations", 100)
+    if meta["inference_unit"] in ("component", "block"):
+        count = recorded_native_detection_count(res, alpha)
+        count_text = str(count) if count is not None else "not recorded"
+        st.info(
+            f"📝 **Summary:** The {method_name} run detected **{count_text}** significant "
+            f"{meta['inference_unit']}s at α = {alpha:g} using {n_perms} permutations. "
+            f"{meta['inference_unit_note']}"
+        )
+        return
+    if meta["is_omnibus"]:
+        nsig = res.n_significant(alpha).get("omnibus", 0)
+        st.info(
+            f"📝 **Summary:** The omnibus F-test ({method_name}) detected **{nsig}** significant edges "
+            f"(non-directional, α = {alpha:g}) using {n_perms} permutations. "
+            f"{meta['inference_unit_note']}"
+        )
+        return
+
     pos_count = 0
     neg_count = 0
-    if edges_df is not None and not edges_df.empty:
+    if edges_df is not None and not edges_df.empty and "t_signed" in edges_df.columns:
         pos_count = len(edges_df[edges_df["t_signed"] > 0])
         neg_count = len(edges_df[edges_df["t_signed"] < 0])
-    
-    n_perms = getattr(res, "n_permutations", 100)
+    else:
+        nsig = res.n_significant(alpha)
+        pos_count = int(nsig.get("positive", 0))
+        neg_count = int(nsig.get("negative", 0))
+
     tested = getattr(res, "tested_tail", None)
     if tested is not None:
         count = pos_count if tested == "positive" else neg_count
         st.info(
             f"📝 **Summary:** The one-sided {method_name} test of **{direction_labels[tested]}** "
             f"detected **{count}** significant edges using {n_perms} permutations. "
-            "The opposite direction was not tested."
+            f"The opposite direction was not tested. {meta['inference_unit_note']}"
         )
         return
     st.info(
         f"📝 **Summary:** The {method_name} run detected **{pos_count}** significant edges for **{direction_labels['positive']}** "
-        f"and **{neg_count}** edges for **{direction_labels['negative']}** using {n_perms} permutations."
+        f"and **{neg_count}** edges for **{direction_labels['negative']}** using {n_perms} permutations. "
+        f"{meta['inference_unit_note']}"
     )
+
 
 def _shown_tail_counts(res, alpha):
     """Per-tail counts with an untested direction labelled 'not tested'."""
     nsig = res.n_significant(alpha)
+    if _is_omnibus_result(res):
+        return {"omnibus": nsig.get("omnibus", 0)}
     tested = getattr(res, "tested_tail", None)
     return {
         tail: ("not tested" if tested is not None and tail != tested else nsig[tail])
@@ -285,37 +356,58 @@ def _render_summary_metrics(res, edges_df, method_name, direction_labels):
     """Render the headline metric row for one result."""
     st.markdown(f"##### 📊 {method_name} Summary")
     alpha = _run_alpha()
+    meta = describe_result_scale_and_stat(res, st.session_state.get("run_plan"))
     shown = _shown_tail_counts(res, alpha)
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric(direction_labels["positive"], shown["positive"], help=f"Edges significant in the positive statistical tail at α = {alpha:g}.")
-    with col2:
-        st.metric(direction_labels["negative"], shown["negative"], help=f"Edges significant in the negative statistical tail at α = {alpha:g}.")
-    with col3:
-        st.metric("Permutations Completed", res.n_permutations)
-    st.caption(f"Detections at α = {alpha:g}. {_family_caption(res)}")
+    if meta["inference_unit"] in ("component", "block"):
+        col1, col2, col3 = st.columns(3)
+        count = recorded_native_detection_count(res, alpha)
+        col1.metric(f"Significant {meta['inference_unit'].capitalize()}s", count if count is not None else "not recorded")
+        col2.metric("Statistic / Scale", f"{meta['stat_symbol']} / {meta['scale_label']}")
+        col3.metric("Permutations Completed", res.n_permutations)
+    elif meta["is_omnibus"]:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Omnibus F Detections", shown["omnibus"], help=f"Edges significant on omnibus F-test at α = {alpha:g}.")
+        with col2:
+            st.metric("Statistic / Scale", f"{meta['stat_symbol']} / {meta['scale_label']}")
+        with col3:
+            st.metric("Permutations Completed", res.n_permutations)
+    else:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(direction_labels["positive"], shown["positive"], help=f"Edges significant in the positive statistical tail at α = {alpha:g}.")
+        with col2:
+            st.metric(direction_labels["negative"], shown["negative"], help=f"Edges significant in the negative statistical tail at α = {alpha:g}.")
+        with col3:
+            st.metric("Permutations Completed", res.n_permutations)
+    st.caption(
+        f"Detections at α = {alpha:g}. {_family_caption(res)} "
+        f"Test statistic: `{meta['stat_name']}` | Input scale: `{meta['scale_label']}` | Unit: `{meta['inference_unit']}`."
+    )
+
 
 def _render_ground_truth_metrics(edges_df, effect_mask, method_name):
     """Render precision/recall against the planted effect mask, if any."""
     if effect_mask is not None:
         st.markdown(f"##### 🎯 Ground Truth Comparison ({method_name})")
+        st.caption("Descriptive edge-membership coverage against the saved truth mask; these ratios do not estimate component/block FWER or node significance.")
         true_mask = (effect_mask > 0)
         true_mask_triu = np.triu(true_mask, 1)
-        
+
         n_nodes = true_mask.shape[0]
         possible_edges = int(n_nodes * (n_nodes - 1) / 2)
-        
+
         n_true_pos_edges = int(np.sum(true_mask_triu))
         n_true_neg_edges = possible_edges - n_true_pos_edges
-        
+
         detected_edges_set = set()
         if edges_df is not None and not edges_df.empty:
             for _, row in edges_df.iterrows():
-                i = int(row['roi_i'])
-                j = int(row['roi_j'])
+                i = int(row["roi_i"])
+                j = int(row["roi_j"])
                 u, v = min(i, j), max(i, j)
                 detected_edges_set.add((u, v))
-        
+
         tp_count = 0
         fp_count = 0
         for u, v in detected_edges_set:
@@ -323,13 +415,13 @@ def _render_ground_truth_metrics(edges_df, effect_mask, method_name):
                 tp_count += 1
             else:
                 fp_count += 1
-        
+
         fn_count = n_true_pos_edges - tp_count
-        
+
         tp_rate = (tp_count / n_true_pos_edges) if n_true_pos_edges > 0 else 0.0
         fp_rate = (fp_count / n_true_neg_edges) if n_true_neg_edges > 0 else 0.0
         fn_rate = (fn_count / n_true_pos_edges) if n_true_pos_edges > 0 else 0.0
-        
+
         m_col1, m_col2, m_col3 = st.columns(3)
         with m_col1:
             st.metric("Sensitivity / Power (TPR)", f"{tp_rate*100:.1f}%", help=f"True Positives: {tp_count} detected out of {n_true_pos_edges} active ground-truth edges")
@@ -337,43 +429,220 @@ def _render_ground_truth_metrics(edges_df, effect_mask, method_name):
             st.metric("Type I Error Rate (FPR)", f"{fp_rate*100:.1f}%", help=f"False Positives: {fp_count} detected out of {n_true_neg_edges} null ground-truth edges")
         with m_col3:
             st.metric("Type II Error Rate (FNR)", f"{fn_rate*100:.1f}%", help=f"False Negatives: {fn_count} missed out of {n_true_pos_edges} active ground-truth edges")
-        
+
         if len(detected_edges_set) > 0:
             fdr = fp_count / len(detected_edges_set)
-            st.markdown(f"**False Discovery Rate (FDR):** `{fdr*100:.1f}%` (proportion of false positives among all detected edges)")
+            st.markdown(f"**False Discovery Proportion (FDP):** `{fdr*100:.1f}%` (false edge memberships among selected edge memberships in this saved example)")
 
-def _render_heatmaps(res, base_atlas, method_name):
-    """Render the positive/negative p-value heatmaps."""
+
+def _download_figure_button(fig, label, filename, key):
+    """Render a figure download button with a unique widget key."""
+    buffer = BytesIO()
+    fig.savefig(buffer, format="png", dpi=220, bbox_inches="tight", facecolor="white")
+    st.download_button(
+        label,
+        data=buffer.getvalue(),
+        file_name=filename,
+        mime="image/png",
+        key=key,
+    )
+
+
+def _render_heatmaps(res, base_atlas, method_name, contrast_name="contrast", slot="primary", effect_mask=None):
+    """Render aligned statistic, signed -log10(p), native contrast effect, and optional truth mask."""
     st.markdown(f"##### 🗺️ Connectivity Maps ({method_name})")
     alpha = _run_alpha()
-    stat_map = res.stat_signed
-    p_pos = res["positive"]
-    p_neg = res["negative"]
-    
-    if stat_map is not None:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-        
-        # Heatmap 1: Observed statistics
-        im1 = ax1.imshow(stat_map, cmap="RdBu_r", aspect="auto")
-        fig.colorbar(im1, ax=ax1)
-        ax1.set_title("Observed Effect Size (Stat Map)")
-        
-        # Heatmap 2: -log10 thresholded p-values
-        min_p = np.minimum(p_pos, p_neg)
-        log_p = -np.log10(min_p + 1e-10)
-        log_p[min_p > alpha] = 0.0  # Hide non-significant
-        
-        im2 = ax2.imshow(log_p, cmap="inferno", aspect="auto")
-        fig.colorbar(im2, ax=ax2)
-        ax2.set_title(f"Significant Edges at α = {alpha:g} (-log10 p)")
-        
+    atlas = _active_atlas(base_atlas)
+    fig, info = build_connectivity_maps_figure(
+        res,
+        atlas=atlas,
+        alpha=alpha,
+        method_name=method_name,
+        run_plan=st.session_state.get("run_plan"),
+        effect_mask=effect_mask,
+    )
+    if fig is None:
+        st.info("Statistic matrix unavailable on this result.")
+        return
+
+    order_desc = (
+        f"grouped by atlas networks ({', '.join(info['network_order'])})"
+        if info["ordered_by_network"]
+        else "matrix index order (no usable atlas network labels)"
+    )
+    effect_note = (
+        f" Native contrast effect (`c' β`) is shown separately in `{info['effect_unit_label']}`."
+        if info["has_effect_map"]
+        else " Native contrast effect (`c' β`) unavailable (model coefficients / 1D contrast not recorded)."
+    )
+    st.caption(
+        f"Statistic panel shows `{info['stat_name']}` (test statistic, not standardized effect size); "
+        f"input scale: `{info['scale_label']}`. ROI ordering: {order_desc}.{effect_note}"
+    )
+    st.pyplot(fig)
+    _download_figure_button(
+        fig,
+        f"Download {method_name} Connectivity Maps PNG",
+        f"connectivity_maps_{safe_filename_part(contrast_name)}_{safe_filename_part(method_name)}.png",
+        key=f"heatmaps_download_{slot}_{safe_filename_part(method_name)}",
+    )
+    plt.close(fig)
+
+
+def _render_network_and_node_summaries(res, base_atlas, method_name, contrast_name, slot):
+    """Render network-pair summary (above edge table) and descriptive node summary."""
+    alpha = _run_alpha()
+    atlas = _active_atlas(base_atlas)
+    meta = describe_result_scale_and_stat(res, st.session_state.get("run_plan"))
+
+    st.markdown(f"##### 🌐 Network-Pair Summary ({method_name})")
+    net_df, net_reason = prepare_network_summary(res, atlas=atlas, alpha=alpha)
+    if net_df is None:
+        st.info(f"Network-pair summary unavailable: {net_reason}")
+    else:
+        st.caption(
+            f"Descriptive aggregation of significant detections at α = {alpha:g} by atlas network pair "
+            f"(same ROI network labels used for matrix ordering). Inference unit remains `{meta['inference_unit']}`."
+        )
+        fig = build_network_summary_figure(res, atlas=atlas, alpha=alpha, method_name=method_name)
+        if fig is not None:
+            st.pyplot(fig)
+            _download_figure_button(
+                fig,
+                f"Download {method_name} Network Summary PNG",
+                f"network_summary_{safe_filename_part(contrast_name)}_{safe_filename_part(method_name)}.png",
+                key=f"network_summary_png_{slot}_{safe_filename_part(method_name)}",
+            )
+            plt.close(fig)
+        st.dataframe(net_df, width="stretch", hide_index=True)
+        st.download_button(
+            f"Download {method_name} Network Summary CSV",
+            data=net_df.to_csv(index=False).encode("utf-8"),
+            file_name=f"network_summary_{safe_filename_part(contrast_name)}_{safe_filename_part(method_name)}.csv",
+            mime="text/csv",
+            key=f"network_summary_csv_{slot}_{safe_filename_part(method_name)}",
+        )
+
+    st.markdown(f"##### 🧩 Node Summary ({method_name}, descriptive)")
+    node_df, node_reason = prepare_node_summary(res, atlas=atlas, alpha=alpha)
+    if node_df is None:
+        st.info(f"Node summary unavailable: {node_reason}")
+    else:
+        st.caption(
+            f"Descriptive per-ROI summary in the `{meta['inference_unit']}` inference unit at α = {alpha:g}. "
+            "Counts reflect how many detected units touch each ROI and do NOT constitute node-level significance tests or hub p-values."
+        )
+        st.dataframe(node_df, width="stretch", hide_index=True)
+        st.download_button(
+            f"Download {method_name} Node Summary CSV",
+            data=node_df.to_csv(index=False).encode("utf-8"),
+            file_name=f"node_summary_{safe_filename_part(contrast_name)}_{safe_filename_part(method_name)}.csv",
+            mime="text/csv",
+            key=f"node_summary_csv_{slot}_{safe_filename_part(method_name)}",
+        )
+
+
+def _render_blocks_table(res, base_atlas, method_name, contrast_name, direction_labels, slot):
+    """cNBS only: block-level visual matrix, table from ``block_report``, and CSV download."""
+    report = getattr(res, "block_report", None)
+    if report is None:
+        return
+    st.markdown(f"##### 🧱 cNBS Network Blocks ({method_name})")
+    alpha = _run_alpha()
+    atlas = _active_atlas(base_atlas)
+    df, info = prepare_cnbs_blocks_table(res, atlas=atlas, alpha=alpha, direction_labels=direction_labels)
+    if df is None or df.empty:
+        st.info("No network-block statistics recorded on this cNBS result.")
+        return
+    st.caption(
+        f"cNBS tests the mean signed edge statistic within each network block across {info['n_blocks_tested']} tested "
+        f"block(s) using `{info['correction']}` correction ({info['n_significant']} significant at α = {alpha:g}). "
+        "Every edge inside a block shares the block's p-value."
+    )
+    fig = build_cnbs_block_figure(res, atlas=atlas, alpha=alpha, method_name=method_name)
+    if fig is not None:
         st.pyplot(fig)
+        _download_figure_button(
+            fig,
+            f"Download {method_name} cNBS Blocks PNG",
+            f"cnbs_blocks_{safe_filename_part(contrast_name)}_{safe_filename_part(method_name)}.png",
+            key=f"cnbs_blocks_png_{slot}_{safe_filename_part(method_name)}",
+        )
         plt.close(fig)
+    st.dataframe(df, width="stretch", hide_index=True)
+    st.download_button(
+        f"Download {method_name} Blocks CSV",
+        data=df.to_csv(index=False).encode("utf-8"),
+        file_name=f"cnbs_blocks_{safe_filename_part(contrast_name)}_{safe_filename_part(method_name)}.csv",
+        mime="text/csv",
+        key=f"cnbs_blocks_csv_{slot}_{safe_filename_part(method_name)}",
+    )
+
+
+def _render_predicted_and_coupling(res, base_atlas, method_name, contrast_name, slot):
+    """Render covariate profile predictions (``predicted()``) and ``coupling()``."""
+    st.markdown(f"##### 🧭 Predicted Profiles & Coupling ({method_name})")
+    alpha = _run_alpha()
+    atlas = _active_atlas(base_atlas)
+    info = prepare_predicted_coupling_summary(
+        res, atlas=atlas, alpha=alpha, run_plan=st.session_state.get("run_plan")
+    )
+    if not info["available"]:
+        st.info(info["reason"])
+        return
+
+    st.caption(info["scale_explanation"])
+    if info["profile_summaries"] is not None and not info["profile_summaries"].empty:
+        st.markdown("**Covariate Profiles (whole-connectome summary):**")
+        st.dataframe(info["profile_summaries"], width="stretch", hide_index=True)
+
+    if info["comparison"] is not None:
+        name_a, name_b = info["comparison"]
+        description = ("Coupling pattern breakdown" if info["coupling_counts_df"] is not None
+                       else "Model profile comparison")
+        st.caption(
+            f"{description} for **{name_a} → {name_b}** over {info['scope_label']} "
+            "(descriptive effect classification only; not a physiological or causal claim)."
+        )
+        if info["coupling_counts_df"] is not None and not info["coupling_counts_df"].empty:
+            st.dataframe(info["coupling_counts_df"], width="stretch", hide_index=True)
+        if info["edge_predictions_df"] is not None and not info["edge_predictions_df"].empty:
+            st.dataframe(info["edge_predictions_df"], width="stretch", hide_index=True)
+            st.download_button(
+                f"Download {method_name} Predicted Profiles CSV",
+                data=info["edge_predictions_df"].to_csv(index=False).encode("utf-8"),
+                file_name=f"predicted_coupling_{safe_filename_part(contrast_name)}_{safe_filename_part(method_name)}.csv",
+                mime="text/csv",
+                key=f"predicted_coupling_csv_{slot}_{safe_filename_part(method_name)}",
+            )
+
+
+def _render_null_max_distribution(res, method_name, contrast_name, slot):
+    """Render ``plot_null_max_distribution`` when ``null_max_dist`` was saved."""
+    st.markdown(f"##### 📈 Null Max-Statistic Distribution ({method_name})")
+    fig, info = build_null_max_figure(res, method_name=method_name)
+    if fig is None:
+        st.caption(info["reason"])
+        return
+    st.caption(
+        "Empirical permutation null distribution of the family-wise maximum statistic "
+        f"for tested tail(s): {', '.join(info['tails'])}."
+    )
+    if info.get("observed_max_note"):
+        st.caption(info["observed_max_note"])
+    st.pyplot(fig)
+    _download_figure_button(
+        fig,
+        f"Download {method_name} Null Max Distribution PNG",
+        f"null_max_{safe_filename_part(contrast_name)}_{safe_filename_part(method_name)}.png",
+        key=f"null_max_png_{slot}_{safe_filename_part(method_name)}",
+    )
+    plt.close(fig)
+
 
 def _active_atlas(base_atlas):
     """Atlas to annotate results with, honoring any workspace override."""
     return active_analysis_atlas(base_atlas)
-
 
 
 def _filter_edges_for_tail(edges_df, atlas, tail, alpha, top_n, rank_by, selected_networks, network_filter_mode):
@@ -407,22 +676,22 @@ def _filter_edges_for_tail(edges_df, atlas, tail, alpha, top_n, rank_by, selecte
 
     return df.head(int(top_n)).drop(columns=[c for c in ["_rank_value"] if c in df.columns])
 
-def _download_figure_button(fig, label, filename, key):
-    """Render a figure download button with a unique widget key."""
-    buffer = BytesIO()
-    fig.savefig(buffer, format="png", dpi=220, bbox_inches="tight", facecolor="white")
-    st.download_button(
-        label,
-        data=buffer.getvalue(),
-        file_name=filename,
-        mime="image/png",
-        key=key,
-    )
 
 def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction_labels, res):
     """Render glass-brain connectome graphs of the significant edges."""
     atlas = _active_atlas(base_atlas)
     st.markdown(f"##### 🧠 Brain-Space Effect Graphs ({method_name})")
+
+    meta = describe_result_scale_and_stat(res, st.session_state.get("run_plan"))
+    if meta["inference_unit"] in ("component", "block"):
+        st.caption(
+            f"Note ({meta['inference_unit']} inference unit): edges plotted below belong to significant "
+            f"{meta['inference_unit']}s and carry their {meta['inference_unit']}-level p-value rather than "
+            "independent edge-level significance."
+        )
+    if meta["is_omnibus"]:
+        st.info("3D directional glass-brain plotting is defined for directional t/β contrasts; omnibus F-test detections are shown in the connectivity matrices, network summary, and edge table.")
+        return
 
     if atlas is None:
         st.info("Brain graph plotting requires atlas metadata with ROI coordinates.")
@@ -502,18 +771,31 @@ def _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction
     _download_figure_button(fig, f"Download {direction_labels[tail]} graph PNG", f"{safe_filename_part(direction_labels[tail])}_connectome_{safe_filename_part(method_name)}.png", f"{method_name}_{tail}_graph_download")
     plt.close(fig)
 
-def _render_table_and_download(edges_df, contrast_name, file_suffix):
+
+def _render_table_and_download(edges_df, contrast_name, file_suffix, res=None):
     """Render the edge table with a CSV download button."""
     st.markdown("##### 📋 Significant Edges Table")
+    if res is not None:
+        meta = describe_result_scale_and_stat(res, st.session_state.get("run_plan"))
+        if meta["inference_unit"] in ("component", "block"):
+            st.caption(
+                f"Unit caveat ({meta['inference_unit']}): each listed edge inherits its {meta['inference_unit']}-level "
+                "p-value; rows are member edges of detected units, not separately corrected edge findings."
+            )
+    if edges_df is None or edges_df.empty:
+        st.info("No significant edges detected at this α.")
+        return
     st.dataframe(edges_df, width="stretch")
-    
+
     csv_data = edges_df.to_csv(index=False).encode('utf-8')
     st.download_button(
         f"Download {file_suffix} Significant Edges CSV",
         data=csv_data,
         file_name=f"significant_edges_{safe_filename_part(contrast_name)}_{file_suffix}.csv",
-        mime="text/csv"
+        mime="text/csv",
+        key=f"edges_download_{safe_filename_part(file_suffix)}",
     )
+
 
 def _components_for_display(table, direction_labels):
     """The component table with reader-facing headers and one-line cells."""
@@ -570,42 +852,90 @@ def _render_components_table(res, base_atlas, method_name, contrast_name, direct
     )
 
 
-def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, primary_name, comp_name, base_atlas, effect_mask, direction_labels):
-    """Render the side-by-side two-method comparison view."""
+def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, primary_name, comp_name, base_atlas, effect_mask, direction_labels, contrast_name="contrast"):
+    """Render the side-by-side two-method comparison view with explicit compatibility gating."""
     st.markdown("#### 🔄 Side-by-Side Comparison")
     alpha = _run_alpha()
-    st.caption(f"Detections and maps at the run's α = {alpha:g}. {_family_caption(primary_res)}")
-    
+    p_2d, _ = get_2d_result(primary_res, 0)
+    c_2d, _ = get_2d_result(comp_res, 0)
+    st.caption(f"Detections and maps at the run's α = {alpha:g}. {_family_caption(p_2d)}")
+
     # 1. Compare summary metrics in two columns
     col_p, col_c = st.columns(2)
     with col_p:
         st.markdown(f"**Primary Analysis ({primary_name})**")
-        shown_p = _shown_tail_counts(primary_res, alpha)
-        st.write(f"- **{direction_labels['positive']}:** `{shown_p['positive']}`")
-        st.write(f"- **{direction_labels['negative']}:** `{shown_p['negative']}`")
-        st.write(f"- **Permutations:** `{primary_res.n_permutations}`")
+        shown_p = _shown_tail_counts(p_2d, alpha)
+        if _is_omnibus_result(p_2d):
+            st.write(f"- **Omnibus F:** `{shown_p['omnibus']}`")
+        else:
+            st.write(f"- **{direction_labels['positive']}:** `{shown_p['positive']}`")
+            st.write(f"- **{direction_labels['negative']}:** `{shown_p['negative']}`")
+        if getattr(p_2d, "inference_unit", "edge") != "edge":
+            st.caption(f"Native {p_2d.inference_unit} detections: {recorded_native_detection_count(p_2d, alpha)}; tail counts above describe projected edge membership.")
+        st.write(f"- **Permutations:** `{p_2d.n_permutations}`")
     with col_c:
         st.markdown(f"**Sensitivity Companion ({comp_name})**")
-        shown_c = _shown_tail_counts(comp_res, alpha)
-        st.write(f"- **{direction_labels['positive']}:** `{shown_c['positive']}`")
-        st.write(f"- **{direction_labels['negative']}:** `{shown_c['negative']}`")
-        st.write(f"- **Permutations:** `{comp_res.n_permutations}`")
-        
-    # 2. Compare ground truth side-by-side if synthetic
+        shown_c = _shown_tail_counts(c_2d, alpha)
+        if _is_omnibus_result(c_2d):
+            st.write(f"- **Omnibus F:** `{shown_c['omnibus']}`")
+        else:
+            st.write(f"- **{direction_labels['positive']}:** `{shown_c['positive']}`")
+            st.write(f"- **{direction_labels['negative']}:** `{shown_c['negative']}`")
+        if getattr(c_2d, "inference_unit", "edge") != "edge":
+            st.caption(f"Native {c_2d.inference_unit} detections: {recorded_native_detection_count(c_2d, alpha)}; tail counts above describe projected edge membership.")
+        st.write(f"- **Permutations:** `{c_2d.n_permutations}`")
+
+    # 2. Strict companion agreement check (family / unit / contrast / tail / alpha / mask / ROI frame)
+    st.divider()
+    st.markdown("##### 🤝 Companion Agreement")
+    compat = check_companion_compatibility(primary_res, comp_res, alpha=alpha)
+    atlas = _active_atlas(base_atlas)
+    if compat["compatible"]:
+        sm = compat["summary"]
+        a1, a2, a3, a4 = st.columns(4)
+        unit = compat.get("inference_unit", "edge")
+        a1.metric(f"Both Significant ({unit}s)", sm["both"])
+        a2.metric(f"{primary_name} Only ({unit}s)", sm["primary_only"])
+        a3.metric(f"{comp_name} Only ({unit}s)", sm["companion_only"])
+        a4.metric("Jaccard Overlap", f"{sm['jaccard']:.2f}")
+        st.caption(
+            f"Agreement computed on compatible family, inference unit, contrast, tested tail, α = {alpha:g}, "
+            "tested mask, and ROI frame. Counts and Jaccard use matching tested inferential units; "
+            "two-sided edge overlap counts any detection rather than agreement of effect direction."
+        )
+        if unit != "edge":
+            st.caption(f"The matrix projects {unit} memberships onto edges; these are not independent edge findings.")
+        agree_fig = build_companion_agreement_figure(
+            compat, atlas=atlas, primary_name=primary_name, comp_name=comp_name
+        )
+        if agree_fig is not None:
+            st.pyplot(agree_fig)
+            _download_figure_button(
+                agree_fig,
+                "Download Companion Agreement PNG",
+                f"companion_agreement_{safe_filename_part(contrast_name)}_{safe_filename_part(primary_name)}_{safe_filename_part(comp_name)}.png",
+                key="companion_agreement_png",
+            )
+            plt.close(agree_fig)
+    else:
+        st.warning(
+            "**Companion agreement omitted (incompatible runs):**\n"
+            + "\n".join(f"- {r}" for r in compat["reasons"])
+        )
+
+    # 3. Compare ground truth side-by-side if synthetic (no recomputation)
     if effect_mask is not None:
         st.divider()
         st.markdown("##### 🎯 Ground Truth Comparison")
-        
+
         true_mask = (effect_mask > 0)
         true_mask_triu = np.triu(true_mask, 1)
         n_nodes = true_mask.shape[0]
         possible_edges = int(n_nodes * (n_nodes - 1) / 2)
         n_true_pos_edges = int(np.sum(true_mask_triu))
         n_true_neg_edges = possible_edges - n_true_pos_edges
-        
-        # Helper to compute TPR, FPR, FNR, FDR
+
         def _get_metrics(edges_df):
-            """True-positive / detected-edge metrics vs the planted mask."""
             detected = set()
             if edges_df is not None and not edges_df.empty:
                 for _, row in edges_df.iterrows():
@@ -619,49 +949,46 @@ def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, p
             fnr = fn / n_true_pos_edges if n_true_pos_edges > 0 else 0.0
             fdr = fp / len(detected) if len(detected) > 0 else 0.0
             return tp, fp, fn, tpr, fpr, fnr, fdr
-            
+
         tp_p, fp_p, fn_p, tpr_p, fpr_p, fnr_p, fdr_p = _get_metrics(primary_edges)
         tp_c, fp_c, fn_c, tpr_c, fpr_c, fnr_c, fdr_c = _get_metrics(comp_edges)
-        
+
         col_m_p, col_m_c = st.columns(2)
         with col_m_p:
             st.markdown(f"**{primary_name} Performance**")
             st.metric("Sensitivity / Power (TPR)", f"{tpr_p*100:.1f}%", help=f"{tp_p} / {n_true_pos_edges}")
             st.metric("Type I Error Rate (FPR)", f"{fpr_p*100:.1f}%", help=f"{fp_p} / {n_true_neg_edges}")
-            st.metric("False Discovery Rate (FDR)", f"{fdr_p*100:.1f}%", help=f"{fp_p} / {len(primary_edges) if primary_edges is not None else 0}")
+            st.metric("False Discovery Proportion (FDP)", f"{fdr_p*100:.1f}%", help=f"{fp_p} / {len(primary_edges) if primary_edges is not None else 0}; descriptive edge membership")
         with col_m_c:
             st.markdown(f"**{comp_name} Performance**")
             st.metric("Sensitivity / Power (TPR)", f"{tpr_c*100:.1f}%", help=f"{tp_c} / {n_true_pos_edges}")
             st.metric("Type I Error Rate (FPR)", f"{fpr_c*100:.1f}%", help=f"{fp_c} / {n_true_neg_edges}")
-            st.metric("False Discovery Rate (FDR)", f"{fdr_c*100:.1f}%", help=f"{fp_c} / {len(comp_edges) if comp_edges is not None else 0}")
+            st.metric("False Discovery Proportion (FDP)", f"{fdr_c*100:.1f}%", help=f"{fp_c} / {len(comp_edges) if comp_edges is not None else 0}; descriptive edge membership")
 
-    # 3. Compare heatmaps side-by-side
+    # 4. Aligned connectivity maps side-by-side
     st.divider()
-    st.markdown("##### 🗺️ Edge Significance Maps Comparison (-log10 p-value)")
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-    
-    # Primary Map
-    p_pos_p = primary_res["positive"]
-    p_neg_p = primary_res["negative"]
-    min_p_p = np.minimum(p_pos_p, p_neg_p)
-    log_p_p = -np.log10(min_p_p + 1e-10)
-    log_p_p[min_p_p > alpha] = 0.0
-    im1 = ax1.imshow(log_p_p, cmap="inferno", aspect="auto")
-    fig.colorbar(im1, ax=ax1)
-    ax1.set_title(f"{primary_name} Significant Edges (α = {alpha:g})")
-    
-    # Companion Map
-    p_pos_c = comp_res["positive"]
-    p_neg_c = comp_res["negative"]
-    min_p_c = np.minimum(p_pos_c, p_neg_c)
-    log_p_c = -np.log10(min_p_c + 1e-10)
-    log_p_c[min_p_c > alpha] = 0.0
-    im2 = ax2.imshow(log_p_c, cmap="inferno", aspect="auto")
-    fig.colorbar(im2, ax=ax2)
-    ax2.set_title(f"{comp_name} Significant Edges (α = {alpha:g})")
-    
-    st.pyplot(fig)
-    plt.close(fig)
+    _render_heatmaps(p_2d, base_atlas, primary_name, contrast_name=contrast_name, slot="compare_primary", effect_mask=effect_mask)
+    _render_heatmaps(c_2d, base_atlas, comp_name, contrast_name=contrast_name, slot="compare_comp", effect_mask=None)
+
+
+def _render_single_run_view(res_wrapper, edges_df, method_name, base_atlas, effect_mask, contrast_name, direction_labels, slot):
+    """Render all sections for a single run consistently."""
+    res, param_idx = _select_grid_slice(res_wrapper, slot)
+    if (param_idx is not None and param_idx > 0) or edges_df is None:
+        edges_df = res.significant_edges(atlas=_active_atlas(base_atlas), alpha=_run_alpha())
+    _render_one_sentence_summary(res, edges_df, method_name, direction_labels)
+    _render_summary_metrics(res, edges_df, method_name, direction_labels)
+    _render_analyze_decisions_and_diagnostics(res_wrapper, st.session_state.get("run_plan"), method_name)
+    _render_ground_truth_metrics(edges_df, effect_mask, method_name)
+    _render_heatmaps(res, base_atlas, method_name, contrast_name=contrast_name, slot=slot, effect_mask=effect_mask)
+    _render_null_max_distribution(res, method_name, contrast_name, slot)
+    _render_predicted_and_coupling(res, base_atlas, method_name, contrast_name, slot)
+    _render_network_and_node_summaries(res, base_atlas, method_name, contrast_name, slot)
+    _render_brain_connectome_graphs(edges_df, base_atlas, method_name, direction_labels, res)
+    _render_components_table(res, base_atlas, method_name, contrast_name, direction_labels, slot)
+    _render_blocks_table(res, base_atlas, method_name, contrast_name, direction_labels, slot)
+    _render_table_and_download(edges_df, contrast_name, method_name, res=res)
+
 
 def render_inference_results_view(base_atlas):
     """Render the results step (summaries, heatmaps, tables, exports)."""
@@ -670,89 +997,95 @@ def render_inference_results_view(base_atlas):
         st.markdown("### Inference Results")
     with col_h:
         render_help("inference_results")
-    
+
     is_stale = result_is_stale()
 
     if is_stale:
         st.warning("⚠️ **Stale Results Detected:** The dataset configuration, parcellation, or preprocessing settings have changed in Tab 1 since these inference results were generated. Please re-run the inference in Tab 2 to obtain up-to-date results.")
-        
+
     if not require_analysis_step(key="results"):
         return
-    else:
-        # Determine if companion result is available
-        companion_res_wrapper = st.session_state.get("companion_inference_result")
-        
-        primary_method = st.session_state.run_plan.get("method", "Primary").upper()
-        effect_mask = st.session_state.get("_synthetic_effect_mask")
-        contrast_name = current_contrast_name()
-        direction_labels = effect_direction_labels(st.session_state.get("run_plan"))
-        
-        if companion_res_wrapper is not None:
-            companion_method = st.session_state.get("companion_method", "Companion").upper()
-            
-            view_mode = st.radio(
-                "Select Result View Mode:",
-                [f"Primary Run ({primary_method})", f"Sensitivity Companion ({companion_method})", "Side-by-Side Comparison"],
-                horizontal=True,
-                key=persistent_key('results:select_result_view_mode', scope='results', options=[f'Primary Run ({primary_method})', f'Sensitivity Companion ({companion_method})', 'Side-by-Side Comparison']),
+
+    companion_res_wrapper = st.session_state.get("companion_inference_result")
+    primary_method = st.session_state.run_plan.get("method", "Primary").upper()
+    effect_mask = st.session_state.get("_synthetic_effect_mask")
+    contrast_name = current_contrast_name()
+    direction_labels = effect_direction_labels(st.session_state.get("run_plan"))
+
+    if companion_res_wrapper is not None:
+        companion_method = st.session_state.get("companion_method", "Companion").upper()
+
+        view_mode = st.radio(
+            "Select Result View Mode:",
+            [f"Primary Run ({primary_method})", f"Sensitivity Companion ({companion_method})", "Side-by-Side Comparison"],
+            horizontal=True,
+            key=persistent_key('results:select_result_view_mode', scope='results', options=[f'Primary Run ({primary_method})', f'Sensitivity Companion ({companion_method})', 'Side-by-Side Comparison']),
+        )
+        st.write("")
+
+        if view_mode == f"Primary Run ({primary_method})":
+            _render_single_run_view(
+                st.session_state.inference_result,
+                st.session_state.edges_df,
+                primary_method,
+                base_atlas,
+                effect_mask,
+                contrast_name,
+                direction_labels,
+                "primary",
             )
-            st.write("")
-            
-            if view_mode == f"Primary Run ({primary_method})":
-                res_wrapper = st.session_state.inference_result
-                res = getattr(res_wrapper, "inference", res_wrapper)
-                edges_df = st.session_state.edges_df
-                
-                _render_one_sentence_summary(res, edges_df, primary_method, direction_labels)
-                _render_summary_metrics(res, edges_df, primary_method, direction_labels)
-                _render_analyze_decisions_and_diagnostics(res_wrapper, st.session_state.get("run_plan"), primary_method)
-                _render_ground_truth_metrics(edges_df, effect_mask, primary_method)
-                _render_heatmaps(res, base_atlas, primary_method)
-                _render_brain_connectome_graphs(edges_df, base_atlas, primary_method, direction_labels, res)
-                _render_components_table(res, base_atlas, primary_method, contrast_name, direction_labels, 'primary')
-                _render_table_and_download(edges_df, contrast_name, primary_method)
-                
-            elif view_mode == f"Sensitivity Companion ({companion_method})":
-                res = getattr(companion_res_wrapper, "inference", companion_res_wrapper)
-                edges_df = st.session_state.companion_edges_df
-                
-                _render_one_sentence_summary(res, edges_df, companion_method, direction_labels)
-                _render_summary_metrics(res, edges_df, companion_method, direction_labels)
-                _render_analyze_decisions_and_diagnostics(companion_res_wrapper, st.session_state.get("run_plan"), companion_method)
-                _render_ground_truth_metrics(edges_df, effect_mask, companion_method)
-                _render_heatmaps(res, base_atlas, companion_method)
-                _render_brain_connectome_graphs(edges_df, base_atlas, companion_method, direction_labels, res)
-                _render_components_table(res, base_atlas, companion_method, contrast_name, direction_labels, 'companion')
-                _render_table_and_download(edges_df, contrast_name, companion_method)
-                
-            else: # Side-by-Side
-                primary_res = getattr(st.session_state.inference_result, "inference", st.session_state.inference_result)
-                primary_edges = st.session_state.edges_df
-                comp_res = getattr(companion_res_wrapper, "inference", companion_res_wrapper)
-                comp_edges = st.session_state.companion_edges_df
-                
-                _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, primary_method, companion_method, base_atlas, effect_mask, direction_labels)
-                _render_analyze_decisions_and_diagnostics(st.session_state.inference_result, st.session_state.get("run_plan"), primary_method)
-                
-                # Show tables in tabs
-                tab_p, tab_c = st.tabs([f"Primary Edges ({primary_method})", f"Companion Edges ({companion_method})"])
-                with tab_p:
-                    _render_components_table(primary_res, base_atlas, primary_method, contrast_name, direction_labels, 'primary')
-                    _render_table_and_download(primary_edges, contrast_name, primary_method)
-                with tab_c:
-                    _render_components_table(comp_res, base_atlas, companion_method, contrast_name, direction_labels, 'companion')
-                    _render_table_and_download(comp_edges, contrast_name, companion_method)
+        elif view_mode == f"Sensitivity Companion ({companion_method})":
+            _render_single_run_view(
+                companion_res_wrapper,
+                st.session_state.companion_edges_df,
+                companion_method,
+                base_atlas,
+                effect_mask,
+                contrast_name,
+                direction_labels,
+                "companion",
+            )
         else:
-            # Traditional single run view
-            res_wrapper = st.session_state.inference_result
-            res = getattr(res_wrapper, "inference", res_wrapper)
-            edges_df = st.session_state.edges_df
-            
-            _render_one_sentence_summary(res, edges_df, primary_method, direction_labels)
-            _render_summary_metrics(res, edges_df, primary_method, direction_labels)
-            _render_analyze_decisions_and_diagnostics(res_wrapper, st.session_state.get("run_plan"), primary_method)
-            _render_ground_truth_metrics(edges_df, effect_mask, primary_method)
-            _render_heatmaps(res, base_atlas, primary_method)
-            _render_brain_connectome_graphs(edges_df, base_atlas, primary_method, direction_labels, res)
-            _render_components_table(res, base_atlas, primary_method, contrast_name, direction_labels, 'primary')
-            _render_table_and_download(edges_df, contrast_name, primary_method)
+            primary_res = st.session_state.inference_result
+            primary_edges = st.session_state.edges_df
+            comp_res = companion_res_wrapper
+            comp_edges = st.session_state.companion_edges_df
+
+            _render_comparative_view(
+                primary_res,
+                primary_edges,
+                comp_res,
+                comp_edges,
+                primary_method,
+                companion_method,
+                base_atlas,
+                effect_mask,
+                direction_labels,
+                contrast_name=contrast_name,
+            )
+            _render_analyze_decisions_and_diagnostics(primary_res, st.session_state.get("run_plan"), primary_method)
+
+            p_2d, _ = get_2d_result(primary_res, 0)
+            c_2d, _ = get_2d_result(comp_res, 0)
+            tab_p, tab_c = st.tabs([f"Primary Details ({primary_method})", f"Companion Details ({companion_method})"])
+            with tab_p:
+                _render_network_and_node_summaries(p_2d, base_atlas, primary_method, contrast_name, "compare_primary")
+                _render_components_table(p_2d, base_atlas, primary_method, contrast_name, direction_labels, 'primary')
+                _render_blocks_table(p_2d, base_atlas, primary_method, contrast_name, direction_labels, 'primary')
+                _render_table_and_download(primary_edges, contrast_name, primary_method, res=p_2d)
+            with tab_c:
+                _render_network_and_node_summaries(c_2d, base_atlas, companion_method, contrast_name, "compare_comp")
+                _render_components_table(c_2d, base_atlas, companion_method, contrast_name, direction_labels, 'companion')
+                _render_blocks_table(c_2d, base_atlas, companion_method, contrast_name, direction_labels, 'companion')
+                _render_table_and_download(comp_edges, contrast_name, companion_method, res=c_2d)
+    else:
+        _render_single_run_view(
+            st.session_state.inference_result,
+            st.session_state.edges_df,
+            primary_method,
+            base_atlas,
+            effect_mask,
+            contrast_name,
+            direction_labels,
+            "primary",
+        )
