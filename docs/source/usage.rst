@@ -653,6 +653,58 @@ Built-in atlas names are ``schaefer_100_yeo7``, ``schaefer_200_yeo7``,
 ``schaefer_400_yeo7`` and ``bna_246``; ``bna_246`` labels networks with the
 Brainnetome Yeo-7 division (see :ref:`usage-interpret`).
 
+Replaying application runs
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The application's *Download Full Analysis Archive* export writes a ZIP with
+a reloadable ``bundle.pkl`` (trusted-only pickle), the corrected-evidence and
+coefficient arrays, the edge / network / node / component / block tables,
+figures, a deterministic ``methods.md`` and an ``analysis.yaml`` for this
+command together with an explicit replay status
+(``replayable`` / ``requires-input`` / ``not-replayable`` and why — missing
+data files, an ROI subset, synthetic data, or uncaptured settings stay
+honest instead of being defaulted). Two keys exist specifically so a replay
+reproduces the policy of the finished run rather than a look-alike:
+
+- ``connectivity.fisher`` applies a Fisher r-to-z transform with the exact
+  captured policy — ``clip_r`` (clip correlations before ``arctanh``, e.g.
+  the application's ±0.9999 button), ``clip_z`` (clip z afterwards) or
+  ``unbounded`` — and records the applied transform in the run's
+  provenance. The bound (``clip_r`` / ``max_z``) is a required explicit
+  argument: a different bound is a different analysis, so it is never
+  defaulted. Without the block nothing is transformed, and applying it to
+  already-transformed data is an error, not a second pass.
+- ``design.interest_reference`` declares the reference level of one binary
+  GLM/paired predictor, categorical or numeric 0/1, so a group indicator
+  keeps the level order the finished run used (absent: the first sorted
+  level of a categorical column, numeric pass-through, as before).
+
+The archived ``run_plan.json`` / ``dataset_info.json`` keep the launch-time
+facts (α, seed, resolved acceleration, network-label vector, Fisher history,
+synthetic generator parameters) separate from any later display choices;
+the archive never contains subject-level observations or phenotype rows.
+A ``replayable`` status requires the recorded facts to cover the whole run:
+the seed, the directional family, the variance choice, the operator
+arguments (network labels always replay as the captured vector, whether it
+came from an SC prior or from atlas network labels) and the source files.
+Values the finished result genuinely records on itself (an NBS threshold,
+the (E, H) grid coordinates, cNBS block labels) may back the replay file
+under an explicit contract, listed in the archive manifest; anything else
+blocks the status instead of borrowing a default. The referenced manifest
+is exported as a resolved absolute path with its declared file dependencies
+checked, so an extracted archive replays from any directory.
+
+.. code-block:: yaml
+
+   data: study.yaml
+   design:
+     type: glm
+     interest: group
+     interest_reference: control     # indicator of (group != control)
+   connectivity:
+     fisher: {policy: clip_r, clip_r: 0.9999}
+   inference: {method: tstat, n_permutations: 1000, rng: 42}
+
 
 Network-level summaries — ``result.network_summary(atlas)``
 -----------------------------------------------------------

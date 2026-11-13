@@ -996,6 +996,63 @@ def _render_single_run_view(res_wrapper, edges_df, method_name, base_atlas, effe
     _render_table_and_download(edges_df, contrast_name, method_name, res=res)
 
 
+def _render_archive_export(base_atlas, effect_mask):
+    """One download button: the full self-contained analysis archive (ZIP).
+
+    Pure export of the finished primary run: the trusted bundle, evidence
+    arrays, tables, figures, deterministic methods and an honest CLI replay
+    configuration. No preprocessing, inference, ComBat, community detection
+    or simulation is (re)run; current display widgets are never written back
+    into the captured analysis facts.
+    """
+    from apps.utils.archive_export import archive_filename, build_analysis_archive
+    from apps.utils.helpers import PROJECT_ROOT
+
+    run_plan = st.session_state.get("run_plan") or {}
+    result = st.session_state.inference_result
+    dataset_info = st.session_state.get("dataset_info") or {}
+    inner = unwrap_result(result)
+    n_nodes = np.asarray(inner["omnibus"] if "omnibus" in inner else inner["positive"]).shape[0]
+    atlas = atlas_for_annotation(active_analysis_atlas(base_atlas), n_nodes, warn=False)
+    grid_cell = st.session_state.get("results:grid_idx:primary")
+    # Build once per finished run / display cell; the page can rerun freely.
+    memo = (
+        "_archive_zip", id(result), str(run_plan.get("alpha")), grid_cell,
+        id(effect_mask), str(dataset_info.get("loaded_at")),
+    )
+    if st.session_state.get(memo) is None:
+        zip_bytes, _manifest = build_analysis_archive(
+            result,
+            run_plan,
+            dataset_info,
+            atlas=atlas,
+            effect_mask=effect_mask,
+            grid_cell=grid_cell,
+            project_root=PROJECT_ROOT,
+        )
+        st.session_state[memo] = zip_bytes
+    else:
+        zip_bytes = st.session_state[memo]
+    st.download_button(
+        "📦 Download Full Analysis Archive (ZIP)",
+        data=zip_bytes,
+        file_name=archive_filename(
+            current_contrast_name(),
+            str(run_plan.get("method") or "analysis"),
+            run_plan.get("started_at"),
+        ),
+        mime="application/zip",
+        help=(
+            "Self-contained archive of the finished run: result bundle, evidence "
+            "arrays, tables, figures, deterministic methods.md and a CLI replay "
+            "analysis.yaml with its replay status. Contains no subject data; "
+            "bundle.pkl is a trusted-only pickle."
+        ),
+        key="archive_export_download",
+        type="primary",
+    )
+
+
 def render_inference_results_view(base_atlas):
     """Render the results step (summaries, heatmaps, tables, exports)."""
     col_t, col_h = st.columns([0.8, 0.2])
@@ -1011,6 +1068,8 @@ def render_inference_results_view(base_atlas):
 
     if not require_analysis_step(key="results"):
         return
+
+    _render_archive_export(base_atlas, st.session_state.get("_synthetic_effect_mask"))
 
     companion_res_wrapper = st.session_state.get("companion_inference_result")
     primary_method = st.session_state.run_plan.get("method", "Primary").upper()
