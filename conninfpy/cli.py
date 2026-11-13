@@ -22,6 +22,19 @@ A directional hypothesis fixed before the run is declared with
 ``inference.tested_tail: positive`` (or ``negative``): that direction is
 tested against its own null and the other is reported as not tested.
 
+``design.interest_reference`` declares the reference level of one binary
+GLM/paired predictor, categorical or numeric 0/1 (the application exports
+it so a group indicator keeps the level order the finished run used;
+absent it, the first sorted level of a categorical column is the reference
+and numeric columns pass through unchanged, as before). ``connectivity.fisher`` replays a
+Fisher r-to-z transform applied upstream of a finished run with the exact
+captured policy — ``clip_r`` (clip correlations before arctanh, e.g. the
+application's ±0.9999), ``clip_z`` (clip z afterwards, the library default
+±5) or ``unbounded`` — instead of silently reapplying a different one;
+absent, nothing is transformed. With it the analysis runs on Fisher z
+(``input: z``) and the applied transform is recorded in the run's
+provenance.
+
 Example analysis file: ``examples/abide/configs/abide_mini_age.yaml``.
 """
 from __future__ import annotations
@@ -95,9 +108,72 @@ def _numeric(frame: pd.DataFrame) -> np.ndarray:
     return pd.get_dummies(frame, drop_first=True, dtype=float).to_numpy(float)
 
 
+def _reference_coded_indicator(column: pd.Series, reference: Any, name: str) -> np.ndarray:
+    """Indicator of (value != reference) for one binary predictor.
+
+    Categorical or numeric 0/1 columns alike: the declared reference level
+    is coded 0 and the other level 1, matching the application's group
+    coding instead of the first-sorted-category default.
+    """
+    values = column.reset_index(drop=True)
+    levels = list(pd.Categorical(values).categories) if not pd.api.types.is_numeric_dtype(values) \
+        else sorted(pd.unique(values.dropna()).tolist())
+    if len(levels) != 2:
+        raise ConfigError(
+            f"design.interest_reference needs a binary predictor; {name!r} has "
+            f"{len(levels)} level(s): {levels}."
+        )
+    if reference not in levels:
+        raise ConfigError(
+            f"design.interest_reference {reference!r} is not a level of {name!r}; "
+            f"observed: {levels}."
+        )
+    return (values != reference).to_numpy(dtype=np.float64)
+
+
 # ---------------------------------------------------------------------------
 # Data → analyze() arguments
 # ---------------------------------------------------------------------------
+
+def _apply_fisher_policy(Y: np.ndarray, fisher_cfg: Dict[str, Any]) -> Tuple[np.ndarray, dict]:
+    """Apply the captured in-app Fisher policy to correlation matrices.
+
+    Shared helper and parameters only; nothing is invented. The returned
+    entry is the structured provenance of the actually applied call.
+    """
+    from conninfpy._prepare import make_fisher_entry
+    from conninfpy.utils import fisher_r_to_z
+
+    if not isinstance(fisher_cfg, dict):
+        raise ConfigError("connectivity.fisher must be a mapping.")
+    policy = fisher_cfg.get("policy")
+    if policy == "clip_r":
+        clip_r = fisher_cfg.get("clip_r")
+        if not isinstance(clip_r, (int, float)) or isinstance(clip_r, bool) or not 0 < float(clip_r) < 1:
+            # The actual bound is part of the policy: it is never defaulted,
+            # because a different bound is a different analysis.
+            raise ConfigError("connectivity.fisher.clip_r must be an explicit number "
+                              "in (0, 1) (the bound actually used upstream).")
+        z, report = fisher_r_to_z(Y, clip_r=float(clip_r), return_report=True)
+    elif policy == "clip_z":
+        max_z = fisher_cfg.get("max_z")
+        if not isinstance(max_z, (int, float)) or isinstance(max_z, bool) or float(max_z) <= 0:
+            raise ConfigError("connectivity.fisher.max_z must be an explicit positive "
+                              "number (the bound actually used upstream).")
+        z, report = fisher_r_to_z(Y, handle_bounds=True, max_z=float(max_z), return_report=True)
+    elif policy == "unbounded":
+        if "clip_r" in fisher_cfg or "max_z" in fisher_cfg:
+            raise ConfigError("connectivity.fisher policy 'unbounded' takes no parameters.")
+        z, report = fisher_r_to_z(Y, handle_bounds=False, return_report=True)
+    else:
+        raise ConfigError(
+            "connectivity.fisher.policy must be 'clip_r', 'clip_z' or 'unbounded'; "
+            f"got {policy!r}."
+        )
+    entry = make_fisher_entry(stage="cli_connectivity_fisher", scope="dataset_in_memory",
+                              report=report)
+    return z, entry
+
 
 def _connectivity(dataset: Any, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Optional[str]]:
     """Construct connectivity when needed and retain observation diagnostics."""
@@ -125,10 +201,36 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
     """
     design = cfg["design"]
     kind = design["type"]
-    options = dict(cfg.get("connectivity") or {})
-    if design.get("group") and "group_column" not in options:
-        options["group_column"] = design["group"]
-    Y, scale = _connectivity(dataset, options if dataset.data_kind == "timeseries" else cfg.get("connectivity"))
+    conn_cfg = dict(cfg.get("connectivity") or {})
+    fisher_cfg = conn_cfg.pop("fisher", None)
+    if dataset.data_kind == "timeseries":
+        options = conn_cfg
+        if design.get("group") and "group_column" not in options:
+            options["group_column"] = design["group"]
+        Y, scale = _connectivity(dataset, options)
+    else:
+        # Matrix data: remaining connectivity options (beyond the Fisher
+        # replay block, handled below) are still matrix-data errors.
+        Y, scale = _connectivity(dataset, conn_cfg if conn_cfg else None)
+    fisher_entry = None
+    if fisher_cfg is not None:
+        if dataset.data_kind == "fisher_z":
+            raise ConfigError(
+                "connectivity.fisher cannot be applied: the manifest data are already "
+                "Fisher z (applying it again would transform twice)."
+            )
+        if cfg.get("input") == "r":
+            raise ConfigError(
+                "connectivity.fisher produces Fisher z output; remove the explicit "
+                "input: r or the fisher block."
+            )
+        if scale != "r":
+            raise ConfigError(
+                "connectivity.fisher requires correlation-scale matrices "
+                f"(manifest data_kind 'correlation'); got scale {scale!r}."
+            )
+        Y, fisher_entry = _apply_fisher_policy(Y, fisher_cfg)
+        scale = "z"
     # Three-state preprocessing facts (gsr / estimator / standardize /
     # shrinkage / tr_seconds, each with a source) recorded by the loaders and
     # the connectivity backend; kept unknown where no explicit source exists.
@@ -142,15 +244,20 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
             f"phenotype table has {len(pheno)} rows but the data has {Y.shape[0]} subjects."
         )
     input_kind = cfg.get("input") or scale
+    if fisher_entry is not None and input_kind == "r":
+        raise ConfigError("internal: fisher adapter produced z but input stayed 'r'.")
     confound_cols = _as_list(design.get("confounds"))
     site_col = design.get("sites")
     kwargs: Dict[str, Any] = {"input": input_kind}
+    if fisher_entry is not None:
+        kwargs["fisher_history"] = [fisher_entry]
     if preprocessing_record:
         kwargs["preprocessing"] = preprocessing_record
     encoding_frame = None
     encoding_columns: List[str] = []
-    if design.get("harmonize") is not None:
-        kwargs["harmonize"] = design["harmonize"]
+    interest_reference = design.get("interest_reference")
+    if "harmonize" in design:
+        kwargs["harmonize"] = design.get("harmonize")
 
     if kind == "glm":
         interest_cols = _as_list(design.get("interest"))
@@ -177,6 +284,16 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
             kwargs["interactions"] = interactions
         if len(interest) == 1 and interactions is None:
             kwargs["contrast_id"] = interest_cols[0]
+        if interest_reference is not None:
+            if len(interest_cols) != 1 or interactions is not None:
+                raise ConfigError(
+                    "design.interest_reference needs exactly one interest column without interactions."
+                )
+            # The declared reference level of one binary predictor: coded as
+            # indicator of (value != reference) — categorical or numeric 0/1
+            # columns alike, matching the application's group coding.
+            column = p[interest_cols[0]]
+            kwargs["interest"] = _reference_coded_indicator(column, interest_reference, interest_cols[0])
         if confound_cols:
             kwargs["confounds"] = _numeric(p[confound_cols])
         if site_col:
@@ -250,6 +367,12 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
                 interest[c] = values.ravel()
             interactions = design.get("interactions")
             kwargs["interest"] = interest if len(interest) > 1 or interactions is not None else interest[interest_cols[0]]
+            if interest_reference is not None:
+                if len(interest_cols) != 1:
+                    raise ConfigError("design.interest_reference needs exactly one interest column.")
+                kwargs["interest"] = _reference_coded_indicator(
+                    pheno.loc[ia, interest_cols[0]], interest_reference, interest_cols[0]
+                )
             if interactions is not None:
                 kwargs["interactions"] = interactions
             elif len(interest) == 1:
@@ -278,7 +401,10 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
             series = encoding_frame[col].dropna()
             if not pd.api.types.is_numeric_dtype(series):
                 levels_found = pd.Categorical(series).categories.tolist()
-                categorical_coding[col] = {"levels": levels_found, "reference": levels_found[0] if levels_found else None}
+                reference = levels_found[0] if levels_found else None
+                if col == design.get("interest") and interest_reference is not None:
+                    reference = interest_reference
+                categorical_coding[col] = {"levels": levels_found, "reference": reference}
     summary = {
         "design": kind,
         "n_subjects_in_data": int(Y.shape[0]),
@@ -291,6 +417,12 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
         "connectivity_diagnostics": dataset.pheno[[c for c in ("n_valid_tr", "delta_s") if c in dataset.pheno]].to_dict(orient="list"),
         "loader_warnings": dataset.warnings,
     }
+    if fisher_entry is not None:
+        summary["fisher_applied"] = {
+            "policy": fisher_entry["policy"],
+            "parameters": fisher_entry["parameters"],
+            "source": fisher_entry["source"],
+        }
     return kwargs, summary
 
 

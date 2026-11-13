@@ -85,6 +85,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
     ts_preprocess_required = False
     corr_type = "Pearson correlation"
     apply_fisher = False
+    cohort = None
 
     # ----------------- LAYOUT GENERATION -----------------
     if ingest_mode == "Generate Synthetic Dataset":
@@ -325,6 +326,23 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             source="Synthetic simulation", atlas=atlas_choice, mode=ingest_mode,
                             scenario=selected_scenario, fisher_z=synthetic_fisher, seed=synthetic_seed,
                             group_added_variance_percent=(variance_g1, variance_g2) if sim_type != "Continuous Covariate GLM" else None,
+                            generation_parameters={
+                                "simulation_paradigm": sim_type,
+                                "scenario": selected_scenario,
+                                "n_rois": int(n_nodes),
+                                "n_modules": int(n_modules),
+                                "n_subjects": int(n_total),
+                                "subjects_group1": int(n_group1) if sim_type != "Continuous Covariate GLM" else None,
+                                "subjects_group2": int(n_group2) if sim_type != "Continuous Covariate GLM" else None,
+                                "signal_effect_size": float(effect_sz),
+                                "confound_effect_size": float(confound_effect_sz) if sim_type != "Two-Group Contrast" else None,
+                                "signal_confound_correlation": float(interest_confound_corr) if sim_type != "Two-Group Contrast" else None,
+                                "confound_scenario": confound_scenario if sim_type != "Two-Group Contrast" else None,
+                                "output_scale": "fisher_z" if synthetic_fisher else "correlation",
+                                "atlas_signature": st.session_state.get("active_atlas_signature"),
+                                "generator_seed": int(synthetic_seed),
+                                "note": "generator inputs captured at generation time; the inference RNG seed is separate",
+                            },
                         )
                         reset_widget_scopes("design", "results", "annotation")
                         
@@ -1167,6 +1185,9 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                     source="Built-in dataset" if ingest_mode == "Built-in data" else str(manifest_file),
                                     atlas=loaded_atlas_label, mode=ingest_mode,
                                     loader_provenance=loaded.provenance,
+                                    dataset_choice=dataset_choice if ingest_mode == "Built-in data" else None,
+                                    cohort=cohort if ingest_mode == "Built-in data" and dataset_choice == "OpenClose" else None,
+                                    manifest_file=str(manifest_file) if ingest_mode == "Import from manifest" else None,
                                 )
                                 reset_widget_scopes("design", "results", "annotation")
                                     

@@ -562,7 +562,7 @@ def _run_inference_background(
     effective_recipe_choice, group_col, ref_group, target_group, interest_var,
     subject_col, condition_col, baseline_val, target_val, confound_vars, site_col,
     active_atlas_signature, data_kind, tested_tail=None, var_equal=None,
-    preprocessing=None, fisher_history=None
+    preprocessing=None, fisher_history=None, roi_indices=None
 ):
     """Worker thread body: run the inference and record status.
 
@@ -577,7 +577,18 @@ def _run_inference_background(
     (one joint family; the single alpha covers both directions).
     ``var_equal`` (two-sample only) chooses Student's (True) or Welch's
     (False) t in the two-sample permutation test.
+
+    ``roi_indices`` is the ROI subset the caller selected before subsetting
+    the arrays; it is recorded as a launch fact (metadata only). The run
+    plan captures the actual launch arguments of this execution — started
+    time, resolved acceleration, multiprocessing, the operator kwargs
+    actually passed (including the network-label vector used by
+    network-informed methods) and the enhancement backend — so exports can
+    report them without rerunning anything.
     """
+    from datetime import datetime, timezone
+
+    started_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
     try:
         input_kind = {"correlation": "r", "fisher_z": "z"}.get(data_kind)
         # Only the two-sample t-test has the choice; analyze() rejects it elsewhere.
@@ -625,6 +636,17 @@ def _run_inference_background(
                 primary_run_kwargs["net_labels"] = sc_net_labels
             elif atlas is not None:
                 primary_run_kwargs["net_labels"] = atlas.network_index()
+        # The actual network labels used by this run, captured from the
+        # arguments that are about to be passed (never recomputed at export
+        # time and never replaced by the current UI selection).
+        used_net_labels = primary_run_kwargs.get("net_labels")
+        net_labels_capture = None
+        if used_net_labels is not None:
+            label_values = used_net_labels.tolist() if hasattr(used_net_labels, "tolist") else used_net_labels
+            net_labels_capture = {
+                "source": "sc_prior" if (use_sc_prior and sc_net_labels is not None) else "atlas_networks",
+                "labels": [int(x) for x in label_values],
+            }
         res = analyze(
             Y=Y if test_type == "glm" else None,
             interest=interest,
@@ -752,6 +774,38 @@ def _run_inference_background(
                 _method_plan_parameters(comp_method, comp_run_kwargs)
                 if run_sensitivity and comp_method else {}
             ),
+            # ---- actual launch facts of this execution (metadata only) ----
+            "started_at": started_at_utc,
+            "wall_time_s": getattr(getattr(res, "inference", res), "wall_time_s", None),
+            "use_mp": bool(use_mp),
+            "acceleration": effective_acceleration,
+            "var_equal": var_equal,
+            # The app never overrides analyze()'s missing-data policy; the
+            # default is the policy this run executed with.
+            "missing_policy": "raise",
+            "r_to_z": False,
+            "roi_indices": list(roi_indices) if roi_indices is not None else None,
+            "net_labels": net_labels_capture,
+            "operator_kwargs": {
+                key: (value.tolist() if hasattr(value, "tolist") else value)
+                for key, value in primary_run_kwargs.items()
+            },
+            # Installation fact only: whether the numba module was present in
+            # the run environment. Which enhancement backend actually
+            # executed is not recorded by the kernels (no runtime dispatcher
+            # metadata exists), so it is never guessed: methods without
+            # enhancement kernels are marked not-applicable, everything else
+            # stays unknown until a genuine runtime record exists.
+            "numba_module_found": (
+                __import__("importlib.util", fromlist=["util"]).find_spec("numba") is not None
+            ),
+            "enhancement_backend": (
+                "not-applicable"
+                if str(operator_choice).lower() in ("tstat", "bonferroni", "bh_fdr", "bh_fdr_perm", "nbs")
+                else None
+            ),
+            "package_version": __import__("conninfpy").__version__,
+            "python_version": __import__("platform").python_version(),
         }
         task.status = "success"
         task.progress_message = "✅ Completed!"
@@ -1638,6 +1692,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                                     var_equal=var_equal,
                                     preprocessing=st.session_state.get("dataset_preprocessing"),
                                     fisher_history=st.session_state.get("dataset_fisher_history"),
+                                    roi_indices=st.session_state.get("roi_indices"),
                                 )
                             )
                             t.daemon = True
