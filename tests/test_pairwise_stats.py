@@ -686,6 +686,30 @@ class TestBasicStats(TestCase):
         self.assertTrue(np.all(p_vals['positive'] >= 0))
         self.assertTrue(np.all(p_vals['positive'] <= 1))
 
+    def test_bh_fdr_perm_two_tailed_streaming_serial_parallel(self):
+        """Two-tailed bh_fdr_perm: streaming serial run equals the 2-worker run."""
+        group_dict = self.fc_sim
+        serial = compute_p_val(
+            group_dict['group1'], group_dict['group2'],
+            test_type='two-sample', method='bh_fdr_perm',
+            n_permutations=40, use_mp=False, rng=42, two_tailed=True,
+        )
+        parallel = compute_p_val(
+            group_dict['group1'], group_dict['group2'],
+            test_type='two-sample', method='bh_fdr_perm',
+            n_permutations=40, use_mp=True, n_processes=2, rng=42, two_tailed=True,
+        )
+        for tail in ('positive', 'negative'):
+            np.testing.assert_array_equal(np.asarray(serial[tail]), np.asarray(parallel[tail]))
+        # Two-tailed directional assignment: significant statistic keeps the
+        # corrected p on its dominant side, the opposite side gets 1.
+        emp_pos = np.asarray(serial.stat_positive)
+        triu = np.triu_indices(emp_pos.shape[0], k=1)
+        dominant = emp_pos[triu] > 0
+        np.testing.assert_array_equal(
+            np.asarray(serial['positive'])[triu][~dominant], np.ones((~dominant).sum())
+        )
+
     def test_ni_tfnbs_normalization_via_compute_p_val(self):
         """NI-TFNBS normalization parameter should be threaded through compute_p_val."""
         group_dict = self.fc_sim

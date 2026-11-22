@@ -405,5 +405,39 @@ class TestAccelerationGLMPipeline(unittest.TestCase):
                         f"Planted edge p={p['positive'][1, 2]}, expected < 0.05")
 
 
+class TestEmpiricalPContract(unittest.TestCase):
+    """_empirical_p stays an exact tie-inclusive counter (NETSTAT-33)."""
+
+    def test_ties_out_of_range_and_dtype(self):
+        from conninfpy.stats.acceleration import _empirical_p
+
+        rg = np.random.default_rng(11)
+        null = np.round(rg.normal(size=41), 1)
+        observed = np.round(rg.normal(size=(5, 5)), 1)
+        p, count = _empirical_p(null, observed)
+        # Independent broadcast oracle, ties counted in the conservative
+        # direction (null >= observed).
+        expected_count = np.sum(observed[..., np.newaxis] <= null, axis=-1)
+        npt.assert_array_equal(count, expected_count)
+        npt.assert_array_equal(p, (count + 1.0) / (null.size + 1.0))
+        self.assertEqual(count.dtype, np.int64)
+        # Observed above/below the whole null: floor / ceiling counts.
+        _, above = _empirical_p(null, observed + 100.0)
+        npt.assert_array_equal(above, np.zeros((5, 5), dtype=np.int64))
+        _, below = _empirical_p(null, observed - 100.0)
+        npt.assert_array_equal(below, np.full((5, 5), null.size, dtype=np.int64))
+
+    def test_tail_fits_keep_empirical_p_for_dense_tails(self):
+        """Above MIN_EXCEEDANCES the fit must not replace any permutation p."""
+        from conninfpy.stats.acceleration import MIN_EXCEEDANCES, _empirical_p, fit_gpd_tail
+
+        rg = np.random.default_rng(3)
+        null = rg.normal(size=200)
+        observed = np.quantile(null, 0.5) * np.ones((4, 4))  # dense tail region
+        dense = fit_gpd_tail(null, observed, min_exceedances=MIN_EXCEEDANCES)
+        expected, _ = _empirical_p(null, observed)
+        npt.assert_array_equal(dense, expected)
+
+
 if __name__ == "__main__":
     unittest.main()

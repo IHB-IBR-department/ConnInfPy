@@ -44,3 +44,30 @@ def fail_on_seed(seed):
     if seed == 2:
         raise ValueError("deliberate worker failure")
     return seed
+
+
+def slow_first_chunk(seed):
+    """Boundedness fixture: sleep on the seeds of a size-4 first chunk.
+
+    Module-level constants (not instance state) so forkserver / spawn
+    workers see the same schedule after importing this module fresh.
+    """
+    if seed < 4:
+        time.sleep(0.6)
+    return seed * seed
+
+
+def sum_squares_chunk(results):
+    """Chunk reduction for the boundedness fixture (partial sum, ndarray)."""
+    return np.sum(np.asarray(results, dtype=np.float64))
+
+
+def nested_reduction(seed):
+    """Reduce path nested inside a pool worker must stay serial (no sub-pool)."""
+    from functools import partial
+
+    from conninfpy.stats._workers import run_permutations_reduce
+
+    return os.getpid(), run_permutations_reduce(
+        partial(pow, seed), [1, 2], reduce_func=sum_squares_chunk, n_processes=2
+    )

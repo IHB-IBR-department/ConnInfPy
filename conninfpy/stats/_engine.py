@@ -264,17 +264,30 @@ def _compute_p_values_from_null(
         null_dist = max_null_dict[key]
         _check_finite_statistics(emp_t, null_dist, key)
 
+        n_perm = null_dist.shape[0]
+        count = np.empty(emp_t.shape, dtype=np.int64)
         if is_2d:
-            # Shape: (N, N) vs (n_permutations,)
-            n_perm = null_dist.shape[0]
-            emp_t_expanded = emp_t[..., np.newaxis]
-            count = np.sum(emp_t_expanded <= null_dist, axis=-1)
+            # Shape: (N, N) vs (n_permutations,). Count null >= observed
+            # (ties included, identical to the broadcast comparison) without
+            # materialising an (N, N, B) boolean array: sort the null once,
+            # then the count is B minus the number of null values strictly
+            # below the observed statistic.
+            sorted_null = np.sort(null_dist)
+            count[...] = n_perm - np.searchsorted(sorted_null, emp_t, side="left")
         else:
-            # Multi-param: (N, N, n_params) vs (n_permutations, n_params)
-            n_perm = null_dist.shape[0]
-            emp_t_expanded = emp_t[..., np.newaxis]
-            null_reshaped = null_dist.swapaxes(0, 1)[None, None, ...]
-            count = np.sum(emp_t_expanded <= null_reshaped, axis=-1)
+            # Multi-param: (N, N, n_params) vs (n_permutations, n_params).
+            # Each parameter has its own 1D null; loop over the (small)
+            # parameter axis instead of broadcasting an (N, N, P, B) array.
+            # A single shared 1D null (legacy shape combination) compares
+            # every parameter against the same sorted null.
+            shared_null = null_dist.ndim == 1
+            sorted_null = np.sort(null_dist) if shared_null else None
+            for param in range(emp_t.shape[-1]):
+                if not shared_null:
+                    sorted_null = np.sort(null_dist[:, param])
+                count[..., param] = n_perm - np.searchsorted(
+                    sorted_null, emp_t[..., param], side="left"
+                )
 
         # +1 correction (Phipson & Smyth 2010): prevents p = 0 with finite perms
         p_values[key] = (count + 1.0) / (n_perm + 1.0)

@@ -59,7 +59,11 @@ def _empirical_p(
         raise ValueError(
             "Tail approximation requires finite observed and null statistics."
         )
-    count = np.sum(observed[..., np.newaxis] <= null_dist, axis=-1)
+    count = np.empty(observed.shape, dtype=np.int64)
+    # Count null >= observed (ties included) without an (obs, B) broadcast:
+    # nulls strictly below the observed statistic, via one sorted copy.
+    sorted_null = np.sort(null_dist)
+    count[...] = null_dist.size - np.searchsorted(sorted_null, observed, side="left")
     return (count + 1.0) / (len(null_dist) + 1.0), count
 
 

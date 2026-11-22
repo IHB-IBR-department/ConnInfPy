@@ -8,6 +8,18 @@ keep the previous silent behaviour.
 The helper handles the multiprocessing decision internally so call
 sites collapse from ten lines to one.
 
+``run_permutations_reduce`` is a streaming variant for permutation
+p-value counting: workers fold a chunk of per-seed results into a partial
+sum (e.g. per-edge exceedance counts) and only that partial travels back
+to the parent, so the parent never holds ``B`` per-seed results. The
+number of issued-but-unfolded chunks is bounded by construction at
+``2 * workers`` (bounded ``apply_async`` issuance: a new chunk is issued
+only after a previous one has been folded), and inside a chunk workers
+fold in batches of ``_FOLD_BATCH`` seeds. Because every per-seed
+contribution is a 0/1 indicator summed as float64 (exact below 2**53)
+and chunks fold in seed order, the totals are bitwise identical to a
+serial fold over the same seeds.
+
 The data-bearing task is serialized once into a private temporary file and
 each worker loads it from there when it starts. Pool initializer arguments
 travel through each worker's start-up channel one worker at a time (spawn /
@@ -28,7 +40,8 @@ import pickle
 import sys
 import tempfile
 import threading
-from typing import Any, Callable, Iterator, List, Optional, Sequence, TypeVar
+from collections import deque
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, TypeVar
 
 from conninfpy.stats._engine import _is_worker_process, get_available_cores
 
@@ -36,6 +49,12 @@ T = TypeVar("T")
 _main_script_lock = threading.RLock()
 _worker_task: Optional[Callable[[int], Any]] = None
 _worker_thread_limiter: Any = None
+
+# Per-seed results inside a chunk fold are processed in batches of this many
+# seeds: peak live memory stays at O(batch * per-seed result) in the worker
+# (and in the parent's serial path) instead of O(chunk * per-seed result).
+# Summed 0/1 contributions are exact regardless of batch grouping.
+_FOLD_BATCH = 32
 
 try:
     from tqdm.auto import tqdm
@@ -90,6 +109,103 @@ def _task_file(task_func: Callable[..., Any]) -> Iterator[str]:
 def _run_worker_seed(seed: int) -> Any:
     assert _worker_task is not None
     return _worker_task(seed)
+
+
+def _fold_seeds_in_batches(
+    task: Callable[[int], Any],
+    chunk_seeds: List[int],
+    reduce_func: Callable[[List[Any]], Any],
+) -> Any:
+    """Fold a chunk's seeds in order, in batches of ``_FOLD_BATCH`` seeds."""
+    total: Any = None
+    for start in range(0, len(chunk_seeds), _FOLD_BATCH):
+        batch = [task(seed) for seed in chunk_seeds[start : start + _FOLD_BATCH]]
+        partial = reduce_func(batch)
+        total = partial if total is None else total + partial
+    return total
+
+
+def _run_worker_chunk_reduce(
+    chunk_seeds: List[int], reduce_func: Callable[[List[Any]], Any]
+) -> Any:
+    """Fold one chunk of seeds inside the worker; return only the partial sum.
+
+    The per-seed results never leave the worker process, and they are folded
+    in batches of ``_FOLD_BATCH`` seeds, so the worker never holds a whole
+    chunk of per-seed results either. The returned value is a ``reduce_func``
+    partial reduction over the chunk's seeds (in order).
+    """
+    assert _worker_task is not None
+    return _fold_seeds_in_batches(_worker_task, chunk_seeds, reduce_func)
+
+
+def _result_nbytes(partial: Any) -> int:
+    """Approximate parent-side footprint of one chunk reduction."""
+    nbytes = getattr(partial, "nbytes", None)
+    return int(nbytes) if nbytes is not None else 0
+
+
+class _ReductionStats:
+    """Counters proving the structural bound on unreduced chunk results.
+
+    ``issued`` counts chunks handed to the pool (or the serial loop) whose
+    result has not been folded yet; ``arrived``/``arrived_bytes`` count
+    results that have reached the parent but are not folded yet (mp only,
+    tracked from the pool's result-handler thread). ``limit`` is the
+    structural bound the implementation must never exceed.
+    """
+
+    def __init__(self, limit: int) -> None:
+        self._lock = threading.Lock()
+        self.limit = limit
+        self.issued = 0
+        self.arrived = 0
+        self.arrived_bytes = 0
+        self.max_issued = 0
+        self.max_arrived = 0
+        self.max_arrived_bytes = 0
+        self.max_result_bytes = 0
+        self.chunks_issued = 0
+        self.chunks_folded = 0
+
+    def on_issue(self) -> None:
+        with self._lock:
+            self.issued += 1
+            self.chunks_issued += 1
+            self.max_issued = max(self.max_issued, self.issued)
+            assert self.issued <= self.limit, "bounded issuance exceeded"
+
+    def on_arrival(self, nbytes: int) -> None:
+        with self._lock:
+            self.arrived += 1
+            self.arrived_bytes += nbytes
+            self.max_result_bytes = max(self.max_result_bytes, nbytes)
+            self.max_arrived = max(self.max_arrived, self.arrived)
+            self.max_arrived_bytes = max(self.max_arrived_bytes, self.arrived_bytes)
+            assert self.arrived <= self.limit, "bounded buffer exceeded"
+
+    def on_fold(self, nbytes: int) -> None:
+        with self._lock:
+            self.issued -= 1
+            self.arrived -= 1
+            self.arrived_bytes -= nbytes
+            self.chunks_folded += 1
+
+    def snapshot(self, mode: str, workers: int, chunk_size: int, n_chunks: int) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "mode": mode,
+                "workers": workers,
+                "chunk_size": chunk_size,
+                "n_chunks": n_chunks,
+                "issued_outstanding_limit": self.limit,
+                "max_issued_outstanding": self.max_issued,
+                "max_arrived_outstanding": self.max_arrived,
+                "max_arrived_outstanding_bytes": self.max_arrived_bytes,
+                "max_chunk_result_bytes": self.max_result_bytes,
+                "chunks_issued": self.chunks_issued,
+                "chunks_folded": self.chunks_folded,
+            }
 
 
 def _worker_count(n_processes: Optional[int], n_jobs: int) -> int:
@@ -254,6 +370,158 @@ def run_permutations(
             return out3
 
 
+def _make_chunk_progress(
+    n: int, verbose: bool, desc: str, log_every: int
+) -> Callable[[int], None]:
+    """Per-permutation progress advanced once per folded chunk."""
+    if not verbose:
+        return lambda done: None
+    if _HAS_TQDM:
+        bar = tqdm(total=n, desc=desc, leave=False)
+        state = {"done": 0}
+
+        def update(done: int) -> None:
+            bar.update(done - state["done"])
+            state["done"] = done
+
+        return update
+
+    state = {"next": min(log_every, n)}
+
+    def update(done: int) -> None:
+        if done >= state["next"] or done == n:
+            _print_progress(done, n, desc)
+            state["next"] = done + log_every
+
+    return update
+
+
+def run_permutations_reduce(
+    task_func: Callable[[int], T],
+    seeds: Sequence[int],
+    *,
+    reduce_func: Callable[[List[T]], Any],
+    use_mp: bool = True,
+    n_processes: Optional[int] = None,
+    verbose: bool = False,
+    desc: str = "perm",
+    log_every: int = 50,
+    stats_out: Optional[Dict[str, Any]] = None,
+):
+    """Map ``task_func`` over seeds with worker-side chunk reduction.
+
+    Instead of returning one result per seed, seeds are processed in chunks;
+    each worker folds its chunk's per-seed results with ``reduce_func`` and
+    returns only the partial reduction (e.g. a per-edge count vector). The
+    parent sums the partials in seed order. This keeps ``B`` per-seed
+    results out of the parent: peak parent memory is ``O(reduction size)``
+    plus at most ``2 * workers`` outstanding chunk results.
+
+    Parameters
+    ----------
+    task_func : callable
+        Single-permutation worker, as in :func:`run_permutations`. The task
+        still travels through the private task file, once per worker.
+    seeds : sequence of int
+        Per-permutation seeds (length = n_permutations).
+    reduce_func : callable
+        ``list_of_per_seed_results -> partial reduction`` (an ndarray, or
+        something supporting in-place ``+=`` with other chunk reductions).
+        Must be defined at module level so pool workers can unpickle it by
+        reference (spawn / forkserver). Called once per chunk, in seed order.
+        With per-seed 0/1 float64 contributions the summed counts are exact
+        (well below 2**53), hence bitwise identical to a serial fold.
+    use_mp, n_processes, verbose, desc, log_every
+        As in :func:`run_permutations`. Progress counts permutations, not
+        chunks; it advances as each chunk completes.
+    stats_out : dict, optional
+        Written with instrumentation counters: ``max_issued_outstanding``
+        (peak chunks issued but not folded; structurally ≤
+        ``issued_outstanding_limit`` = ``2 * workers``, or 1 serial),
+        ``max_arrived_outstanding`` / ``max_arrived_outstanding_bytes``
+        (peak parent-held unreduced results and their bytes), chunking
+        details. Intended for tests and memory audits.
+
+    Returns
+    -------
+    The accumulated reduction over all seeds (``None`` for empty ``seeds``).
+    Worker exceptions propagate; the pool and task file are cleaned up on
+    success, failure and cancellation exactly as in :func:`run_permutations`.
+    """
+    n = len(seeds)
+    if not n:
+        return None
+    use_mp = use_mp and not _is_worker_process()
+    workers = _worker_count(n_processes, n) if use_mp else 1
+    # Same chunk shape as run_permutations' balanced pool chunks.
+    chunk_size = max(1, (n + 4 * workers - 1) // (4 * workers))
+    chunks = [list(seeds[i : i + chunk_size]) for i in range(0, n, chunk_size)]
+    progress = _make_chunk_progress(n, verbose, desc, log_every)
+    total: Any = None
+
+    if workers == 1:
+        stats = _ReductionStats(limit=1)
+        done = 0
+        for chunk in chunks:
+            stats.on_issue()
+            partial = _fold_seeds_in_batches(task_func, list(chunk), reduce_func)
+            stats.on_arrival(_result_nbytes(partial))
+            total = partial if total is None else total + partial
+            stats.on_fold(_result_nbytes(partial))
+            done += len(chunk)
+            progress(done)
+        if stats_out is not None:
+            stats_out.update(stats.snapshot("serial", 1, chunk_size, len(chunks)))
+        return total
+
+    # Multiprocessing path: identical pool setup and start-method policy as
+    # run_permutations. Structural memory bound: a chunk is issued only
+    # while fewer than 2 * workers issued-but-unfolded chunks exist, so at
+    # most that many partial reductions can ever sit in the parent.
+    ctx: multiprocessing.context.BaseContext
+    try:
+        ctx = multiprocessing.get_context("forkserver")
+    except ValueError:  # pragma: no cover (platform-specific)
+        ctx = multiprocessing.get_context("spawn")
+    chunk_limit = 2 * workers
+    stats = _ReductionStats(limit=chunk_limit)
+    pending: deque = deque()
+    with _task_file(task_func) as task_path:
+        with _workers_skip_main_script(task_func):
+            pool = ctx.Pool(
+                processes=workers,
+                initializer=_initialize_worker_task,
+                initargs=(task_path,),
+            )
+        with pool as p:
+            next_chunk = 0
+            done = 0
+
+            def _issue() -> None:
+                nonlocal next_chunk
+                stats.on_issue()
+                result = p.apply_async(
+                    _run_worker_chunk_reduce,
+                    (chunks[next_chunk], reduce_func),
+                    callback=lambda partial: stats.on_arrival(_result_nbytes(partial)),
+                )
+                next_chunk += 1
+                pending.append(result)
+
+            for _ in range(len(chunks)):
+                while next_chunk < len(chunks) and len(pending) < chunk_limit:
+                    _issue()
+                partial = pending.popleft().get()  # propagates worker errors
+                stats.on_fold(_result_nbytes(partial))
+                total = partial if total is None else total + partial
+                done += len(chunks[stats.chunks_folded - 1])
+                progress(done)
+
+    if stats_out is not None:
+        stats_out.update(stats.snapshot("mp", workers, chunk_size, len(chunks)))
+    return total
+
+
 def _print_progress(i: int, n: int, desc: str) -> None:
     """Print an inline ``i/n`` progress line."""
     sys.stdout.write(f"\r{desc} {i}/{n} ({100 * i / n:.0f}%)")
@@ -262,4 +530,4 @@ def _print_progress(i: int, n: int, desc: str) -> None:
         sys.stdout.write("\n")
 
 
-__all__ = ["run_permutations"]
+__all__ = ["run_permutations", "run_permutations_reduce"]

@@ -46,7 +46,8 @@ from conninfpy.stats._engine import (
     _twosample_se2,
     get_available_cores,
 )
-from conninfpy.stats._workers import run_permutations
+from conninfpy.stats._workers import run_permutations, run_permutations_reduce
+from conninfpy.stats.pairwise import _reduce_bh_fdr_edge_counts
 
 DEFAULT_MIN_COVERAGE = 0.8
 MIN_PER_GROUP = 3
@@ -383,24 +384,29 @@ def available_case_p_val(
     )
 
     if method == "bh_fdr_perm":
-        perm = run_permutations(
+        # Streaming reduction: partial per-edge counts per chunk instead of
+        # B per-seed edge vectors collected in the parent. Untested edges
+        # carry 0 in both the observed statistics and the permutations, so
+        # their comparisons stay False and only tested entries are used.
+        counts = run_permutations_reduce(
             partial(_task_edges, d),
             list(seeds),
+            reduce_func=partial(
+                _reduce_bh_fdr_edge_counts,
+                emp_upper_pos=t_pos,
+                emp_upper_neg=t_neg,
+                two_tailed=two_tailed,
+            ),
             use_mp=use_mp,
             n_processes=n_processes,
             verbose=verbose,
             desc="available_case",
         )
         p_values = {}
-        for key, t in (("positive", t_pos), ("negative", t_neg)):
-            count = np.zeros(t.shape)
-            for r in perm:
-                count += (
-                    (r["positive"] + r["negative"] >= t_pos + t_neg)
-                    if two_tailed
-                    else (r[key] >= t)
-                )
-            per_edge = (count + 1.0) / (n_permutations + 1.0)
+        for row, (key, t) in enumerate((("positive", t_pos), ("negative", t_neg))):
+            per_edge = (
+                (counts + 1.0) if two_tailed else (counts[row] + 1.0)
+            ) / (n_permutations + 1.0)
             p = np.full(t.shape, np.nan)
             p[d.tested] = _bh_fdr_correction(per_edge[d.tested])
             if two_tailed:

@@ -13,10 +13,13 @@ from threadpoolctl import threadpool_info
 
 from conninfpy.stats import _workers
 from conninfpy.stats import _engine
+from conninfpy.stats._workers import run_permutations_reduce
 from tests.mp_helpers import (
     CountTaskPickles,
     fail_on_seed,
     nested_permutations,
+    nested_reduction,
+    sum_squares_chunk,
     worker_threads,
 )
 
@@ -181,3 +184,96 @@ def test_cpu_count_is_positive():
 def test_cpu_soft_limit_is_honored():
     with patch.dict(_engine.os.environ, {"LOKY_MAX_CPU_COUNT": "2"}):
         assert 1 <= _engine.get_available_cores() <= 2
+
+
+# ---------------------------------------------------------------------------
+# run_permutations_reduce: same lifecycle contract as run_permutations.
+# ---------------------------------------------------------------------------
+
+
+def test_reduce_worker_count_policy_matches_run_permutations(worker_context):
+    """One worker stays serial and starts no pool; None caps at job count."""
+    with patch.object(_workers.multiprocessing, "get_context") as factory:
+        out = run_permutations_reduce(
+            abs, [-3, -1], reduce_func=sum_squares_chunk, n_processes=1
+        )
+        assert out == 4.0
+    factory.assert_not_called()
+    with patch.object(_workers, "get_available_cores", return_value=100):
+        with patch.object(worker_context, "Pool", wraps=worker_context.Pool) as pool:
+            run_permutations_reduce(
+                abs, [-1, -2], reduce_func=sum_squares_chunk, n_processes=2
+            )
+    assert pool.call_args.kwargs["processes"] == 2
+
+
+def test_reduce_task_file_removed_after_success_and_failure(worker_context, tmp_path):
+    """The private task file is cleaned up on success and on worker errors."""
+    # The pickle-count log lives outside tmp_path so the patched tempdir
+    # (which also hosts the forkserver socket) stays short.
+    log = tmp_path.parent / f"{tmp_path.name}-pickles.txt"
+    with patch.object(_workers.tempfile, "tempdir", str(tmp_path)):
+        out = run_permutations_reduce(
+            CountTaskPickles(log),
+            list(range(8)),
+            reduce_func=sum_squares_chunk,
+            n_processes=2,
+        )
+        assert out == float(sum(s * s for s in range(8)))
+        assert list(tmp_path.iterdir()) == []
+    with patch.object(_workers.tempfile, "tempdir", str(tmp_path)):
+        with pytest.raises(ValueError, match="deliberate worker failure"):
+            run_permutations_reduce(
+                fail_on_seed,
+                [1, 2, 3],
+                reduce_func=sum_squares_chunk,
+                n_processes=2,
+            )
+        assert list(tmp_path.iterdir()) == []
+
+
+def test_reduce_worker_error_leaves_no_pool_and_next_pool_succeeds(worker_context):
+    children_before = {p.pid for p in multiprocessing.active_children()}
+    with pytest.raises(ValueError, match="deliberate worker failure"):
+        run_permutations_reduce(
+            fail_on_seed, [1, 2, 3], reduce_func=sum_squares_chunk, n_processes=2
+        )
+    assert {p.pid for p in multiprocessing.active_children()} == children_before
+    assert _workers.run_permutations(
+        functools.partial(pow, 2), [1, 2], n_processes=2
+    ) == [2, 4]
+
+
+def test_reduce_task_is_serialized_once_across_chunks(worker_context, tmp_path):
+    """Chunked reduction reuses the per-worker task like the list path."""
+    log = tmp_path / "pickles.txt"
+    out = run_permutations_reduce(
+        CountTaskPickles(log),
+        list(range(32)),
+        reduce_func=sum_squares_chunk,
+        n_processes=2,
+    )
+    assert out == float(sum(s * s for s in range(32)))
+    assert log.read_text().splitlines() == ["pickle"]
+
+
+def test_reduce_plain_progress_fallback_counts_permutations(worker_context, capsys):
+    """Without tqdm the fallback logs at permutation granularity (total n)."""
+    with patch.object(_workers, "_HAS_TQDM", False):
+        out = run_permutations_reduce(
+            abs,
+            [-1, -2, -3, -4],
+            reduce_func=sum_squares_chunk,
+            n_processes=2,
+            verbose=True,
+            log_every=2,
+        )
+    assert out == 10.0
+    out_text = capsys.readouterr().out
+    assert "4/4 (100%)" in out_text
+
+
+def test_reduce_nested_worker_runs_serially(worker_context):
+    """Inside a pool worker the reduce path must not spawn another pool."""
+    out = _workers.run_permutations(nested_reduction, [2, 3], n_processes=2)
+    assert [r[1] for r in out] == [6.0, 12.0]

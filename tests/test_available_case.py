@@ -175,5 +175,37 @@ class TestAnalyzeAndSummaries(unittest.TestCase):
         self.assertEqual(int(summary["n_edges"].sum()), len(IU[0]) - (N - 1))
 
 
+class TestStreamingBhFdrPerm(unittest.TestCase):
+    """NETSTAT-33: available-case bh_fdr_perm streams partial counts.
+
+    Serial and 2-worker runs must stay identical for both tailings, and the
+    untested-edge NaN semantics must survive the streaming reduction.
+    """
+
+    def _run(self, g1, g2, two_tailed, use_mp):
+        return available_case_p_val(
+            g1, g2, "two-sample", "bh_fdr_perm", None, {},
+            n_permutations=40, random_state=7, use_mp=use_mp,
+            n_processes=2 if use_mp else None, verbose=False,
+            strata=None, acceleration=None, two_tailed=two_tailed,
+            min_coverage=0.95)
+
+    def test_serial_parallel_parity_with_missing_data(self):
+        g1, g2, _ = _data(n=16)
+        g1 = _kill(g1, 0, 2)
+        g1 = _kill(g1, 1, 3)
+        for two_tailed in (False, True):
+            ref_p, _, ref_rep = self._run(g1, g2, two_tailed, use_mp=False)
+            mp_p, _, mp_rep = self._run(g1, g2, two_tailed, use_mp=True)
+            self.assertGreater(ref_rep["n_edges_untested"], 0)
+            for tail in ("positive", "negative"):
+                np.testing.assert_array_equal(ref_p[tail], mp_p[tail])
+                untested_edges = ~np.asarray(ref_rep["tested_mask"])[IU]
+                np.testing.assert_array_equal(
+                    np.asarray(ref_p[tail])[IU][untested_edges],
+                    np.full(untested_edges.sum(), np.nan),
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

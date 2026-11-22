@@ -72,7 +72,7 @@ from conninfpy.stats._types import (
     _grid_from_kwargs,
     enhancement_provenance,
 )
-from conninfpy.stats._workers import run_permutations
+from conninfpy.stats._workers import run_permutations, run_permutations_reduce
 from conninfpy.stats.acceleration import compute_p_values_accelerated
 
 __all__ = [
@@ -738,6 +738,35 @@ def _compute_enhanced_null_dist(
     return _collect_results_to_arrays(results, n_permutations)
 
 
+def _reduce_bh_fdr_edge_counts(
+    results: List[Dict[str, npt.NDArray[np.float64]]],
+    emp_upper_pos: npt.NDArray[np.float64],
+    emp_upper_neg: npt.NDArray[np.float64],
+    two_tailed: bool,
+) -> npt.NDArray[np.float64]:
+    """Partial per-edge exceedance counts over one chunk of permutations.
+
+    Chunk-level reduction for :func:`run_permutations_reduce`: runs in the
+    worker process, so per-seed edge vectors never reach the parent. Row 0
+    accumulates the positive-direction counts, row 1 the negative ones; with
+    ``two_tailed`` a single row of two-sided counts ``(t+ >= observed)``,
+    where ``observed`` is the sum of both directional statistics. Every
+    contribution is a 0/1 float64 indicator summed in seed order, so the
+    accumulated counts are bitwise identical to a serial fold.
+    """
+    if two_tailed:
+        observed = emp_upper_pos + emp_upper_neg
+        count = np.zeros(observed.shape, dtype=np.float64)
+        for r in results:
+            count += (r["positive"] + r["negative"] >= observed).astype(np.float64)
+        return count
+    count = np.zeros((2, emp_upper_pos.shape[0]), dtype=np.float64)
+    for r in results:
+        count[0] += (r["positive"] >= emp_upper_pos).astype(np.float64)
+        count[1] += (r["negative"] >= emp_upper_neg).astype(np.float64)
+    return count
+
+
 def _compute_bh_fdr_perm_p_values(
     group1: npt.NDArray[np.float64],
     group2: Optional[npt.NDArray[np.float64]],
@@ -774,7 +803,6 @@ def _compute_bh_fdr_perm_p_values(
 
     N = emp_t_dict["positive"].shape[0]
     triu_idx = np.triu_indices(N, k=1)
-    n_edges = len(triu_idx[0])
 
     # Generate seeds
     rng = np.random.RandomState(random_state)
@@ -819,9 +847,20 @@ def _compute_bh_fdr_perm_p_values(
         )
 
 
-    perm_results = run_permutations(
+    emp_upper_pos = emp_t_dict["positive"][triu_idx]
+    emp_upper_neg = emp_t_dict["negative"][triu_idx]
+
+    # Streaming reduction: workers return per-chunk partial counts (length E)
+    # instead of the parent collecting B per-seed edge-vector pairs.
+    counts = run_permutations_reduce(
         task_func,
         list(seeds),
+        reduce_func=partial(
+            _reduce_bh_fdr_edge_counts,
+            emp_upper_pos=emp_upper_pos,
+            emp_upper_neg=emp_upper_neg,
+            two_tailed=two_tailed,
+        ),
         use_mp=use_mp,
         n_processes=n_processes,
         verbose=verbose,
@@ -832,11 +871,7 @@ def _compute_bh_fdr_perm_p_values(
     # and apply BH-FDR correction
     p_values = {}
     if two_tailed:
-        observed = (emp_t_dict["positive"] + emp_t_dict["negative"])[triu_idx]
-        count = sum(
-            (r["positive"] + r["negative"] >= observed).astype(float)
-            for r in perm_results
-        )
+        count = counts
         corrected = _bh_fdr_correction((count + 1.0) / (n_permutations + 1.0))
         for key in ("positive", "negative"):
             p_mat = np.ones((N, N), dtype=np.float64)
@@ -845,14 +880,8 @@ def _compute_bh_fdr_perm_p_values(
             p_mat[(triu_idx[1], triu_idx[0])] = directional
             p_values[key] = p_mat
         return p_values, emp_t_dict
-    for key in ("positive", "negative"):
-        emp_upper = emp_t_dict[key][triu_idx]
-
-        # Count how many permutation t-stats >= observed for each edge
-        count_ge = np.zeros(n_edges, dtype=np.float64)
-        for perm_dict in perm_results:
-            # perm_dict[key] is already the upper-triangle vector (fast path)
-            count_ge += (perm_dict[key] >= emp_upper).astype(np.float64)
+    for row, key in ((0, "positive"), (1, "negative")):
+        count_ge = counts[row]
 
         # +1 correction: prevents p = 0 with finite permutations
         per_edge_p = (count_ge + 1.0) / (n_permutations + 1.0)
