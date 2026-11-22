@@ -1665,8 +1665,6 @@ def render_design_inference_view(base_atlas, tabs_list):
                             st.session_state.run_plan = None
                             st.session_state.annotation = None
                             st.session_state.evidence_packet = None
-                            st.session_state.narrative_text = None
-                            st.session_state.narrative_results = None
                             reset_widget_scopes("results", "annotation")
                             
                             # Start thread

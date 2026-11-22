@@ -23,9 +23,6 @@ labels, declared template) and worked calls are in :ref:`usage-interpret`.
   returns an :class:`~conninfpy.interpret.InterpretationReport` (tables,
   evidence packet, connectograms, Markdown section).
 
-The optional narrative (``conninfpy.interpret.llm_narrative``) writes text
-from the evidence packet only.
-
 .. automodule:: conninfpy.interpret
    :members:
    :exclude-members: table, weights, membership, reference, settings

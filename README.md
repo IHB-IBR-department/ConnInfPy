@@ -341,12 +341,10 @@ The repository-root `requirements.txt` is the public Streamlit Cloud profile
 (Cloud only looks for dependency files next to the entry point or at the repo
 root, so it mirrors `requirements/gui.txt` there).
 
-**LLM-assisted interpretation (optional).** `conninfpy.interpret` turns the
-Brainnetome annotation of the detected connections into a cautious
-methods-style summary via OpenAI, Google
-Gemini or OpenRouter (keys read from a local `.env`; without a key it falls
-back to a deterministic template). The app exposes it as its
-"Interpretation" step.
+**Local interpretation.** `conninfpy.interpret` turns the Brainnetome
+annotation of the detected connections into descriptive tables, an evidence
+packet and Brainnetome-style connectograms, entirely offline. The app exposes
+it as its "Brainnetome Annotation" step.
 
 ## Performance
 

@@ -223,8 +223,6 @@ def clear_downstream_results():
         "companion_method",
         "annotation",
         "evidence_packet",
-        "narrative_text",
-        "narrative_results",
         "run_plan",
     ):
         st.session_state[key] = None

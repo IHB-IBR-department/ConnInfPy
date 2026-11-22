@@ -1,12 +1,12 @@
-"""Interpretation of inference results: Brainnetome annotation, reports, evidence and narration.
+"""Interpretation of inference results: Brainnetome annotation, reports and evidence.
 
 * :mod:`conninfpy.interpret.annotate`: ROI and connection annotation with the
   Brainnetome atlas (:func:`annotate_rois`, :func:`annotate_bna_regions`,
   :func:`summarize_annotation`, :func:`aggregate_connections`);
 * :mod:`conninfpy.interpret.report`: one-call interpretation of a result
   (:func:`interpret_result`), tables, evidence packet and connectograms;
-* :mod:`conninfpy.interpret.evidence` and :mod:`conninfpy.interpret.llm_narrative`:
-  the evidence packet and its optional LLM narration.
+* :mod:`conninfpy.interpret.evidence`: the evidence packet built from the
+  annotation.
 """
 from conninfpy.interpret.annotate import RoiAnnotation
 from conninfpy.interpret.annotate import aggregate_connections

@@ -133,7 +133,7 @@ warn_return_any = false
 [[tool.mypy.overrides]]
 module = [
     "scipy.*", "sklearn.*", "nilearn.*",
-    "tqdm.*", "numba.*", "openai.*", "google.*", "yaml.*",
+    "tqdm.*", "numba.*", "yaml.*",
     "pandas.*", "networkx.*",
 ]
 ignore_missing_imports = true

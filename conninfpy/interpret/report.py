@@ -5,7 +5,7 @@ and returns an :class:`InterpretationReport`: the detected connections with
 their endpoint anatomy and relations, detections against tested opportunities
 by relation and by lobe / network group, coupling change against baseline,
 BrainMap domains of the endpoints, a distance check, and the evidence packet
-for the narrative. ``report.save(out_dir)`` writes the tables, the evidence
+for downstream use. ``report.save(out_dir)`` writes the tables, the evidence
 packet and Brainnetome-style connectograms; ``report.markdown()`` gives a report
 section.
 

@@ -31,8 +31,6 @@ for key in (
     st.session_state.setdefault(key, None)
 if st.session_state.get("next_tab") is not None:
     st.session_state.active_tab = st.session_state.pop("next_tab")
-if st.session_state.get("active_tab") == "5. Narrative Report":
-    st.session_state.active_tab = ANNOTATION_TAB
 if st.session_state.get("active_tab") not in tabs_list:
     st.session_state.active_tab = DATA_TAB
 

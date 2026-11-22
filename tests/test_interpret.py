@@ -1,8 +1,5 @@
-"""Interpretation layer: evidence packets from Brainnetome annotation, guardrails, narrators."""
-import os
+"""Offline interpretation layer: evidence packets from Brainnetome annotation."""
 import tempfile
-from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -16,7 +13,6 @@ from conninfpy.interpret.evidence import (
     summarize_terms,
     validate_evidence,
 )
-from conninfpy.interpret.llm_narrative import LLMNarrator, check_narrative_terms, load_dotenv_manually
 from conninfpy.results import InferenceResult
 
 POINTS = [(-42, 36, 24), (42, 36, 24), (-22, -4, -18), (-20, -60, -30)]   # dlPFC L/R, amygdala, cerebellum
@@ -84,51 +80,3 @@ def test_relation_counts_from_the_summary(rois):
     ev = build_annotation_evidence(res.significant_edges(), rois, summary=summary)
     hom = [r for r in ev["relations"] if r["category"] == "homotopic"]
     assert hom and hom[0]["n_detected"] == 1
-
-
-def test_guardrail_flags_terms_outside_the_packet(evidence):
-    safe = ("Connections link ventral area 9/46 (A9/46v) homologous regions and the amygdala; "
-            "BrainMap profiles list Cognition and Emotion terms (memory, working, fear).")
-    assert check_narrative_terms(safe, evidence) == []
-    flagged = check_narrative_terms("This contrast activates pain and vision networks with executive dysfunction.",
-                                    evidence)
-    assert "pain" in flagged and "executive" in flagged
-
-
-def test_mock_narrator(evidence):
-    text = LLMNarrator(provider="mock").generate(evidence)
-    for heading in ("### Anatomical summary", "### Endpoint regions", "### BrainMap context", "### Cautions"):
-        assert heading in text
-    assert "dlPFC_L" in text and "Cognition (2 ROIs)" in text
-
-
-def test_llm_narrator_missing_api_keys(evidence):
-    with patch.dict(os.environ, {}, clear=True):
-        for provider, msg in (("openai", "OPENAI_API_KEY is not set"),
-                              ("gemini", "GEMINI_API_KEY or GOOGLE_API_KEY is not set"),
-                              ("openrouter", "OPENROUTER_API_KEY is not set")):
-            narrator = LLMNarrator(provider=provider, api_key="")
-            narrator.api_key = None
-            with pytest.raises(ValueError, match=msg):
-                narrator.generate(evidence)
-
-
-def test_llm_narrator_openrouter_setup():
-    with patch.dict(os.environ, {}, clear=True):
-        narrator = LLMNarrator(provider="openrouter", api_key="sk-or-v1-testkey", model="meta-llama/test")
-        assert narrator.provider == "openrouter"
-        assert narrator.api_key == "sk-or-v1-testkey"
-        assert narrator.model == "meta-llama/test"
-
-
-def test_load_dotenv_manually():
-    has_env = any(
-        d.joinpath(".env").exists()
-        for d in [Path.cwd(), Path.cwd().parent, Path(__file__).resolve().parents[1]]
-    )
-    if not has_env:  # e.g. fork PRs / fresh clones without a local .env
-        pytest.skip("no local .env with OPENROUTER_API_KEY")
-    with patch.dict(os.environ, {}, clear=True):
-        load_dotenv_manually()
-        assert "OPENROUTER_API_KEY" in os.environ
-        assert os.environ["OPENROUTER_API_KEY"].startswith("sk-or-")

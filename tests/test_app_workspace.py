@@ -258,14 +258,17 @@ def test_empty_steps_lead_directly_to_loading_data(step):
     assert app.session_state.active_tab == "1. Data Ingestion & Preprocessing"
 
 
-def test_removed_report_redirects_legacy_sessions_to_annotation():
-    app = AppTest.from_file(str(APP), default_timeout=120)
-    app.session_state.active_tab = "5. Narrative Report"
-    app.run()
+def test_navigation_reaches_annotation_and_docs_without_narrative_controls():
+    app = AppTest.from_file(str(APP), default_timeout=120).run()
+    assert not app.exception
+    keys = {button.key for button in app.button}
+    assert {f"nav_step_{step}" for step in (1, 2, 3, 4)} <= keys
+    assert "nav_docs_btn" in keys
+    assert not any("narrative" in (button.key or "").lower() or "llm" in button.label.lower()
+                   for button in app.button)
+    app.button(key="nav_step_4").click().run()
     assert not app.exception
     assert app.session_state.active_tab == "4. Brainnetome Annotation"
-    assert not any(button.key == "nav_step_5" for button in app.button)
-    assert not any("LLM" in button.label or "Report" in button.label for button in app.button)
     app.button(key="nav_docs_btn").click().run()
     assert not app.exception
     assert app.session_state.active_tab == "6. Workspace Documentation"
