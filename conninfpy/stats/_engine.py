@@ -266,14 +266,39 @@ def _compute_p_values_from_null(
 
         n_perm = null_dist.shape[0]
         if is_2d:
-            # Shape: (N, N) vs (n_permutations,). Count null >= observed
-            # (ties included, identical to the broadcast comparison) without
-            # materialising an (N, N, B) boolean array: sort the null once,
-            # then the count is B minus the number of null values strictly
-            # below the observed statistic.
-            count = np.empty(emp_t.shape, dtype=np.int64)
-            sorted_null = np.sort(null_dist)
-            count[...] = n_perm - np.searchsorted(sorted_null, emp_t, side="left")
+            if null_dist.ndim == 1:
+                # Shape: (N, N) vs (n_permutations,). Count null >= observed
+                # (ties included, identical to the broadcast comparison)
+                # without materialising an (N, N, B) boolean array: sort the
+                # null once, then the count is B minus the number of null
+                # values strictly below the observed statistic.
+                count = np.empty(emp_t.shape, dtype=np.int64)
+                sorted_null = np.sort(null_dist)
+                count[...] = n_perm - np.searchsorted(sorted_null, emp_t, side="left")
+            else:
+                # Shape: (N, N) vs (n_permutations, n_params) — the broadcast
+                # contract of the base expression ``emp[..., None] <= null``
+                # summed over the LAST (params) axis, without materialising
+                # the (N, B, P) comparison: column k of the null (shape (B,))
+                # right-aligns against emp (fusing with emp's last axis when
+                # sizes match, exactly like the base broadcast); incompatible
+                # axes raise ValueError from np.broadcast_shapes, the same
+                # failure type as the base comparison. Singleton null axes
+                # stretch; the resulting count may exceed B when B does not
+                # feed the summed axis — kept verbatim from base.
+                out_shape = np.broadcast_shapes(
+                    emp_t.shape + (1,), null_dist.shape
+                )
+                count = np.zeros(out_shape[:-1], dtype=np.int64)
+                emp_full = np.broadcast_to(emp_t[..., None], tuple(out_shape))
+                for param in range(null_dist.shape[1]):
+                    # Column k: the (B,)-slice at parameter k, kept on the B
+                    # axis (second-to-last of out) so singletons and fused
+                    # axes broadcast exactly as in the base comparison.
+                    col_full = np.broadcast_to(
+                        null_dist[:, param][:, None], tuple(out_shape)
+                    )
+                    count += emp_full[..., 0] <= col_full[..., 0]
         else:
             # Multi-param: (N, N, n_params) vs (n_permutations, n_params),
             # with the parameter-broadcast contract of the original

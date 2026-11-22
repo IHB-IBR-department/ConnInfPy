@@ -236,6 +236,111 @@ def test_engine_2d_branch_rejects_2d_null_like_base():
     assert engine_error == base_error == "ValueError"
 
 
+def _base_full_oracle(emp_t_dict, max_null_dict):
+    """Literal e8430e8 function: both branches, is_2d from the first key."""
+    keys = list(emp_t_dict.keys())
+    p_values = {}
+    is_2d = len(emp_t_dict[keys[0]].shape) == 2
+    for key in keys:
+        emp_t = emp_t_dict[key]
+        null_dist = max_null_dict[key]
+        if is_2d:
+            count = np.sum(emp_t[..., np.newaxis] <= null_dist, axis=-1)
+        else:
+            null_reshaped = null_dist.swapaxes(0, 1)[None, None, ...]
+            count = np.sum(emp_t[..., np.newaxis] <= null_reshaped, axis=-1)
+        p_values[key] = (count + 1.0) / (null_dist.shape[0] + 1.0)
+    return p_values
+
+
+def _owner_grid():
+    """Owner-independent 70-case grid: 7 emp shapes x 10 null shapes."""
+    emps = [
+        ("(2,2,3)", np.arange(12.0).reshape(2, 2, 3)),
+        ("(2,2,1)", np.arange(4.0).reshape(2, 2, 1)),
+        ("(2,2)", np.arange(4.0).reshape(2, 2)),
+        ("(3,3,2)", np.random.RandomState(7).standard_normal((3, 3, 2))),
+        ("(5,)", np.random.RandomState(8).standard_normal(5)),
+        ("0D", np.float64(0.5)),
+        ("(2,2,1,1)", np.random.RandomState(9).standard_normal((2, 2, 1, 1))),
+    ]
+    specs = [(5, 3), (5, 1), (5,), (1, 3), (5, 2), (1, 1), (1,), (7, 2), (3,), (5, 5)]
+    nulls = []
+    for spec in specs:
+        if len(spec) == 1:
+            (b,) = spec
+            nulls.append((f"({b},)", np.linspace(-2.0, 2.0, b)))
+        else:
+            b, p = spec
+            nulls.append((f"({b},{p})", np.linspace(-2.0, 2.0, b * p).reshape(b, p)))
+    return [(ename, nname, e, n) for ename, e in emps for nname, n in nulls]
+
+
+def _run_engine_pair(emp_t, null_dist):
+    return _compute_p_values_from_null(
+        {"positive": emp_t, "negative": -emp_t if emp_t.ndim else emp_t},
+        {"positive": null_dist, "negative": null_dist},
+    )["positive"]
+
+
+def test_engine_owner_grid_matches_literal_e8430e8():
+    """70-case accept/reject + bitwise grid against the literal base (both branches)."""
+    checked = 0
+    for ename, nname, emp_t, null_dist in _owner_grid():
+        engine_error = base_error = None
+        engine_p = base_p = None
+        try:
+            engine_p = _run_engine_pair(emp_t, null_dist)
+        except Exception as exc:  # noqa: BLE001
+            engine_error = type(exc).__name__
+        try:
+            base_p = _base_full_oracle(
+                {"positive": emp_t}, {"positive": null_dist}
+            )["positive"]
+        except Exception as exc:  # noqa: BLE001
+            base_error = type(exc).__name__
+        assert engine_error == base_error, (ename, nname, engine_error, base_error)
+        if engine_p is None:
+            checked += 1  # both reject with the same exception type
+            continue
+        assert engine_p.shape == base_p.shape, (ename, nname)
+        np.testing.assert_array_equal(engine_p, base_p)
+        checked += 1
+    assert checked == 70
+
+
+def test_engine_2d_null_singleton_axes_match_base():
+    """The two returned corners: singleton null axes accept, bitwise equal."""
+    emp = np.arange(4.0).reshape(2, 2)
+    for name, null in (
+        ("(1,3)", np.linspace(-2.0, 2.0, 3).reshape(1, 3)),
+        ("(1,1)", np.linspace(-2.0, 2.0, 1).reshape(1, 1)),
+    ):
+        result = _run_engine_pair(emp, null)
+        expected = _base_full_oracle({"positive": emp}, {"positive": null})["positive"]
+        assert result.shape == (2, 2) == expected.shape, name
+        np.testing.assert_array_equal(result, expected, err_msg=name)
+
+
+def test_engine_2d_null_fusion_corners_match_base():
+    """Fusion corners where null's B axis fuses with emp's last axis."""
+    corners = [
+        ("(2,2)x(2,3)", np.arange(4.0).reshape(2, 2), np.linspace(-2.0, 2.0, 6).reshape(2, 3)),
+        ("(2,2)x(2,1)", np.arange(4.0).reshape(2, 2), np.linspace(-2.0, 2.0, 2).reshape(2, 1)),
+        ("(1,2)x(2,3)", np.arange(2.0).reshape(1, 2), np.linspace(-2.0, 2.0, 6).reshape(2, 3)),
+    ]
+    rg = np.random.default_rng(105)
+    corners += [
+        ("ties_(2,2,3)x(5,3)", np.round(rg.normal(size=(2, 2, 3)), 0), np.round(rg.normal(size=(5, 3)), 0)),
+        ("random_(2,2,3)x(5,3)", np.round(rg.normal(size=(2, 2, 3)), 1), np.round(rg.normal(size=(5, 3)), 1)),
+    ]
+    for name, emp_t, null_dist in corners:
+        result = _run_engine_pair(emp_t, null_dist)
+        expected = _base_full_oracle({"positive": emp_t}, {"positive": null_dist})["positive"]
+        assert result.shape == expected.shape, name
+        np.testing.assert_array_equal(result, expected, err_msg=name)
+
+
 def test_engine_nan_statistics_raise_runtime_error():
     null = np.arange(10.0)
     with pytest.raises(RuntimeError, match="NaN statistics in the"):
