@@ -116,11 +116,19 @@ def _fold_seeds_in_batches(
     chunk_seeds: List[int],
     reduce_func: Callable[[List[Any]], Any],
 ) -> Any:
-    """Fold a chunk's seeds in order, in batches of ``_FOLD_BATCH`` seeds."""
+    """Fold a chunk's seeds in order, in batches of ``_FOLD_BATCH`` seeds.
+
+    The batch of per-seed results is dropped (``del``) right after it is
+    reduced, before the next batch is built, so at most ``_FOLD_BATCH``
+    per-seed results are alive at once. The only other transient is the
+    accumulator fold ``total + partial`` — two ``O(E)`` reduction-size
+    arrays, never per-seed data.
+    """
     total: Any = None
     for start in range(0, len(chunk_seeds), _FOLD_BATCH):
         batch = [task(seed) for seed in chunk_seeds[start : start + _FOLD_BATCH]]
         partial = reduce_func(batch)
+        del batch
         total = partial if total is None else total + partial
     return total
 

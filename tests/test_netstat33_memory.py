@@ -86,7 +86,27 @@ def _acceleration_p_cases():
     return [case for case in _empirical_p_cases() if case[2].ndim == 1]
 
 
-@pytest.mark.parametrize("name,observed,null", _empirical_p_cases(), ids=lambda x: x)
+def _engine_p_cases():
+    """Engine grid: the multi-param branch requires a (B, P) null."""
+    return [
+        (name, observed, null)
+        for name, observed, null in _empirical_p_cases()
+        if observed.ndim == 2 or null.ndim == 2
+    ]
+
+
+def _base_broadcast_oracle(emp_t, null_dist):
+    """The literal e8430e8 expression: broadcast + sum, +1 Phipson-Smyth.
+
+    Raises exactly what the base raises (AxisError for a 1D null in the
+    multi-param branch, ValueError for incompatible axes).
+    """
+    null_reshaped = null_dist.swapaxes(0, 1)[None, None, ...]
+    count = np.sum(emp_t[..., np.newaxis] <= null_reshaped, axis=-1)
+    return (count + 1.0) / (null_dist.shape[0] + 1.0)
+
+
+@pytest.mark.parametrize("name,observed,null", _engine_p_cases(), ids=lambda x: x)
 def test_engine_p_values_match_broadcast_oracle(name, observed, null):
     """Engine counting equals the previous broadcast, tie handling included."""
     result = _compute_p_values_from_null(
@@ -97,7 +117,7 @@ def test_engine_p_values_match_broadcast_oracle(name, observed, null):
     np.testing.assert_array_equal(result["positive"], expected)
 
 
-@pytest.mark.parametrize("name,observed,null", _empirical_p_cases(), ids=lambda x: x)
+@pytest.mark.parametrize("name,observed,null", _engine_p_cases(), ids=lambda x: x)
 def test_engine_p_values_match_broadcast_oracle_b1(name, observed, null):
     """B = 1 nulls (single permutation) keep the +1 correction behaviour."""
     null_b1 = null[:1] if null.ndim == 1 else null[:1, :]
@@ -121,6 +141,99 @@ def test_engine_count_dtype_is_int64():
     assert counts.dtype == np.int64
     # Memory footprint: no broadcast-sized intermediate survives in the result.
     assert counts.nbytes == observed.size * 8
+
+
+def _engine_broadcast_grid():
+    """Owner repro grid for the multi-param broadcast contract."""
+    rg = np.random.default_rng(99)
+    emp3 = np.round(rg.normal(size=(2, 2, 3)), 1)
+    emp3s = np.round(rg.normal(size=(2, 2, 1)), 1)
+    emp1 = np.round(rg.normal(size=(3,)), 1)
+    emp0 = np.round(rg.normal(), 1)
+    null53 = np.round(rg.normal(size=(5, 3)), 1)
+    null51 = np.round(rg.normal(size=(5, 1)), 1)
+    null11 = np.round(rg.normal(size=(1, 1)), 1)
+    null13 = np.round(rg.normal(size=(1, 3)), 1)
+    return [
+        ("(2,2,3)x(5,3)", emp3, null53),
+        ("(2,2,3)x(5,1)_singleton_null_col", emp3, null51),
+        ("(2,2,3)x(1,1)_B1", emp3, null11),
+        ("(2,2,3)x(1,3)", emp3, null13),
+        ("(2,2,1)x(5,3)_singleton_emp", emp3s, null53),
+        ("(2,2,1)x(5,1)", emp3s, null51),
+        ("(3,)x(5,3)_fused_axes", emp1, null53),
+        ("0Dx(5,3)", emp0, null53),
+        ("0Dx(5,1)", emp0, null51),
+        ("ties", np.round(rg.normal(size=(2, 2, 3)), 0), np.round(rg.normal(size=(7, 3)), 0)),
+        ("random_big", np.round(rg.normal(size=(6, 6, 4)), 1), np.round(rg.normal(size=(11, 4)), 1)),
+    ]
+
+
+def _run_engine_single(emp_t, null_dist):
+    return _compute_p_values_from_null(
+        {"positive": emp_t, "negative": -emp_t if emp_t.ndim else emp_t},
+        {"positive": null_dist, "negative": null_dist},
+    )["positive"]
+
+
+@pytest.mark.parametrize("name,observed,null", _engine_broadcast_grid(), ids=lambda x: x)
+def test_engine_multi_param_matches_literal_e8430e8(name, observed, null):
+    """Bitwise p-values and shapes versus the literal e8430e8 expression."""
+    result = _run_engine_single(observed, null)
+    expected = _base_broadcast_oracle(observed, null)
+    assert result.shape == expected.shape
+    np.testing.assert_array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "emp_key,null_key,expected_error",
+    [
+        ("emp3", "null5", "AxisError"),
+        ("emp3", "null52", "ValueError"),
+        ("emp7", "null53", "ValueError"),
+    ],
+)
+def test_engine_multi_param_error_types_match_e8430e8(emp_key, null_key, expected_error):
+    """Accept/reject and exception TYPES equal the base expression."""
+    rg = np.random.default_rng(101)
+    emps = {
+        "emp3": np.round(rg.normal(size=(2, 2, 3)), 1),
+        "emp7": np.round(rg.normal(size=(7,)), 1),
+    }
+    nulls = {
+        "null5": np.arange(5.0),
+        "null52": np.round(rg.normal(size=(5, 2)), 1),
+        "null53": np.round(rg.normal(size=(5, 3)), 1),
+    }
+    emp_t, null_dist = emps[emp_key], nulls[null_key]
+    engine_error = base_error = None
+    try:
+        _run_engine_single(emp_t, null_dist)
+    except Exception as exc:  # noqa: BLE001 - the exception TYPE is the assertion
+        engine_error = type(exc).__name__
+    try:
+        _base_broadcast_oracle(emp_t, null_dist)
+    except Exception as exc:  # noqa: BLE001
+        base_error = type(exc).__name__
+    assert engine_error == base_error == expected_error
+
+
+def test_engine_2d_branch_rejects_2d_null_like_base():
+    """2D observed against a (B, P) null: ValueError, as the base 2D branch."""
+    rg = np.random.default_rng(103)
+    observed = np.round(rg.normal(size=(4, 4)), 1)
+    null_2d = np.round(rg.normal(size=(5, 3)), 1)
+    engine_error = base_error = None
+    try:
+        _compute_p_values_from_null({"positive": observed}, {"positive": null_2d})
+    except Exception as exc:  # noqa: BLE001
+        engine_error = type(exc).__name__
+    try:
+        count = np.sum(observed[..., np.newaxis] <= null_2d, axis=-1)
+        _ = (count + 1.0) / (null_2d.shape[0] + 1.0)
+    except Exception as exc:  # noqa: BLE001
+        base_error = type(exc).__name__
+    assert engine_error == base_error == "ValueError"
 
 
 def test_engine_nan_statistics_raise_runtime_error():

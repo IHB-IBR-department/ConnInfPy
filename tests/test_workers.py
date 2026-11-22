@@ -277,3 +277,48 @@ def test_reduce_nested_worker_runs_serially(worker_context):
     """Inside a pool worker the reduce path must not spawn another pool."""
     out = _workers.run_permutations(nested_reduction, [2, 3], n_processes=2)
     assert [r[1] for r in out] == [6.0, 12.0]
+
+
+def test_reduce_batch_fold_never_holds_two_batches(worker_context):
+    """NETSTAT-33 rework: the previous batch is dead before the next is built.
+
+    Weakref counter: while seeds of batch k+1 are produced, batch k must
+    already be folded and dropped, so at most ``_FOLD_BATCH`` per-seed
+    results are ever alive (a missing ``del`` would drive the counter to
+    almost 2 * _FOLD_BATCH). tracemalloc cross-checks the payload peak.
+    """
+    import gc
+    import tracemalloc
+    import weakref
+
+    batch_size = 4
+    refs: list = []
+    probe = {"max_alive": 0}
+    payload_nbytes = 200_000
+
+    def task(seed):
+        arr = np.full(payload_nbytes // 8, float(seed))
+        alive = sum(1 for ref in refs if ref() is not None)
+        probe["max_alive"] = max(probe["max_alive"], alive)
+        refs.append(weakref.ref(arr))
+        return arr
+
+    def reduce_func(results):
+        acc = np.zeros(1)
+        for r in results:
+            acc += r[0]
+        return acc
+
+    seeds = list(range(2 * batch_size + 3))
+    with patch.object(_workers, "_FOLD_BATCH", batch_size):
+        tracemalloc.start(1)
+        total = run_permutations_reduce(task, seeds, reduce_func=reduce_func, use_mp=False)
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+    gc.collect()
+
+    assert float(total[0]) == float(sum(seeds))
+    assert probe["max_alive"] <= batch_size
+    per_seed = payload_nbytes
+    # Batch data plus fold transients stay well below two live batches.
+    assert peak < 2 * batch_size * per_seed

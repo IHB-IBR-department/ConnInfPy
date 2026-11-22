@@ -265,28 +265,45 @@ def _compute_p_values_from_null(
         _check_finite_statistics(emp_t, null_dist, key)
 
         n_perm = null_dist.shape[0]
-        count = np.empty(emp_t.shape, dtype=np.int64)
         if is_2d:
             # Shape: (N, N) vs (n_permutations,). Count null >= observed
             # (ties included, identical to the broadcast comparison) without
             # materialising an (N, N, B) boolean array: sort the null once,
             # then the count is B minus the number of null values strictly
             # below the observed statistic.
+            count = np.empty(emp_t.shape, dtype=np.int64)
             sorted_null = np.sort(null_dist)
             count[...] = n_perm - np.searchsorted(sorted_null, emp_t, side="left")
         else:
-            # Multi-param: (N, N, n_params) vs (n_permutations, n_params).
-            # Each parameter has its own 1D null; loop over the (small)
-            # parameter axis instead of broadcasting an (N, N, P, B) array.
-            # A single shared 1D null (legacy shape combination) compares
-            # every parameter against the same sorted null.
-            shared_null = null_dist.ndim == 1
-            sorted_null = np.sort(null_dist) if shared_null else None
-            for param in range(emp_t.shape[-1]):
-                if not shared_null:
-                    sorted_null = np.sort(null_dist[:, param])
+            # Multi-param: (N, N, n_params) vs (n_permutations, n_params),
+            # with the parameter-broadcast contract of the original
+            # ``emp_t[..., np.newaxis] <= null_dist.swapaxes(0, 1)[None, None]``
+            # preserved without materialising the (N, N, P, B) array:
+            # a singleton parameter axis on either side stretches, mutually
+            # incompatible parameter axes raise ValueError
+            # (np.broadcast_shapes, the same failure type as the original
+            # comparison), and a 1D null in the multi-param branch raises
+            # AxisError exactly like the original swapaxes(0, 1).
+            null_swapped = null_dist.swapaxes(0, 1)
+            out_shape = np.broadcast_shapes(
+                emp_t.shape + (1,), (1, 1) + null_swapped.shape
+            )
+            n_params = out_shape[-2]  # trailing axis of out_shape is B
+            count_shape = out_shape[:-1]
+            count = np.empty(count_shape, dtype=np.int64)
+            # Observed values along the parameter axis of the original
+            # broadcast: emp[..., None] spread over the full comparison shape
+            # (a singleton emp parameter axis stretches, a full-size axis
+            # maps index to index, fused axes behave exactly as in the
+            # original expression) — the [:, param, 0] slice is the
+            # comparison minus the B axis.
+            emp_full = np.broadcast_to(emp_t[..., None], tuple(out_shape))
+            for param in range(n_params):
+                pn = 0 if null_dist.shape[1] == 1 else param
+                sorted_col = np.sort(null_dist[:, pn])
+                emp_values = emp_full[..., param, 0]
                 count[..., param] = n_perm - np.searchsorted(
-                    sorted_null, emp_t[..., param], side="left"
+                    sorted_col, emp_values, side="left"
                 )
 
         # +1 correction (Phipson & Smyth 2010): prevents p = 0 with finite perms
