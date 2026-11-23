@@ -221,6 +221,11 @@ def _assert_equal(actual, expected):
         np.testing.assert_allclose(
             actual, expected, rtol=1e-12, atol=1e-12, equal_nan=True
         )
+    elif isinstance(expected, (float, np.floating)) and np.isnan(expected):
+        # A scalar real NaN equals no value, so require the same NaN here
+        # instead of falling through to ``==`` (per-element arrays are
+        # already handled above with equal_nan=True).
+        assert isinstance(actual, (float, np.floating)) and np.isnan(actual)
     else:
         assert actual == expected
 

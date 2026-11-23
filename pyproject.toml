@@ -93,6 +93,10 @@ dev = [
     "mypy",
     "pyyaml",
     "networkx",
+    # examples/simulations/fpr/fpr_calibration.py imports tqdm at module level
+    # and tests/test_examples_structure.py collects it; publish.yml installs
+    # only .[dev,app] before running pytest.
+    "tqdm",
 ]
 notebooks = [
     "jupyter",

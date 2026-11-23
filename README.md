@@ -32,7 +32,7 @@ harmonization, and permutation inference with any of nine methods.
   permutations on 99.99% of edges in the examples below (≈25× faster). Use
   exact p-values (the default) for reported results.
 - **JIT-compiled TFNBS** via `numba` (≈15× end-to-end on a 60×60, 200-permutation
-  benchmark), with a SciPy fallback.
+  benchmark); both scoring paths also run without it (see [Installation](#installation)).
 - **20-scenario topology library** of planted effects (hub, rich club, chain,
   gradient, …) for method benchmarking.
 - **Anatomical interpretation with the Brainnetome atlas (BNA-246)** — each
@@ -75,11 +75,15 @@ A built artifact installs the same way and is self-contained once installed:
 data and puts the `conninfpy` command on the path of that environment — no
 checkout needed afterwards.
 
-Without `numba`, install the other dependencies yourself: every `numba` kernel
-(the TFNBS scoring and its graph sweep) falls back to its NumPy/SciPy
-implementation, with the same inference and only a slower runtime. Check the
-active backend with `conninfpy info` (`numba      not installed (SciPy TFNBS
-backend)`):
+Without `numba`, install the other dependencies yourself. Which code runs then
+depends on the scoring path: the default exact integral (`n=None`) executes its
+Python graph and block sweeps instead of the compiled ones, while the legacy
+threshold grid (an explicit `n`) uses its SciPy implementation. Requesting
+`backend="numba"` when it is not installed logs `Numba not installed, falling
+back to scipy backend.` and runs the uncompiled path. The permutations, the
+correction and the significance level are not affected by this choice; the
+runtime of the uncompiled paths is not benchmarked here. `conninfpy info`
+reports whether `numba` was found:
 
 ```bash
 python -m pip install -e . --no-deps
