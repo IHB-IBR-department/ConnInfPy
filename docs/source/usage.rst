@@ -714,7 +714,11 @@ both write a versioned, pickle-free ``workspace/`` layer
 (``workspace/manifest.json`` + ``workspace/state.json`` + ``workspace/arrays/arrays.npz``
 loaded strictly with ``allow_pickle=False``). ``workspace/manifest.json`` declares
 ``kind`` and ``workspace_schema_version``; the current schema is version 2, and
-every other version is rejected before anything is applied. The layer separates
+every other version is rejected before anything is applied. The declared version
+must be a JSON integer in both manifests, and every declared section must be a
+JSON object: a document typed otherwise (for example ``[]`` where an object
+belongs, or ``2.0`` instead of ``2``) is rejected as malformed before the active
+session is touched. The layer separates
 four explicit sections plus optional subject data:
 
 ``source_refs``
@@ -739,10 +743,24 @@ four explicit sections plus optional subject data:
   are not loaded and must be re-imported in Tab 1 to run a new analysis.
 - Source freshness is verified honestly against load-time SHA-256 hashes
   (``verified``, ``stale``, ``missing``, ``unknown``, or ``synthetic``). Legacy
-  or unhashed sources stay ``unknown`` rather than claiming freshness.
+  or unhashed sources stay ``unknown`` rather than claiming freshness. A source
+  reference recorded as something other than a JSON object is reported
+  explicitly as malformed (per file, counted, and it degrades the overall status
+  to ``unknown``) instead of being skipped silently.
+- Saving a workspace from the sidebar (*Save workspace (.zip)*) always produces
+  a pickle-free archive, including when a full finished result is present: it
+  carries the ``workspace/`` layer and the standard analysis files, but never a
+  ``bundle.pkl``. Root ``manifest.json`` states that honestly
+  (``bundle_available: false``, ``trusted_only: []``, a ``bundle.pkl omitted``
+  note, and ``methods.md`` says the export is pickle-free by design). The
+  trusted snapshot stays opt-in through the results-page *Download Full
+  Analysis Archive (ZIP)* button, whose ``bundle.pkl`` and warning are
+  unchanged.
 - Inspection and restoration never import ``pickle`` or read ``bundle.pkl``, and
   reject corrupt checksums, malformed sections, or unsupported schema versions
-  without mutating the active session.
+  without mutating the active session. An archive is parsed, validated and
+  summarized exactly once, and only then applied, so a rejected archive cannot
+  leave a half-restored session behind.
 - Workspaces saved by an earlier schema that also carried the retired LLM
   narrative report still load: those narrative fields, API keys, and narrative
   widgets are skipped and reported as legacy, and a saved *5. Narrative Report*

@@ -457,6 +457,9 @@ def verify_source_references(
     - ``stale``: file exists on disk and current SHA-256 differs from ``captured_sha256``
     - ``missing``: referenced file is not present on disk
     - ``unknown``: file exists on disk (or source is unhashed/directory), no ``captured_sha256``
+    - ``unknown`` + ``malformed``: the recorded reference is not a JSON object, so
+      nothing about it can be verified. It is counted and reported explicitly
+      (never skipped) and it can never yield an ``overall`` of ``verified``.
     """
     info = dataset_info or {}
     root = Path(project_root) if project_root is not None else Path.cwd()
@@ -473,20 +476,36 @@ def verify_source_references(
             return {
                 "overall": "synthetic",
                 "files": {},
-                "counts": {"verified": 0, "stale": 0, "missing": 0, "unknown": 0},
+                "counts": {"verified": 0, "stale": 0, "missing": 0, "unknown": 0, "malformed": 0},
                 "message": "Synthetic simulation (no external source files).",
             }
         return {
             "overall": "unknown",
             "files": {},
-            "counts": {"verified": 0, "stale": 0, "missing": 0, "unknown": 0},
+            "counts": {"verified": 0, "stale": 0, "missing": 0, "unknown": 0, "malformed": 0},
             "message": "No external source hashes were recorded for this workspace.",
         }
 
-    counts = {"verified": 0, "stale": 0, "missing": 0, "unknown": 0}
+    counts = {"verified": 0, "stale": 0, "missing": 0, "unknown": 0, "malformed": 0}
     file_statuses: Dict[str, Dict[str, Any]] = {}
     for name, item in sorted(entries.items()):
         if not isinstance(item, Mapping):
+            # A malformed record is reported, not silently dropped: it is
+            # unverifiable, so it degrades the overall status and stays visible.
+            counts["unknown"] += 1
+            counts["malformed"] += 1
+            file_statuses[str(name)] = {
+                "path": None,
+                "resolved": None,
+                "location": "unknown",
+                "exists": False,
+                "captured_sha256": None,
+                "current_sha256": None,
+                "status": "unknown",
+                "malformed": True,
+                "message": ("Recorded source reference is not a JSON object; "
+                            "it cannot be verified."),
+            }
             continue
         raw = str(item.get("path") or item.get("resolved") or "")
         captured_sha = item.get("captured_sha256")
@@ -536,6 +555,13 @@ def verify_source_references(
         "missing": f"{counts['missing']} referenced source file(s) are missing on disk.",
         "unknown": "Source freshness is unknown (unhashed source reference(s) or directory source).",
     }
+    if overall == "unknown" and counts["malformed"]:
+        unhashed = counts["unknown"] - counts["malformed"]
+        details = [f"{counts['malformed']} malformed source reference(s) (not a JSON "
+                   "object) could not be verified"]
+        if unhashed > 0:
+            details.append(f"{unhashed} reference(s) are unhashed or directories")
+        messages["unknown"] = "Source freshness is unknown: " + "; ".join(details) + "."
     return {
         "overall": overall,
         "files": file_statuses,
@@ -1251,6 +1277,12 @@ def build_workspace_archive(
     the additive ``workspace/`` layer covered in root ``manifest.json``.
     Otherwise returns a clean workspace ZIP with ``workspace/*`` + root
     ``manifest.json``.
+
+    This is the default workspace save path (sidebar *Save workspace*, Cloud
+    save): it NEVER writes a ``bundle.pkl`` pickle member. The explicit
+    ``NETSTAT-24`` *Download Full Analysis Archive* button keeps calling
+    ``build_analysis_archive`` directly (``include_bundle=True``), so an
+    operator can still request the trusted bundle deliberately.
     """
     from apps.utils.archive_export import (
         ARCHIVE_KIND,
@@ -1295,6 +1327,7 @@ def build_workspace_archive(
                 project_root=project_root,
                 workspace_state=state,
                 include_workspace_data=include_data,
+                include_bundle=False,
             )
 
     ws_files, ws_manifest = build_workspace_layer_files(
@@ -1403,6 +1436,12 @@ def _parse_and_validate_zip(
         ws_files_meta = ws_manifest.get("files")
         if not isinstance(ws_files_meta, dict) or WORKSPACE_STATE_PATH not in ws_files_meta:
             raise WorkspaceArchiveError("workspace/manifest.json is missing required file inventory.")
+        for member, meta in ws_files_meta.items():
+            if not isinstance(meta, Mapping):
+                raise WorkspaceArchiveError(
+                    "workspace/manifest.json file inventory entry "
+                    f"{str(member)!r} is not a JSON object."
+                )
 
         ws_members = {n for n in names if n.startswith(WORKSPACE_PREFIX) and not n.endswith("/")}
         expected_ws_members = set(ws_files_meta.keys()) | {WORKSPACE_MANIFEST_PATH}
@@ -1424,6 +1463,8 @@ def _parse_and_validate_zip(
                 root_manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
             except Exception as exc:
                 raise WorkspaceArchiveError(f"Corrupt root manifest.json: {exc}") from exc
+            if not isinstance(root_manifest, dict):
+                raise WorkspaceArchiveError("Root manifest.json must be a JSON object.")
             root_files = root_manifest.get("files")
             if not isinstance(root_files, dict):
                 raise WorkspaceArchiveError("Root manifest.json is missing 'files' checksums.")
@@ -1434,6 +1475,10 @@ def _parse_and_validate_zip(
                     )
                 raw_member = zf.read(member)
                 entry = root_files[member]
+                if not isinstance(entry, Mapping):
+                    raise WorkspaceArchiveError(
+                        f"Root manifest.json checksum entry for {member!r} is not a JSON object."
+                    )
                 if len(raw_member) != entry.get("bytes") or _sha256_bytes(raw_member) != entry.get("sha256"):
                     raise WorkspaceArchiveError(
                         f"Root manifest checksum mismatch for workspace member: {member}"
@@ -1448,7 +1493,14 @@ def _parse_and_validate_zip(
             raise WorkspaceArchiveError("workspace/state.json must be a JSON object.")
         if state_doc.get("kind") != WORKSPACE_ARCHIVE_KIND:
             raise WorkspaceArchiveError(f"Unsupported workspace state kind: {state_doc.get('kind')!r}")
-        if state_doc.get("workspace_schema_version") != version:
+        state_version = state_doc.get("workspace_schema_version")
+        if isinstance(state_version, bool) or not isinstance(state_version, int):
+            # 2.0 (float) must never satisfy the manifest's integer 2.
+            raise WorkspaceArchiveError(
+                "Invalid workspace/state.json workspace_schema_version: "
+                f"{state_version!r} (expected an integer)."
+            )
+        if state_version != version:
             raise WorkspaceArchiveError("workspace/state.json schema version does not match manifest.")
         _validate_state_contract(state_doc)
 
@@ -1537,33 +1589,62 @@ def _legacy_unknowns_from_decoded(
     return unknowns
 
 
-def inspect_workspace_archive(
+def _require_decoded_mapping(value: Any, label: str) -> Dict[str, Any]:
+    """Insist a decoded section is a JSON object, else raise ``WorkspaceArchiveError``."""
+    if not isinstance(value, Mapping):
+        raise WorkspaceArchiveError(
+            f"workspace/state.json section {label!r} must decode to a JSON object "
+            f"(got {type(value).__name__})."
+        )
+    return dict(value)
+
+
+def _decode_workspace_payload_impl(
     zip_bytes: bytes,
     *,
     project_root: Optional[Path] = None,
-) -> WorkspaceInspection:
-    """Validate and summarize a workspace ZIP without mutating session state."""
+) -> Tuple[WorkspaceInspection, Dict[str, Any]]:
+    """Parse, validate, decode and summarize an archive in one pass."""
     ws_manifest, state_doc, arrays = _parse_and_validate_zip(zip_bytes, project_root=project_root)
     decoder = _Decoder(arrays)
-    source_refs = decoder.decode(state_doc.get("source_refs") or {})
+    source_refs = _require_decoded_mapping(decoder.decode(state_doc.get("source_refs") or {}), "source_refs")
     results_section = state_doc.get("results") or {}
     primary_raw = results_section.get("primary")
     companion_raw = results_section.get("companion")
-    annotation_section = decoder.decode(state_doc.get("annotation") or {})
-    data_section = state_doc.get("data")
-    ui_section = decoder.decode(state_doc.get("ui_state") or {})
+    annotation_section = _require_decoded_mapping(decoder.decode(state_doc.get("annotation") or {}), "annotation")
+    data_section = decoder.decode(state_doc.get("data")) if state_doc.get("data") is not None else None
+    if data_section is not None and not isinstance(data_section, Mapping):
+        raise WorkspaceArchiveError("workspace/state.json section 'data' must decode to a JSON object or null.")
+    ui_section = _require_decoded_mapping(decoder.decode(state_doc.get("ui_state") or {}), "ui_state")
+    primary_decoded = (
+        _require_decoded_mapping(decoder.decode(primary_raw), "results.primary")
+        if primary_raw is not None else None
+    )
+    companion_decoded = (
+        _require_decoded_mapping(decoder.decode(companion_raw), "results.companion")
+        if companion_raw is not None else None
+    )
+    run_plan = (primary_decoded or {}).get("run_plan")
+    if run_plan is not None and not isinstance(run_plan, Mapping):
+        raise WorkspaceArchiveError("workspace/state.json results.primary.run_plan must be a JSON object.")
 
-    dataset_info = source_refs.get("dataset_info") or {}
-    source_files = source_refs.get("source_files") or {}
+    dataset_info = source_refs.get("dataset_info")
+    if dataset_info is None:
+        dataset_info = {}
+    if not isinstance(dataset_info, Mapping):
+        raise WorkspaceArchiveError("workspace/state.json source_refs.dataset_info must be a JSON object.")
+    source_files = source_refs.get("source_files")
+    if source_files is None:
+        source_files = {}
+    if not isinstance(source_files, Mapping):
+        raise WorkspaceArchiveError("workspace/state.json source_refs.source_files must be a JSON object.")
     verification = verify_source_references(
         source_files,
         dataset_info=dataset_info,
         project_root=project_root,
     )
 
-    # Validate result structure cleanly during inspection too
-    primary_decoded = decoder.decode(primary_raw) if primary_raw is not None else None
-    companion_decoded = decoder.decode(companion_raw) if companion_raw is not None else None
+    # Validate result structure during decode: a bad bundle must fail before apply
     if primary_decoded is not None and primary_decoded.get("inference_result") is not None:
         try:
             _validate_result_bundle_if_captured(primary_decoded["inference_result"])
@@ -1584,6 +1665,8 @@ def inspect_workspace_archive(
     )
     legacy_fields_skipped = _legacy_narrative_skipped(annotation_section, ui_section)
     contents = ws_manifest.get("contents") or {}
+    if not isinstance(contents, Mapping):
+        raise WorkspaceArchiveError("workspace/manifest.json 'contents' must be a JSON object.")
     summary = {
         "name": dataset_info.get("name") or "Workspace",
         "mode": dataset_info.get("mode"),
@@ -1595,7 +1678,7 @@ def inspect_workspace_archive(
         "alpha": ((primary_decoded or {}).get("run_plan") or {}).get("alpha"),
         "source_status": verification["overall"],
     }
-    return WorkspaceInspection(
+    inspection = WorkspaceInspection(
         manifest=ws_manifest,
         workspace_schema_version=int(ws_manifest["workspace_schema_version"]),
         kind=str(ws_manifest["kind"]),
@@ -1613,61 +1696,79 @@ def inspect_workspace_archive(
         legacy_fields_skipped=legacy_fields_skipped,
         summary=summary,
     )
+    payload: Dict[str, Any] = {
+        "manifest": ws_manifest,
+        "source_refs": source_refs,
+        "primary_decoded": primary_decoded,
+        "companion_decoded": companion_decoded,
+        "annotation_section": annotation_section,
+        "ui_section": ui_section,
+        "data_section": data_section,
+        "verification": verification,
+        "legacy_unknowns": legacy_unknowns,
+        "legacy_fields_skipped": legacy_fields_skipped,
+    }
+    return inspection, payload
 
 
-def restore_workspace_archive(
+def _decode_workspace_payload(
     zip_bytes: bytes,
-    target_state: Any,
+    *,
+    project_root: Optional[Path] = None,
+) -> Tuple[WorkspaceInspection, Dict[str, Any]]:
+    """Single decode/validate entry point for inspection and restore.
+
+    A malformed JSON document (wrong type, missing key, `[]` where an object
+    belongs, ...) always surfaces as ``WorkspaceArchiveError`` with a readable
+    message instead of leaking ``AttributeError``/``TypeError``/``KeyError``
+    into the UI, and never after any target state was touched.
+    """
+    try:
+        return _decode_workspace_payload_impl(zip_bytes, project_root=project_root)
+    except WorkspaceArchiveError:
+        raise
+    except (AttributeError, TypeError, KeyError, IndexError) as exc:
+        raise WorkspaceArchiveError(
+            f"Malformed workspace archive ({type(exc).__name__}): {exc}"
+        ) from exc
+
+
+def inspect_workspace_archive(
+    zip_bytes: bytes,
     *,
     project_root: Optional[Path] = None,
 ) -> WorkspaceInspection:
-    """Atomically decode, validate, and apply a saved workspace onto ``target_state``.
+    """Validate and summarize a workspace ZIP without mutating session state."""
+    return _decode_workspace_payload(zip_bytes, project_root=project_root)[0]
 
-    If any validation step fails, ``target_state`` is left completely unchanged.
+
+def _build_restore_patch(
+    payload: Mapping[str, Any],
+) -> Tuple[Dict[str, Any], Dict[str, str], Dict[str, Any], Dict[str, Any], Optional[str]]:
+    """Build the fully validated session patch from an already-decoded archive.
+
+    Pure: it never touches ``target_state``. Every shape assumption fails here,
+    before the first write, so a malformed archive cannot leave half a restore
+    behind.
     """
-    ws_manifest, state_doc, arrays = _parse_and_validate_zip(zip_bytes, project_root=project_root)
-    decoder = _Decoder(arrays)
-
-    source_refs = decoder.decode(state_doc.get("source_refs") or {})
-    results_section = state_doc.get("results") or {}
-    primary_decoded = decoder.decode(results_section.get("primary")) if results_section.get("primary") is not None else None
-    companion_decoded = decoder.decode(results_section.get("companion")) if results_section.get("companion") is not None else None
-    annotation_section = decoder.decode(state_doc.get("annotation") or {})
-    ui_section = decoder.decode(state_doc.get("ui_state") or {})
-    data_section = decoder.decode(state_doc.get("data")) if state_doc.get("data") is not None else None
+    ws_manifest = payload["manifest"]
+    source_refs = payload["source_refs"]
+    primary_decoded = payload["primary_decoded"]
+    companion_decoded = payload["companion_decoded"]
+    annotation_section = payload["annotation_section"]
+    ui_section = payload["ui_section"]
+    data_section = payload["data_section"]
+    verification = payload["verification"]
+    legacy_unknowns = payload["legacy_unknowns"]
+    legacy_fields_skipped = payload["legacy_fields_skipped"]
 
     primary_res = (primary_decoded or {}).get("inference_result")
     companion_res = (companion_decoded or {}).get("inference_result")
     run_plan = (primary_decoded or {}).get("run_plan")
 
-    if primary_res is not None:
-        try:
-            _validate_result_bundle_if_captured(primary_res)
-        except Exception as exc:
-            raise WorkspaceArchiveError(f"Primary result failed bundle validation: {exc}") from exc
-    if companion_res is not None:
-        try:
-            _validate_result_bundle_if_captured(companion_res)
-        except Exception as exc:
-            raise WorkspaceArchiveError(f"Companion result failed bundle validation: {exc}") from exc
-
     dataset_info = source_refs.get("dataset_info")
     if isinstance(dataset_info, Mapping):
         dataset_info = _redact_mapping(dict(dataset_info))
-    source_files = source_refs.get("source_files") or {}
-    verification = verify_source_references(
-        source_files,
-        dataset_info=dataset_info,
-        project_root=project_root,
-    )
-    legacy_unknowns = _legacy_unknowns_from_decoded(
-        source_refs,
-        primary_decoded,
-        verification,
-        annotation_section=annotation_section,
-        ui_section=ui_section,
-    )
-    legacy_fields_skipped = _legacy_narrative_skipped(annotation_section, ui_section)
 
     # Build full validated patch dict BEFORE mutating target_state (atomicity)
     patch: Dict[str, Any] = {k: None for k in _MANAGED_SESSION_KEYS}
@@ -1712,7 +1813,13 @@ def restore_workspace_archive(
     patch["evidence_packet"] = annotation_section.get("evidence_packet")
 
     # Widget-guard keys so Results & Annotation keep restored selections without reset
-    run_alpha = float((run_plan or {}).get("alpha") or 0.05)
+    run_alpha = 0.05
+    try:
+        run_alpha = float((run_plan or {}).get("alpha") or 0.05)
+    except (TypeError, ValueError) as exc:
+        raise WorkspaceArchiveError(
+            f"workspace/state.json records a non-numeric run alpha: {exc}"
+        ) from exc
     if primary_res is not None:
         inner_primary = _unwrap_result(primary_res)
         primary_method = str((run_plan or {}).get("method") or getattr(inner_primary, "method", "Primary")).upper()
@@ -1771,6 +1878,33 @@ def restore_workspace_archive(
 
     target_active_tab = _normalise_active_tab(ui_section.get("active_tab"))
 
+    return patch, widget_registry_patch, widget_values_patch, sidebar_patch, target_active_tab
+
+
+def restore_workspace_archive(
+    zip_bytes: bytes,
+    target_state: Any,
+    *,
+    project_root: Optional[Path] = None,
+) -> WorkspaceInspection:
+    """Atomically decode, validate, and apply a saved workspace onto ``target_state``.
+
+    Parsing, validation and the returned inspection all complete BEFORE the
+    first write to ``target_state``; the archive is never re-parsed after the
+    mutation, and any failure leaves ``target_state`` completely unchanged.
+    """
+    inspection, payload = _decode_workspace_payload(zip_bytes, project_root=project_root)
+    try:
+        patch, widget_registry_patch, widget_values_patch, sidebar_patch, target_active_tab = (
+            _build_restore_patch(payload)
+        )
+    except WorkspaceArchiveError:
+        raise
+    except (AttributeError, TypeError, KeyError, ValueError) as exc:
+        raise WorkspaceArchiveError(
+            f"Malformed workspace archive ({type(exc).__name__}): {exc}"
+        ) from exc
+
     # Atomic apply phase (cannot raise type/validation errors from payload above)
     # Retired narrative/LLM session keys stay absent: an old archive's values are
     # never revived and no narrative widget is recreated.
@@ -1807,7 +1941,7 @@ def restore_workspace_archive(
     if target_active_tab:
         target_state["active_tab"] = target_active_tab
 
-    return inspect_workspace_archive(zip_bytes, project_root=project_root)
+    return inspection
 
 
 def apply_pending_workspace_restore(state: Any, *, project_root: Optional[Path] = None) -> Optional[WorkspaceInspection]:

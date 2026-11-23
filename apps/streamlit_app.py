@@ -146,6 +146,11 @@ with st.sidebar.expander("Save & restore workspace", expanded=False):
             mime="application/zip",
             key="workspace_save_download",
             width="stretch",
+            help=(
+                "Pickle-free workspace archive (results, atlas, annotation, evidence and UI "
+                "state, plus subject data when enabled). It never contains bundle.pkl; the "
+                "trusted bundle is only in the results-page Full Analysis Archive."
+            ),
         )
     else:
         st.caption("Load data or results to save a workspace.")

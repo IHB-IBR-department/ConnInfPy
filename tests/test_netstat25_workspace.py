@@ -882,3 +882,296 @@ def test_contract_sections_and_unsupported_versions_are_rejected(tmp_path: Path)
     ok_target: dict = {}
     restore_workspace_archive(good_zip, ok_target, project_root=tmp_path)
     assert ok_target["inference_result"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 — default workspace ZIP is pickle-free (AC3) and malformed/typed
+# archive structures fail as WorkspaceArchiveError before any mutation.
+# ---------------------------------------------------------------------------
+
+def _assert_rejected_unchanged(
+    bad_zip: bytes,
+    tmp_path: Path,
+    sentinel: dict,
+    match: str = "",
+) -> WorkspaceArchiveError:
+    """Inspect and restore must both reject the archive and leave the target intact."""
+    snap = dict(sentinel)
+    with pytest.raises(WorkspaceArchiveError) as exc_info:
+        restore_workspace_archive(bad_zip, sentinel, project_root=tmp_path)
+    if match:
+        assert match in str(exc_info.value)
+    assert sentinel == snap
+    with pytest.raises(WorkspaceArchiveError):
+        inspect_workspace_archive(bad_zip, project_root=tmp_path)
+    return exc_info.value
+
+
+def _pickle_members(names) -> list:
+    return [n for n in names if n.lower().endswith((".pkl", ".pickle"))]
+
+
+def test_default_workspace_save_never_carries_a_pickle(tmp_path: Path):
+    """AC3(a): the default save path has no bundle.pkl and no pickle member at all."""
+    state = _make_full_state(tmp_path)
+    zip_bytes, manifest = build_workspace_archive(state, include_data=False, project_root=tmp_path)
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+        names = set(zf.namelist())
+        methods = zf.read("methods.md").decode("utf-8")
+        root_manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        state_doc = json.loads(zf.read(WORKSPACE_STATE_PATH).decode("utf-8"))
+
+    # Unified branch (full finished result) still ships the whole workspace layer...
+    assert {
+        "manifest.json",
+        WORKSPACE_MANIFEST_PATH,
+        WORKSPACE_STATE_PATH,
+        WORKSPACE_ARRAYS_PATH,
+        "methods.md",
+        "run_plan.json",
+        "dataset_info.json",
+    } <= names
+    for section in ("source_refs", "results", "annotation", "ui_state", "data"):
+        assert section in state_doc
+
+    # ...but never a pickle member.
+    assert "bundle.pkl" not in names
+    assert _pickle_members(names) == []
+
+    # The manifest and methods state the omission honestly (not "lacks metadata").
+    assert manifest["bundle_available"] is False
+    assert manifest["trusted_only"] == []
+    assert root_manifest["bundle_available"] is False
+    assert root_manifest["trusted_only"] == []
+    assert any("pickle-free" in note for note in manifest["notes"])
+    assert "No bundle.pkl is included" in methods
+    assert "pickle-free by design" in methods
+    assert "lacks the captured analysis metadata" not in methods
+
+    # The pickle-free archive is a complete restore source.
+    insp = inspect_workspace_archive(zip_bytes, project_root=tmp_path)
+    assert insp.has_results is True
+    assert insp.has_companion is True
+    assert insp.has_annotation is True
+    assert insp.has_evidence_packet is True
+
+
+def test_default_workspace_archive_roundtrips_without_pickle(tmp_path: Path, monkeypatch):
+    """AC3(b): inspect + restore of the default archive never import pickle."""
+    state = _make_full_state(tmp_path)
+    zip_bytes, _ = build_workspace_archive(state, include_data=False, project_root=tmp_path)
+
+    real_import = builtins.__import__
+
+    def _forbid_pickle(name, *args, **kwargs):
+        if name == "pickle" or name.startswith("pickle.") or name == "_pickle":
+            raise AssertionError("pickle must never be imported for a default workspace archive!")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _forbid_pickle)
+    insp = inspect_workspace_archive(zip_bytes, project_root=tmp_path)
+    target: dict = {}
+    restored_insp = restore_workspace_archive(zip_bytes, target, project_root=tmp_path)
+
+    assert insp.has_results and restored_insp.has_results
+    assert target["inference_result"] is not None
+    assert target["annotation"] is not None
+    assert target["evidence_packet"] is not None
+    assert target["_workspace_restored_meta"]["workspace_schema_version"] == WORKSPACE_SCHEMA_VERSION
+    assert target["_workspace_source_verification"]["overall"] == "verified"
+
+
+def test_full_analysis_archive_keeps_trusted_bundle(tmp_path: Path):
+    """AC3(c): the explicit NETSTAT-24 archive still carries bundle.pkl + warning."""
+    state = _make_full_state(tmp_path)
+    kwargs = dict(project_root=tmp_path, workspace_state=state)
+    zip_bytes, manifest = build_analysis_archive(
+        state["inference_result"], state["run_plan"], state["dataset_info"], **kwargs
+    )
+    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+        names = set(zf.namelist())
+        methods = zf.read("methods.md").decode("utf-8")
+    assert "bundle.pkl" in names
+    assert manifest["bundle_available"] is True
+    assert manifest["trusted_only"] == ["bundle.pkl"]
+    assert "bundle.pkl is a Python pickle for trusted use only" in methods
+    assert not any("pickle-free" in note for note in manifest["notes"])
+
+    # The explicit opt-out is honest instead of implying missing metadata.
+    plain_bytes, plain_manifest = build_analysis_archive(
+        state["inference_result"], state["run_plan"], state["dataset_info"],
+        include_bundle=False, **kwargs,
+    )
+    with zipfile.ZipFile(io.BytesIO(plain_bytes), "r") as zf:
+        plain_names = set(zf.namelist())
+        plain_methods = zf.read("methods.md").decode("utf-8")
+    assert _pickle_members(plain_names) == []
+    assert plain_manifest["bundle_available"] is False
+    assert plain_manifest["trusted_only"] == []
+    assert any("pickle-free" in note for note in plain_manifest["notes"])
+    assert "lacks the captured analysis metadata" not in plain_methods
+
+
+def test_malformed_manifest_structures_raise_workspace_archive_error(tmp_path: Path):
+    """2(a): `[]` where an object belongs is a clean WorkspaceArchiveError."""
+    state = _make_full_state(tmp_path)
+    good_zip, _ = build_workspace_archive(state, include_data=False, project_root=tmp_path)
+    sentinel = {"existing_key": "untouched", "inference_result": "keep_me"}
+
+    # root manifest.json is a JSON array
+    files = _workspace_zip_files(good_zip)
+    files["manifest.json"] = b"[]"
+    _assert_rejected_unchanged(_zip_from_files(files), tmp_path, sentinel, "manifest.json")
+
+    # workspace manifest inventory entry for state.json is an array
+    files = _workspace_zip_files(good_zip)
+    _sync_workspace_checksums(files)
+    ws_manifest = json.loads(files[WORKSPACE_MANIFEST_PATH].decode("utf-8"))
+    ws_manifest["files"][WORKSPACE_STATE_PATH] = []
+    files[WORKSPACE_MANIFEST_PATH] = json.dumps(ws_manifest, indent=2, sort_keys=True).encode("utf-8")
+    _assert_rejected_unchanged(_zip_from_files(files), tmp_path, sentinel, "inventory entry")
+
+    # root manifest checksum entry for a workspace member is an array
+    files = _workspace_zip_files(good_zip)
+    _sync_workspace_checksums(files)
+    root = json.loads(files["manifest.json"].decode("utf-8"))
+    root["files"][WORKSPACE_STATE_PATH] = []
+    files["manifest.json"] = json.dumps(root, indent=2, sort_keys=True).encode("utf-8")
+    _assert_rejected_unchanged(_zip_from_files(files), tmp_path, sentinel, "checksum entry")
+
+    # source_refs.dataset_info is an array (would be AttributeError before)
+    files = _workspace_zip_files(good_zip)
+    doc = json.loads(files[WORKSPACE_STATE_PATH].decode("utf-8"))
+    doc["source_refs"]["dataset_info"] = []
+    files[WORKSPACE_STATE_PATH] = json.dumps(doc, indent=2, sort_keys=True).encode("utf-8")
+    _sync_workspace_checksums(files)
+    _assert_rejected_unchanged(_zip_from_files(files), tmp_path, sentinel, "dataset_info")
+
+    # results["primary"] is an array (would be AttributeError before)
+    files = _workspace_zip_files(good_zip)
+    doc = json.loads(files[WORKSPACE_STATE_PATH].decode("utf-8"))
+    doc["results"]["primary"] = []
+    files[WORKSPACE_STATE_PATH] = json.dumps(doc, indent=2, sort_keys=True).encode("utf-8")
+    _sync_workspace_checksums(files)
+    _assert_rejected_unchanged(_zip_from_files(files), tmp_path, sentinel, "results.primary")
+
+    # The untouched archive still restores.
+    ok_target: dict = {}
+    restore_workspace_archive(good_zip, ok_target, project_root=tmp_path)
+    assert ok_target["inference_result"] is not None
+
+
+def test_state_schema_version_must_be_a_json_integer(tmp_path: Path):
+    """2(b): 2.0 (float) must never satisfy the manifest's integer 2."""
+    state = _make_full_state(tmp_path)
+    good_zip, _ = build_workspace_archive(state, include_data=False, project_root=tmp_path)
+    sentinel = {"existing_key": "untouched", "inference_result": "keep_me"}
+
+    files = _workspace_zip_files(good_zip)
+    ws_manifest = json.loads(files[WORKSPACE_MANIFEST_PATH].decode("utf-8"))
+    assert ws_manifest["workspace_schema_version"] == WORKSPACE_SCHEMA_VERSION
+    doc = json.loads(files[WORKSPACE_STATE_PATH].decode("utf-8"))
+    doc["workspace_schema_version"] = float(WORKSPACE_SCHEMA_VERSION)
+    files[WORKSPACE_STATE_PATH] = json.dumps(doc, indent=2, sort_keys=True).encode("utf-8")
+    _sync_workspace_checksums(files)
+    bad_zip = _zip_from_files(files)
+
+    # Prove the payload really is a float after the JSON round-trip.
+    with zipfile.ZipFile(io.BytesIO(bad_zip), "r") as zf:
+        stored = json.loads(zf.read(WORKSPACE_STATE_PATH).decode("utf-8"))
+    assert isinstance(stored["workspace_schema_version"], float)
+    assert stored["workspace_schema_version"] == WORKSPACE_SCHEMA_VERSION
+
+    _assert_rejected_unchanged(bad_zip, tmp_path, sentinel, "workspace_schema_version")
+
+    # A genuine integer version still restores (guards do not over-reject).
+    ok_target: dict = {}
+    restore_workspace_archive(good_zip, ok_target, project_root=tmp_path)
+    assert ok_target["inference_result"] is not None
+
+
+def test_malformed_source_reference_degrades_honest_status(tmp_path: Path):
+    """2(c): a non-object source record is reported, never silently skipped."""
+    f1 = tmp_path / "data.npy"
+    f1.write_bytes(b"original-content")
+    captured = capture_source_hashes(
+        dataset_info={"mode": "Dataset Manifest (data.yaml)", "source": str(f1)},
+        resolved_paths={"data": f1},
+        project_root=tmp_path,
+    )
+    captured["broken_ref"] = ["not", "an", "object"]
+
+    res = verify_source_references(captured, project_root=tmp_path)
+    assert res["overall"] != "verified"
+    assert res["overall"] == "unknown"
+    assert res["counts"]["malformed"] == 1
+    assert res["files"]["broken_ref"]["status"] == "unknown"
+    assert res["files"]["broken_ref"]["malformed"] is True
+    assert res["files"]["manifest.data"]["status"] == "verified"  # good records stay honest
+    assert "malformed" in res["message"]
+    assert len(res["files"]) == 2  # nothing silently dropped
+
+    # Same through a real archive: inspect and restore both report it.
+    state = _make_full_state(tmp_path)
+    good_zip, _ = build_workspace_archive(state, include_data=False, project_root=tmp_path)
+    files = _workspace_zip_files(good_zip)
+    doc = json.loads(files[WORKSPACE_STATE_PATH].decode("utf-8"))
+    doc["source_refs"]["source_files"]["broken_ref"] = ["not", "an", "object"]
+    files[WORKSPACE_STATE_PATH] = json.dumps(doc, indent=2, sort_keys=True).encode("utf-8")
+    _sync_workspace_checksums(files)
+    bad_zip = _zip_from_files(files)
+
+    insp = inspect_workspace_archive(bad_zip, project_root=tmp_path)
+    assert insp.source_verification["overall"] != "verified"
+    assert insp.source_verification["counts"]["malformed"] == 1
+    assert insp.source_verification["files"]["broken_ref"]["malformed"] is True
+    target: dict = {}
+    restore_workspace_archive(bad_zip, target, project_root=tmp_path)
+    stored = target["_workspace_source_verification"]
+    assert stored["overall"] != "verified"
+    assert stored["counts"]["malformed"] == 1
+    assert "malformed" in stored["message"]
+
+
+def test_restore_validates_and_inspects_before_mutation(tmp_path: Path, monkeypatch):
+    """2(d): one parse per restore, no re-inspection after applying, no partial apply."""
+    state = _make_full_state(tmp_path)
+    zip_bytes, _ = build_workspace_archive(state, include_data=False, project_root=tmp_path)
+
+    parses = {"n": 0}
+    real_parse = workspace_io._parse_and_validate_zip
+
+    def _counting_parse(*args, **kwargs):
+        parses["n"] += 1
+        return real_parse(*args, **kwargs)
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("the archive must not be re-inspected after it was applied")
+
+    monkeypatch.setattr(workspace_io, "_parse_and_validate_zip", _counting_parse)
+    monkeypatch.setattr(workspace_io, "inspect_workspace_archive", _boom)
+
+    target: dict = {}
+    insp = restore_workspace_archive(zip_bytes, target, project_root=tmp_path)
+    assert parses["n"] == 1
+    assert insp.has_results is True
+    assert target["inference_result"] is not None
+
+    # A failure while building the patch happens strictly before the first write.
+    def _boom_patch(payload):
+        raise WorkspaceArchiveError("synthetic pre-apply failure")
+
+    monkeypatch.setattr(workspace_io, "_build_restore_patch", _boom_patch)
+    sentinel = {
+        "existing_key": "untouched",
+        "inference_result": "keep_me",
+        "connectivity_data": "keep_me_too",
+        "_workspace_widget_keys": {"results:alpha": "results"},
+        "results:alpha": 0.5,
+        "inference_task": "transient",
+    }
+    snap = dict(sentinel)
+    with pytest.raises(WorkspaceArchiveError):
+        restore_workspace_archive(zip_bytes, sentinel, project_root=tmp_path)
+    assert sentinel == snap

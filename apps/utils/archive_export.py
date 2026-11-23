@@ -51,6 +51,18 @@ ARCHIVE_KIND = "conninfpy-analysis-archive"
 # captured facts (the content itself carries the real run times).
 _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
+# Honest wording for an export that deliberately omits the trusted pickle
+# (default workspace saves). It must never read as "this result lacked".
+_PICKLE_FREE_ARCHIVE_NOTE = (
+    "bundle.pkl omitted: this export is pickle-free by design (workspace save); "
+    "no trusted bundle was requested."
+)
+_PICKLE_FREE_METHODS_REASON = (
+    "No bundle.pkl is included: this export is pickle-free by design (workspace "
+    "save). Arrays, tables and the workspace/ layer remain a faithful record of "
+    "the run, and workspace restore never needs a pickle."
+)
+
 _BUILTIN_ATLAS_NAMES = {
     "Schaefer-100 Yeo7": "schaefer_100_yeo7",
     "Schaefer-200 Yeo-7": "schaefer_200_yeo7",
@@ -735,6 +747,7 @@ def build_methods_markdown(
     dataset_files: Mapping[str, Any],
     effect_mask_available: bool,
     bundle_available: bool = True,
+    bundle_omitted_reason: Optional[str] = None,
 ) -> str:
     """Deterministic methods text built only from captured facts."""
     inner = _inner(result)
@@ -1081,9 +1094,10 @@ def build_methods_markdown(
         add("- bundle.pkl is a Python pickle for trusted use only "
             "(ResultBundle.load); do not load archives from untrusted sources.")
     else:
-        add("- No bundle.pkl is included: this finished result lacks the captured "
+        add("- " + (bundle_omitted_reason or (
+            "No bundle.pkl is included: this finished result lacks the captured "
             "analysis metadata a trustworthy snapshot requires. Arrays and tables "
-            "remain a faithful record of the run.")
+            "remain a faithful record of the run.")))
     add("")
     return "\n".join(lines)
 
@@ -1164,6 +1178,7 @@ def build_analysis_archive(
     exporter: str = "conninfpy-app",
     workspace_state: Optional[Mapping[str, Any]] = None,
     include_workspace_data: bool = False,
+    include_bundle: bool = True,
 ) -> Tuple[bytes, Dict[str, Any]]:
     """Build the deterministic analysis-archive ZIP bytes and its manifest.
 
@@ -1184,6 +1199,12 @@ def build_analysis_archive(
         fact; the archived arrays keep the full grid evidence).
     project_root : Path, optional
         Root for resolving relative source paths (defaults to cwd).
+    include_bundle : bool, default True
+        Whether to snapshot the trusted ``bundle.pkl`` pickle. ``True`` is the
+        full analysis archive (NETSTAT-24) behaviour. ``False`` builds a
+        pickle-free archive: no ``bundle.pkl`` member is produced and the
+        manifest/methods state that omission honestly. Default workspace saves
+        (``build_workspace_archive``) always pass ``False``.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -1213,25 +1234,30 @@ def build_analysis_archive(
     files["run_plan.json"] = _dumps_json(plan)
     files["dataset_info.json"] = _dumps_json(info)
 
-    # ---- trusted bundle ----
+    # ---- trusted bundle (only when explicitly requested) ----
     bundle = None
     bundle_note = None
-    try:
-        bundle = result.to_bundle() if hasattr(result, "to_bundle") else inner.to_bundle()
-    except ValueError as exc:
-        # A legacy result without captured analysis metadata cannot be
-        # snapshotted; the archive records that honestly instead of failing
-        # or reconstructing metadata from defaults.
-        bundle_note = ("bundle.pkl omitted: this finished result lacks captured "
-                       f"analysis metadata ({exc}).")
-        notes.append(bundle_note)
-    if bundle is not None:
-        import pickle
+    if include_bundle:
+        try:
+            bundle = result.to_bundle() if hasattr(result, "to_bundle") else inner.to_bundle()
+        except ValueError as exc:
+            # A legacy result without captured analysis metadata cannot be
+            # snapshotted; the archive records that honestly instead of failing
+            # or reconstructing metadata from defaults.
+            bundle_note = ("bundle.pkl omitted: this finished result lacks captured "
+                           f"analysis metadata ({exc}).")
+            notes.append(bundle_note)
+        if bundle is not None:
+            import pickle
 
-        bundle_buffer = io.BytesIO()
-        pickle.dump({"schema_version": bundle.schema_version, "bundle": bundle},
-                    bundle_buffer, protocol=pickle.HIGHEST_PROTOCOL)
-        files["bundle.pkl"] = bundle_buffer.getvalue()
+            bundle_buffer = io.BytesIO()
+            pickle.dump({"schema_version": bundle.schema_version, "bundle": bundle},
+                        bundle_buffer, protocol=pickle.HIGHEST_PROTOCOL)
+            files["bundle.pkl"] = bundle_buffer.getvalue()
+    else:
+        # A pickle-free export states the omission instead of implying that the
+        # finished result lacked the metadata a snapshot needs.
+        notes.append(_PICKLE_FREE_ARCHIVE_NOTE)
 
     # ---- arrays ----
     array_files, arrays_index = _arrays_payload(inner, cell_idx)
@@ -1277,6 +1303,7 @@ def build_analysis_archive(
         fisher_summary=fisher_summary, dataset_files=dfiles,
         effect_mask_available=effect_mask_available,
         bundle_available="bundle.pkl" in files,
+        bundle_omitted_reason=_PICKLE_FREE_METHODS_REASON if not include_bundle else None,
     )
     files["methods.md"] = methods.encode("utf-8")
 
@@ -1344,6 +1371,7 @@ def build_analysis_archive(
         },
         "replay": {k: replay.get(k) for k in ("status", "reasons", "prerequisites",
                                               "command", "sourced_from_result")},
+        "bundle_available": "bundle.pkl" in files,
         "trusted_only": ["bundle.pkl"] if "bundle.pkl" in files else [],
         "notes": notes,
     }

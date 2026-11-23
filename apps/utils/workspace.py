@@ -252,8 +252,12 @@ def render_restored_workspace_notice():
     if verification:
         overall = verification.get("overall")
         msg = verification.get("message", "")
+        counts = verification.get("counts") or {}
+        malformed = int(counts.get("malformed") or 0) if isinstance(counts, dict) else 0
         if overall in ("missing", "stale"):
             st.warning(f"Workspace source status ({overall}): {msg}")
+        elif overall == "unknown" and malformed:
+            st.warning(f"Workspace source status (unknown, {malformed} malformed reference(s)): {msg}")
         elif overall == "unknown":
             st.info(f"Workspace source status (unknown): {msg}")
         else:
