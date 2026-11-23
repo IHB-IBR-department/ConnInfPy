@@ -938,11 +938,6 @@ def compute_p_val_glm(
     X_reduced = _compute_reduced_model(X, contrast_vec)
     scheme_used = _resolve_scheme(X, X_reduced, scheme)
 
-    Y_flat = Y.reshape(n_subjects, -1)
-    Y_hat_reduced_flat = _reduced_fit(X_reduced, Y_flat)
-    Y_hat_reduced = Y_hat_reduced_flat.reshape(n_subjects, N, N)
-    residuals_reduced = Y - Y_hat_reduced
-
     reference_shape = (N, N)
 
     # ---- Encode strata for within-block exchangeability (PALM -eb) ----
@@ -960,22 +955,55 @@ def compute_p_val_glm(
     seeds = rng.randint(0, 2**32 - 1, size=n_permutations, dtype=np.int64)
 
     # ---- Build permutation task ----
-    task_func = partial(
-        _freedman_lane_permutation_task,
-        Y_hat_reduced,
-        residuals_reduced,
+    # NETSTAT-34: the null needs only the E = N(N-1)/2 upper-triangle edges
+    # (the stack is exactly symmetric with a zero diagonal, see
+    # check_connectivity), so each draw refits and scores an (n, E) edge
+    # vector instead of rebuilding several (n, N, N) arrays. The observed
+    # statistics, the enhancement metadata and the matrix enhancers are
+    # unchanged; ``_glm_fast.build_plan`` returns None for stacks that are
+    # not exactly symmetric/zero-diagonal, keeping the matrix path.
+    from conninfpy.stats import _glm_fast
+
+    glm_plan = _glm_fast.build_plan(
+        Y,
         X,
         contrast_vec,
-        X_pinv,
-        XtX_inv_diag,
-        XtX_inv,
-        reference_shape,
         stat_type_str,
+        X_pinv,
+        XtX_inv,
         enhance_func,
-        strata_codes=strata_codes,
-        scheme=scheme_used,
-        **enhance_kwargs,
+        enhance_kwargs,
+        scheme_used,
+        strata_codes,
     )
+    if glm_plan is not None:
+        Y_hat_e, residuals_e = _glm_fast.reduced_payload(
+            Y, X_reduced, glm_plan.rows, glm_plan.cols
+        )
+        task_func = partial(
+            _glm_fast.permutation_task, glm_plan, Y_hat_e, residuals_e
+        )
+    else:
+        Y_flat = Y.reshape(n_subjects, -1)
+        Y_hat_reduced_flat = _reduced_fit(X_reduced, Y_flat)
+        Y_hat_reduced = Y_hat_reduced_flat.reshape(n_subjects, N, N)
+        residuals_reduced = Y - Y_hat_reduced
+        task_func = partial(
+            _freedman_lane_permutation_task,
+            Y_hat_reduced,
+            residuals_reduced,
+            X,
+            contrast_vec,
+            X_pinv,
+            XtX_inv_diag,
+            XtX_inv,
+            reference_shape,
+            stat_type_str,
+            enhance_func,
+            strata_codes=strata_codes,
+            scheme=scheme_used,
+            **enhance_kwargs,
+        )
 
     # ---- Run permutations ----
 
