@@ -181,6 +181,56 @@ def test_invalid_ids_are_rejected(bad):
         validate_subject_ids(bad, "ids_group1")
 
 
+@pytest.mark.parametrize("bad", [
+    {f"s{i:02d}" for i in range(6)},                 # set
+    frozenset(f"s{i:02d}" for i in range(6)),          # frozenset
+    {f"s{i:02d}": i for i in range(6)},               # dict
+    {f"s{i:02d}": i for i in range(6)}.keys(),        # dict_keys view
+    {f"s{i:02d}": i for i in range(6)}.values(),      # dict_values view
+    {f"s{i:02d}": i for i in range(6)}.items(),       # dict_items view
+    42,                                                # bare scalar
+    np.int64(42),                                      # numpy scalar
+    np.float64(1.5),
+])
+def test_unordered_or_non_iterable_ids_are_not_a_vector(bad):
+    """set/dict and friends silently paired rows by iteration order before.
+
+    A scalar raised a bare ``TypeError`` from ``list(ids)``.  Both must be the
+    documented ``IdAlignmentError``/``not_a_vector`` — and stay visible as a
+    ``ValueError`` for callers that catch the public API's error type.
+    """
+    with pytest.raises(IdAlignmentError) as err:
+        validate_subject_ids(bad, "ids_group1")
+    assert err.value.code == "not_a_vector"
+    assert isinstance(err.value, ValueError)
+    assert "row order" in str(err.value) or "subject IDs" in str(err.value)
+
+
+def test_unordered_or_non_iterable_ids_are_value_errors_through_the_api():
+    n = 6
+    a, b = matrices(n, 1), matrices(n, 2)
+    ids = ids_for(n)
+    with pytest.raises(ValueError, match="unordered set"):
+        analyze(group1=a, group2=b, test_type="paired", ids_group1=set(ids),
+                ids_group2=ids, input="z", **FAST)
+    with pytest.raises(ValueError, match="non-iterable value"):
+        analyze(group1=a, group2=b, test_type="paired", ids_group1=42,
+                ids_group2=ids, input="z", **FAST)
+    with pytest.raises(ValueError, match="not a mapping"):
+        analyze(group1=a, group2=b, test_type="paired",
+                ids_group1=dict.fromkeys(ids), ids_group2=ids, input="z", **FAST)
+
+
+@pytest.mark.parametrize("convert", [list, tuple, np.array, pd.Series, pd.Index,
+                               lambda ids: range(len(ids))])
+def test_ordered_id_vectors_are_still_accepted(convert):
+    n = 6
+    ids = list(range(n))
+    assert validate_subject_ids(convert(ids), "ids_group1", n=n) == tuple(ids)
+    assert paired_id_permutation(convert(ids), ids[::-1]).tolist() == ids[::-1]
+    assert paired_id_permutation(convert(ids), convert(ids)).tolist() == ids
+
+
 def test_matching_does_not_normalise_or_coerce_types():
     # 1 and "1" are different opaque IDs; no stringification happens.
     with pytest.raises(IdAlignmentError, match="only one condition"):
@@ -455,6 +505,12 @@ def _paired_dataset(n: int = 8, seed: int = 41):
 
 
 def test_cli_matches_the_api_on_a_shuffled_phenotype(tmp_path):
+    """The CLI's real row permutation reaches provenance, not identity.
+
+    Both oracles are independent of the CLI builder: the expected permutation
+    is derived from the phenotype table alone, and the reference statistics
+    come from one direct API call on the *unpermuted* condition-B rows.
+    """
     n = 8
     dataset, data, pheno, n_rest = _paired_dataset(n)
     design = {"type": "paired", "condition": "condition", "levels": ["rest", "task"],
@@ -471,24 +527,59 @@ def test_cli_matches_the_api_on_a_shuffled_phenotype(tmp_path):
     path.write_text(yaml.safe_dump(config))
     with contextlib.redirect_stdout(io.StringIO()):
         written = run(path)
-    # The same study, loaded and driven exactly as run() does it, with the IDs
-    # the CLI derived from the (shuffled) subject column.
+
+    # (a) Expected permutation from the phenotype table only — never from the
+    # CLI analysis builder.  The table is re-read from the file the CLI used, so
+    # the reference call below sees bit-identical inputs.
     from conninfpy.loaders import load
-    reloaded = load(tmp_path / "study.yaml")
-    kwargs, summary = build_analysis(reloaded, {"design": design, "input": "z"})
-    assert summary["n_subjects_used"] == n
-    api = analyze(**kwargs, **FAST_TWO_SIDED).inference
-    assert api.design["paired_alignment"]["n_subjects"] == n
+    loaded = load(tmp_path / "study.yaml")
+    ph, mat = loaded.pheno, loaded.data
+    rows_a = ph.index[ph["condition"] == "rest"].to_numpy()
+    rows_b = ph.index[ph["condition"] == "task"].to_numpy()
+    ids_a = ph.loc[rows_a, "subject_id"].to_numpy()
+    ids_b = ph.loc[rows_b, "subject_id"].to_numpy()
+    expected = [list(ids_b).index(i) for i in ids_a]
+    assert expected != list(range(n)), "fixture must be row-shuffled"
+    # The exact permutation the owner reproduced for _paired_dataset(8).
+    assert expected == [5, 1, 3, 2, 7, 6, 4, 0]
+
+    bundle = ResultBundle.load(written["bundle"])
+    record = bundle.metadata["design"]["paired_alignment"]
+    assert record["permutation_b_to_a"] == expected
+    assert record["identity_permutation"] is False
+    assert record["n_subjects"] == n
+    assert record["reordered_inputs"] == ["group2", "confounds_group2"]
+    assert any("paired subject IDs aligned" in flag for flag in bundle.metadata["flags"])
+    assert not any("already followed" in flag for flag in bundle.metadata["flags"])
+    # The paired-interest path carries the same record.
+    assert (bundle.metadata["design"]["paired_difference"]["alignment"]
+            ["permutation_b_to_a"] == expected)
+
+    prov = json.loads(written["provenance"].read_text())
+    assert prov["data"]["n_subjects_used"] == n
+    assert (prov["results"]["result"]["design"]["paired_alignment"]
+            ["permutation_b_to_a"] == expected)
+    assert prov["results"]["result"]["design"]["paired_alignment"][
+        "identity_permutation"] is False
+
+    # (b) One direct API call, assembled from the phenotype by hand, on the
+    # condition-B rows in their original order (no CLI builder involved).
+    api = analyze(
+        group1=mat[rows_a], group2=mat[rows_b], test_type="paired",
+        ids_group1=ids_a, ids_group2=ids_b,
+        interest=ph.loc[rows_a, ["age"]].to_numpy(float).ravel(),
+        contrast_id="age",
+        confounds_group1=ph.loc[rows_a, ["fd"]].to_numpy(float),
+        confounds_group2=ph.loc[rows_b, ["fd"]].to_numpy(float),
+        sites=ph.loc[rows_a, "site"].to_numpy(),
+        input="z", **FAST_TWO_SIDED,
+    ).inference
+    assert api.design["paired_alignment"]["permutation_b_to_a"] == expected
+    assert api.design["paired_difference"]["alignment"] == record
     with np.load(written["pvals"]) as z:
         np.testing.assert_array_equal(z["positive"], api["positive"])
         np.testing.assert_array_equal(z["negative"], api["negative"])
         np.testing.assert_array_equal(z["effect"], api.effect_map())
-    prov = json.loads(written["provenance"].read_text())
-    assert prov["data"]["n_subjects_used"] == n
-    bundle = ResultBundle.load(written["bundle"])
-    record = bundle.metadata["design"]["paired_alignment"]
-    assert record["n_subjects"] == n and record["identity_permutation"] is True
-    assert record["reordered_inputs"] == ["group2", "confounds_group2"]
 
 
 def test_cli_paired_id_errors_keep_their_messages():

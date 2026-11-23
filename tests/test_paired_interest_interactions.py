@@ -7,6 +7,7 @@ import yaml
 from conninfpy import analyze, compute_p_val_glm, ResultBundle
 from conninfpy.cli import build_analysis, ConfigError, run
 from conninfpy.loaders.base import LoadedDataset
+from conninfpy._shared.alignment import paired_id_permutation
 import conninfpy.stats.glm as glm
 
 FAST = dict(method='tstat', n_permutations=39, acceleration=None, use_mp=False, rng=11)
@@ -97,9 +98,14 @@ def test_cli_alignment_and_validation():
          'interactions':[['group','age']], 'confounds':['motion']}
     kw, _ = build_analysis(ds, {'design':d})
     a = ds.pheno[ds.pheno.condition == 'A']
-    b = ds.pheno[ds.pheno.condition == 'B'].set_index('subject_id').loc[a.subject_id]
-    np.testing.assert_allclose(kw['confounds_group2'].ravel(), b.motion)
+    b_rows = ds.pheno[ds.pheno.condition == 'B']
+    b = b_rows.set_index('subject_id').loc[a.subject_id]   # B rows in A order
+    # Condition-B inputs reach analyze() in the caller's row order; analyze()
+    # applies the single B -> A permutation itself, from the IDs.
+    np.testing.assert_allclose(kw['confounds_group2'].ravel(), b_rows.motion)
     out = analyze(**kw, **FAST)
+    perm = out['group:age'].inference.design['paired_alignment']['permutation_b_to_a']
+    np.testing.assert_allclose(kw['confounds_group2'].ravel()[perm], b.motion)
     assert 'group:age' in out
     missing = dataset(); missing.pheno = missing.pheno.iloc[:-1]; missing.data = missing.data[:-1]
     with pytest.raises(ConfigError, match='missing pair'): build_analysis(missing, {'design': d})
@@ -113,7 +119,9 @@ def test_cli_alignment_and_validation():
     categorical = dataset()
     categorical.pheno['motion_cat'] = categorical.pheno['group']
     kc, _ = build_analysis(categorical, {'design': {**d, 'confounds':['motion_cat']}})
-    np.testing.assert_array_equal(kc['confounds_group1'], kc['confounds_group2'])
+    np.testing.assert_array_equal(
+        kc['confounds_group1'],
+        kc['confounds_group2'][paired_id_permutation(kc['ids_group1'], kc['ids_group2'])])
     categorical.pheno.loc[categorical.pheno.condition == 'B', 'motion_cat'] = 'other'
     with pytest.raises(ConfigError, match='incompatible levels'):
         build_analysis(categorical, {'design': {**d, 'confounds':['motion_cat']}})

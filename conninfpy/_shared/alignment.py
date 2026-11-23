@@ -35,7 +35,7 @@ Index ownership, in one line per input group::
 
 from __future__ import annotations
 
-from collections.abc import Hashable
+from collections.abc import Hashable, Mapping, MappingView, Set
 from typing import Any, Optional, Sequence
 
 import numpy as np
@@ -142,8 +142,10 @@ def validate_subject_ids(
     Raises
     ------
     IdAlignmentError
-        If the argument is not a sequence, contains a missing or
-        unhashable ID, repeats an ID, or disagrees with ``n``.
+        If the argument is not an *ordered* iterable of IDs (a string, an
+        unordered set/view, a mapping, a scalar or any other non-iterable),
+        contains a missing or unhashable ID, repeats an ID, or disagrees
+        with ``n``.
     """
     if ids is None:
         raise IdAlignmentError(
@@ -159,7 +161,43 @@ def validate_subject_ids(
             code="not_a_vector",
             condition=condition,
         )
-    values = list(ids)
+    # Row order is the whole point of an ID vector: an unordered collection
+    # would pair rows by an arbitrary iteration order, and a mapping has no
+    # row order at all.  Both are rejected instead of silently guessed.
+    if isinstance(ids, Mapping):
+        raise IdAlignmentError(
+            f"{name} must be a sequence of subject IDs in row order, not a "
+            f"mapping ({type(ids).__name__}); a mapping carries no row order "
+            "to pair on — pass the IDs as a list, array or pandas Series.",
+            code="not_a_vector",
+            condition=condition,
+        )
+    if isinstance(ids, Set):
+        raise IdAlignmentError(
+            f"{name} must be a sequence of subject IDs in row order, not an "
+            f"unordered set ({type(ids).__name__}); a set has no row order, so "
+            "it cannot say which row belongs to which subject.",
+            code="not_a_vector",
+            condition=condition,
+        )
+    if isinstance(ids, MappingView):
+        raise IdAlignmentError(
+            f"{name} must be a sequence of subject IDs in row order, not an "
+            f"unordered view ({type(ids).__name__}); pass the IDs as a list, "
+            "array or pandas Series.",
+            code="not_a_vector",
+            condition=condition,
+        )
+    try:
+        iterator = iter(ids)
+    except TypeError:
+        raise IdAlignmentError(
+            f"{name} must be a sequence of subject IDs, not a single "
+            f"non-iterable value ({ids!r}); pass one ID per subject row.",
+            code="not_a_vector",
+            condition=condition,
+        ) from None
+    values = list(iterator)
     for position, value in enumerate(values):
         if _is_missing_id(value):
             raise IdAlignmentError(

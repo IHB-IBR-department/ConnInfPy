@@ -364,12 +364,16 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
             raise ConfigError(str(exc)) from exc
         ia = rows[levels[0]].to_numpy()
         ib = rows[levels[1]].to_numpy()[perm]
-        subjects = pheno.loc[ia, subj_col].to_numpy()
+        rows_b = rows[levels[1]].to_numpy()  # condition B in the caller's row order
         encoding_frame = pheno
         encoding_columns = interest_cols + confound_cols + subject_confounds
+        # Condition-B data goes to analyze() in its *original* row order: the
+        # single B -> A permutation is applied there, from the IDs, and is what
+        # the provenance records.  ia/ib stay inside the CLI for the
+        # subject-level constancy checks and the shared encoding fit only.
         kwargs.update(
-            group1=Y[ia], group2=Y[ib], test_type="paired",
-            ids_group1=subjects, ids_group2=subjects,
+            group1=Y[ia], group2=Y[rows_b], test_type="paired",
+            ids_group1=ids_a, ids_group2=ids_b,
         )
         for col in interest_cols + subject_confounds + _as_list(site_col):
             if not np.array_equal(pheno.loc[ia, col].to_numpy(), pheno.loc[ib, col].to_numpy()):
@@ -403,13 +407,14 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
                     if set(pheno.loc[ia, col]) != set(pheno.loc[ib, col]):
                         raise ConfigError(f"condition-specific categorical confound {col!r} has incompatible levels")
             # Fit one encoding on both conditions so the same columns are
-            # subtracted even if rows are shuffled.
-            combined = _numeric(pd.concat([pheno.loc[ia, confound_cols], pheno.loc[ib, confound_cols]]))
+            # subtracted even if rows are shuffled.  The fit does not depend on
+            # row order, so B keeps its original order for analyze().
+            combined = _numeric(pd.concat([pheno.loc[ia, confound_cols], pheno.loc[rows_b, confound_cols]]))
             kwargs["confounds_group1"] = combined[:len(ia)]
             kwargs["confounds_group2"] = combined[len(ia):]
         if site_col:
             kwargs["sites"] = pheno.loc[ia, site_col].to_numpy()
-        n_used = len(subjects)
+        n_used = len(ia)
 
     categorical_coding = {}
     if encoding_frame is not None:
@@ -560,7 +565,7 @@ def run(
             "design": None if design is None else {
                 k: design.get(k) for k in ("kind", "columns", "contrast", "column_means", "profiles",
                                            "comparison", "interest", "scale", "estimable_columns",
-                                           "enhancement")
+                                           "enhancement", "paired_alignment")
             },
         }
 
