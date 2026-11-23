@@ -352,6 +352,52 @@ def _shown_tail_counts(res, alpha):
     }
 
 
+def _monte_carlo_caption(res):
+    """One descriptive caption: B, resolution, permutation space, counts, interval.
+
+    Display only — it reads the result's recorded Monte-Carlo metadata
+    (:meth:`mc_report`) and never re-runs or re-derives anything. Results
+    without that metadata (legacy, parametric, cNBS, available-case) render a
+    short "unavailable/unknown" line instead of a claim.
+    """
+    report_fn = getattr(res, "mc_report", None)
+    if report_fn is None:
+        return None
+    try:
+        report = report_fn()
+    except Exception:
+        return None
+    n_perms = int(report.get("n_permutations") or 0)
+    if n_perms <= 0:
+        return None
+    bits = [f"B = {n_perms}", f"resolution 1/(B+1) = {report['resolution']:.3g}"]
+    space = report.get("permutation_space")
+    bits.append(
+        "permutation space unknown" if space is None else f"permutation space {space}"
+    )
+    tails = report.get("tails") or {}
+    counted = [tail for tail, entry in tails.items() if entry.get("counts_available")]
+    bits.append(
+        "exceedance counts: " + (", ".join(counted) if counted else "unavailable")
+    )
+    bounded = [
+        tail for tail, entry in tails.items() if entry.get("interval_status") == "available"
+    ]
+    if bounded:
+        confidence = report.get("interval_confidence")
+        level = f"{confidence:.0%}" if isinstance(confidence, (int, float)) else "95%"
+        bits.append(f"Wilson {level} interval for count/B: {', '.join(bounded)}")
+    else:
+        reason = next(
+            (entry.get("interval_reason") for entry in tails.values() if entry.get("interval_reason")),
+            None,
+        )
+        bits.append("interval: unknown" + (f" ({reason})" if reason else ""))
+    if report.get("flags"):
+        bits.append("flags: " + ", ".join(report["flags"]))
+    return "Monte-Carlo precision: " + "; ".join(bits) + "."
+
+
 def _render_summary_metrics(res, edges_df, method_name, direction_labels):
     """Render the headline metric row for one result."""
     st.markdown(f"##### 📊 {method_name} Summary")
@@ -384,6 +430,9 @@ def _render_summary_metrics(res, edges_df, method_name, direction_labels):
         f"Detections at α = {alpha:g}. {_family_caption(res)} "
         f"Test statistic: `{meta['stat_name']}` | Input scale: `{meta['scale_label']}` | Unit: `{meta['inference_unit']}`."
     )
+    mc_caption = _monte_carlo_caption(res)
+    if mc_caption:
+        st.caption(mc_caption)
 
 
 def _render_ground_truth_metrics(edges_df, effect_mask, method_name):
@@ -879,6 +928,9 @@ def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, p
         if getattr(p_2d, "inference_unit", "edge") != "edge":
             st.caption(f"Native {p_2d.inference_unit} detections: {recorded_native_detection_count(p_2d, alpha)}; tail counts above describe projected edge membership.")
         st.write(f"- **Permutations:** `{p_2d.n_permutations}`")
+        primary_mc = _monte_carlo_caption(p_2d)
+        if primary_mc:
+            st.caption(primary_mc)
     with col_c:
         st.markdown(f"**Sensitivity Companion ({comp_name})**")
         shown_c = _shown_tail_counts(c_2d, alpha)
@@ -890,6 +942,9 @@ def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, p
         if getattr(c_2d, "inference_unit", "edge") != "edge":
             st.caption(f"Native {c_2d.inference_unit} detections: {recorded_native_detection_count(c_2d, alpha)}; tail counts above describe projected edge membership.")
         st.write(f"- **Permutations:** `{c_2d.n_permutations}`")
+        comp_mc = _monte_carlo_caption(c_2d)
+        if comp_mc:
+            st.caption(comp_mc)
 
     # 2. Strict companion agreement check (family / unit / contrast / tail / alpha / mask / ROI frame)
     st.divider()

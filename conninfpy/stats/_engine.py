@@ -232,8 +232,11 @@ def _check_finite_statistics(
 
 
 def _compute_p_values_from_null(
-    emp_t_dict: Dict[str, npt.NDArray], max_null_dict: Dict[str, npt.NDArray]
-) -> Dict[str, npt.NDArray]:
+    emp_t_dict: Dict[str, npt.NDArray],
+    max_null_dict: Dict[str, npt.NDArray],
+    *,
+    return_counts: bool = False,
+) -> Any:
     """
     Compute max-statistic p-values from empirical statistics and a null.
 
@@ -248,14 +251,22 @@ def _compute_p_values_from_null(
         Dictionary with empirical t-statistic arrays.
     max_null_dict : dict
         Dictionary with null distribution arrays.
+    return_counts : bool, default False
+        Also return the raw per-cell exceedance counts (``null >= observed``,
+        one 0/1 indicator per draw, summed). They are genuinely computed here,
+        never reconstructed from the p-values. The default return value is
+        unchanged.
 
     Returns
     -------
-    dict
-        Dictionary with p-value arrays for each direction.
+    dict or (dict, dict)
+        Dictionary with p-value arrays for each direction, and, with
+        ``return_counts=True``, a second dictionary of int64 count arrays
+        (same shape as the p-value arrays).
     """
     keys = list(emp_t_dict.keys())
     p_values = {}
+    counts_out: Dict[str, npt.NDArray[np.int64]] = {}
 
     is_2d = len(emp_t_dict[keys[0]].shape) == 2
 
@@ -333,7 +344,11 @@ def _compute_p_values_from_null(
 
         # +1 correction (Phipson & Smyth 2010): prevents p = 0 with finite perms
         p_values[key] = (count + 1.0) / (n_perm + 1.0)
+        if return_counts:
+            counts_out[key] = np.asarray(count, dtype=np.int64)
 
+    if return_counts:
+        return p_values, counts_out
     return p_values
 
 

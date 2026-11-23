@@ -33,6 +33,7 @@ from scipy import stats
 
 from conninfpy._prepare import nonfinite_report
 from conninfpy.stats import _degenerate as _degenerate
+from conninfpy.stats import _mc
 from conninfpy.stats._design import contrast_is_estimable
 from conninfpy.stats._engine import (
     _collect_results_to_arrays,
@@ -47,6 +48,13 @@ from conninfpy.stats._workers import run_permutations
 
 DEFAULT_MIN_COVERAGE = 0.8
 MIN_DF = 2
+
+
+def _counts_return(p_values, raw, report, counts, count_kind, return_counts):
+    """Three-value legacy return, or the same plus the Monte-Carlo counts."""
+    if not return_counts:
+        return p_values, raw, report
+    return p_values, raw, report, {"counts": counts, "count_kind": count_kind}
 
 
 @dataclass
@@ -178,6 +186,7 @@ def available_case_glm(
     min_coverage: float = DEFAULT_MIN_COVERAGE,
     scheme: str = "permutation",
     block_inference: Optional[Dict[str, Any]] = None,
+    return_counts: bool = False,
 ):
     """p-values, raw statistic maps and the coverage report (GLM, missing values).
 
@@ -186,6 +195,15 @@ def available_case_glm(
     pattern's subjects. ``block_inference`` (``net_labels``, ``correction``)
     switches to cNBS block inference over the tested edges; the block table
     is returned in the report under ``'block_report'``.
+
+    With ``return_counts=True`` a fourth value is returned:
+    ``{'counts': {tail: (N, N) int64} or None, 'count_kind': str or None}``.
+    These are the per-edge exceedance counts this run actually computed
+    (searchsorted / fitted-tail diagnostics), with
+    :data:`conninfpy.stats._mc.COUNT_UNAVAILABLE` (-1) on untested edges, the
+    diagonal, the untested F-stat cells a signed tail does not use and
+    accelerated tail replacements. cNBS carries no per-edge counts. The
+    default three-value return is unchanged.
     """
     if not 0 < min_coverage <= 1:
         raise ValueError(f"min_coverage must be in (0, 1]; got {min_coverage}.")
@@ -333,6 +351,11 @@ def available_case_glm(
         joint = np.maximum(null["positive"], null["negative"])
         null = {"positive": joint, "negative": joint}
     block_report = None
+    # Per-edge counts of the 0/1 indicator sums actually computed; None for
+    # block-level (cNBS) inference, which has no per-edge counter.
+    counts_raw = None
+    replacement_mask = None
+    count_kind = None
     if block_inference is not None:
         from conninfpy.stats._cnbs import block_p_values
 
@@ -349,15 +372,46 @@ def available_case_glm(
     elif acceleration is not None:
         from conninfpy.stats.acceleration import compute_p_values_accelerated
 
-        p_values = compute_p_values_accelerated(emp, null, method=acceleration)
+        # Diagnostics only: p-values are unchanged, and no Wilson interval
+        # applies anywhere in an accelerated result.
+        p_values, diagnostics = compute_p_values_accelerated(
+            emp, null, method=acceleration, return_diagnostics=True
+        )
+        counts_raw = diagnostics["counts"]
+        replacement_mask = diagnostics["replacement_mask"]
+        count_kind = (
+            _mc.COUNT_KIND_JOINT_MAX
+            if two_tailed and stat_type != "fstat"
+            else _mc.COUNT_KIND_MAX_STAT
+        )
     else:
-        p_values = _compute_p_values_from_null(emp, null)
+        p_values, counts_raw = _compute_p_values_from_null(
+            emp, null, return_counts=True
+        )
+        count_kind = (
+            _mc.COUNT_KIND_JOINT_MAX
+            if two_tailed and stat_type != "fstat"
+            else _mc.COUNT_KIND_MAX_STAT
+        )
     out_i, out_j = triu[0][~tested], triu[1][~tested]
     for key in p_values:
         p = np.array(p_values[key], dtype=np.float64)
         p[out_i, out_j, ...] = np.nan
         p[out_j, out_i, ...] = np.nan
         p_values[key] = p
+    count_maps = None
+    if counts_raw is not None:
+        # Untested edges, the diagonal and replaced accelerated tails keep the
+        # sentinel: never a fabricated count.
+        count_maps = {
+            key: _mc.mark_untested(
+                counts_raw[key],
+                p_values[key],
+                unavailable=(replacement_mask or {}).get(key),
+                n_draws=n_permutations,
+            )
+            for key in counts_raw
+        }
 
     report = _report(Y, X, C, present, tested, triu, N, min_coverage, reasons)
     # These are the patterns actually fitted above, before any p-map filling.
@@ -383,7 +437,7 @@ def available_case_glm(
     if f_threshold_info is not None:
         report["f_threshold"] = {**f_threshold_info,
                                  "start_thres": enhance_kwargs["start_thres"]}
-    return p_values, raw, report
+    return _counts_return(p_values, raw, report, count_maps, count_kind, return_counts)
 
 
 def _report(Y, X, C, present, tested, triu, N, min_coverage, reasons) -> Dict[str, Any]:

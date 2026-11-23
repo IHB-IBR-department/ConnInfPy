@@ -202,12 +202,33 @@ class ResultBundle:
         unit = result.inference_unit
         report = deepcopy(getattr(result, "component_report" if unit == "component" else "block_report", None)) if unit != "edge" else None
         from conninfpy import __version__
+        n_permutations = int(getattr(result, "n_permutations", 0) or 0)
+        mc_snapshot = {
+            "level": "per_edge",
+            "n_permutations": n_permutations,
+            "resolution": (1.0 / (n_permutations + 1)) if n_permutations > 0 else None,
+            "permutation_space": getattr(result, "permutation_space", None),
+            "count_kind": getattr(result, "count_kind", None),
+            "rng": deepcopy(getattr(result, "rng_provenance", None)),
+            "exceedance_counts": deepcopy(getattr(result, "exceedance_counts", None)),
+            # Documented relation of a stored count to its reported p-value:
+            # on a counted cell the empirical p-values satisfy this exactly
+            # (the p-values may still be BH-adjusted q values, and the count is
+            # never reconstructed from them). The sentinel marks a cell with no
+            # genuine count (untested/NaN/diagonal/accelerated replacement).
+            "p_relation": "(count + 1) / (B + 1) on counted cells",
+            "count_sentinel": -1,
+            "counts_are_per_edge": True,
+        }
         meta = {"model_id": model_id, "contrast_id": contrast_id, "design": design, "software_version": __version__,
                 "method": result.method, "correction": result.correction, "family": deepcopy(family),
                 "inference_unit": unit, "native_report": report, "tail_policy": result.tail_policy,
                 "tested_tail": getattr(result, "tested_tail", None),
                 "tail_selection": getattr(result, "tail_selection", None),
                 "n_permutations": result.n_permutations, "acceleration": result.acceleration,
+                # Additive Monte-Carlo snapshot; absent keys mean "unavailable",
+                # never an inferred value (see ResultBundle._validate).
+                "mc": mc_snapshot,
                 "e_grid": deepcopy(e_grid), "h_grid": deepcopy(h_grid),
                 "identity": deepcopy(provenance.get("identity", {"roi_id_kind": "explicit_input_id"})),
                 "coverage": deepcopy(provenance.get("coverage")),
@@ -306,6 +327,22 @@ class ResultBundle:
                     raise ValueError("invalid corrected evidence or tested family")
         if self.annotation is not None and tuple(self.annotation.get("roi_ids", ())) != self.roi_ids:
             raise ValueError("annotation IDs do not match result")
+        # Optional Monte-Carlo snapshot: absent for legacy bundles (accepted as
+        # "unavailable"), never reconstructed. When present, counts must align
+        # with the saved p maps and keep the sentinel convention.
+        mc = self.metadata.get("mc")
+        if mc is not None:
+            if not isinstance(mc, dict):
+                raise ValueError("monte-carlo metadata must be a mapping")
+            counts = mc.get("exceedance_counts")
+            if counts is not None:
+                if not isinstance(counts, dict) or set(counts) - set(self.corrected_p):
+                    raise ValueError("monte-carlo counts name unknown tails")
+                for tail, arr in counts.items():
+                    if arr is None:
+                        continue
+                    if np.asarray(arr).shape != np.asarray(self.corrected_p[tail]).shape:
+                        raise ValueError("monte-carlo counts do not align with the p maps")
 
     @classmethod
     def load(cls, path: Any) -> "ResultBundle":

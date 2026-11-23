@@ -814,6 +814,12 @@ class _Codec:
             "combat_diagnostics", "e_grid", "h_grid", "missing_report",
             "block_report", "component_report", "two_tailed", "tested_tail",
             "tail_selection", "beta", "design", "analysis_provenance",
+            # NETSTAT-32 Monte-Carlo precision contract. Listed explicitly (not
+            # left to the `extra` catch-all) so a restore cannot silently drop
+            # counts/kind/RNG/space; absent keys in an older archive decode as
+            # None = "unavailable", never as an inferred value.
+            "exceedance_counts", "count_kind", "rng_provenance",
+            "permutation_space",
         )
         attrs = {k: self.encode(getattr(res, k, None), hint=f"{hint}_{k}") for k in known}
         extra = {
@@ -836,6 +842,9 @@ class _Codec:
             "preserve_provided", "strata_provided", "combat_diagnostics",
             "missing_report", "block_report", "component_report", "beta",
             "design", "analysis_provenance",
+            # See _encode_inference_result: explicit NETSTAT-32 contract.
+            "exceedance_counts", "count_kind", "rng_provenance",
+            "permutation_space",
         )
         attrs = {k: self.encode(getattr(res, k, None), hint=f"{hint}_{k}") for k in known}
         extra = {
@@ -1031,6 +1040,9 @@ class _Decoder:
                 "combat_diagnostics", "e_grid", "h_grid", "missing_report",
                 "block_report", "two_tailed", "tested_tail", "tail_selection",
                 "beta", "design", "analysis_provenance", "component_report",
+                # NETSTAT-32: legacy archives simply omit these keys.
+                "exceedance_counts", "count_kind", "rng_provenance",
+                "permutation_space",
             }}
             obj = InferenceResult(pos, neg, **kwargs)
             for k, v in (node.get("extra") or {}).items():
@@ -1046,6 +1058,9 @@ class _Decoder:
                 "preserve_provided", "strata_provided", "combat_diagnostics",
                 "missing_report", "block_report", "beta", "design",
                 "analysis_provenance", "component_report",
+                # NETSTAT-32: legacy archives simply omit these keys.
+                "exceedance_counts", "count_kind", "rng_provenance",
+                "permutation_space",
             }}
             obj = OmnibusInferenceResult(omni, **kwargs)
             for k, v in (node.get("extra") or {}).items():

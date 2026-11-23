@@ -177,6 +177,10 @@ def _attach(result: Any, arguments: Mapping[str, Any], contrast_id: Optional[str
         "correction": result.correction,
         "inference_unit": result.inference_unit,
     }
+    # Additive Monte-Carlo summary (schema_version stays 1): describes the run,
+    # never reconstructs counts from p-values. Count arrays stay on the result.
+    n_perm = int(getattr(result, "n_permutations", 0) or 0)
+    counts = getattr(result, "exceedance_counts", None) or {}
     result.analysis_provenance = {
         "schema_version": 1,
         "eligible": eligible,
@@ -184,6 +188,16 @@ def _attach(result: Any, arguments: Mapping[str, Any], contrast_id: Optional[str
         "tested": tested_maps,
         "family": family,
         "coverage": _coverage(arguments, result),
+        "rng": deepcopy(getattr(result, "rng_provenance", None)),
+        "mc": {
+            "n_permutations": n_perm,
+            "resolution": (1.0 / (n_perm + 1)) if n_perm > 0 else None,
+            "permutation_space": getattr(result, "permutation_space", None),
+            "count_kind": getattr(result, "count_kind", None),
+            "counts_available": sorted(
+                tail for tail, arr in counts.items() if arr is not None
+            ),
+        },
         **_identity(arguments, n, design, contrast_id),
     }
 

@@ -23,7 +23,7 @@ Knijnenburg et al. (2009). Fewer permutations, more accurate P-values.
 from __future__ import annotations
 
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -65,6 +65,27 @@ def _empirical_p(
     sorted_null = np.sort(null_dist)
     count[...] = null_dist.size - np.searchsorted(sorted_null, observed, side="left")
     return (count + 1.0) / (len(null_dist) + 1.0), count
+
+
+def _tail_payload(
+    p_out: npt.NDArray[np.float64],
+    p_empirical: npt.NDArray[np.float64],
+    count: npt.NDArray[np.int64],
+    return_diagnostics: bool,
+):
+    """Return p-values alone, or with empirical counts and replacement mask.
+
+    The mask marks the cells whose returned p-value is not the empirical
+    ``(count + 1) / (J + 1)``: exactly the cells where the fitted tail was
+    used, so a caller can tell an approximated cell from a counted one.
+    Diagnostic output only; the p-values themselves are unchanged.
+    """
+    if not return_diagnostics:
+        return p_out
+    mask = np.asarray(p_out, dtype=np.float64) != np.asarray(
+        p_empirical, dtype=np.float64
+    )
+    return p_out, np.asarray(count, dtype=np.int64), mask
 
 
 def _replace_sparse_tail(
@@ -210,6 +231,7 @@ def fit_gpd_tail(
     n_thresholds: int = 5,
     ad_threshold: float = 2.5,
     min_exceedances: int = MIN_EXCEEDANCES,
+    return_diagnostics: bool = False,
 ) -> npt.NDArray[np.float64]:
     """
     Compute p-values with a GPD tail approximation where permutations are too few.
@@ -254,6 +276,11 @@ def fit_gpd_tail(
     below the fitted threshold retain empirical p-values. Fits whose finite
     upper endpoint excludes any candidate observation are rejected. Failed
     fits fall back to counting; the positive numerical floor guards underflow.
+
+    With ``return_diagnostics=True`` the return value is
+    ``(p_values, count, replaced)``: the empirical exceedance counts actually
+    computed here and a boolean mask of the cells whose p-value came from the
+    fitted tail instead of the count. The p-values are identical either way.
     """
     J = len(null_dist)
     if not isinstance(min_exceedances, (int, np.integer)) or min_exceedances < 1:
@@ -265,7 +292,7 @@ def fit_gpd_tail(
 
     sparse = count < min_exceedances
     if not np.any(sparse):
-        return p_empirical
+        return _tail_payload(p_empirical, p_empirical, count, return_diagnostics)
 
     for q in np.linspace(0.75, 0.95, n_thresholds):
         u = np.quantile(null_sorted, q)
@@ -301,19 +328,30 @@ def fit_gpd_tail(
             f"GPD fit: u={u:.3f} (q={q:.2f}), k={k}, xi={xi:.4f}, "
             f"sigma={sigma:.4f}, AD={ad_stat:.3f}, sparse={int(sparse.sum())}"
         )
-        return _replace_sparse_tail(
-            p_empirical, count, tail_p, J, min_exceedances, replacement_mask=eligible
+        return _tail_payload(
+            _replace_sparse_tail(
+                p_empirical,
+                count,
+                tail_p,
+                J,
+                min_exceedances,
+                replacement_mask=eligible,
+            ),
+            p_empirical,
+            count,
+            return_diagnostics,
         )
 
     # No good fit found — fall back to empirical
     logger.debug("GPD fit failed at all thresholds, using empirical p-values")
-    return p_empirical
+    return _tail_payload(p_empirical, p_empirical, count, return_diagnostics)
 
 
 def fit_gamma_tail(
     null_dist: npt.NDArray[np.float64],
     observed: npt.NDArray[np.float64],
     min_exceedances: int = MIN_EXCEEDANCES,
+    return_diagnostics: bool = False,
 ) -> npt.NDArray[np.float64]:
     """
     Compute p-values with a gamma (Pearson type III) tail where permutations are too few.
@@ -339,6 +377,10 @@ def fit_gamma_tail(
     p_values : ndarray of same shape as observed
         Permutation p-values (tie-inclusive, Phipson-Smyth +1), with gamma
         values in the sparse tail when the gamma can be fitted.
+
+    With ``return_diagnostics=True`` the return value is
+    ``(p_values, count, replaced)``; see :func:`fit_gpd_tail`. The p-values
+    are identical either way.
     """
 
     J = len(null_dist)
@@ -347,7 +389,7 @@ def fit_gamma_tail(
     p_empirical, count = _empirical_p(null_dist, observed)
     sparse = count < min_exceedances
     if not np.any(sparse):
-        return p_empirical
+        return _tail_payload(p_empirical, p_empirical, count, return_diagnostics)
 
     mean = np.mean(null_dist)
     var = np.var(null_dist, ddof=1)
@@ -362,7 +404,7 @@ def fit_gamma_tail(
         # A gamma with positive scale is always right-skewed (skewness
         # 2 / sqrt(a) > 0): it cannot represent a symmetric or left-skewed
         # null, so keep the permutation p-values.
-        return p_empirical
+        return _tail_payload(p_empirical, p_empirical, count, return_diagnostics)
 
     # Gamma parameters from moments
     # shape a = 4/skew^2, scale b = sqrt(var / a), loc = mean - a*b
@@ -371,14 +413,21 @@ def fit_gamma_tail(
     loc = mean - a * b
 
     tail_p = stats.gamma.sf(observed[sparse], a, loc=loc, scale=b)
-    return _replace_sparse_tail(p_empirical, count, tail_p, J, min_exceedances)
+    return _tail_payload(
+        _replace_sparse_tail(p_empirical, count, tail_p, J, min_exceedances),
+        p_empirical,
+        count,
+        return_diagnostics,
+    )
 
 
 def compute_p_values_accelerated(
     emp_stat_dict: Dict[str, npt.NDArray],
     max_null_dict: Dict[str, npt.NDArray],
     method: str = "gpd",
-) -> Dict[str, npt.NDArray]:
+    *,
+    return_diagnostics: bool = False,
+) -> Any:
     """
     Compute p-values using accelerated tail approximation.
 
@@ -395,14 +444,24 @@ def compute_p_values_accelerated(
         Dictionary with null distribution arrays.
     method : {'gpd', 'gamma'}, default='gpd'
         Acceleration method.
+    return_diagnostics : bool, default False
+        Also return the empirical exceedance counts and the per-cell mask of
+        tail replacements. Diagnostic only: no p-value changes, and the
+        default return type is unchanged. Because the replacement choice is
+        data-dependent, a conditional binomial interval is not valid for any
+        cell of an accelerated result, including surviving empirical cells.
 
     Returns
     -------
-    dict
-        Dictionary with p-value arrays for each key.
+    dict or (dict, dict)
+        Dictionary with p-value arrays for each key, and, with
+        ``return_diagnostics=True``, ``{'counts': {...},
+        'replacement_mask': {...}}`` with arrays shaped like the p-values.
     """
     fit_func = fit_gpd_tail if method == "gpd" else fit_gamma_tail
     p_values = {}
+    counts_out: Dict[str, npt.NDArray[np.int64]] = {}
+    replaced_out: Dict[str, npt.NDArray[np.bool_]] = {}
 
     from conninfpy.stats._engine import _check_finite_statistics
 
@@ -413,14 +472,36 @@ def compute_p_values_accelerated(
 
         if emp.ndim == 2:
             # Standard case: (N, N) vs (J,)
-            p_values[key] = fit_func(null, emp)
+            out = fit_func(null, emp, return_diagnostics=return_diagnostics)
+            if return_diagnostics:
+                p_values[key] = out[0]
+                counts_out[key] = out[1]
+                replaced_out[key] = out[2]
+            else:
+                p_values[key] = out
         else:
             # Multi-param: (N, N, n_params) vs (J, n_params)
             n_params = emp.shape[-1]
             p_list = []
+            count_list = []
+            mask_list = []
             for p_idx in range(n_params):
-                p_slice = fit_func(null[:, p_idx], emp[..., p_idx])
-                p_list.append(p_slice)
+                out = fit_func(
+                    null[:, p_idx],
+                    emp[..., p_idx],
+                    return_diagnostics=return_diagnostics,
+                )
+                if return_diagnostics:
+                    p_list.append(out[0])
+                    count_list.append(out[1])
+                    mask_list.append(out[2])
+                else:
+                    p_list.append(out)
             p_values[key] = np.stack(p_list, axis=-1)
+            if return_diagnostics:
+                counts_out[key] = np.stack(count_list, axis=-1)
+                replaced_out[key] = np.stack(mask_list, axis=-1)
 
+    if return_diagnostics:
+        return p_values, {"counts": counts_out, "replacement_mask": replaced_out}
     return p_values

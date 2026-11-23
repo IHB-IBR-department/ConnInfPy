@@ -475,6 +475,17 @@ def _jsonable(obj: Any) -> Any:
     return repr(obj)
 
 
+def _monte_carlo_summary(result: Any, alpha: float) -> Dict[str, Any]:
+    """Scalar Monte-Carlo precision / RNG provenance for the report JSON.
+
+    Describes the run that produced the result; nothing is re-run, and an
+    unknown space or unavailable count stays explicitly unknown.
+    """
+    from conninfpy.stats._mc import build_report, report_summary
+
+    return report_summary(build_report(result, alpha=alpha))
+
+
 def run(
     config_path: "str | os.PathLike[str]",
     out_dir: "str | os.PathLike[str] | None" = None,
@@ -556,6 +567,8 @@ def run(
             "inference_unit": inf.inference_unit,
             "n_permutations": inf.n_permutations,
             "acceleration": inf.acceleration,
+            # Monte-Carlo precision and RNG provenance, described (not re-run).
+            "monte_carlo": _monte_carlo_summary(inf, alpha),
             "flags": list(res.flags),
             "resolved_strategy": getattr(res, "resolved_strategy", None),
             "combat_diagnostics": res.combat_diagnostics,

@@ -35,6 +35,7 @@ from scipy import stats
 
 from conninfpy._prepare import nonfinite_report
 from conninfpy.stats import _degenerate as _degenerate
+from conninfpy.stats import _mc
 from conninfpy.stats._engine import (
     _bh_fdr_correction,
     _collect_results_to_arrays,
@@ -51,6 +52,13 @@ from conninfpy.stats.pairwise import _reduce_bh_fdr_edge_counts
 
 DEFAULT_MIN_COVERAGE = 0.8
 MIN_PER_GROUP = 3
+
+
+def _counts_return(p_values, raw_t, report, counts, count_kind, return_counts):
+    """Three-value legacy return, or the same plus the Monte-Carlo counts."""
+    if not return_counts:
+        return p_values, raw_t, report
+    return p_values, raw_t, report, {"counts": counts, "count_kind": count_kind}
 
 
 @dataclass
@@ -321,6 +329,7 @@ def available_case_p_val(
     block_inference: Optional[Dict[str, Any]] = None,
     two_tailed: bool = False,
     var_equal: bool = False,
+    return_counts: bool = False,
 ):
     """p-values, raw t maps and the coverage report for one available-case run.
 
@@ -377,7 +386,9 @@ def available_case_p_val(
             if two_tailed:
                 p[d.tested & (t == 0)] = 1.0
             p_values[key] = _matrix(p)
-        return p_values, raw_t, report
+        # Parametric p-values come from the t distribution: no permutation
+        # counts exist, and none is reconstructed.
+        return _counts_return(p_values, raw_t, report, None, None, return_counts)
 
     seeds = np.random.RandomState(random_state).randint(
         0, 2**32 - 1, size=n_permutations, dtype=np.int64
@@ -412,7 +423,30 @@ def available_case_p_val(
             if two_tailed:
                 p[d.tested & (t == 0)] = 1.0
             p_values[key] = _matrix(p)
-        return p_values, raw_t, report
+        # The counts are genuine per-edge indicator sums; the returned p-values
+        # are their BH-adjusted q values, so the count belongs to the raw
+        # empirical exceedance, never to the adjusted q.
+        count_maps: Dict[str, npt.NDArray[np.int64]] = {}
+        if two_tailed:
+            shared = np.asarray(counts, dtype=np.int64)
+            for key, t in (("positive", t_pos), ("negative", t_neg)):
+                c_mat = np.full((d.N, d.N), _mc.COUNT_UNAVAILABLE, dtype=np.int64)
+                used = d.tested & (t > 0)
+                c_mat[d.triu[0][used], d.triu[1][used]] = shared[used]
+                c_mat[d.triu[1][used], d.triu[0][used]] = shared[used]
+                count_maps[key] = c_mat
+            count_kind = _mc.COUNT_KIND_TWO_SIDED_SUM_STAT
+        else:
+            for row, key in ((0, "positive"), (1, "negative")):
+                c_mat = np.full((d.N, d.N), _mc.COUNT_UNAVAILABLE, dtype=np.int64)
+                values = np.asarray(counts[row], dtype=np.int64)
+                c_mat[d.triu[0][d.tested], d.triu[1][d.tested]] = values[d.tested]
+                c_mat[d.triu[1][d.tested], d.triu[0][d.tested]] = values[d.tested]
+                count_maps[key] = c_mat
+            count_kind = _mc.COUNT_KIND_EDGE_WISE
+        return _counts_return(
+            p_values, raw_t, report, count_maps, count_kind, return_counts
+        )
 
     tested_mat = np.zeros((d.N, d.N), dtype=bool)
     tested_mat[d.triu] = d.tested
@@ -434,6 +468,11 @@ def available_case_p_val(
     if two_tailed and block_inference is None:
         joint = np.maximum(null["positive"], null["negative"])
         null = {"positive": joint, "negative": joint}
+    # Per-edge counts of the 0/1 indicator sums the counting code computes:
+    # None for block-level (cNBS) inference, which has no per-edge counter.
+    counts_raw = None
+    replacement_mask = None
+    count_kind = None
     if block_inference is not None:
         from conninfpy.stats._cnbs import block_p_values
 
@@ -450,9 +489,23 @@ def available_case_p_val(
     elif acceleration is not None:
         from conninfpy.stats.acceleration import compute_p_values_accelerated
 
-        p_values = compute_p_values_accelerated(emp, null, method=acceleration)
+        # Diagnostics only: the reported p-values are unchanged, and no Wilson
+        # interval applies anywhere in an accelerated result.
+        p_values, diagnostics = compute_p_values_accelerated(
+            emp, null, method=acceleration, return_diagnostics=True
+        )
+        counts_raw = diagnostics["counts"]
+        replacement_mask = diagnostics["replacement_mask"]
+        count_kind = (
+            _mc.COUNT_KIND_JOINT_MAX if two_tailed else _mc.COUNT_KIND_MAX_STAT
+        )
     else:
-        p_values = _compute_p_values_from_null(emp, null)
+        p_values, counts_raw = _compute_p_values_from_null(
+            emp, null, return_counts=True
+        )
+        count_kind = (
+            _mc.COUNT_KIND_JOINT_MAX if two_tailed else _mc.COUNT_KIND_MAX_STAT
+        )
     # Untested edges are outside the family: NaN, never "not significant" by accident
     for key in p_values:
         p = np.array(p_values[key], dtype=np.float64)
@@ -463,4 +516,17 @@ def available_case_p_val(
             p[d.triu[0][untested], d.triu[1][untested]] = np.nan
             p[d.triu[1][untested], d.triu[0][untested]] = np.nan
         p_values[key] = p
-    return p_values, raw_t, report
+    count_maps = None
+    if counts_raw is not None:
+        # Untested edges (coverage), the diagonal and replaced accelerated
+        # tails keep the sentinel: never a fabricated count.
+        count_maps = {
+            key: _mc.mark_untested(
+                counts_raw[key],
+                p_values[key],
+                unavailable=(replacement_mask or {}).get(key),
+                n_draws=n_permutations,
+            )
+            for key in counts_raw
+        }
+    return _counts_return(p_values, raw_t, report, count_maps, count_kind, return_counts)

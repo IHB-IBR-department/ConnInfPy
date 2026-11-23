@@ -58,6 +58,7 @@ from conninfpy.enhance._backend import _enhance_call_scope, _suppress_fallback_w
 from conninfpy._provenance import capture_analysis_provenance
 from conninfpy.results import InferenceResult, make_inference_result
 from conninfpy.stats import _degenerate as _degenerate
+from conninfpy.stats import _mc
 from conninfpy.stats._components import build_component_report
 from conninfpy.stats._engine import (
     _bh_fdr_correction,
@@ -1056,6 +1057,7 @@ def _compute_bh_fdr_perm_p_values(
     strata: Optional[npt.NDArray[Any]] = None,
     two_tailed: bool = False,
     var_equal: bool = False,
+    return_counts: bool = False,
 ) -> Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]]]:
     """
     Compute BH-FDR corrected p-values using permutation-based per-edge nulls.
@@ -1064,6 +1066,11 @@ def _compute_bh_fdr_perm_p_values(
     2. For each permutation, compute per-edge t-stats.
     3. For each edge, p = (# perm t >= observed t) / n_perm.
     4. Apply BH-FDR correction to per-edge p-values.
+
+    The BH correction is applied to the per-edge empirical counts; the
+    returned p-values are therefore adjusted q values, not empirical
+    exceedance p-values. Exceedance counts are captured here (they already
+    exist in the reducing code) when ``return_counts=True``.
     """
     # Compute observed t-stats
     if test_type_str == TestType.PAIRED.value:
@@ -1147,8 +1154,10 @@ def _compute_bh_fdr_perm_p_values(
     # Compute per-edge p-values (with +1 correction — Phipson & Smyth 2010)
     # and apply BH-FDR correction
     p_values = {}
+    count_maps: Dict[str, npt.NDArray[np.int64]] = {}
     if two_tailed:
         count = counts
+        count_int = np.asarray(count, dtype=np.int64)
         corrected = _bh_fdr_correction((count + 1.0) / (n_permutations + 1.0))
         for key in ("positive", "negative"):
             p_mat = np.ones((N, N), dtype=np.float64)
@@ -1156,6 +1165,19 @@ def _compute_bh_fdr_perm_p_values(
             p_mat[triu_idx] = directional
             p_mat[(triu_idx[1], triu_idx[0])] = directional
             p_values[key] = p_mat
+            if return_counts:
+                # One shared two-sided count array; a cell only carries it when
+                # this tail's direction is the one the count was built for.
+                used = emp_t_dict[key][triu_idx] > 0
+                c_mat = np.full((N, N), _mc.COUNT_UNAVAILABLE, dtype=np.int64)
+                c_mat[triu_idx] = np.where(used, count_int, _mc.COUNT_UNAVAILABLE)
+                c_mat[(triu_idx[1], triu_idx[0])] = c_mat[triu_idx]
+                count_maps[key] = c_mat
+        if return_counts:
+            return p_values, emp_t_dict, {
+                "counts": count_maps,
+                "count_kind": _mc.COUNT_KIND_TWO_SIDED_SUM_STAT,
+            }
         return p_values, emp_t_dict
     for row, key in ((0, "positive"), (1, "negative")):
         count_ge = counts[row]
@@ -1170,7 +1192,17 @@ def _compute_bh_fdr_perm_p_values(
         p_mat[triu_idx] = corrected_p
         p_mat[(triu_idx[1], triu_idx[0])] = corrected_p
         p_values[key] = p_mat
+        if return_counts:
+            c_mat = np.full((N, N), _mc.COUNT_UNAVAILABLE, dtype=np.int64)
+            c_mat[triu_idx] = np.asarray(count_ge, dtype=np.int64)
+            c_mat[(triu_idx[1], triu_idx[0])] = c_mat[triu_idx]
+            count_maps[key] = c_mat
 
+    if return_counts:
+        return p_values, emp_t_dict, {
+            "counts": count_maps,
+            "count_kind": _mc.COUNT_KIND_EDGE_WISE,
+        }
     return p_values, emp_t_dict
 
 
@@ -1717,6 +1749,16 @@ def compute_p_val(
             f"var_equal applies to test_type='two-sample' only; got {test_type_str!r}."
         )
 
+    # ---- Monte-Carlo precision metadata (descriptive; no stream changes) ----
+    # The resolved seed is the one the existing seed draw uses below.
+    mc_rng = _mc.rng_provenance(random_state)
+    mc_space = _mc.permutation_space(
+        test_type_str,
+        group1.shape[0],
+        None if group2 is None else group2.shape[0],
+        strata,
+    )
+
     # Validate method
     try:
         method_enum = StatMethod(method_str)
@@ -1796,7 +1838,7 @@ def compute_p_val(
             mode = "bh_fdr_perm"
         else:
             mode = "max"
-        p_ac, raw_t_ac, report = available_case_p_val(
+        p_ac, raw_t_ac, report, mc_ac = available_case_p_val(
             group1,
             group2,
             test_type_str,
@@ -1818,6 +1860,7 @@ def compute_p_val(
                 else None
             ),
             var_equal=var_equal,
+            return_counts=True,
         )
         e_grid, h_grid = _grid_from_kwargs(method_enum, enhance_kwargs)
         return InferenceResult(
@@ -1836,6 +1879,10 @@ def compute_p_val(
             missing_report=report,
             block_report=report.pop("block_report", None),
             two_tailed=two_tailed,
+            exceedance_counts=mc_ac["counts"],
+            count_kind=mc_ac["count_kind"],
+            rng_provenance=mc_rng,
+            permutation_space=None,
             component_report=build_component_report(
                 raw_t_ac, p_ac, method=method_enum, threshold=threshold,
                 nbs_stat=nbs_stat, n_permutations=n_permutations,
@@ -1864,7 +1911,7 @@ def compute_p_val(
 
     # BH-FDR with permutation p-values: separate code path
     if method_enum == StatMethod.BH_FDR_PERM:
-        result, obs_t_dict = _compute_bh_fdr_perm_p_values(
+        result, obs_t_dict, bh_counts = _compute_bh_fdr_perm_p_values(
             group1,
             group2,
             test_type_str,
@@ -1876,6 +1923,7 @@ def compute_p_val(
             strata=strata,
             two_tailed=two_tailed,
             var_equal=var_equal,
+            return_counts=True,
         )
         return InferenceResult(
             result["positive"],
@@ -1889,6 +1937,13 @@ def compute_p_val(
             stat_type="tstat",
             strata_provided=strata is not None,
             two_tailed=two_tailed,
+            exceedance_counts={
+                key: _mc.mark_untested(counts, result[key])
+                for key, counts in bh_counts["counts"].items()
+            },
+            count_kind=bh_counts["count_kind"],
+            rng_provenance=mc_rng,
+            permutation_space=mc_space,
         )
 
     # Compute observed t-stat once, then apply enhancement (if any)
@@ -1952,6 +2007,8 @@ def compute_p_val(
         )
 
     block_report = None
+    mc_counts = None
+    mc_count_kind = None
     if two_tailed and method_enum != StatMethod.CNBS:
         joint = np.maximum(max_null_dict["positive"], max_null_dict["negative"])
         max_null_dict = {"positive": joint, "negative": joint}
@@ -1967,14 +2024,27 @@ def compute_p_val(
             acceleration=acceleration,
             two_tailed=two_tailed,
         )
+        # Block-level inference: no per-edge exceedance count exists, and none
+        # is reconstructed from the block p-values.
     elif acceleration is not None:
-        result = compute_p_values_accelerated(
+        result, mc_diag = compute_p_values_accelerated(
             emp_t_dict,
             max_null_dict,
             method=acceleration,
+            return_diagnostics=True,
+        )
+        # Counts are the producer's empirical counts; a cell whose p-value came
+        # from the fitted tail carries no usable count (sentinel).
+        mc_count_kind = (
+            _mc.COUNT_KIND_JOINT_MAX if two_tailed else _mc.COUNT_KIND_MAX_STAT
         )
     else:
-        result = _compute_p_values_from_null(emp_t_dict, max_null_dict)
+        result, mc_raw_counts = _compute_p_values_from_null(
+            emp_t_dict, max_null_dict, return_counts=True
+        )
+        mc_count_kind = (
+            _mc.COUNT_KIND_JOINT_MAX if two_tailed else _mc.COUNT_KIND_MAX_STAT
+        )
     if family is not None:
         # Edges outside the declared family are untested: NaN, never "not significant"
         outside = ~family & ~np.eye(family.shape[0], dtype=bool)
@@ -1982,6 +2052,25 @@ def compute_p_val(
             k: np.where(outside, np.nan, np.asarray(result[k], dtype=np.float64))
             for k in ("positive", "negative")
         }
+    if mc_count_kind is not None and method_enum != StatMethod.CNBS:
+        if acceleration is not None:
+            mc_counts = {
+                key: _mc.mark_untested(
+                    mc_diag["counts"][key],
+                    result[key],
+                    unavailable=mc_diag["replacement_mask"][key],
+                    n_draws=n_permutations,
+                )
+                for key in ("positive", "negative")
+                if key in mc_diag["counts"]
+            }
+        else:
+            mc_counts = {
+                key: _mc.mark_untested(
+                    counts, result[key], n_draws=n_permutations
+                )
+                for key, counts in mc_raw_counts.items()
+            }
     # Capture the (E, H) grid for TFNBS-family methods so the result
     # carries the parameter axis labels when an array was passed.
     e_grid, h_grid = _grid_from_kwargs(method_enum, enhance_kwargs)
@@ -2000,6 +2089,10 @@ def compute_p_val(
         h_grid=h_grid,
         block_report=block_report,
         two_tailed=two_tailed,
+        exceedance_counts=mc_counts,
+        count_kind=mc_count_kind,
+        rng_provenance=mc_rng,
+        permutation_space=mc_space,
         component_report=build_component_report(
             raw_t_dict, result, method=method_enum, threshold=threshold,
             nbs_stat=nbs_stat, n_permutations=n_permutations,

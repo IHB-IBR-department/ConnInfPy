@@ -64,6 +64,7 @@ from conninfpy._provenance import (
 from conninfpy.results import InferenceResult, OmnibusInferenceResult
 from conninfpy.stats import _degenerate as _degenerate
 from conninfpy.stats import _estimates as _estimates
+from conninfpy.stats import _mc
 from conninfpy.stats._components import build_component_report
 from conninfpy.stats._design import (
     _check_estimable,
@@ -682,6 +683,8 @@ def compute_p_val_glm(
     if random_state is not None and rng is None:
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
+    # Monte-Carlo provenance only: the resolved seed reused below, no new draws.
+    mc_rng = _mc.rng_provenance(random_state)
 
     if missing not in ("raise", "available_case"):
         raise ValueError(
@@ -808,7 +811,7 @@ def compute_p_val_glm(
         from conninfpy.stats._missing_glm import available_case_glm
         from conninfpy.stats._types import _grid_from_kwargs
 
-        p_ac, raw_ac, report = available_case_glm(
+        p_ac, raw_ac, report, mc_ac = available_case_glm(
             Y,
             X,
             contrast_vec,
@@ -827,6 +830,7 @@ def compute_p_val_glm(
             min_coverage=min_coverage,
             scheme=_resolve_scheme(X, _compute_reduced_model(X, contrast_vec), scheme),
             block_inference=block_inference,
+            return_counts=True,
         )
         block_report = report.pop("block_report", None)
         beta_ac = report.pop("beta")
@@ -857,6 +861,10 @@ def compute_p_val_glm(
                 block_report=block_report,
                 beta=beta_ac,
                 design=design,
+                exceedance_counts=mc_ac["counts"],
+                count_kind=mc_ac["count_kind"],
+                rng_provenance=mc_rng,
+                permutation_space=None,
                 component_report=build_component_report(
                     raw_ac, p_ac, method=method_enum, threshold=threshold,
                     nbs_stat=nbs_stat, edge_stat="fstat",
@@ -882,6 +890,10 @@ def compute_p_val_glm(
             two_tailed=two_tailed,
             beta=beta_ac,
             design=design,
+            exceedance_counts=mc_ac["counts"],
+            count_kind=mc_ac["count_kind"],
+            rng_provenance=mc_rng,
+            permutation_space=None,
             component_report=build_component_report(
                 raw_ac, p_ac, method=method_enum, threshold=threshold,
                 nbs_stat=nbs_stat, edge_stat=stat_type_str,
@@ -998,6 +1010,10 @@ def compute_p_val_glm(
 
     # ---- Compute p-values ----
     block_report = None
+    mc_counts = None
+    mc_count_kind = None
+    # Freedman–Lane swaps residuals under a model, not a fixed relabelling
+    # space: the number of admissible assignments is unknown (None).
     if block_inference is not None:
         from conninfpy.stats._cnbs import block_p_values
 
@@ -1011,13 +1027,41 @@ def compute_p_val_glm(
             two_tailed=two_tailed,
         )
     elif acceleration is not None:
-        result = compute_p_values_accelerated(
+        result, mc_diag = compute_p_values_accelerated(
             emp_stat_dict,
             max_null_dict,
             method=acceleration,
+            return_diagnostics=True,
         )
     else:
-        result = _compute_p_values_from_null(emp_stat_dict, max_null_dict)
+        result, mc_raw_counts = _compute_p_values_from_null(
+            emp_stat_dict, max_null_dict, return_counts=True
+        )
+    if block_inference is None:
+        # F has no sign: two_tailed pools nothing on the F-stat path, so there
+        # is no joint null and every cell comes from an independent max-stat.
+        joint_used = two_tailed and stat_type_str != GLMStatType.FSTAT.value
+        mc_count_kind = (
+            _mc.COUNT_KIND_JOINT_MAX if joint_used else _mc.COUNT_KIND_MAX_STAT
+        )
+        if acceleration is not None:
+            mc_counts = {
+                key: _mc.mark_untested(
+                    mc_diag["counts"][key],
+                    result[key],
+                    unavailable=mc_diag["replacement_mask"][key],
+                    n_draws=n_permutations,
+                )
+                for key in result
+                if key in mc_diag["counts"]
+            }
+        else:
+            mc_counts = {
+                key: _mc.mark_untested(
+                    counts, result[key], n_draws=n_permutations
+                )
+                for key, counts in mc_raw_counts.items()
+            }
     method_str = method.value if hasattr(method, "value") else str(method)
     from conninfpy.stats._types import _grid_from_kwargs
 
@@ -1040,6 +1084,10 @@ def compute_p_val_glm(
             two_tailed=two_tailed,
             beta=beta,
             design=design,
+            exceedance_counts=mc_counts,
+            count_kind=mc_count_kind,
+            rng_provenance=mc_rng,
+            permutation_space=None,
             component_report=build_component_report(
                 raw_stat_dict, result, method=method_enum, threshold=threshold,
                 nbs_stat=nbs_stat, edge_stat=stat_type_str,
@@ -1059,6 +1107,10 @@ def compute_p_val_glm(
         block_report=block_report,
         beta=beta,
         design=design,
+        exceedance_counts=mc_counts,
+        count_kind=mc_count_kind,
+        rng_provenance=mc_rng,
+        permutation_space=None,
         component_report=build_component_report(
             raw_stat_dict, result, method=method_enum, threshold=threshold,
             nbs_stat=nbs_stat, edge_stat="fstat", n_permutations=n_permutations,
@@ -1218,6 +1270,8 @@ def compute_p_val_glm_multi(
     if random_state is not None and rng is None:
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
+    # Monte-Carlo provenance only: the resolved seed reused below, no new draws.
+    mc_rng = _mc.rng_provenance(random_state)
 
     if missing not in ("raise", "available_case"):
         raise ValueError(
@@ -1462,6 +1516,8 @@ def compute_p_val_glm_multi(
         emp = emp_dicts[name]
         null = null_max_per_contrast[name]
         block_report = None
+        mc_counts = None
+        mc_count_kind = None
         if method_enum == StatMethod.CNBS:
             from conninfpy.stats._cnbs import block_p_values
 
@@ -1475,9 +1531,39 @@ def compute_p_val_glm_multi(
                 two_tailed=two_tailed,
             )
         elif acceleration is not None:
-            res = compute_p_values_accelerated(emp, null, method=acceleration)
+            res, mc_diag = compute_p_values_accelerated(
+                emp, null, method=acceleration, return_diagnostics=True
+            )
         else:
-            res = _compute_p_values_from_null(emp, null)
+            res, mc_raw_counts = _compute_p_values_from_null(
+                emp, null, return_counts=True
+            )
+        if method_enum != StatMethod.CNBS:
+            # Freedman–Lane: no fixed relabelling space (unknown), and F has
+            # no sign so only a signed two-sided run pools into a joint null.
+            mc_count_kind = (
+                _mc.COUNT_KIND_JOINT_MAX
+                if two_tailed and stat_type_str != GLMStatType.FSTAT.value
+                else _mc.COUNT_KIND_MAX_STAT
+            )
+            if acceleration is not None:
+                mc_counts = {
+                    key: _mc.mark_untested(
+                        mc_diag["counts"][key],
+                        res[key],
+                        unavailable=mc_diag["replacement_mask"][key],
+                        n_draws=n_permutations,
+                    )
+                    for key in res
+                    if key in mc_diag["counts"]
+                }
+            else:
+                mc_counts = {
+                    key: _mc.mark_untested(
+                        counts, res[key], n_draws=n_permutations
+                    )
+                    for key, counts in mc_raw_counts.items()
+                }
         raw = raw_stat_dicts[name]
         out[name] = InferenceResult(
             res["positive"],
@@ -1496,6 +1582,10 @@ def compute_p_val_glm_multi(
             design=_estimates.glm_design(
                 X, contrast_arrays[contrast_names.index(name)], design_columns
             ),
+            exceedance_counts=mc_counts,
+            count_kind=mc_count_kind,
+            rng_provenance=mc_rng,
+            permutation_space=None,
             component_report=build_component_report(
                 raw, res, method=method_enum, threshold=threshold,
                 nbs_stat=nbs_stat, edge_stat=stat_type_str,

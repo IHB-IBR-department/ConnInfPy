@@ -208,6 +208,32 @@ class InferenceResult(TailResult):
     analysis_provenance : dict or None
         Producer-captured identities, correction family, validity masks and
         coverage used by :meth:`to_bundle`; ``None`` for legacy results.
+    exceedance_counts : dict[str, ndarray] or None
+        Raw per-cell permutation exceedance counts (``count`` in
+        ``p = (count + 1) / (B + 1)``), genuinely computed by the counting
+        code and never reconstructed from p-values. Each array has the shape
+        of that tail's p-value map; ``-1`` marks a cell with no genuine count
+        (diagonal, outside a declared family mask, NaN p-value, an accelerated
+        tail replacement, or a cell that tail does not use). ``None`` for
+        legacy results, parametric methods, cNBS and available-case analyses.
+    count_kind : str or None
+        Which 0/1-per-draw counting rule produced ``exceedance_counts``:
+        ``'max_stat'``, ``'joint_max'`` (two-sided run: both tails count
+        against the same joint null), ``'edge_wise'`` or
+        ``'two_sided_sum_stat'``
+        (``bh_fdr_perm``; there the interval belongs to the underlying
+        per-edge count, never to the BH-adjusted q value).
+    rng_provenance : dict or None
+        ``{'seed', 'scheme', 'bit_generator', 'schema_version'}`` describing
+        the scheme that actually ran (legacy ``RandomState``/MT19937, one
+        uint32 seed per permutation). ``seed`` is ``None`` for a
+        non-deterministic run. Recording it draws no random numbers.
+    permutation_space : int or None
+        Theoretical number of admissible assignments (``2**n`` for sign
+        flips, ``comb(n1+n2, n1)`` or its per-stratum product for group
+        shuffles). ``None`` where the space is ambiguous (Freedman-Lane
+        residuals, available-case, block-level inference); never the number
+        of distinct statistic values.
     """
 
     method: str
@@ -236,6 +262,12 @@ class InferenceResult(TailResult):
     beta: Optional[npt.NDArray[np.float64]]
     design: Optional[Dict[str, Any]]
     analysis_provenance: Optional[Dict[str, Any]]
+    # Class-level defaults also cover results pickled before these attributes
+    # existed: they reload as None ("unavailable"), never as an invention.
+    exceedance_counts: Optional[Dict[str, Optional[npt.NDArray[np.int64]]]] = None
+    count_kind: Optional[str] = None
+    rng_provenance: Optional[Dict[str, Any]] = None
+    permutation_space: Optional[int] = None
 
     def __new__(
         cls,
@@ -265,6 +297,10 @@ class InferenceResult(TailResult):
         tested_tail: Optional[str] = None,
         component_report: Optional[Dict[str, Any]] = None,
         tail_selection: Optional[str] = None,
+        exceedance_counts: Optional[Dict[str, Optional[npt.NDArray[np.int64]]]] = None,
+        count_kind: Optional[str] = None,
+        rng_provenance: Optional[Dict[str, Any]] = None,
+        permutation_space: Optional[int] = None,
     ) -> "InferenceResult":
         instance = super().__new__(cls)
         TailResult.__init__(
@@ -293,6 +329,10 @@ class InferenceResult(TailResult):
         instance.beta = beta
         instance.design = design
         instance.analysis_provenance = analysis_provenance
+        instance.exceedance_counts = exceedance_counts
+        instance.count_kind = count_kind
+        instance.rng_provenance = rng_provenance
+        instance.permutation_space = permutation_space
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
@@ -345,6 +385,61 @@ class InferenceResult(TailResult):
         if tested is not None:
             return f"one-sided-{tested}"
         return "two-sided" if getattr(self, "two_tailed", False) else "separate-one-sided"
+
+    def mc_report(self, alpha: float = 0.05, param_idx: Optional[int] = None) -> Dict[str, Any]:
+        """Monte-Carlo precision and RNG provenance for this result.
+
+        Describes, per tail: the number of permutations ``B``, the numerical
+        resolution ``1 / (B + 1)`` (the smallest attainable p-value — a grid
+        step, not an error bar), the theoretical permutation space (or
+        ``None`` when it is ambiguous), whether the raw exceedance counts
+        ``count`` are available, and a conditional binomial (Wilson) interval
+        for ``count / B`` wherever one is justified.
+
+        What the numbers mean
+        ---------------------
+        The reported p-value is ``(count + 1) / (B + 1)``; the interval here is
+        for the *conditional exceedance probability* ``count / B`` of a single
+        draw, i.e. ``P(T* >= T_obs | H0)``, and never a bound on family-wise or
+        FDR error. Because only ``B + 1`` p-values are attainable, a p-value
+        within about ``1 / (B + 1)`` of a threshold (alpha) cannot be separated
+        from it by this run; that is a resolution limit, not evidence for
+        either side.
+
+        Tail policy: a two-sided result uses the joint null
+        ``max(positive, negative)``, so both tails count against that same
+        null (``count_kind='joint_max'``); their counts, and therefore their
+        intervals, are not independent.
+        Separate one-sided tails have their own counts. For
+        ``bh_fdr_perm`` the reported p-values are BH-adjusted q values; the
+        interval belongs to the underlying per-edge empirical count only.
+
+        Honesty rules: counts are the producer's, never reconstructed from
+        p-values. Untested cells keep the sentinel ``-1`` (see
+        ``exceedance_counts``) and get no interval. Accelerated (GPD/gamma)
+        results, cNBS block inference, available-case analyses and legacy
+        results report interval status ``'unknown'`` with the actual reason.
+        Sampling is i.i.d. *with replacement*, so ``B`` above the permutation
+        space only raises an informational flag (duplicate draws expected).
+
+        Parameters
+        ----------
+        alpha : float, default 0.05
+            Two-sided confidence level ``1 - alpha`` for the Wilson interval.
+        param_idx : int, optional
+            Cell of an (E, H) grid result; omit to describe the whole grid.
+
+        Returns
+        -------
+        dict
+            ``n_permutations``, ``resolution``, ``permutation_space``,
+            ``rng``, ``count_kind``, ``flags``, ``notes`` and a ``tails``
+            mapping with the counts, tested mask, interval status/reason and
+            interval bound arrays (NaN outside the tested cells).
+        """
+        from conninfpy.stats._mc import build_report
+
+        return build_report(self, alpha=alpha, param_idx=param_idx)
 
     def one_sided(self, direction: str) -> "InferenceResult":
         """Restrict a finished result to one direction — a post hoc selection.
@@ -445,6 +540,15 @@ class InferenceResult(TailResult):
             component_report=restrict_component_report(
                 getattr(self, "component_report", None), direction, selection=selection
             ),
+            exceedance_counts=(
+                {direction: self.exceedance_counts[direction]}
+                if getattr(self, "exceedance_counts", None)
+                and direction in self.exceedance_counts
+                else None
+            ),
+            count_kind=getattr(self, "count_kind", None),
+            rng_provenance=getattr(self, "rng_provenance", None),
+            permutation_space=getattr(self, "permutation_space", None),
         )
 
     @property
@@ -540,6 +644,21 @@ class InferenceResult(TailResult):
                 getattr(self, "analysis_provenance", None), param_idx=param_idx
             ),
             component_report=getattr(self, "component_report", None),
+            exceedance_counts=(
+                {
+                    tail: (
+                        arr[:, :, param_idx].copy() if np.asarray(arr).ndim == 3
+                        else np.array(arr, copy=True)
+                    )
+                    for tail, arr in self.exceedance_counts.items()
+                    if arr is not None
+                }
+                if getattr(self, "exceedance_counts", None)
+                else None
+            ),
+            count_kind=getattr(self, "count_kind", None),
+            rng_provenance=getattr(self, "rng_provenance", None),
+            permutation_space=getattr(self, "permutation_space", None),
         )
 
     def n_significant(
@@ -1069,6 +1188,12 @@ class OmnibusInferenceResult(TailResult):
     analysis_provenance: Optional[Dict[str, Any]]
     # See InferenceResult.component_report (single tail, 'omnibus').
     component_report: Optional[Dict[str, Any]] = None
+    # See InferenceResult.exceedance_counts and friends: same contract, one
+    # 'omnibus' tail (F has no sign, so there is no two-sided pooling).
+    exceedance_counts: Optional[Dict[str, Optional[npt.NDArray[np.int64]]]] = None
+    count_kind: Optional[str] = None
+    rng_provenance: Optional[Dict[str, Any]] = None
+    permutation_space: Optional[int] = None
 
     def __new__(
         cls,
@@ -1091,6 +1216,10 @@ class OmnibusInferenceResult(TailResult):
         design: Optional[Dict[str, Any]] = None,
         analysis_provenance: Optional[Dict[str, Any]] = None,
         component_report: Optional[Dict[str, Any]] = None,
+        exceedance_counts: Optional[Dict[str, Optional[npt.NDArray[np.int64]]]] = None,
+        count_kind: Optional[str] = None,
+        rng_provenance: Optional[Dict[str, Any]] = None,
+        permutation_space: Optional[int] = None,
     ) -> "OmnibusInferenceResult":
         instance = super().__new__(cls)
         # Don't go through TailResult's positive/negative initializer —
@@ -1113,6 +1242,10 @@ class OmnibusInferenceResult(TailResult):
         instance.beta = beta
         instance.design = design
         instance.analysis_provenance = analysis_provenance
+        instance.exceedance_counts = exceedance_counts
+        instance.count_kind = count_kind
+        instance.rng_provenance = rng_provenance
+        instance.permutation_space = permutation_space
         return instance
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
@@ -1137,6 +1270,18 @@ class OmnibusInferenceResult(TailResult):
         """Snapshot this unsigned omnibus result for post-analysis reporting."""
         from conninfpy.post_analysis import ResultBundle
         return ResultBundle.from_result(self, **kwargs)
+
+    def mc_report(self, alpha: float = 0.05, param_idx: Optional[int] = None) -> Dict[str, Any]:
+        """Monte-Carlo precision and RNG provenance for the omnibus map.
+
+        Same contract as :meth:`InferenceResult.mc_report`, with a single
+        ``'omnibus'`` tail: F has no sign, so there is no two-sided pooling and
+        the counts come from the one-sided max-F null (one 0/1 indicator per
+        draw).
+        """
+        from conninfpy.stats._mc import build_report
+
+        return build_report(self, alpha=alpha, param_idx=param_idx)
 
     @property
     def tail_policy(self) -> str:
