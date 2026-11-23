@@ -18,6 +18,18 @@ From a clone (until the first PyPI release)
 
 After the release this becomes ``python -m pip install conninfpy``.
 
+From a built artifact
+----------------------
+
+``python -m build`` produces ``dist/conninfpy-2.0.0-py3-none-any.whl`` and
+``dist/conninfpy-2.0.0.tar.gz``. Either installs with its dependencies and the
+bundled atlas data, and the checkout is no longer needed afterwards:
+
+.. code-block:: bash
+
+    python -m build
+    python -m pip install dist/conninfpy-2.0.0-py3-none-any.whl   # or the .tar.gz
+
 Optional extras
 ---------------
 
@@ -37,7 +49,8 @@ Requirements
 ------------
 
 Core: ``numpy``, ``scipy``, ``statsmodels``, ``pandas``, ``matplotlib``,
-``numba``, ``scikit-learn``, ``threadpoolctl``, ``pyyaml``.
+``numba``, ``scikit-learn``, ``joblib``, ``threadpoolctl``, ``pyyaml``,
+``nibabel>=3.2``.
 
 .. note::
    **Without numba.** If ``numba`` / ``llvmlite`` cannot be installed on your
@@ -46,6 +59,11 @@ Core: ``numpy``, ``scipy``, ``statsmodels``, ``pandas``, ``matplotlib``,
    .. code-block:: bash
 
        python -m pip install -e . --no-deps
-       python -m pip install numpy scipy statsmodels pandas matplotlib scikit-learn pyyaml threadpoolctl
+       python -m pip install numpy scipy statsmodels pandas matplotlib scikit-learn joblib threadpoolctl pyyaml "nibabel>=3.2"
 
-   ConnInfPy detects the missing ``numba`` and falls back to the SciPy backend.
+   Every ``numba`` kernel (TFNBS scoring and the graph sweep) then uses its
+   NumPy/SciPy implementation: the same inference, slower. ``conninfpy info``
+   prints ``numba      not installed (SciPy TFNBS backend)`` in that setup.
+   ``nibabel`` is not optional — the atlas and the interpretation step read
+   their label images with it, so annotation fails without it even though the
+   statistics still run.

@@ -67,13 +67,28 @@ After the release this becomes `python -m pip install conninfpy`. Optional
 extras: `[app]` (Streamlit interface), `[notebooks]` (Jupyter tutorials),
 `[dev]` (tests and docs).
 
-If `numba` fails to install on your platform, install without it — ConnInfPy
-falls back to SciPy automatically:
+A built artifact installs the same way and is self-contained once installed:
+`python -m build` writes `dist/conninfpy-2.0.0-py3-none-any.whl` and
+`dist/conninfpy-2.0.0.tar.gz`, and
+`python -m pip install dist/conninfpy-2.0.0-py3-none-any.whl` (or the
+`.tar.gz`) resolves the dependencies, installs the bundled Brainnetome atlas
+data and puts the `conninfpy` command on the path of that environment — no
+checkout needed afterwards.
+
+Without `numba`, install the other dependencies yourself: every `numba` kernel
+(the TFNBS scoring and its graph sweep) falls back to its NumPy/SciPy
+implementation, with the same inference and only a slower runtime. Check the
+active backend with `conninfpy info` (`numba      not installed (SciPy TFNBS
+backend)`):
 
 ```bash
 python -m pip install -e . --no-deps
-python -m pip install numpy scipy statsmodels pandas matplotlib scikit-learn pyyaml threadpoolctl
+python -m pip install numpy scipy statsmodels pandas matplotlib scikit-learn joblib threadpoolctl pyyaml "nibabel>=3.2"
 ```
+
+`nibabel` is not optional: the atlas and the interpretation step read their
+label images with it, so the annotation fails without it even though the
+statistics still run.
 
 ---
 
