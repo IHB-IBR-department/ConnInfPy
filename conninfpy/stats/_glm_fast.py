@@ -311,38 +311,40 @@ def _max_tails(
     return out
 
 
-def permutation_task(
-    plan: EdgeGlmPlan,
-    yhat_e: npt.NDArray[np.float64],
-    r_e: npt.NDArray[np.float64],
-    seed: int,
+def score_tails(
+    stat_dict: Dict[str, npt.NDArray[np.float64]], spec: _EdgeMaxSpec
 ) -> Dict[str, Any]:
-    """One Freedman-Lane permutation, scored on the edge vector.
+    """Maximum of each tail through the edge-max spec (no (N, N) map).
 
-    Reconstruct ``Y*`` (one ``n x E`` array), refit the full model, compute
-    ``t``/``beta``/``F`` from the explicit residual, then either score each
-    tail directly from the edge vector (``_EdgeMaxSpec``) or — for the legacy
-    explicit-n and cNBS routes, which need a matrix — assemble the (N, N) map
-    and call the same enhancer the matrix path uses.
-
-    Returns the same per-permutation contract as
-    ``glm._freedman_lane_permutation_task``: a tail dict of ``np.float64`` or
-    of ``(K,)`` arrays for a parameter grid.
+    Shared by the single-contrast, multi-contrast and available-case routes.
     """
-    rng = np.random.RandomState(seed)
-    Y_e = _draw_y_edge(yhat_e, r_e, rng, plan.scheme, plan.strata_codes)
-    stat_dict = _tails_from_edge_stats(edge_statistics(plan, Y_e).stat, plan.stat_type)
+    if set(stat_dict.keys()) == {"omnibus"}:
+        return {"omnibus": _eval_edge_max_tail(stat_dict["omnibus"], spec)}
+    return make_tail_result(
+        _eval_edge_max_tail(stat_dict["positive"], spec),
+        _eval_edge_max_tail(stat_dict["negative"], spec),
+    )
+
+
+def permutation_tails(
+    plan: EdgeGlmPlan, Y_e: npt.NDArray[np.float64]
+) -> Dict[str, Any]:
+    """Score one reconstructed edge stack with the plan's route.
+
+    Statistic first (``edge_statistics``), then: no enhancement → the tail
+    maxima; an ``_EdgeMaxSpec`` → :func:`score_tails`; otherwise (legacy
+    explicit-n grid, cNBS) the (N, N) map assembled from the edge vector and
+    the same enhancer the matrix path calls.
+    """
+    stat_dict = _tails_from_edge_stats(
+        edge_statistics(plan, Y_e).stat, plan.stat_type
+    )
 
     if plan.enhance_func is None:
         return _max_tails(stat_dict)
 
     if plan.spec is not None:
-        if plan.stat_type == _FSTAT:
-            return {"omnibus": _eval_edge_max_tail(stat_dict["omnibus"], plan.spec)}
-        return make_tail_result(
-            _eval_edge_max_tail(stat_dict["positive"], plan.spec),
-            _eval_edge_max_tail(stat_dict["negative"], plan.spec),
-        )
+        return score_tails(stat_dict, plan.spec)
 
     # Legacy matrix route (explicit threshold grid, cNBS): same enhancer,
     # same input maps as the matrix path, only assembled from the edge vector.
@@ -351,13 +353,59 @@ def permutation_task(
     return _extract_max_stats(enhanced, (plan.n_roi, plan.n_roi))
 
 
+def permutation_task(
+    plan: EdgeGlmPlan,
+    yhat_e: npt.NDArray[np.float64],
+    r_e: npt.NDArray[np.float64],
+    seed: int,
+) -> Dict[str, Any]:
+    """One Freedman-Lane permutation, scored on the edge vector.
+
+    Reconstruct ``Y*`` (one ``n x E`` array), then :func:`permutation_tails`.
+
+    Returns the same per-permutation contract as
+    ``glm._freedman_lane_permutation_task``: a tail dict of ``np.float64`` or
+    of ``(K,)`` arrays for a parameter grid.
+    """
+    rng = np.random.RandomState(seed)
+    Y_e = _draw_y_edge(yhat_e, r_e, rng, plan.scheme, plan.strata_codes)
+    return permutation_tails(plan, Y_e)
+
+
+def multi_contrast_perm_task(
+    names: Tuple[str, ...],
+    plans: Tuple[EdgeGlmPlan, ...],
+    payloads: Tuple[
+        Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]], ...
+    ],
+    seed: int,
+) -> Dict[str, Dict[str, Any]]:
+    """One shared permutation, evaluated for every contrast on the edge vector.
+
+    Contract of ``glm._multi_contrast_perm_task``: contrasts are visited in
+    the order of the ``contrasts`` dict, and each restarts
+    ``RandomState(seed)``, so every contrast sees the same draw and its result
+    equals a single-contrast run with that seed. Returns
+    ``{contrast_name: {tail: max_stat}}``.
+    """
+    out: Dict[str, Dict[str, Any]] = {}
+    for name, plan, (yhat_e, r_e) in zip(names, plans, payloads):
+        rng = np.random.RandomState(seed)
+        Y_e = _draw_y_edge(yhat_e, r_e, rng, plan.scheme, plan.strata_codes)
+        out[name] = permutation_tails(plan, Y_e)
+    return out
+
+
 __all__ = [
     "EdgeGlmPlan",
     "EdgeStats",
     "build_plan",
     "edge_payload_usable",
     "edge_statistics",
+    "multi_contrast_perm_task",
     "permutation_task",
+    "permutation_tails",
     "reduced_payload",
+    "score_tails",
     "upper_triangle",
 ]

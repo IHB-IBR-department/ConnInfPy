@@ -44,6 +44,7 @@ from conninfpy.stats._engine import (
     _stratified_perm,
     get_available_cores,
 )
+from conninfpy.stats._glm_fast import _tails_from_edge_stats, score_tails
 from conninfpy.stats._workers import run_permutations
 
 DEFAULT_MIN_COVERAGE = 0.8
@@ -73,6 +74,8 @@ class _Pattern:
     blocks: List[tuple] = field(
         default_factory=list
     )  # (block positions, block positions present, local index of present)
+    member: Optional[npt.NDArray[np.bool_]] = None  # subject -> present in this pattern
+    spec: Optional[Any] = None  # edge-max route for the family; False = unsupported
 
 
 def _stats(Yp: npt.NDArray[np.float64], pat: _Pattern, contrast, stat_type: str):
@@ -114,11 +117,21 @@ def _restricted(perm_idx: npt.NDArray[np.intp], pat: _Pattern) -> npt.NDArray[np
     ``perm_idx[k]`` is the subject whose residual lands in row ``k``. Within
     each block, the global sequence with the absent subjects removed is
     assigned, in order, to the present rows of that block.
+
+    Membership is looked up in the pattern's cached ``(n_subjects,)`` bool
+    array (``member``) instead of ``np.isin`` over the subject set; element
+    for element the two select the same sequence in the same order, only
+    without rebuilding a sorted search per pattern per permutation.
     """
+    member = pat.member
     local = np.empty(pat.rows.size, dtype=np.intp)
     for positions, present_positions, loc in pat.blocks:
         sources = perm_idx[positions]
-        keep = sources[np.isin(sources, pat.rows)]
+        keep = (
+            sources[member[sources]]
+            if member is not None
+            else sources[np.isin(sources, pat.rows)]
+        )
         local[loc[present_positions]] = loc[keep]
     return local
 
@@ -128,6 +141,43 @@ def _vector_stats(Y_by_pattern, patterns, contrast, stat_type, n_edges):
     for Yp, pat in zip(Y_by_pattern, patterns):
         out[pat.edges] = _stats(Yp, pat, contrast, stat_type)
     return out
+
+
+def _edge_max_spec(
+    patterns: List[_Pattern],
+    enhance_func: Optional[Callable],
+    enhance_kwargs: Dict[str, Any],
+    triu,
+    N: int,
+):
+    """Edge-vector enhancement route for this fitted family, or None.
+
+    Built once per run and cached on the first pattern, which is pickled to
+    the workers together with the patterns. An ``edge_mask`` (untested edges
+    for NI-TFNBS, cNBS blocks) is applied through :func:`apply_edge_mask` —
+    the same wrapper the matrix path uses — so block capacities count the
+    tested family only. Returns None for routes that need an ``(N, N)`` map
+    (explicit threshold grid, cNBS, no enhancement).
+    """
+    if not patterns or enhance_func is None:
+        return None
+    cached = patterns[0].spec
+    if cached is not None:
+        return cached or None
+
+    from conninfpy.enhance import apply_edge_mask
+    from conninfpy.stats.pairwise import _build_edge_max_spec
+
+    mask = enhance_kwargs.get("edge_mask")
+    spec = _build_edge_max_spec(
+        apply_edge_mask if mask is not None else enhance_func,
+        {**enhance_kwargs, "inner": enhance_func} if mask is not None
+        else enhance_kwargs,
+        triu,
+        N,
+    )
+    patterns[0].spec = spec if spec is not None else False
+    return spec
 
 
 def _task(
@@ -155,12 +205,14 @@ def _task(
             else _stratified_perm(strata_codes, rng)
         )
         Y_perm = [pat.Y_hat0 + pat.R0[_restricted(perm_idx, pat)] for pat in patterns]
-    stat = _to_stat_dict(
-        _vector_stats(Y_perm, patterns, contrast, stat_type, n_edges),
-        N,
-        triu,
-        stat_type,
-    )
+    vec = _vector_stats(Y_perm, patterns, contrast, stat_type, n_edges)
+    spec = _edge_max_spec(patterns, enhance_func, enhance_kwargs, triu, N)
+    if spec is not None:
+        # Same edge-max route as the GLM null paths: no (N, N) map. Untested
+        # edges carry 0 in ``vec`` and are outside the family mask, exactly as
+        # in the ``_to_stat_dict`` map below.
+        return score_tails(_tails_from_edge_stats(vec, stat_type), spec)
+    stat = _to_stat_dict(vec, N, triu, stat_type)
     if enhance_func is not None:
         stat = enhance_func(stat, **enhance_kwargs)
     return _extract_max_stats(stat, (N, N))
@@ -278,6 +330,7 @@ def available_case_glm(
         in_rows = np.zeros(n, dtype=bool)
         in_rows[rows] = True
         pat.blocks = [(pos, pos[in_rows[pos]], loc) for pos in block_positions]
+        pat.member = in_rows
         patterns.append(pat)
         tested[edges] = True
     if not tested.any():
@@ -413,7 +466,9 @@ def available_case_glm(
             for key in counts_raw
         }
 
-    report = _report(Y, X, C, present, tested, triu, N, min_coverage, reasons)
+    report = _report(
+        Y, X, C, present, tested, triu, N, min_coverage, reasons, len(patterns)
+    )
     # These are the patterns actually fitted above, before any p-map filling.
     report["tested_mask"] = tested_mat.copy()
     report["effect_estimable_mask"] = (tested_mat.copy() if C.shape[0] == 1 and stat_type != "fstat"
@@ -440,7 +495,9 @@ def available_case_glm(
     return _counts_return(p_values, raw, report, count_maps, count_kind, return_counts)
 
 
-def _report(Y, X, C, present, tested, triu, N, min_coverage, reasons) -> Dict[str, Any]:
+def _report(
+    Y, X, C, present, tested, triu, N, min_coverage, reasons, n_patterns
+) -> Dict[str, Any]:
     edge_n = present.sum(0)
     n_mat = np.zeros((N, N))
     n_mat[triu] = edge_n
@@ -451,6 +508,7 @@ def _report(Y, X, C, present, tested, triu, N, min_coverage, reasons) -> Dict[st
     rep: Dict[str, Any] = {
         "policy": "available_case",
         "min_coverage": min_coverage,
+        "n_patterns": int(n_patterns),
         "n_edges_tested": int(tested.sum()),
         "n_edges_untested": int((~tested).sum()),
         "untested_edges": [

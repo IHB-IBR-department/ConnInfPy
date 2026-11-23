@@ -1463,22 +1463,6 @@ def compute_p_val_glm_multi(
             emp = enhance_func(emp, **enhance_kwargs)
         emp_dicts[name] = emp
 
-    # ---- Fixed-residuals reduced fits (one per distinct reduced model) ----
-    Y_flat = Y.reshape(n_subjects, -1)
-    nulls = []
-    fitted: Dict[int, Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], str]] = {}
-    for X_reduced in reduced_models:
-        if id(X_reduced) not in fitted:
-            Y_hat_reduced = _reduced_fit(X_reduced, Y_flat).reshape(n_subjects, N, N)
-            fitted[id(X_reduced)] = (
-                Y_hat_reduced,
-                Y - Y_hat_reduced,
-                _resolve_scheme(X, X_reduced, scheme),
-            )
-        nulls.append(fitted[id(X_reduced)])
-
-    reference_shape = (N, N)
-
     # ---- Encode strata for within-block exchangeability (PALM -eb) ----
     strata_codes = None
     if strata is not None:
@@ -1489,26 +1473,88 @@ def compute_p_val_glm_multi(
                 f"n_subjects={n_subjects}."
             )
 
+    reference_shape = (N, N)
+
+    # ---- Fixed-residuals reduced fits (one per distinct reduced model) ----
+    # NETSTAT-34 C2: the shared pass runs on (n, E) edge payloads — one
+    # reduced fit + residual pair per distinct reduced model (a joint null
+    # stores one, not K), reusing the bitwise-guaranteed C1 payload builder.
+    # Each contrast then draws and scores its own (n, E) stack; no n x N**2
+    # array is allocated per contrast per permutation. Stacks that are not
+    # exactly symmetric/zero-diagonal (build_plan returns None) keep the
+    # matrix task unchanged.
+    from conninfpy.stats import _glm_fast
+
+    plans: List[Optional[_glm_fast.EdgeGlmPlan]] = []
+    payloads: List[Any] = []
+    edge_payloads: Dict[int, Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]] = {}
+    for X_reduced, contrast_k in zip(reduced_models, contrast_arrays):
+        plan_k = _glm_fast.build_plan(
+            Y,
+            X,
+            contrast_k,
+            stat_type_str,
+            X_pinv,
+            XtX_inv,
+            enhance_func,
+            enhance_kwargs,
+            _resolve_scheme(X, X_reduced, scheme),
+            strata_codes,
+        )
+        plans.append(plan_k)
+        if plan_k is None:
+            payloads.append(None)
+            continue
+        if id(X_reduced) not in edge_payloads:
+            edge_payloads[id(X_reduced)] = _glm_fast.reduced_payload(
+                Y, X_reduced, plan_k.rows, plan_k.cols
+            )
+        payloads.append(edge_payloads[id(X_reduced)])
+
+    if all(plan_k is not None for plan_k in plans):
+        task_func = partial(
+            _glm_fast.multi_contrast_perm_task,
+            tuple(contrast_names),
+            tuple(plans),
+            tuple(payloads),
+        )
+    else:
+        Y_flat = Y.reshape(n_subjects, -1)
+        nulls = []
+        fitted: Dict[
+            int, Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], str]
+        ] = {}
+        for X_reduced in reduced_models:
+            if id(X_reduced) not in fitted:
+                Y_hat_reduced = _reduced_fit(X_reduced, Y_flat).reshape(
+                    n_subjects, N, N
+                )
+                fitted[id(X_reduced)] = (
+                    Y_hat_reduced,
+                    Y - Y_hat_reduced,
+                    _resolve_scheme(X, X_reduced, scheme),
+                )
+            nulls.append(fitted[id(X_reduced)])
+
+        task_func = partial(
+            _multi_contrast_perm_task,
+            tuple(nulls),
+            X,
+            tuple(contrast_names),
+            tuple(contrast_arrays),
+            X_pinv,
+            XtX_inv_diag,
+            XtX_inv,
+            reference_shape,
+            stat_type_str,
+            enhance_func,
+            enhance_kwargs,
+            strata_codes=strata_codes,
+        )
+
     # ---- Permutation seeds ----
     rng_local = np.random.RandomState(random_state)
     seeds = rng_local.randint(0, 2**32 - 1, size=n_permutations, dtype=np.int64)
-
-    task_func = partial(
-        _multi_contrast_perm_task,
-        tuple(nulls),
-        X,
-        tuple(contrast_names),
-        tuple(contrast_arrays),
-        X_pinv,
-        XtX_inv_diag,
-        XtX_inv,
-        reference_shape,
-        stat_type_str,
-        enhance_func,
-        enhance_kwargs,
-        strata_codes=strata_codes,
-    )
-
 
     perm_results = run_permutations(
         task_func,
