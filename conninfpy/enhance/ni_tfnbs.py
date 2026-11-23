@@ -10,6 +10,7 @@ import numpy.typing as npt
 from conninfpy.defaults import (
     DEFAULT_START_THRESHOLD,
 )
+from conninfpy.enhance._backend import HAS_NUMBA, _record_executed_backend
 from conninfpy.enhance._blocks import (
     _compute_edge_block_weights,
     _precompute_block_metadata,
@@ -109,16 +110,49 @@ def get_network_informed_tfnbs_score(
 
         rows, cols, weights = _get_edges(t_stats, start_thres, symmetric=True)
         if not len(weights):
-            return integrate(rows, cols, weights, nroi, e_arr, h_arr,
-                             scalar_mode, True, start_thres)
+            return integrate(
+                rows,
+                cols,
+                weights,
+                nroi,
+                e_arr,
+                h_arr,
+                scalar_mode,
+                True,
+                start_thres,
+                blocks=np.empty(0, dtype=np.intp),
+                use_numba=HAS_NUMBA,
+                method_label="NI-TFNBS (exact)",
+            )
         blocks, capacities = _precompute_block_metadata(
             rows, cols, normalized_net_labels, edge_mask
         )
-        scales = {"sqrt": 1.0 / capacities, "linear": 1.0 / capacities**2,
-                  "none": np.ones_like(capacities)}
-        return integrate(rows, cols, weights, nroi, e_arr, h_arr, scalar_mode,
-                         True, start_thres, blocks=blocks,
-                         scale=scales[normalization])
+        scales = {
+            "sqrt": 1.0 / capacities,
+            "linear": 1.0 / capacities**2,
+            "none": np.ones_like(capacities),
+        }
+        return integrate(
+            rows,
+            cols,
+            weights,
+            nroi,
+            e_arr,
+            h_arr,
+            scalar_mode,
+            True,
+            start_thres,
+            blocks=blocks,
+            scale=scales[normalization],
+            use_numba=HAS_NUMBA,
+            method_label="NI-TFNBS (exact)",
+        )
+
+    _record_executed_backend(
+        "numpy",
+        method_label=f"NI-TFNBS (n={n})",
+        fallback_reason="no_numba" if not HAS_NUMBA else None,
+    )
 
     # 2. Thresholds
     threshs, dh = _compute_thresholds(t_stats, n, start_thres)

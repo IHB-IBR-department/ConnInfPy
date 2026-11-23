@@ -17,7 +17,8 @@ from scipy.sparse.csgraph import connected_components
 
 from conninfpy._prepare import check_connectivity
 from conninfpy._shared.rng import RngLike, resolve_seed, warn_legacy_random_state
-from conninfpy.enhance._graph import _is_symmetric
+from conninfpy.enhance._backend import HAS_NUMBA, _record_executed_backend, njit
+from conninfpy.enhance._graph import _get_edges, _is_symmetric
 
 __all__ = [
     "DEFAULT_NBS_THRESHOLD",
@@ -50,29 +51,181 @@ from conninfpy.defaults import (
 ArrayF = npt.NDArray[np.float64]
 
 
-def _get_edges(
-    t_stats: npt.NDArray[np.floating],
-    min_threshold: float,
-    symmetric: bool,
-) -> Tuple[npt.NDArray[np.intp], npt.NDArray[np.intp], npt.NDArray[np.floating]]:
-    """Upper-triangle edge indices of a square matrix."""
-    if symmetric:
-        rows, cols = np.triu_indices_from(t_stats, k=1)
-    else:
-        nroi = t_stats.shape[0]
-        rows, cols = np.where(~np.eye(nroi, dtype=bool))
-
-    weights = t_stats[rows, cols]
-    valid_mask = weights > min_threshold
-    return rows[valid_mask], cols[valid_mask], weights[valid_mask]
-
-
 def _check_square(t_stat: npt.NDArray[np.floating]) -> None:
     """Raise ValueError unless ``arr`` is a square (N, N) matrix."""
     if t_stat.ndim != 2 or t_stat.shape[0] != t_stat.shape[1]:
         raise ValueError("t_stat must be a square (N, N) matrix.")
     if not np.allclose(np.diag(t_stat), 0.0):
         raise ValueError("Diagonal elements must be zero (no self-connections).")
+
+
+@njit(cache=True)
+def _nbs_union_find_labels(rows, cols, n_nodes):
+    """Weakly-connected component labels (0..n_components-1) from an edge list."""
+    parent = np.arange(n_nodes, dtype=np.int32)
+    rank = np.zeros(n_nodes, dtype=np.int32)
+
+    for i in range(len(rows)):
+        a = rows[i]
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        b = cols[i]
+        while parent[b] != b:
+            parent[b] = parent[parent[b]]
+            b = parent[b]
+        if a != b:
+            if rank[a] < rank[b]:
+                parent[a] = b
+            elif rank[a] > rank[b]:
+                parent[b] = a
+            else:
+                parent[b] = a
+                rank[a] += 1
+
+    comp_map = np.full(n_nodes, -1, dtype=np.int32)
+    labels = np.empty(n_nodes, dtype=np.int32)
+    n_comp = 0
+    for i in range(n_nodes):
+        x = i
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        cid = comp_map[x]
+        if cid < 0:
+            cid = n_comp
+            comp_map[x] = cid
+            n_comp += 1
+        labels[i] = cid
+    return n_comp, labels
+
+
+@njit(cache=True)
+def _nbs_max_numba(rows, cols, weights, n_nodes, threshold, is_intensity):
+    """Single-pass union-find returning max component extent or intensity."""
+    parent = np.arange(n_nodes, dtype=np.int32)
+    rank = np.zeros(n_nodes, dtype=np.int32)
+
+    n_edges = len(rows)
+    for i in range(n_edges):
+        a = rows[i]
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        b = cols[i]
+        while parent[b] != b:
+            parent[b] = parent[parent[b]]
+            b = parent[b]
+        if a != b:
+            if rank[a] < rank[b]:
+                parent[a] = b
+            elif rank[a] > rank[b]:
+                parent[b] = a
+            else:
+                parent[b] = a
+                rank[a] += 1
+
+    comp_stat = np.zeros(n_nodes, dtype=np.float64)
+    max_stat = 0.0
+    for i in range(n_edges):
+        a = rows[i]
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        val = (weights[i] - threshold) if is_intensity else 1.0
+        new_val = comp_stat[a] + val
+        comp_stat[a] = new_val
+        if new_val > max_stat:
+            max_stat = new_val
+    return max_stat
+
+
+def _connected_components_from_edges(
+    edge_rows: npt.NDArray[np.intp],
+    edge_cols: npt.NDArray[np.intp],
+    nroi: int,
+    *,
+    emit_fallback_warning: bool = True,
+) -> Tuple[int, npt.NDArray[np.intp]]:
+    """Compute weakly connected node labels directly from sparse edge coordinates."""
+    if HAS_NUMBA:
+        _record_executed_backend(
+            "numba",
+            method_label="NBS",
+            emit_fallback_warning=emit_fallback_warning,
+        )
+        n_comp, labels = _nbs_union_find_labels(
+            edge_rows.astype(np.int64, copy=False),
+            edge_cols.astype(np.int64, copy=False),
+            nroi,
+        )
+        return int(n_comp), labels.astype(np.intp, copy=False)
+
+    _record_executed_backend(
+        "scipy",
+        method_label="NBS",
+        emit_fallback_warning=emit_fallback_warning,
+        fallback_reason="no_numba",
+    )
+    ones = np.ones(edge_rows.size, dtype=np.int8)
+    sparse_mat = csr_matrix((ones, (edge_rows, edge_cols)), shape=(nroi, nroi))
+    n_components, node_labels = connected_components(sparse_mat, directed=False)
+    return int(n_components), node_labels.astype(np.intp, copy=False)
+
+
+def _nbs_max_from_edges(
+    edge_rows: npt.NDArray[np.intp],
+    edge_cols: npt.NDArray[np.intp],
+    edge_weights: npt.NDArray[np.floating],
+    nroi: int,
+    threshold: float,
+    stat_type: str,
+    *,
+    emit_fallback_warning: bool = True,
+) -> np.float64:
+    """Return max NBS component statistic directly from sparse suprathreshold edges."""
+    if HAS_NUMBA:
+        _record_executed_backend(
+            "numba",
+            method_label="NBS",
+            emit_fallback_warning=emit_fallback_warning,
+        )
+        if edge_rows.size == 0:
+            return np.float64(0.0)
+        return np.float64(
+            _nbs_max_numba(
+                edge_rows.astype(np.int64, copy=False),
+                edge_cols.astype(np.int64, copy=False),
+                edge_weights.astype(np.float64, copy=False),
+                nroi,
+                float(threshold),
+                stat_type == "intensity",
+            )
+        )
+
+    _record_executed_backend(
+        "scipy",
+        method_label="NBS",
+        emit_fallback_warning=emit_fallback_warning,
+        fallback_reason="no_numba",
+    )
+    if edge_rows.size == 0:
+        return np.float64(0.0)
+    ones = np.ones(edge_rows.size, dtype=np.int8)
+    sparse_mat = csr_matrix((ones, (edge_rows, edge_cols)), shape=(nroi, nroi))
+    n_components, node_labels = connected_components(sparse_mat, directed=False)
+    edge_component = node_labels[edge_rows]
+    if stat_type == "extent":
+        return np.float64(
+            np.bincount(edge_component, minlength=n_components).max()
+        )
+    return np.float64(
+        np.bincount(
+            edge_component,
+            weights=edge_weights.astype(np.float64, copy=False) - threshold,
+            minlength=n_components,
+        ).max()
+    )
 
 
 # =============================================================================
@@ -86,7 +239,7 @@ class _Suprathreshold:
 
     ``rows``/``cols``/``weights`` list the edges (the upper triangle when the
     map is symmetric); ``edge_component`` gives the component of each edge
-    (labels from :func:`scipy.sparse.csgraph.connected_components`);
+    (labels from sparse union-find or :func:`scipy.sparse.csgraph.connected_components`);
     ``node_labels`` gives the component of every node.
     """
 
@@ -118,16 +271,16 @@ def _label_suprathreshold(
         t_stats, threshold, symmetric=is_symm
     )
     if edge_rows.size == 0:
+        _record_executed_backend(
+            "numba" if HAS_NUMBA else "scipy",
+            method_label="NBS",
+            fallback_reason=None if HAS_NUMBA else "no_numba",
+        )
         return None
 
-    mask = np.zeros((nroi, nroi), dtype=bool)
-    mask[edge_rows, edge_cols] = True
-    if is_symm:
-        mask[edge_cols, edge_rows] = True
-
-    mask_for_cc = mask | mask.T
-    sparse_mat = csr_matrix(mask_for_cc)
-    n_components, node_labels = connected_components(sparse_mat, directed=False)
+    n_components, node_labels = _connected_components_from_edges(
+        edge_rows, edge_cols, nroi
+    )
     return _Suprathreshold(
         rows=edge_rows,
         cols=edge_cols,

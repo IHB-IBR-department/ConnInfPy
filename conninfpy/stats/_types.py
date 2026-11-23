@@ -10,13 +10,16 @@ import numpy.typing as npt
 
 
 def enhancement_provenance(e, h, n, start_thres, method=None,
-                           normalization=None, min_cluster_size=None):
+                           normalization=None, min_cluster_size=None,
+                           actual_backend=None):
     """Serializable effective TFNBS parameters, not inferred historical values."""
     def plain(value):
         return value.tolist() if isinstance(value, np.ndarray) else value
     result = {"integration": "exact" if n is None else "right-grid",
               "n": n, "e": plain(e), "h": plain(h), "start_thres": start_thres,
               "backend": "auto"}
+    if actual_backend is not None:
+        result["actual_backend"] = actual_backend
     if method is not None:
         method = method.value if hasattr(method, "value") else method
         result["method"] = method

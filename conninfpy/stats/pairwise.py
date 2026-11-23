@@ -15,6 +15,7 @@ compute_null_dist : Compute null distribution via permutation testing
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import time
 from functools import partial
@@ -47,11 +48,13 @@ from conninfpy.defaults import (
 from conninfpy.defaults import DEFAULT_N_THRESHOLDS_PERMUTATION as DEFAULT_N_THRESHOLDS
 from conninfpy.enhance import (
     apply_cnbs,
+    apply_edge_mask,
     apply_fbc_tfnbs,
     apply_nbs,
     apply_ni_tfnbs,
     apply_tfnbs,
 )
+from conninfpy.enhance._backend import _enhance_call_scope, _suppress_fallback_warnings
 from conninfpy._provenance import capture_analysis_provenance
 from conninfpy.results import InferenceResult, make_inference_result
 from conninfpy.stats import _degenerate as _degenerate
@@ -370,6 +373,251 @@ def _tstat_edges_to_matrix(t_pos, t_neg, triu_idx, N):
     return t_pos_mat, t_neg_mat
 
 
+@dataclass(frozen=True)
+class _EdgeMaxSpec:
+    """Pickle-safe descriptor for direct edge-list permutation max-statistics."""
+
+    kind: str  # "tfnbs_exact" | "ni_tfnbs_exact" | "fbc_tfnbs_exact" | "nbs"
+    rows: npt.NDArray[np.int64]
+    cols: npt.NDArray[np.int64]
+    nroi: int
+    cutoff: float
+    family_edges: Optional[npt.NDArray[np.bool_]] = None
+    e_arr: Optional[npt.NDArray[np.float64]] = None
+    h_arr: Optional[npt.NDArray[np.float64]] = None
+    scalar_mode: bool = True
+    blocks: Optional[npt.NDArray[np.intp]] = None
+    scale: Optional[npt.NDArray[np.float64]] = None
+    minimum: int = 1
+    nbs_stat: str = "extent"
+
+
+def _build_edge_max_spec(
+    enhance_func: Optional[Callable],
+    enhance_kwargs: Dict[str, Any],
+    triu_idx: Tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]],
+    nroi: int,
+) -> Optional[_EdgeMaxSpec]:
+    """Return an _EdgeMaxSpec for supported zero-matrix permutation paths."""
+    target = enhance_func
+    kw = enhance_kwargs
+    family_mask = None
+    family_edges = None
+    if target is apply_edge_mask:
+        inner = kw.get("inner")
+        if inner is None:
+            return None
+        family_mask = np.asarray(kw["edge_mask"], dtype=bool)
+        family_edges = family_mask[triu_idx]
+        target = inner
+        kw = {k: v for k, v in kw.items() if k not in ("edge_mask", "inner")}
+
+    rows = triu_idx[0].astype(np.int64)
+    cols = triu_idx[1].astype(np.int64)
+
+    if target is apply_nbs:
+        threshold = float(kw.get("threshold", DEFAULT_NBS_THRESHOLD))
+        nbs_stat = kw.get("nbs_stat", DEFAULT_NBS_STAT)
+        if nbs_stat not in ("extent", "intensity"):
+            raise ValueError("stat_type must be 'extent' or 'intensity'.")
+        return _EdgeMaxSpec(
+            kind="nbs",
+            rows=rows,
+            cols=cols,
+            nroi=nroi,
+            cutoff=threshold,
+            family_edges=family_edges,
+            nbs_stat=nbs_stat,
+        )
+
+    n_steps = kw.get("n", DEFAULT_N_THRESHOLDS)
+    if n_steps is not None:
+        # Preserve legacy explicit-n matrix path for guaranteed grid equivalence.
+        return None
+
+    if target not in (apply_tfnbs, apply_ni_tfnbs, apply_fbc_tfnbs):
+        return None
+
+    from conninfpy.enhance._thresholds import _validate_params
+
+    e_val = kw.get("e", DEFAULT_EXTENT_EXPONENT)
+    h_val = kw.get("h", DEFAULT_HEIGHT_EXPONENT)
+    start_thres = float(kw.get("start_thres", DEFAULT_START_THRESHOLD))
+    if not np.isfinite(start_thres) or start_thres < 0:
+        raise ValueError(f"start_thres must be finite and >= 0; got {start_thres}.")
+    e_arr, h_arr, scalar_mode = _validate_params(
+        np.zeros((2, 2), dtype=np.float64), e_val, h_val
+    )
+
+    if target is apply_tfnbs:
+        return _EdgeMaxSpec(
+            kind="tfnbs_exact",
+            rows=rows,
+            cols=cols,
+            nroi=nroi,
+            cutoff=start_thres,
+            family_edges=family_edges,
+            e_arr=e_arr.astype(np.float64),
+            h_arr=h_arr.astype(np.float64),
+            scalar_mode=scalar_mode,
+        )
+
+    from conninfpy.enhance._blocks import (
+        _compute_canonical_block_ids,
+        _precompute_block_metadata,
+        _validate_net_labels,
+    )
+
+    net_labels = _validate_net_labels(np.asarray(kw["net_labels"]), nroi)
+    if target is apply_ni_tfnbs:
+        normalization = kw.get("normalization", "sqrt")
+        if normalization not in ("sqrt", "linear", "none"):
+            raise ValueError("normalization must be 'sqrt', 'linear', or 'none'.")
+        blocks, capacities = _precompute_block_metadata(
+            rows, cols, net_labels, family_mask
+        )
+        scales = {
+            "sqrt": 1.0 / capacities,
+            "linear": 1.0 / capacities**2,
+            "none": np.ones_like(capacities),
+        }
+        return _EdgeMaxSpec(
+            kind="ni_tfnbs_exact",
+            rows=rows,
+            cols=cols,
+            nroi=nroi,
+            cutoff=start_thres,
+            family_edges=family_edges,
+            e_arr=e_arr.astype(np.float64),
+            h_arr=h_arr.astype(np.float64),
+            scalar_mode=scalar_mode,
+            blocks=blocks,
+            scale=scales[normalization],
+            minimum=1,
+        )
+
+    # apply_fbc_tfnbs (exact)
+    min_cluster_size = int(kw.get("min_cluster_size", DEFAULT_MIN_CLUSTER_SIZE))
+    n_networks = int(np.max(net_labels)) + 1
+    blocks = _compute_canonical_block_ids(rows, cols, net_labels, n_networks)
+    return _EdgeMaxSpec(
+        kind="fbc_tfnbs_exact",
+        rows=rows,
+        cols=cols,
+        nroi=nroi,
+        cutoff=start_thres,
+        family_edges=family_edges,
+        e_arr=e_arr.astype(np.float64),
+        h_arr=h_arr.astype(np.float64),
+        scalar_mode=scalar_mode,
+        blocks=blocks,
+        scale=np.ones(n_networks * n_networks, dtype=np.float64),
+        minimum=min_cluster_size,
+    )
+
+
+def _eval_edge_max_tail(
+    t_tail: npt.NDArray[np.float64], spec: _EdgeMaxSpec
+) -> Union[np.float64, npt.NDArray[np.float64]]:
+    """Score one tail from its upper-triangle edge vector without (N, N) allocation."""
+    if spec.family_edges is not None:
+        t_tail = np.where(spec.family_edges, t_tail, 0.0)
+    weights = np.round(t_tail, decimals=10)
+    keep = weights > spec.cutoff
+    r = spec.rows[keep]
+    c = spec.cols[keep]
+    w = weights[keep]
+    if spec.kind == "nbs":
+        from conninfpy.enhance.nbs import _nbs_max_from_edges
+
+        return _nbs_max_from_edges(
+            r,
+            c,
+            w,
+            spec.nroi,
+            spec.cutoff,
+            spec.nbs_stat,
+            emit_fallback_warning=False,
+        )
+
+    from conninfpy.enhance._exact import integrate_max
+
+    if spec.kind == "tfnbs_exact":
+        from conninfpy.enhance.tfnbs import HAS_NUMBA as _tfnbs_has_numba
+
+        use_numba = _tfnbs_has_numba
+    else:
+        use_numba = True
+    b = None if spec.blocks is None else spec.blocks[keep]
+    return integrate_max(
+        r,
+        c,
+        w,
+        spec.nroi,
+        spec.e_arr,
+        spec.h_arr,
+        spec.scalar_mode,
+        spec.cutoff,
+        blocks=b,
+        scale=spec.scale,
+        minimum=spec.minimum,
+        use_numba=use_numba,
+        emit_fallback_warning=False,
+    )
+
+
+def _fast_perm_task_edge_max_paired(
+    X,
+    sumsq_all,
+    spec: _EdgeMaxSpec,
+    seed,
+):
+    """Paired/one-sample permutation: sign-flip + fast t-stat + direct edge-max."""
+    rng = np.random.RandomState(seed)
+    n_sub = X.shape[0]
+    signs = rng.choice([1, -1], n_sub).astype(np.float64)
+    sum_perm = signs @ X
+    t_pos, t_neg = _onesample_tstat_from_sums(sum_perm, sumsq_all, n_sub)
+    return make_tail_result(
+        _eval_edge_max_tail(t_pos, spec),
+        _eval_edge_max_tail(t_neg, spec),
+    )
+
+
+def _fast_perm_task_edge_max_ind(
+    Xall,
+    Xall2,
+    sum_all,
+    sumsq_all,
+    n1,
+    spec: _EdgeMaxSpec,
+    seed,
+    strata=None,
+    n1_per_stratum=None,
+    var_equal=False,
+):
+    """Two-sample permutation: group shuffle + fast t-stat + direct edge-max."""
+    rng = np.random.RandomState(seed)
+    n_all = Xall.shape[0]
+    n2 = n_all - n1
+    if strata is None:
+        g = np.zeros(n_all, dtype=np.float64)
+        g[rng.choice(n_all, n1, replace=False)] = 1.0
+    else:
+        g = _stratified_choice_n1(strata, n1_per_stratum, rng)
+    sum1 = g @ Xall
+    sumsq1 = g @ Xall2
+    sum2 = sum_all - sum1
+    sumsq2 = sumsq_all - sumsq1
+    t_pos, t_neg = _twosample_tstat_from_sums(
+        sum1, sumsq1, n1, sum2, sumsq2, n2, var_equal=var_equal
+    )
+    return make_tail_result(
+        _eval_edge_max_tail(t_pos, spec),
+        _eval_edge_max_tail(t_neg, spec),
+    )
+
+
 def _fast_perm_task_enhanced_paired(
     X,
     sumsq_all,
@@ -388,7 +636,8 @@ def _fast_perm_task_enhanced_paired(
     t_pos_mat, t_neg_mat = _tstat_edges_to_matrix(t_pos, t_neg, triu_idx, N)
     stat_dict = {"positive": t_pos_mat, "negative": t_neg_mat}
     if enhance_func is not None:
-        stat_dict = enhance_func(stat_dict, **enhance_kwargs)
+        with _suppress_fallback_warnings():
+            stat_dict = enhance_func(stat_dict, **enhance_kwargs)
     return _extract_max_stats(stat_dict, (N, N))
 
 
@@ -430,7 +679,8 @@ def _fast_perm_task_enhanced_ind(
     t_pos_mat, t_neg_mat = _tstat_edges_to_matrix(t_pos, t_neg, triu_idx, N)
     stat_dict = {"positive": t_pos_mat, "negative": t_neg_mat}
     if enhance_func is not None:
-        stat_dict = enhance_func(stat_dict, **enhance_kwargs)
+        with _suppress_fallback_warnings():
+            stat_dict = enhance_func(stat_dict, **enhance_kwargs)
     return _extract_max_stats(stat_dict, (N, N))
 
 
@@ -666,30 +916,37 @@ def _compute_enhanced_null_dist(
     """
     N = group1.shape[1]
     triu_idx = np.triu_indices(N, k=1)
+    edge_spec = _build_edge_max_spec(enhance_func, enhance_kwargs, triu_idx, N)
 
     if test_type_str == TestType.PAIRED.value:
         diffs = group2 - group1
         X, sumsq_all = _precompute_edge_sums(diffs)
-        task_func = partial(
-            _fast_perm_task_enhanced_paired,
-            X,
-            sumsq_all,
-            triu_idx,
-            N,
-            enhance_func,
-            enhance_kwargs,
-        )
+        if edge_spec is not None:
+            task_func = partial(_fast_perm_task_edge_max_paired, X, sumsq_all, edge_spec)
+        else:
+            task_func = partial(
+                _fast_perm_task_enhanced_paired,
+                X,
+                sumsq_all,
+                triu_idx,
+                N,
+                enhance_func,
+                enhance_kwargs,
+            )
     elif test_type_str == TestType.ONE_SAMPLE.value:
         X, sumsq_all = _precompute_edge_sums(group1)
-        task_func = partial(
-            _fast_perm_task_enhanced_paired,
-            X,
-            sumsq_all,
-            triu_idx,
-            N,
-            enhance_func,
-            enhance_kwargs,
-        )
+        if edge_spec is not None:
+            task_func = partial(_fast_perm_task_edge_max_paired, X, sumsq_all, edge_spec)
+        else:
+            task_func = partial(
+                _fast_perm_task_enhanced_paired,
+                X,
+                sumsq_all,
+                triu_idx,
+                N,
+                enhance_func,
+                enhance_kwargs,
+            )
     elif test_type_str == TestType.TWO_SAMPLE.value:
         n1 = group1.shape[0]
         n_all = n1 + group2.shape[0]
@@ -707,21 +964,35 @@ def _compute_enhanced_null_dist(
             )
         Xall_3d = np.concatenate((group1, group2), axis=0)
         Xall, Xall2, sum_all, sumsq_all = _precompute_twosample_sums(Xall_3d)
-        task_func = partial(
-            _fast_perm_task_enhanced_ind,
-            Xall,
-            Xall2,
-            sum_all,
-            sumsq_all,
-            n1,
-            triu_idx,
-            N,
-            enhance_func,
-            enhance_kwargs,
-            strata=strata_codes,
-            n1_per_stratum=n1_per_stratum,
-            var_equal=var_equal,
-        )
+        if edge_spec is not None:
+            task_func = partial(
+                _fast_perm_task_edge_max_ind,
+                Xall,
+                Xall2,
+                sum_all,
+                sumsq_all,
+                n1,
+                edge_spec,
+                strata=strata_codes,
+                n1_per_stratum=n1_per_stratum,
+                var_equal=var_equal,
+            )
+        else:
+            task_func = partial(
+                _fast_perm_task_enhanced_ind,
+                Xall,
+                Xall2,
+                sum_all,
+                sumsq_all,
+                n1,
+                triu_idx,
+                N,
+                enhance_func,
+                enhance_kwargs,
+                strata=strata_codes,
+                n1_per_stratum=n1_per_stratum,
+                var_equal=var_equal,
+            )
     else:
         raise ValueError(
             f"Invalid test_type: '{test_type_str}'. "
@@ -1071,7 +1342,9 @@ def _with_estimates(fn):
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        res = fn(*args, **kwargs)
+        with _enhance_call_scope() as ctx:
+            res = fn(*args, **kwargs)
+            actual_backend = ctx["actual_backend"]
         b = sig.bind(*args, **kwargs)
         b.apply_defaults()
         tt = b.arguments["test_type"]
@@ -1100,6 +1373,7 @@ def _with_estimates(fn):
                 b.arguments["start_thres"] if b.arguments["start_thres"] is not None
                 else DEFAULT_START_THRESHOLD,
                 method, b.arguments["normalization"], b.arguments["min_cluster_size"],
+                actual_backend=actual_backend,
             )
         return res
 

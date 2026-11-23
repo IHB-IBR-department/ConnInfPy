@@ -7,14 +7,7 @@ from typing import Tuple
 import numpy as np
 import numpy.typing as npt
 
-
-try:
-    from numba import njit
-except ImportError:
-    def njit(*args, **kwargs):
-        if len(args) == 1 and callable(args[0]):
-            return args[0]
-        return lambda fn: fn
+from conninfpy.enhance._backend import HAS_NUMBA, njit
 
 
 @njit(cache=True)
@@ -36,6 +29,7 @@ def _extract_numba(matrix, cutoff, symmetric):
                 k += 1
     return rows, cols, weights
 
+
 def _is_symmetric(matrix: npt.NDArray[np.floating], rtol: float = 1e-8) -> bool:
     """True when the matrix equals its transpose up to rounding.
 
@@ -51,7 +45,10 @@ def _is_symmetric(matrix: npt.NDArray[np.floating], rtol: float = 1e-8) -> bool:
 
 
 def _get_edges(
-    t_stats: npt.NDArray[np.floating], start_thres: float, symmetric: bool
+    t_stats: npt.NDArray[np.floating],
+    start_thres: float,
+    symmetric: bool,
+    use_numba: bool = True,
 ) -> Tuple[npt.NDArray[np.intp], npt.NDArray[np.intp], npt.NDArray[np.floating]]:
     """
     Extract edges with values above threshold.
@@ -67,6 +64,8 @@ def _get_edges(
         Minimum threshold for edge inclusion.
     symmetric : bool
         Whether matrix is symmetric (use upper triangle only).
+    use_numba : bool, default=True
+        Use the JIT extractor when Numba is installed and dtype is supported.
 
     Returns
     -------
@@ -77,9 +76,14 @@ def _get_edges(
     edge_weights : ndarray
         Edge weight values.
     """
-    # Inputs have already been rounded by the calling scorer. Keep the
-    # NumPy path for nonstandard dtypes unsupported by Numba.
-    if t_stats.dtype in (np.dtype("float64"), np.dtype("float32"), np.dtype("int64")):
+    # Inputs have already been rounded by the calling scorer. Only dispatch to
+    # the Numba extractor when Numba is actually installed; otherwise use
+    # vectorized NumPy so the fallback does not run an interpreted double loop.
+    if (
+        HAS_NUMBA
+        and use_numba
+        and t_stats.dtype in (np.dtype("float64"), np.dtype("float32"), np.dtype("int64"))
+    ):
         return _extract_numba(t_stats, start_thres, symmetric)
     if symmetric:
         rows, cols = np.triu_indices_from(t_stats, k=1)

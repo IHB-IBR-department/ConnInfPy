@@ -606,7 +606,7 @@ def info() -> None:
         import numba
         lines.append(f"numba      {numba.__version__} (JIT TFNBS backend)")
     except ImportError:
-        lines.append("numba      not installed (SciPy TFNBS backend)")
+        lines.append("numba      not installed (Python/NumPy/SciPy fallback)")
     lines.append(f"cpu cores  {os.cpu_count()}")
     from conninfpy.stats._engine import get_available_cores
 

@@ -22,6 +22,11 @@ import numpy.typing as npt
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 
+from conninfpy.enhance._backend import (
+    HAS_NUMBA as _BACKEND_HAS_NUMBA,
+    _record_executed_backend,
+    njit,
+)
 from conninfpy.enhance._graph import _get_edges, _is_symmetric
 from conninfpy.enhance._thresholds import (
     ArrayLike,
@@ -31,23 +36,7 @@ from conninfpy.enhance._thresholds import (
     _validate_params,
 )
 
-try:
-    from numba import njit
-
-    HAS_NUMBA = True
-except ImportError:
-    HAS_NUMBA = False
-
-    def njit(*args, **kwargs):
-        """Fallback decorator when numba is not installed."""
-
-        def decorator(func):
-            """No-op stand-in for numba's njit when numba is absent."""
-            return func
-
-        if len(args) == 1 and callable(args[0]):
-            return args[0]
-        return decorator
+HAS_NUMBA = _BACKEND_HAS_NUMBA
 
 
 __all__ = [
@@ -135,23 +124,51 @@ def get_tfnbs_score(
            [2.19, 0.  , 4.5 ],
            [0.  , 4.5 , 0.  ]])
     """
+    if backend not in ("auto", "numba", "scipy"):
+        raise ValueError(
+            f"backend must be 'auto', 'numba', or 'scipy'; got {backend!r}."
+        )
+
     if n is None:
         from conninfpy.enhance._exact import integrate
+
+        use_numba = (backend != "scipy") and HAS_NUMBA
+        fallback_reason = None
+        if not use_numba:
+            fallback_reason = "no_numba" if not HAS_NUMBA else "disabled"
 
         e_arr, h_arr, scalar_mode = _validate_params(t_stats, e, h)
         rounded = np.round(t_stats, decimals=10)
         symmetric = _is_symmetric(rounded)
-        rows, cols, weights = _get_edges(rounded, start_thres, symmetric)
-        return integrate(rows, cols, weights, rounded.shape[0], e_arr, h_arr,
-                         scalar_mode, symmetric, start_thres,
-                         use_numba=backend != "scipy" and HAS_NUMBA)
+        rows, cols, weights = _get_edges(
+            rounded, start_thres, symmetric, use_numba=use_numba
+        )
+        return integrate(
+            rows,
+            cols,
+            weights,
+            rounded.shape[0],
+            e_arr,
+            h_arr,
+            scalar_mode,
+            symmetric,
+            start_thres,
+            use_numba=use_numba,
+            method_label="TFNBS (exact)",
+            fallback_reason=fallback_reason,
+        )
 
     use_numba = (backend == "numba") or (backend == "auto" and HAS_NUMBA)
-    if use_numba:
-        if not HAS_NUMBA:
-            logger.warning("Numba not installed, falling back to scipy backend.")
-        else:
-            return _get_tfnbs_score_numba(t_stats, e, h, n, start_thres)
+    if use_numba and HAS_NUMBA:
+        _record_executed_backend("numba", method_label=f"TFNBS (n={n})")
+        return _get_tfnbs_score_numba(t_stats, e, h, n, start_thres)
+
+    fallback_reason = "no_numba" if not HAS_NUMBA else "disabled"
+    _record_executed_backend(
+        "scipy",
+        method_label=f"TFNBS (n={n})",
+        fallback_reason=fallback_reason,
+    )
     e_arr, h_arr, scalar_mode = _validate_params(t_stats, e, h)
 
     # Round to avoid float precision issues at threshold boundaries
@@ -168,7 +185,7 @@ def get_tfnbs_score(
 
     is_symm = _is_symmetric(t_stats)
     edge_rows, edge_cols, edge_weights = _get_edges(
-        t_stats, start_thres, symmetric=is_symm
+        t_stats, start_thres, symmetric=is_symm, use_numba=False
     )
 
     if len(edge_rows) == 0:
@@ -457,9 +474,9 @@ def _get_tfnbs_score_numba(
     t_stats : ndarray of shape (N, N)
         Statistical matrix to be transformed.
     e : float or array-like
-        Extent exponent.
+        Extent exponent. Can be a scalar or list of values.
     h : float or array-like
-        Height exponent.
+        Height exponent. Can be a scalar or list of values.
     n : int
         Number of threshold steps.
     start_thres : float, default=1.65
@@ -728,31 +745,6 @@ def get_tfnbs_score_networkx(
 
     tfnbs *= dh
     return tfnbs
-
-
-"""
-Network-Informed TFNBS scoring module.
-
-This module extends TFNBS to incorporate functional network architecture.
-It weights topological clusters based on the density of the functional blocks
-they span, increasing sensitivity to effects that align with known
-functional anatomy.
-"""
-
-
-# =============================================================================
-# Specific Helper Functions
-# =============================================================================
-
-
-# =============================================================================
-# Main Function
-# =============================================================================
-
-
-# =============================================================================
-# Functional Block Clustering TFNBS (FBC-TFNBS)
-# =============================================================================
 
 
 # Compatibility exports of the other TFNBS family members.

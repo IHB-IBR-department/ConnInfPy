@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
-from typing import Optional
 
 from conninfpy.defaults import (
     DEFAULT_MIN_CLUSTER_SIZE,
     DEFAULT_START_THRESHOLD,
 )
+from conninfpy.enhance._backend import HAS_NUMBA, _record_executed_backend
 from conninfpy.enhance._blocks import (
     _compute_canonical_block_ids,
     _validate_net_labels,
@@ -117,13 +118,45 @@ def get_fbc_tfnbs_score(
         is_symm = _is_symmetric(t_stats)
         rows, cols, weights = _get_edges(t_stats, start_thres, symmetric=is_symm)
         if not len(weights):
-            return integrate(rows, cols, weights, nroi, e_arr, h_arr,
-                             scalar_mode, is_symm, start_thres)
-        blocks = _compute_canonical_block_ids(rows, cols, normalized_net_labels, n_networks)
-        return integrate(rows, cols, weights, nroi, e_arr, h_arr, scalar_mode,
-                         is_symm, start_thres, blocks=blocks,
-                         scale=np.ones(n_networks * n_networks),
-                         minimum=min_cluster_size)
+            return integrate(
+                rows,
+                cols,
+                weights,
+                nroi,
+                e_arr,
+                h_arr,
+                scalar_mode,
+                is_symm,
+                start_thres,
+                blocks=np.empty(0, dtype=np.intp),
+                use_numba=HAS_NUMBA,
+                method_label="FBC-TFNBS (exact)",
+            )
+        blocks = _compute_canonical_block_ids(
+            rows, cols, normalized_net_labels, n_networks
+        )
+        return integrate(
+            rows,
+            cols,
+            weights,
+            nroi,
+            e_arr,
+            h_arr,
+            scalar_mode,
+            is_symm,
+            start_thres,
+            blocks=blocks,
+            scale=np.ones(n_networks * n_networks),
+            minimum=min_cluster_size,
+            use_numba=HAS_NUMBA,
+            method_label="FBC-TFNBS (exact)",
+        )
+
+    _record_executed_backend(
+        "numpy",
+        method_label=f"FBC-TFNBS (n={n})",
+        fallback_reason="no_numba" if not HAS_NUMBA else None,
+    )
 
     # 2. Compute thresholds
     threshs, dh = _compute_thresholds(t_stats, n, start_thres)

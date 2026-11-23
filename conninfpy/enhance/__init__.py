@@ -7,8 +7,8 @@ applies the corresponding network-based enhancement to each direction
 independently.
 
 Wrappers accept the legacy keys ``'g2>g1'`` / ``'g1>g2'`` from the v1.x
-t-test pipeline (silently remapped via :func:`conninfpy._compat.normalize_keys`)
-and always return a :class:`~conninfpy._compat.TailResult` with canonical
+t-test pipeline (silently remapped via :func:`conninfpy._compat.normalize_keys`
+) and always return a :class:`~conninfpy._compat.TailResult` with canonical
 ``'positive'`` / ``'negative'`` keys. The legacy keys remain readable on
 the result with a :class:`DeprecationWarning` until v2.1.
 
@@ -35,6 +35,7 @@ from conninfpy.defaults import (
     DEFAULT_START_THRESHOLD,
 )
 from conninfpy.defaults import DEFAULT_N_THRESHOLDS_PERMUTATION as DEFAULT_N_THRESHOLDS
+from conninfpy.enhance._backend import _enhance_call_scope
 from conninfpy.enhance.nbs import (
     cnbs_block_means,
     cnbs_blocks,
@@ -73,12 +74,13 @@ def _wrap(stat_dict: Dict[str, npt.NDArray[np.float64]], score_fn) -> TailResult
     omnibus path with ``{'omnibus': ...}``).
     """
     norm = normalize_keys(stat_dict)
-    if set(norm.keys()) == {"positive", "negative"}:
-        return make_tail_result(
-            score_fn(norm["positive"]),
-            score_fn(norm["negative"]),
-        )
-    return {key: score_fn(arr) for key, arr in norm.items()}
+    with _enhance_call_scope():
+        if set(norm.keys()) == {"positive", "negative"}:
+            return make_tail_result(
+                score_fn(norm["positive"]),
+                score_fn(norm["negative"]),
+            )
+        return {key: score_fn(arr) for key, arr in norm.items()}
 
 
 def apply_tfnbs(
@@ -200,6 +202,7 @@ def apply_edge_mask(
     ``inner=None`` the raw statistic is masked (``method='tstat'``).
     Module-level so it pickles to worker processes.
     """
-    mask = np.asarray(edge_mask, dtype=bool)
-    masked = _wrap(stat_dict, lambda arr: np.where(mask, arr, 0.0))
-    return masked if inner is None else inner(masked, edge_mask=mask, **kwargs)
+    with _enhance_call_scope():
+        mask = np.asarray(edge_mask, dtype=bool)
+        masked = _wrap(stat_dict, lambda arr: np.where(mask, arr, 0.0))
+        return masked if inner is None else inner(masked, edge_mask=mask, **kwargs)

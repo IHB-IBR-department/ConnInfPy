@@ -61,12 +61,13 @@ Core: ``numpy``, ``scipy``, ``statsmodels``, ``pandas``, ``matplotlib``,
        python -m pip install -e . --no-deps
        python -m pip install numpy scipy statsmodels pandas matplotlib scikit-learn joblib threadpoolctl pyyaml "nibabel>=3.2"
 
-   Which code runs instead depends on the scoring path: the default exact
-   integral (``n=None``) executes its Python graph and block sweeps instead of
-   the compiled ones, while the legacy threshold grid (an explicit ``n``) uses
-   its SciPy implementation. Requesting ``backend="numba"`` when it is not
-   installed logs ``Numba not installed, falling back to scipy backend.`` and
-   runs the uncompiled path. The permutations, the correction and the
+   Which code runs instead depends on the method and scoring path: exact TFNBS
+   (``n=None``) executes its pure-Python graph and block sweeps, exact
+   NI-TFNBS / FBC-TFNBS use vectorized NumPy, and the legacy threshold grid
+   (an explicit ``n``) plus NBS use their SciPy implementations. The active
+   fallback backend is logged once per call, e.g. ``Numba is not installed;
+   TFNBS (exact) is running on the 'python' fallback backend.``
+   The permutations, the correction and the
    significance level are not affected by this choice; the runtime of the
    uncompiled paths is not benchmarked here. ``conninfpy info`` reports whether
    ``numba`` was found.
