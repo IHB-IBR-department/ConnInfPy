@@ -1187,7 +1187,20 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                     loader_provenance=loaded.provenance,
                                     dataset_choice=dataset_choice if ingest_mode == "Built-in data" else None,
                                     cohort=cohort if ingest_mode == "Built-in data" and dataset_choice == "OpenClose" else None,
-                                    manifest_file=str(manifest_file) if ingest_mode == "Import from manifest" else None,
+                                    manifest_file=str(manifest_file) if ingest_mode == "Dataset Manifest (data.yaml)" else None,
+                                )
+                                from apps.utils.helpers import PROJECT_ROOT
+                                from apps.utils.workspace_io import capture_source_hashes
+
+                                extra_source_paths = {}
+                                if st.session_state.get("atlas_mode") == "Custom atlas CSV" and st.session_state.get("custom_atlas_path"):
+                                    extra_source_paths["custom_atlas_path"] = st.session_state.get("custom_atlas_path")
+                                st.session_state.dataset_info["source_files"] = capture_source_hashes(
+                                    dataset_info=st.session_state.dataset_info,
+                                    manifest_file=str(manifest_file) if ingest_mode == "Dataset Manifest (data.yaml)" else None,
+                                    resolved_paths=getattr(loader_instance, "resolved_paths", None),
+                                    extra_paths=extra_source_paths or None,
+                                    project_root=PROJECT_ROOT,
                                 )
                                 reset_widget_scopes("design", "results", "annotation")
                                     
@@ -1217,6 +1230,10 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
 
 
     # Display data summaries if populated
+    if st.session_state.connectivity_data is None and st.session_state.get("inference_result") is not None:
+        from apps.utils.workspace import render_restored_workspace_notice
+
+        render_restored_workspace_notice()
     if st.session_state.connectivity_data is not None:
         N_nodes = st.session_state.connectivity_data.shape[1]
         st.success(f"✅ Loaded Connectivity Matrix: {st.session_state.connectivity_data.shape[0]} observations, {N_nodes} x {N_nodes} ROIs.")

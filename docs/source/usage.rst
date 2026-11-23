@@ -706,6 +706,49 @@ checked, so an extracted archive replays from any directory.
    inference: {method: tstat, n_permutations: 1000, rng: 42}
 
 
+Saving and restoring workspaces
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The application sidebar (*Save & restore workspace*) and the results export
+both write a versioned, pickle-free ``workspace/`` layer
+(``workspace/manifest.json`` + ``workspace/state.json`` + ``workspace/arrays/arrays.npz``
+loaded strictly with ``allow_pickle=False``). ``workspace/manifest.json`` declares
+``kind`` and ``workspace_schema_version``; the current schema is version 2, and
+every other version is rejected before anything is applied. The layer separates
+four explicit sections plus optional subject data:
+
+``source_refs``
+  dataset metadata, load-time SHA-256 source hashes, atlas, preprocessing and
+  Fisher history.
+``results``
+  primary and companion ``InferenceResult`` / ``OmnibusInferenceResult``,
+  ``edges_df``, and ``run_plan``.
+``annotation``
+  the ``RoiAnnotation`` and its ``evidence_packet`` — both durable offline, with
+  no inference run needed to read them back.
+``ui_state``
+  allowlisted tabs, display controls, and comparison/annotation settings. API
+  keys, tokens, and secrets are never stored.
+``data``
+  the subject-level connectivity matrices and phenotype table, only when
+  **Include subject data** is on (default off).
+
+- Restoring a results-only workspace opens *Inference Results* and *Brainnetome
+  Annotation* immediately, without re-running inference, preprocessing, ComBat,
+  SC, or Louvain, and states clearly that subject-level connectivity matrices
+  are not loaded and must be re-imported in Tab 1 to run a new analysis.
+- Source freshness is verified honestly against load-time SHA-256 hashes
+  (``verified``, ``stale``, ``missing``, ``unknown``, or ``synthetic``). Legacy
+  or unhashed sources stay ``unknown`` rather than claiming freshness.
+- Inspection and restoration never import ``pickle`` or read ``bundle.pkl``, and
+  reject corrupt checksums, malformed sections, or unsupported schema versions
+  without mutating the active session.
+- Workspaces saved by an earlier schema that also carried the retired LLM
+  narrative report still load: those narrative fields, API keys, and narrative
+  widgets are skipped and reported as legacy, and a saved *5. Narrative Report*
+  tab opens on *4. Brainnetome Annotation* instead.
+
+
 Network-level summaries — ``result.network_summary(atlas)``
 -----------------------------------------------------------
 

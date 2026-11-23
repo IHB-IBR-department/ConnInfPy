@@ -824,7 +824,16 @@ def render_design_inference_view(base_atlas, tabs_list):
         render_help("analysis_setup")
     
     if st.session_state.connectivity_data is None or st.session_state.pheno_df is None:
-        st.info("Load a dataset to configure your analysis.")
+        if st.session_state.get("inference_result") is not None:
+            from apps.utils.workspace import render_restored_workspace_notice
+
+            render_restored_workspace_notice()
+            st.info(
+                "This restored workspace contains finished results without subject-level data. "
+                "Load the dataset in Tab 1 to configure or re-run inference."
+            )
+        else:
+            st.info("Load a dataset to configure your analysis.")
         go_to_step("Load data", DATA_TAB, key="design_load_data")
     else:
         with st.container(key="design_actions"):

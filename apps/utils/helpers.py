@@ -244,7 +244,10 @@ def active_analysis_atlas(base_atlas=None):
         return st.session_state.sub_atlas
     if st.session_state.get("dataset_atlas") is not None:
         return st.session_state.dataset_atlas
-    if "loaded_reference_atlas" in st.session_state and st.session_state.get("connectivity_data") is not None:
+    if "loaded_reference_atlas" in st.session_state and (
+        st.session_state.get("connectivity_data") is not None
+        or st.session_state.get("inference_result") is not None
+    ):
         return st.session_state.loaded_reference_atlas
     return base_atlas
 

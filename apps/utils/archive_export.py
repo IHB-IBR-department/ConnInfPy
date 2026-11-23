@@ -1162,6 +1162,8 @@ def build_analysis_archive(
     grid_cell: Optional[int] = None,
     project_root: Optional[Path] = None,
     exporter: str = "conninfpy-app",
+    workspace_state: Optional[Mapping[str, Any]] = None,
+    include_workspace_data: bool = False,
 ) -> Tuple[bytes, Dict[str, Any]]:
     """Build the deterministic analysis-archive ZIP bytes and its manifest.
 
@@ -1345,6 +1347,21 @@ def build_analysis_archive(
         "trusted_only": ["bundle.pkl"] if "bundle.pkl" in files else [],
         "notes": notes,
     }
+    if workspace_state is not None:
+        from apps.utils.workspace_io import build_workspace_layer_files
+
+        ws_files, ws_manifest = build_workspace_layer_files(
+            workspace_state,
+            include_data=include_workspace_data,
+            project_root=project_root,
+        )
+        files.update(ws_files)
+        manifest["workspace"] = {
+            "kind": ws_manifest["kind"],
+            "workspace_schema_version": ws_manifest["workspace_schema_version"],
+            "include_data": ws_manifest["include_data"],
+        }
+
     # Self-describing listing of every other member (a file cannot carry
     # its own checksum; manifest.json itself is covered by the ZIP listing
     # consumers build when extracting).

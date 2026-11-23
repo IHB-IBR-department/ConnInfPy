@@ -43,11 +43,13 @@ def go_to_step(label, tab, *, key, primary=True):
 
 def require_analysis_step(*, annotation=False, key):
     """Guide an empty view to its earliest missing prerequisite."""
-    if st.session_state.get("connectivity_data") is None:
+    has_data = st.session_state.get("connectivity_data") is not None
+    has_result = st.session_state.get("inference_result") is not None
+    if not has_data and not has_result:
         st.info("Load a dataset to begin your analysis.")
         go_to_step("Load data", DATA_TAB, key=f"{key}_data")
         return False
-    if st.session_state.get("inference_result") is None:
+    if not has_result:
         st.info("Your dataset is ready. Configure and run an analysis to see results.")
         go_to_step("Configure analysis", DESIGN_TAB, key=f"{key}_design")
         return False
@@ -95,15 +97,32 @@ def atlas_display_name(atlas, fallback):
 
 
 def dataset_summary():
-    """Describe loaded arrays, including sessions started before this UI update."""
+    """Describe loaded arrays or restored results-only dataset metadata."""
     data = st.session_state.get("connectivity_data")
-    if data is None:
+    raw_info = st.session_state.get("dataset_info")
+    result = st.session_state.get("inference_result")
+    if data is None and not raw_info and result is None:
         return None
-    info = dict(st.session_state.get("dataset_info") or {})
-    info.setdefault("name", "Loaded session dataset")
-    info.setdefault("source", "Source details unavailable for this earlier session")
-    info.setdefault("observations", int(data.shape[0]))
-    info.setdefault("n_rois", int(data.shape[1]))
+    info = dict(raw_info or {})
+    info.setdefault("name", "Loaded session dataset" if data is not None else "Results-only workspace")
+    info.setdefault(
+        "source",
+        "Source details unavailable for this earlier session"
+        if data is not None
+        else "Results-only archive (subject data omitted)",
+    )
+    if data is not None:
+        info.setdefault("observations", int(data.shape[0]))
+        info.setdefault("n_rois", int(data.shape[1]))
+    else:
+        info.setdefault("observations", "—")
+        if "n_rois" not in info and result is not None:
+            from apps.utils.result_views import unwrap_result
+            inner = unwrap_result(result)
+            first_arr = next(iter(inner.values())) if hasattr(inner, "values") and len(inner) else None
+            info["n_rois"] = int(first_arr.shape[0]) if first_arr is not None else "—"
+        else:
+            info.setdefault("n_rois", "—")
     info.setdefault("atlas", "Dataset metadata")
     atlas = st.session_state.get("dataset_atlas")
     if atlas is None:
@@ -122,7 +141,11 @@ def render_dataset_card():
     cols[0].metric("Observations", info["observations"])
     cols[1].metric("ROIs", info["n_rois"])
     cols[2].metric("Subjects", info.get("subjects") or "—")
-    st.caption(f"{info['source']} · {info['atlas']} · Validated")
+    if st.session_state.get("connectivity_data") is None and st.session_state.get("inference_result") is not None:
+        status_note = "Restored workspace (results only)"
+    else:
+        status_note = "Validated"
+    st.caption(f"{info['source']} · {info['atlas']} · {status_note}")
     record = st.session_state.get("dataset_preprocessing")
     from apps.utils.helpers import describe_per_site_facts, describe_preprocessing_facts
     with st.expander("Preprocessing facts (known / unknown)", expanded=False):
@@ -195,7 +218,7 @@ def render_progress(tabs):
     edges = state.get("edges_df")
     annotation = state.get("annotation")
     statuses = [
-        "Loaded" if loaded else "No data",
+        "Loaded" if loaded else ("Results-only (no data)" if complete else "No data"),
         "Running" if running else "Completed" if complete else "Ready" if loaded else "Needs data",
         (f"{len(edges)} detected connections" if edges is not None and not edges.empty else "No detections") if complete else "Needs analysis",
         ("Completed · no detections" if annotation is not None and annotation["detected"].empty else "Completed") if annotation is not None else "Ready" if complete else "Needs results",
@@ -218,3 +241,26 @@ def render_progress(tabs):
             if st.button(label, key=f"nav_step_{index}", width="stretch", help=status):
                 state.next_tab = tab
                 st.rerun()
+
+
+def render_restored_workspace_notice():
+    """Show honest source-verification status and results-only guidance for restored sessions."""
+    verification = st.session_state.get("_workspace_source_verification")
+    restored_meta = st.session_state.get("_workspace_restored_meta")
+    if not verification and not restored_meta:
+        return
+    if verification:
+        overall = verification.get("overall")
+        msg = verification.get("message", "")
+        if overall in ("missing", "stale"):
+            st.warning(f"Workspace source status ({overall}): {msg}")
+        elif overall == "unknown":
+            st.info(f"Workspace source status (unknown): {msg}")
+        else:
+            st.caption(f"Workspace source status ({overall}): {msg}")
+    if st.session_state.get("connectivity_data") is None and st.session_state.get("inference_result") is not None:
+        st.caption(
+            "This workspace was restored without subject-level connectivity matrices. "
+            "Inference results, companion comparisons, Brainnetome annotation, annotation evidence, "
+            "and archive exports remain available; load data in Tab 1 (or save with subject data) to re-run inference."
+        )

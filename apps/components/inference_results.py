@@ -1019,6 +1019,9 @@ def _render_archive_export(base_atlas, effect_mask):
     memo = (
         "_archive_zip", id(result), str(run_plan.get("alpha")), grid_cell,
         id(effect_mask), str(dataset_info.get("loaded_at")),
+        id(st.session_state.get("companion_inference_result")),
+        id(st.session_state.get("annotation")),
+        id(st.session_state.get("evidence_packet")),
     )
     if st.session_state.get(memo) is None:
         zip_bytes, _manifest = build_analysis_archive(
@@ -1029,6 +1032,8 @@ def _render_archive_export(base_atlas, effect_mask):
             effect_mask=effect_mask,
             grid_cell=grid_cell,
             project_root=PROJECT_ROOT,
+            workspace_state=st.session_state,
+            include_workspace_data=False,
         )
         st.session_state[memo] = zip_bytes
     else:
@@ -1068,6 +1073,9 @@ def render_inference_results_view(base_atlas):
 
     if not require_analysis_step(key="results"):
         return
+
+    from apps.utils.workspace import render_restored_workspace_notice
+    render_restored_workspace_notice()
 
     _render_archive_export(base_atlas, st.session_state.get("_synthetic_effect_mask"))
 

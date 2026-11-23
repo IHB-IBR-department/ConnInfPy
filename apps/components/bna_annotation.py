@@ -50,6 +50,8 @@ def render_bna_annotation_view(base_atlas):
         return
     if not require_analysis_step(key="annotation"):
         return
+    from apps.utils.workspace import render_restored_workspace_notice
+    render_restored_workspace_notice()
     result = unwrap_result(st.session_state.inference_result)
     if hasattr(result, "keys") and "omnibus" in result and "positive" not in result:
         st.info("Brainnetome directional connection annotation and connectogram require directional t/β contrasts (not yet defined for non-directional omnibus F-tests).")
