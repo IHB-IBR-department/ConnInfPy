@@ -1175,3 +1175,53 @@ def test_restore_validates_and_inspects_before_mutation(tmp_path: Path, monkeypa
     with pytest.raises(WorkspaceArchiveError):
         restore_workspace_archive(zip_bytes, sentinel, project_root=tmp_path)
     assert sentinel == snap
+
+
+def test_corrupt_stored_member_body_raises_workspace_archive_error(tmp_path: Path):
+    """One flipped byte in a stored member body (central directory intact).
+
+    Typical download corruption: the ZIP still opens and lists members, but
+    reading ``workspace/state.json`` fails with a bad CRC-32. Both public APIs
+    must surface ``WorkspaceArchiveError`` (never a raw ``zipfile.BadZipFile``)
+    and restore must leave the target untouched.
+    """
+    state = _make_full_state(tmp_path)
+    good_zip, _ = build_workspace_archive(state, include_data=False, project_root=tmp_path)
+
+    # Re-pack the same checksum-valid members as STORED so exactly one body byte
+    # can be flipped without touching the central directory.
+    stored_zip = _zip_from_files(_workspace_zip_files(good_zip))
+    with zipfile.ZipFile(io.BytesIO(stored_zip), "r") as zf:
+        info = zf.getinfo(WORKSPACE_STATE_PATH)
+        names_before = zf.namelist()
+    assert info.compress_type == zipfile.ZIP_STORED
+
+    raw = bytearray(stored_zip)
+    name_len = int.from_bytes(raw[info.header_offset + 26:info.header_offset + 28], "little")
+    extra_len = int.from_bytes(raw[info.header_offset + 28:info.header_offset + 30], "little")
+    body_start = info.header_offset + 30 + name_len + extra_len
+    # Flip a single byte inside the stored payload -> CRC-32 mismatch on read.
+    raw[body_start + info.file_size // 2] ^= 0xFF
+    corrupt_zip = bytes(raw)
+
+    with zipfile.ZipFile(io.BytesIO(corrupt_zip), "r") as zf:
+        assert zf.namelist() == names_before  # central directory still intact
+        with pytest.raises(zipfile.BadZipFile):
+            zf.read(WORKSPACE_STATE_PATH)
+
+    with pytest.raises(WorkspaceArchiveError) as excinfo:
+        inspect_workspace_archive(corrupt_zip, project_root=tmp_path)
+    assert "BadZipFile" in str(excinfo.value)
+
+    target: dict = {"existing_key": "untouched", "inference_result": "keep_me"}
+    snap = dict(target)
+    with pytest.raises(WorkspaceArchiveError):
+        restore_workspace_archive(corrupt_zip, target, project_root=tmp_path)
+    assert target == snap
+
+    # The neighbouring undamaged archive still inspects and restores.
+    insp = inspect_workspace_archive(stored_zip, project_root=tmp_path)
+    assert insp.has_results is True
+    restored: dict = {}
+    restore_workspace_archive(stored_zip, restored, project_root=tmp_path)
+    assert restored["inference_result"] is not None

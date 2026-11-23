@@ -1722,11 +1722,20 @@ def _decode_workspace_payload(
     belongs, ...) always surfaces as ``WorkspaceArchiveError`` with a readable
     message instead of leaking ``AttributeError``/``TypeError``/``KeyError``
     into the UI, and never after any target state was touched.
+
+    The same holds for ZIP-level damage found while reading a member (typical
+    download corruption: one flipped byte in a stored body, central directory
+    intact): a raw ``zipfile.BadZipFile`` from ``zf.read(...)`` of any member is
+    normalised here, on the single external boundary, and never reaches the UI.
     """
     try:
         return _decode_workspace_payload_impl(zip_bytes, project_root=project_root)
     except WorkspaceArchiveError:
         raise
+    except zipfile.BadZipFile as exc:
+        raise WorkspaceArchiveError(
+            f"Corrupt workspace archive (BadZipFile): {exc}"
+        ) from exc
     except (AttributeError, TypeError, KeyError, IndexError) as exc:
         raise WorkspaceArchiveError(
             f"Malformed workspace archive ({type(exc).__name__}): {exc}"
