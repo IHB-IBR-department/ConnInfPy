@@ -33,6 +33,13 @@ from conninfpy.results import OmnibusInferenceResult
 from conninfpy._prepare import infer_input_kind
 from conninfpy._prepare import prepare_connectivity
 from conninfpy._shared.rng import RngLike
+from conninfpy._shared.alignment import (
+    IdAlignmentError,
+    alignment_record,
+    check_subject_axis,
+    paired_id_permutation,
+    reorder_subject_axis,
+)
 from conninfpy.stats._design import build_design_matrix
 from conninfpy.stats.glm import compute_p_val_glm
 from conninfpy.stats.glm import compute_p_val_glm_multi
@@ -408,6 +415,8 @@ def analyze(
     group2: Optional[npt.NDArray[np.float64]] = None,
     confounds_group1: Optional[npt.NDArray[np.float64]] = None,
     confounds_group2: Optional[npt.NDArray[np.float64]] = None,
+    ids_group1: Optional[Sequence[Any]] = None,
+    ids_group2: Optional[Sequence[Any]] = None,
     interactions: Optional[Sequence[tuple[str, str]]] = None,
     test_type: str = "two-sample",
     sites: Optional[Sequence[Any]] = None,
@@ -476,7 +485,43 @@ def analyze(
         condition separately to Fisher z. For
         ``test_type='paired'`` they are the two within-subject
         conditions and must be row-aligned (``group1[s]`` and
-        ``group2[s]`` are the same subject).
+        ``group2[s]`` are the same subject) unless ``ids_group1`` /
+        ``ids_group2`` name the subjects.
+    ids_group1, ids_group2 : sequence of hashable scalars, optional
+        Subject IDs for the two paired conditions, in the row order of
+        ``group1`` / ``group2``. Paired paths only (``test_type='paired'``
+        with ``group1``/``group2`` and no ``Y``); passing them to a
+        two-sample, one-sample or Y-only call raises.
+
+        The two vectors must form a **strict full bijection**: the same
+        unique, non-missing IDs on both sides, matched by Python equality of
+        the opaque values. Nothing is normalised, stringified or type-coerced,
+        and no ID is ever guessed from the data. ``None``, ``NaN``, ``NaT``,
+        ``pd.NA`` and empty strings are rejected as IDs, as are unhashable
+        values. The API raises ``ValueError`` for one-sided IDs (only one
+        condition named), an ID present in only one condition (missing pair),
+        a repeated ID within a condition, an ID vector whose length disagrees
+        with its array's subject axis, and for data with mismatched shapes —
+        silently dropping a subject or pairing the wrong rows never happens.
+
+        **Index ownership.** ``group1`` (condition A) is the reference row
+        order and the result's order. Exactly one permutation moves every
+        condition-B subject-axis input — ``group2`` and
+        ``confounds_group2`` — into A order *before* the Fisher transform,
+        the B − A difference, the condition-confound difference and any
+        inference. Inputs that already live in A order are validated against
+        A and **never** permuted: ``interest`` (including interaction
+        predictors), subject-level ``confounds``, ``sites`` and
+        ``confounds_group1``. Edge-axis objects (``edge_mask``,
+        ``net_labels``) are invariant under a subject permutation.
+        Without IDs the positional behaviour is unchanged.
+
+        The applied alignment is recorded in ``result.design
+        ['paired_alignment']`` (``reference``, ``n_subjects``, the
+        ``permutation_b_to_a`` and ``identity_permutation``), in ``flags``
+        and, on the paired-interest path, in
+        ``design['paired_difference']['alignment']``; it survives
+        :meth:`~conninfpy.InferenceResult.to_bundle`.
     confounds_group1, confounds_group2 : ndarray, optional
         Condition-varying confounds for the **repeated-measures GLM**
         path, shape ``(n_subjects,)`` or ``(n_subjects, k)``, aligned to
@@ -726,6 +771,76 @@ def analyze(
             "FWER is not the nominal alpha (use alpha/2 per tail for that)."
         )
 
+    # ---- Optional subject-ID alignment for paired designs (NETSTAT-31) ----
+    # Condition A (group1) is the reference row order. When the caller names
+    # the subjects, verify the A<->B bijection once and move every
+    # condition-B subject-axis input into A order *before* the Fisher
+    # transform, the B-A differences and any inference. A-order inputs
+    # (interest, subject-level confounds, sites, confounds_group1) are
+    # validated against A and never permuted; edge-axis masks are invariant.
+    paired_alignment = None
+    if ids_group1 is not None or ids_group2 is not None:
+        if Y is not None or group1 is None or group2 is None or test_type != "paired":
+            raise ValueError(
+                "ids_group1/ids_group2 are only valid for the paired design: "
+                "group1= and group2= with test_type='paired' and no Y. "
+                "Two-sample, one-sample and Y-only (GLM) paths carry no "
+                "within-subject pairs to align."
+            )
+        a_data, b_data = np.asarray(group1), np.asarray(group2)
+        if a_data.ndim != 3 or b_data.ndim != 3 or a_data.shape[1:] != b_data.shape[1:]:
+            raise ValueError(
+                "paired conditions must have identical (subjects, regions, regions) "
+                f"shapes; got {a_data.shape} and {b_data.shape}."
+            )
+        n_a = int(a_data.shape[0])
+        try:
+            perm = paired_id_permutation(
+                ids_group1, ids_group2,
+                n_group1=n_a, n_group2=int(b_data.shape[0]),
+                name_group1="ids_group1", name_group2="ids_group2",
+            )
+            a_order = ["interest"] if interest is not None else []
+            if isinstance(interest, dict):
+                for name, values in interest.items():
+                    check_subject_axis(values, f"interest[{name!r}]", n_a, condition="group1")
+            else:
+                check_subject_axis(interest, "interest", n_a, condition="group1")
+            for a_name, a_value in (("confounds", confounds), ("sites", sites),
+                                    ("confounds_group1", confounds_group1)):
+                if a_value is not None:
+                    check_subject_axis(a_value, a_name, n_a, condition="group1")
+                    a_order.append(a_name)
+            had_condition_confounds = confounds_group2 is not None
+            confounds_group2 = reorder_subject_axis(
+                confounds_group2, perm, "confounds_group2"
+            )
+        except IdAlignmentError as exc:
+            raise ValueError(str(exc)) from exc
+        group2 = b_data[perm]
+        reordered = ["group2"] + (["confounds_group2"] if had_condition_confounds else [])
+        paired_alignment = alignment_record(
+            perm,
+            n_subjects=n_a,
+            reference="group1 (condition A)",
+            reordered_inputs=reordered,
+            a_order_inputs=a_order,
+        )
+        if paired_alignment["identity_permutation"]:
+            flags.append(
+                f"paired subject IDs checked: {n_a} subjects form a one-to-one "
+                "match between group1 and group2; condition B already followed "
+                "condition A's row order (no permutation applied)."
+            )
+        else:
+            flags.append(
+                f"paired subject IDs aligned: {n_a} subjects matched one-to-one by "
+                f"ID; {', '.join(reordered)} permuted into condition A's row order "
+                "before the Fisher transform and the B - A difference. "
+                "A-order inputs (interest, subject-level confounds, sites) were "
+                "validated against A and not permuted."
+            )
+
     # A repeated-measures regression has one observation per subject.  Do
     # the nonlinear transform before subtraction, never on the difference.
     paired_interest = interest is not None and (group1 is not None or group2 is not None)
@@ -759,6 +874,8 @@ def analyze(
                           "subject_confound_columns": n_subject_confounds,
                           "condition_confound_columns": n_condition_confounds,
                           "condition_confound_transform": "B - A"}
+        if paired_alignment is not None:
+            paired_details["alignment"] = deepcopy(paired_alignment)
         allow_missing_pair = missing == "available_case"
         # Fisher is applied to each condition separately, never to the
         # difference; the captured entries record exactly that (stage
@@ -1204,6 +1321,8 @@ def analyze(
                     res.design["paired_difference"] = paired_details.copy()
                 if centered_means is not None:
                     res.design["predictor_centering_means"] = centered_means.copy()
+                if paired_alignment is not None:
+                    res.design["paired_alignment"] = deepcopy(paired_alignment)
                 update_analysis_scale(res, analysis_scale, units or _estimator_aware_units(analysis_scale, preprocessing_record) or ("Fisher z difference (B - A)" if derived_scale else None))
                 _thread_preprocessing(res, preprocessing_record)
                 _thread_fisher(res, fisher_record)
@@ -1430,9 +1549,18 @@ def analyze(
             result.design["paired_difference"] = paired_details.copy()
         if centered_means is not None:
             result.design["predictor_centering_means"] = centered_means.copy()
+        if paired_alignment is not None:
+            result.design["paired_alignment"] = deepcopy(paired_alignment)
         update_analysis_scale(result, analysis_scale, units or _estimator_aware_units(analysis_scale, preprocessing_record) or ("Fisher z difference (B - A)" if derived_scale else None))
         _thread_preprocessing(result, preprocessing_record)
         _thread_fisher(result, fisher_record)
+    # The alignment fact also lives in the analysis provenance so a consumer
+    # that only reads provenance sees it; design/paired_details are what the
+    # bundle carries across to_bundle().
+    if paired_alignment is not None:
+        result_prov = getattr(result, "analysis_provenance", None)
+        if isinstance(result_prov, dict):
+            result_prov["paired_alignment"] = deepcopy(paired_alignment)
     # A prespecified direction restricts the finished result after the
     # provenance threading above, so the restriction itself is recorded in
     # provenance and exports ('prespecified', never a post hoc relabelling).

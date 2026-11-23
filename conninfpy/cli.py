@@ -53,6 +53,8 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from conninfpy._shared.alignment import IdAlignmentError, paired_id_permutation
+
 DESIGNS = ("glm", "two-sample", "paired", "one-sample")
 _TOP_LEVEL_KEYS = {"data", "input", "design", "inference", "atlas", "alpha", "output", "connectivity"}
 _KIND_TO_INPUT = {"correlation": "r", "fisher_z": "z"}
@@ -340,21 +342,35 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
         if observed != set(levels):
             raise ConfigError(f"paired condition levels {levels!r} do not match observed levels {sorted(observed, key=str)!r}")
         rows = {lvl: pheno.index[pheno[cond_col] == lvl] for lvl in levels}
-        for lvl in levels:
-            if pheno.loc[rows[lvl], subj_col].duplicated().any():
+        ids_a = pheno.loc[rows[levels[0]], subj_col].to_numpy()
+        ids_b = pheno.loc[rows[levels[1]], subj_col].to_numpy()
+        missing_pair = f"each subject must have both conditions {levels}; missing pair detected"
+        if len(ids_a) == 0 or len(ids_b) == 0:
+            raise ConfigError(missing_pair)
+        # One shared bijection helper with the Python API: condition A
+        # (levels[0]) is the reference row order and condition B is permuted
+        # into it. The CLI keeps its own messages on top of the codes.
+        try:
+            perm = paired_id_permutation(ids_a, ids_b, name_group1=subj_col, name_group2=subj_col)
+        except IdAlignmentError as exc:
+            if exc.code == "duplicate":
+                lvl = levels[0] if exc.condition == "group1" else levels[1]
                 raise ConfigError(
                     f"subject column {subj_col!r} repeats within condition {lvl!r}; "
                     "each subject needs exactly one row per condition."
-                )
-        by_subj = {lvl: pd.Series(rows[lvl], index=pheno.loc[rows[lvl], subj_col]) for lvl in levels}
-        subjects = by_subj[levels[0]].index.intersection(by_subj[levels[1]].index)
-        if len(subjects) == 0 or len(subjects) != len(by_subj[levels[0]]) or len(subjects) != len(by_subj[levels[1]]):
-            raise ConfigError(f"each subject must have both conditions {levels}; missing pair detected")
-        ia = by_subj[levels[0]].loc[subjects].to_numpy()
-        ib = by_subj[levels[1]].loc[subjects].to_numpy()
+                ) from exc
+            if exc.code == "missing_pair":
+                raise ConfigError(missing_pair) from exc
+            raise ConfigError(str(exc)) from exc
+        ia = rows[levels[0]].to_numpy()
+        ib = rows[levels[1]].to_numpy()[perm]
+        subjects = pheno.loc[ia, subj_col].to_numpy()
         encoding_frame = pheno
         encoding_columns = interest_cols + confound_cols + subject_confounds
-        kwargs.update(group1=Y[ia], group2=Y[ib], test_type="paired")
+        kwargs.update(
+            group1=Y[ia], group2=Y[ib], test_type="paired",
+            ids_group1=subjects, ids_group2=subjects,
+        )
         for col in interest_cols + subject_confounds + _as_list(site_col):
             if not np.array_equal(pheno.loc[ia, col].to_numpy(), pheno.loc[ib, col].to_numpy()):
                 raise ConfigError(f"paired subject-level column {col!r} must be constant across conditions")

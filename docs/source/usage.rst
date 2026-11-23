@@ -474,6 +474,40 @@ sign flips assume symmetric errors). With all-zero Δ-confounds it reduces
 exactly to the paired sign-flip test. On both routes ``positive`` means
 Y^B > Y^A.
 
+Optional subject IDs in paired designs
+--------------------------------------
+
+A paired design assumes that row ``s`` of condition B is the same subject as
+row ``s`` of condition A. When the caller can name the subjects, pass the IDs
+in row order and the API verifies that and reorders condition B instead of
+trusting the row order:
+
+.. code-block:: python
+
+   out = analyze(
+       group1=a, group2=b, test_type='paired',
+       ids_group1=['s01', 's02', 's03'],
+       ids_group2=['s03', 's01', 's02'],   # same subjects, different rows
+   )
+
+The two vectors must be a strict full bijection (same unique, non-missing IDs
+matched by value — nothing is normalised, stringified or type-coerced). One
+permutation moves every condition-B subject-axis input (``group2``,
+``confounds_group2``) into condition A's row order *before* the Fisher
+transform, the B − A difference and any inference, so ``positive`` keeps its
+``group2 > group1`` meaning and the result stays in A's order. Inputs that
+already live in A order (``interest``, subject-level ``confounds``, ``sites``,
+``confounds_group1``) are validated against A and never permuted; edge-axis
+masks are invariant. One-sided IDs, an ID present in only one condition, a
+duplicate ID, a length mismatch and a non-paired test type all raise
+``ValueError``; without IDs the positional behaviour is unchanged. The
+alignment is recorded in ``design['paired_alignment']`` (reference, number of
+subjects, the B→A permutation) and in ``flags``, and survives
+``to_bundle()``. ``compute_p_val`` (``ids_group1``/``ids_group2``) and
+``compute_p_val_paired_glm`` (``ids_A``/``ids_B``) accept the same arguments,
+and the YAML ``paired`` design in :mod:`conninfpy.cli` uses one shared helper,
+so a shuffled phenotype table and an API call with IDs give the same result.
+
 Methods (enhancement operators)
 -------------------------------
 

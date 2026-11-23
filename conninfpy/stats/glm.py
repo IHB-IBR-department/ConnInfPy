@@ -33,6 +33,12 @@ import numpy.typing as npt
 from conninfpy._compat import TailResult, make_tail_result, normalize_keys
 from conninfpy._prepare import check_connectivity, check_finite_design
 from conninfpy._shared.rng import RngLike, resolve_seed, warn_legacy_random_state
+from conninfpy._shared.alignment import (
+    IdAlignmentError,
+    alignment_record,
+    paired_id_permutation,
+    reorder_subject_axis,
+)
 from conninfpy.defaults import (
     DEFAULT_ACCELERATION,
     DEFAULT_EXTENT_EXPONENT,
@@ -1511,6 +1517,9 @@ def compute_p_val_paired_glm(
     Y_B: npt.NDArray[np.float64],
     confounds_A: Optional[npt.NDArray[np.float64]] = None,
     confounds_B: Optional[npt.NDArray[np.float64]] = None,
+    *,
+    ids_A: Optional[Sequence[Any]] = None,
+    ids_B: Optional[Sequence[Any]] = None,
     **kwargs,
 ) -> Union[InferenceResult, OmnibusInferenceResult]:
     """
@@ -1543,6 +1552,16 @@ def compute_p_val_paired_glm(
         Aligned per-subject confound values for the two conditions. Either
         pass both or neither. If passed, the *difference*
         ``confounds_B - confounds_A`` enters the GLM as a nuisance regressor.
+    ids_A, ids_B : sequence of hashable scalars, optional keyword-only
+        Subject IDs for ``Y_A`` / ``Y_B``, in their row order. The two
+        vectors must be a strict one-to-one match (same unique, non-missing
+        IDs matched by value, no normalisation or coercion); ``Y_A`` is the
+        reference row order and ``Y_B`` together with ``confounds_B`` is
+        permuted into it once, before Δ_Y/Δ_C and the sign-flip loop.
+        ``confounds_A`` is an A-order input and is never permuted.
+        One-sided IDs, a missing/extra ID, duplicates, a length mismatch and
+        a non-paired ``test_type`` raise ``ValueError``. The permutation is
+        recorded in ``result.design['paired_alignment']``.
     **kwargs
         Forwarded to the downstream call (``compute_p_val`` or
         ``compute_p_val_glm``). ``test_type`` is fixed to ``'paired'`` when
@@ -1566,13 +1585,53 @@ def compute_p_val_paired_glm(
     """
     Y_A = np.asarray(Y_A, dtype=np.float64)
     Y_B = np.asarray(Y_B, dtype=np.float64)
-    if Y_A.shape != Y_B.shape:
-        raise ValueError(
-            f"Y_A and Y_B must have identical shapes, got {Y_A.shape} vs {Y_B.shape}."
-        )
     if Y_A.ndim != 3 or Y_A.shape[1] != Y_A.shape[2]:
         raise ValueError(
             f"Y_A/Y_B must have shape (n_subjects, N, N), got {Y_A.shape}."
+        )
+    if Y_B.ndim != 3 or Y_B.shape[1] != Y_B.shape[2]:
+        raise ValueError(
+            f"Y_A/Y_B must have shape (n_subjects, N, N), got {Y_B.shape}."
+        )
+
+    # Optional subject-ID alignment: Y_A is the reference row order, so Y_B
+    # (and its condition-specific confounds) are moved into it before the
+    # difference. confounds_A stays in A order.
+    alignment = None
+    if ids_A is not None or ids_B is not None:
+        if "test_type" in kwargs:
+            raise ValueError(
+                "test_type is fixed to 'paired' by compute_p_val_paired_glm; "
+                "do not pass it explicitly."
+            )
+        try:
+            perm = paired_id_permutation(
+                ids_A, ids_B,
+                n_group1=int(Y_A.shape[0]), n_group2=int(Y_B.shape[0]),
+                name_group1="ids_A", name_group2="ids_B",
+            )
+            confounds_B = reorder_subject_axis(confounds_B, perm, "confounds_B")
+        except IdAlignmentError as exc:
+            raise ValueError(str(exc)) from exc
+        Y_B = Y_B[perm]
+        alignment = alignment_record(
+            perm,
+            n_subjects=int(Y_A.shape[0]),
+            reference="Y_A",
+            reordered_inputs=["Y_B"]
+            + (["confounds_B"] if confounds_B is not None else []),
+            a_order_inputs=["confounds_A"] if confounds_A is not None else [],
+        )
+
+    def _with_alignment(res: Any) -> Any:
+        """Record the applied alignment on the result's design."""
+        if alignment is not None and getattr(res, "design", None) is not None:
+            res.design["paired_alignment"] = alignment
+        return res
+
+    if Y_A.shape != Y_B.shape:
+        raise ValueError(
+            f"Y_A and Y_B must have identical shapes, got {Y_A.shape} vs {Y_B.shape}."
         )
 
     has_A = confounds_A is not None
@@ -1605,15 +1664,17 @@ def compute_p_val_paired_glm(
             stat_type.value if isinstance(stat_type, GLMStatType) else stat_type
         )
         if stat_type_str != GLMStatType.TSTAT.value:
-            return compute_p_val_glm(
-                Y_B - Y_A,
-                design_matrix=np.ones((Y_A.shape[0], 1)),
-                contrast=np.array([1.0]),
-                stat_type=stat_type_str,
-                scheme="sign-flip",
-                **kwargs,
+            return _with_alignment(
+                compute_p_val_glm(
+                    Y_B - Y_A,
+                    design_matrix=np.ones((Y_A.shape[0], 1)),
+                    contrast=np.array([1.0]),
+                    stat_type=stat_type_str,
+                    scheme="sign-flip",
+                    **kwargs,
+                )
             )
-        return compute_p_val(Y_A, Y_B, test_type="paired", **kwargs)
+        return _with_alignment(compute_p_val(Y_A, Y_B, test_type="paired", **kwargs))
 
     # --- With-confound path: one-sample GLM on differences ---
     confounds_A = np.asarray(confounds_A, dtype=np.float64)
@@ -1693,4 +1754,4 @@ def compute_p_val_paired_glm(
         if enhancement is not None:
             res.design["enhancement"] = enhancement
         refresh_model_identity(res)
-    return res
+    return _with_alignment(res)

@@ -19,7 +19,7 @@ import logging
 import time
 from functools import partial
 from multiprocessing import Pool
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -27,6 +27,12 @@ from scipy import stats
 
 from conninfpy._compat import TailResult, make_tail_result, normalize_keys
 from conninfpy._prepare import check_connectivity
+from conninfpy._shared.alignment import (
+    IdAlignmentError,
+    alignment_record,
+    paired_id_permutation,
+    reorder_subject_axis,
+)
 from conninfpy._shared.rng import RngLike, resolve_seed, warn_legacy_random_state
 from conninfpy.defaults import (
     DEFAULT_ACCELERATION,
@@ -1100,7 +1106,69 @@ def _with_estimates(fn):
     return wrapper
 
 
+def _aligned_paired_ids(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Reorder paired condition B into condition A's row order by subject ID.
+
+    Sits between :func:`capture_analysis_provenance` and ``_with_estimates``
+    so the estimate maps (``beta`` / ``design``) are computed from the aligned
+    stacks too. ``ids_group1``/``ids_group2`` are handled here and stripped
+    before the test body runs; without them the call is untouched.
+    """
+    import functools
+    import inspect
+
+    sig = inspect.signature(fn)
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+        ids_a = bound.arguments.pop("ids_group1", None)
+        ids_b = bound.arguments.pop("ids_group2", None)
+        if ids_a is None and ids_b is None:
+            return fn(*bound.args, **bound.kwargs)
+        test_type = bound.arguments.get("test_type")
+        test_type_str = (
+            test_type.value if isinstance(test_type, TestType) else test_type
+        )
+        if test_type_str != TestType.PAIRED.value:
+            raise ValueError(
+                "ids_group1/ids_group2 are only valid for test_type='paired'; "
+                f"got test_type={test_type_str!r}. A two-sample or one-sample "
+                "design has no within-subject pairs to align."
+            )
+        group1 = bound.arguments.get("group1")
+        group2 = bound.arguments.get("group2")
+        if group1 is None or group2 is None:
+            raise IdAlignmentError(
+                "ids_group1/ids_group2 need both group1 and group2 for a paired "
+                "test.",
+                code="one_sided",
+            )
+        n_group1 = int(np.asarray(group1).shape[0])
+        n_group2 = int(np.asarray(group2).shape[0])
+        try:
+            perm = paired_id_permutation(
+                ids_a, ids_b,
+                n_group1=n_group1, n_group2=n_group2,
+                name_group1="ids_group1", name_group2="ids_group2",
+            )
+        except IdAlignmentError as exc:
+            raise ValueError(str(exc)) from exc
+        bound.arguments["group2"] = reorder_subject_axis(group2, perm, "group2")
+        res = fn(*bound.args, **bound.kwargs)
+        if getattr(res, "design", None) is not None:
+            res.design["paired_alignment"] = alignment_record(
+                perm, n_subjects=n_group1, reference="group1",
+                reordered_inputs=["group2"],
+            )
+        return res
+
+    return wrapper
+
+
 @capture_analysis_provenance
+@_aligned_paired_ids
 @_with_estimates
 def compute_p_val(
     group1: npt.NDArray[np.float64],
@@ -1136,6 +1204,8 @@ def compute_p_val(
     groupings: Optional[Dict[str, Sequence[Any]]] = None,
     units: Optional[str] = None,
     contrast_id: Optional[str] = None,
+    ids_group1: Optional[Sequence[Any]] = None,
+    ids_group2: Optional[Sequence[Any]] = None,
 ) -> InferenceResult:
     """
     Compute p-values using permutation testing with various network-based methods.
@@ -1283,6 +1353,20 @@ def compute_p_val(
         Original ROI/effect/contrast metadata captured for ``to_bundle()``.
         Bare matrix inputs use zero-based positional identities and declare
         unknown response units rather than inventing atlas metadata.
+    ids_group1, ids_group2 : sequence of hashable scalars, optional
+        Subject IDs for the paired conditions, in the row order of
+        ``group1`` / ``group2`` (``test_type='paired'`` only; other test
+        types raise). The two vectors must form a strict one-to-one match
+        (same unique, non-missing IDs matched by value, no normalisation or
+        type coercion); ``group1`` is the reference row order and
+        ``group2`` — together with every other condition-B subject-axis
+        input the caller passes — is permuted into it once, before the
+        observed statistic and the permutation loop. One-sided IDs, a
+        missing/extra ID, duplicates, a length mismatch and non-paired test
+        types all raise ``ValueError``. The applied permutation is recorded in
+        ``result.design['paired_alignment']``; without IDs the positional
+        behaviour is unchanged. See
+        :mod:`conninfpy._shared.alignment` for the index-ownership contract.
 
     Returns
     -------
