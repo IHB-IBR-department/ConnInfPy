@@ -11,7 +11,10 @@
 
 Give ConnInfPy one connectivity matrix per subject and a design (two groups,
 paired conditions, or a continuous predictor with confounds); it returns
-FWER-corrected p-values for every edge, split by direction. One call to
+permutation-corrected p-values for every edge, split by direction — FWER from
+the max-statistic null for `tfnbs`, `ni_tfnbs`, `fbc_tfnbs`, `nbs` and `tstat`,
+FWER across blocks or FDR for `cnbs`, FDR for the BH variants — each read at its
+inference unit (edge, component or block). One call to
 `conninfpy.analyze()` covers input preparation, optional multi-site
 harmonization, and permutation inference with any of nine methods.
 
@@ -22,27 +25,33 @@ harmonization, and permutation inference with any of nine methods.
   with the +1 Phipson–Smyth correction.
 - **Edge-wise GLM with Freedman–Lane permutation** — continuous predictors,
   confounds, $t$/$\beta$/F contrasts, paired designs with condition-varying
-  confounds, directional (positive/negative) FWER.
+  confounds, directional (positive/negative) FWER from the max-statistic null
+  (Freedman–Lane permutation, hence approximate; see the
+  [approach page](https://IHB-IBR-department.github.io/ConnInfPy/approach.html)).
 - **Multi-site data** — parametric empirical-Bayes ComBat (Johnson 2007;
   Fortin 2017/2018) in NumPy, site dummies, and site-blocked permutation.
 - **GPD/gamma tail acceleration (opt-in, off by default)** — for
   exploratory runs with a few hundred permutations, `acceleration="gpd"` (or
   `"gamma"`) replaces the p-values that fewer than 10 permutations reach with a
-  fitted-tail estimate; every other p-value stays the exact permutation
-  p-value. The replaced values are model-based and data-dependent: no binomial
+  fitted-tail estimate; every other p-value stays the empirical permutation
+  p-value (for the GPD the replacement applies only to units at or above the
+  fitted threshold whose fit passes the Anderson–Darling check; the gamma
+  branch has no such check). The replaced values are model-based and
+data-dependent: no binomial
   interval is reported for them, they can be *larger* than the empirical
-  p-value they replace, the gamma branch has no goodness-of-fit check, and no
+  p-value they replace, and no
   FWER or power calibration is claimed for them. Reported results use the
-  exact default; the known limits are listed on the
+  empirical default; the known limits are listed on the
   [approach page](https://IHB-IBR-department.github.io/ConnInfPy/approach.html).
 - **JIT-compiled TFNBS and NBS** via `numba`; both scoring paths also run
   without it (see [Installation](#installation)).
 - **20-scenario topology library** of planted effects (hub, rich club, chain,
   gradient, …) for method benchmarking.
 - **Diagnostics that add no test** — descriptive motion / QC–FC side-car
-  statistics (`analyze(..., motion_qc=...)`: Spearman rank agreement of edge
-  values with framewise displacement and edge length, without p-values,
-  computed on the native input before inference), leave-one-out subject
+  statistics (`analyze(..., motion_qc=...)`: the per-edge Spearman correlation
+  between edge values and framewise displacement, and — when ROI coordinates
+  are known — how those per-edge associations relate to edge length; no
+  p-values, computed on the native input before inference), leave-one-out subject
   influence on caller-chosen edges (`conninfpy.influence.subject_influence`:
   how much each subject moves the native effect and statistic, nothing is
   re-tested), connectivity estimation from time series with shrinkage
@@ -130,7 +139,7 @@ ds = gen.generate("within_module_dense", effect_size=0.3, n_samples=30, time_poi
 
 out = conninfpy.analyze(
     group1=ds.group1, group2=ds.group2, input="r", test_type="two-sample",
-    method="tfnbs", n_permutations=1000, rng=0,   # exact TFNBS, exact empirical p-values (the defaults)
+    method="tfnbs", n_permutations=1000, rng=0,   # exact TFNBS integration, empirical permutation p-values (the defaults)
 )
 print(out)
 
@@ -147,7 +156,8 @@ planted edges found: 45 of 45
 false positives:     0
 ```
 
-`out["positive"]` holds FWER-corrected p-values for `group2 > group1`
+`out["positive"]` holds the TFNBS p-values for `group2 > group1` —
+FWER-corrected at the edge unit under the validity of the permutation scheme
 (`out["negative"]` for the reverse). `input="r"` says the matrices are
 correlations, so Fisher r→z is applied once; with a unit diagonal `analyze()`
 detects this itself, and data that could be either raise an error instead of
@@ -159,7 +169,7 @@ table — see [Results](#results).
 From a clone of the repository, the bundled ABIDE-mini dataset (204 subjects,
 Schaefer-100, 5 sites; one subject with a region without signal is dropped on
 loading, as its manifest specifies) runs an age analysis with multi-site
-harmonization and 1,000 exact permutations:
+harmonization and 1,000 permutations:
 
 <!-- readme-real-data -->
 ```python
@@ -244,7 +254,7 @@ Pass `method=` to `analyze()` (or to the advanced pipelines):
 | `"bh_fdr_perm"` | Permutation-calibrated BH-FDR | — |
 
 Shared numerical defaults (`conninfpy.defaults`):
-1000 permutations with exact empirical p-values (`acceleration=None`), exact
+1000 permutations with empirical permutation p-values (`acceleration=None`), exact
 TFNBS integration (`n=None`) with `e=0.4`, `h=3.0`, `start_thres=1.65`
 (asymptotic normal reference; NBS `threshold=2.0`, `nbs_stat="extent"`;
 FBC-TFNBS `min_cluster_size=3`). `analyze()` uses a single two-sided family
@@ -259,14 +269,14 @@ results.
 `analyze()` returns an `AnalyzeResult`:
 
 ```python
-out["positive"], out["negative"]   # FWER-corrected p-values, (N, N)
+out["positive"], out["negative"]   # corrected p-values, (N, N): FWER (max-statistic, bonferroni) or FDR (BH) by method
 out.inference                      # InferenceResult: statistics, metadata, exports
 out.flags                          # plain-English notes on what analyze() decided
 out.combat_diagnostics             # set when ComBat ran
 
 out.significant_edges(atlas)       # sorted, atlas-annotated edge table (DataFrame)
 out.network_summary(atlas)         # one row per network pair: counts, proportions, -log10 p mass
-out.component_table(atlas)         # nbs: one row per observed component with its FWER p-value
+out.component_table(atlas)         # nbs: one row per observed component with its component-level p-value
 out.node_summary(atlas)            # one row per ROI: which ROIs gather the detections (descriptive)
 out.to_csv("edges.csv", atlas=atlas)
 out.inference.n_significant(0.05)  # {'positive': ..., 'negative': ...}

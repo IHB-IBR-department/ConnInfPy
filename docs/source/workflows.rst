@@ -19,7 +19,7 @@ standard pipeline —
 .. code-block:: text
 
    Fisher r→z  →  optional ComBat  →  optional site-stratified permutation
-              →  network enhancement  →  FWER-corrected p-value maps
+              →  network enhancement  →  permutation-corrected p-value maps
 
 — in a single call, and dispatches to the appropriate lower-level pipeline
 based on the arguments supplied. The lower-level entry points
@@ -111,7 +111,7 @@ The simplest design — two groups of subjects, no covariates.
        method='tfnbs',
        e=0.4, h=3.0, n=None,         # exact integration (the default)
        n_permutations=1000,
-       acceleration=None,           # exact empirical reference
+       acceleration=None,           # empirical permutation p-values (the default)
        rng=42,
    )
 
@@ -128,7 +128,7 @@ The simplest design — two groups of subjects, no covariates.
    only to reproduce historical grid-based results; legacy grid scores and the
    exact integral need not be equal, so record ``E``, ``H``, ``n`` and
    ``start_thres`` explicitly when reproducing such results. Every recipe on
-   this page uses the exact default.
+   this page uses the exact integral.
 
 .. note::
 
@@ -259,7 +259,7 @@ permutation (PALM ``-eb`` semantics, auto-set via ``strata=sites``).
        method='tfnbs',
        e=0.4, h=3.0, n=None,
        n_permutations=5000,
-       acceleration=None,           # exact p-values for a reported result
+       acceleration=None,           # empirical permutation p-values for a reported result
        rng=42,
    )
 
@@ -351,11 +351,17 @@ Question: *does connectivity change between condition A and condition B in
 the same subjects?* Pass both conditions as ``group1`` / ``group2`` (row
 aligned: ``group1[s]`` and ``group2[s]`` are the same subject) with
 ``test_type='paired'``. With no condition-varying confounds this uses the
-**sign-flip** permutation null — exact under its premise (within-subject
-differences symmetric under the null, independent subjects; see :doc:`approach`),
-and only approximate when, for example, the two conditions differ in variance.
-A between-subject predictor of the change (Group × Condition) is a different
-design: :ref:`wf-paired-interest`.
+**sign-flip** permutation null on the per-subject differences ``B − A`` (Fisher
+z of each condition first for ``input='r'``). It is exact under its premise —
+the joint law of all subjects' difference matrices is invariant under any
+pattern of per-subject sign flips, which independent subjects with centrally
+symmetric difference matrices give; unequal variances of A and B do not by
+themselves break it (see :doc:`approach`) — and exactness and Type-I control
+are not guaranteed without that premise. The engine samples sign patterns
+(Monte Carlo form); the hypothesis is about the **mean** difference, at the
+edge unit for ``tstat`` and the TFNBS family. A between-subject predictor of
+the change (Group × Condition) is a different design:
+:ref:`wf-paired-interest`.
 
 .. code-block:: python
 
@@ -456,8 +462,8 @@ with ``test_type='paired'`` **and** a named ``interest`` predictor;
        n_permutations=1000, acceleration=None, rng=42,
    )
 
-   out.inference['positive']   # group ↑ → larger B − A: a larger change in group 1
-   out.inference['negative']   # group ↑ → smaller (or reversed) B − A
+   out.inference['positive']   # positive coefficient of group on B − A: a larger change where group = 1
+   out.inference['negative']   # negative coefficient of group on B − A
 
 Several predictors go in a dict (``interest={'group': ..., 'age': ...}``),
 and the result is then a dict keyed by name, as in :ref:`wf-multi-interest`.
@@ -470,15 +476,19 @@ What the call does:
   Freedman–Lane permutation at the subject level (the design diagnostics
   record ``unit_of_observation = 'subject_pair_difference'``). The effect map
   is the native contrast estimate on that scale. This is the GLM route, not
-  the exact sign-flip of :ref:`wf-paired`: its p-values are approximate in
+  the sign-flip test of :ref:`wf-paired`: its p-values are approximate in
   the Freedman–Lane sense.
-- **Orientation is the paired one:** ``positive = group2 > group1``, i.e. the
-  predictor goes with a larger B − A. A group *main effect* present in both
-  conditions cancels in ``Δ`` and is not tested here; the condition main
-  effect is :ref:`wf-paired`.
-- **Subject-constant nuisances cancel** in ``Δ`` — sex, site, the group itself
-  — so they need not be supplied; ``sites=`` skips ComBat and only stratifies
-  the permutation. Condition-*varying* confounds go in
+- **Sign of the maps.** ``positive`` holds the p-values of edges where the
+  predictor's coefficient on ``Δ = B − A`` is positive (predictor ↑ → larger
+  change), ``negative`` where it is negative; this is the sign of the
+  contrast, not of ``B − A`` itself. The condition main effect — whether
+  ``B − A`` differs from zero on average — is :ref:`wf-paired`; a group *main
+  effect* present identically in both conditions cancels in ``Δ`` and is not
+  tested here.
+- **What cancels.** An additive effect that is identical in both conditions
+  disappears in ``Δ``; a covariate can still be *associated* with ``B − A``
+  and then belongs in the subject-level ``confounds``. ``sites=`` skips ComBat
+  and only stratifies the permutation. Condition-*varying* confounds go in
   ``confounds_group1`` / ``confounds_group2`` and enter as B − A, alongside
   subject-level ``confounds``.
 - **Pairing by ID.** With ``ids_group1`` / ``ids_group2`` the conditions are
@@ -775,7 +785,8 @@ Every result is dict-like and carries metadata and exporters:
    out.to_csv('edges.csv', atlas=atlas)
 
    # NBS (method='nbs'): the inference unit is the component, not the edge.
-   # One row per observed component of each tail, with its FWER p-value;
+   # One row per observed component of each tail, with its component-level
+   # p-value (max-statistic FWER over components, under the scheme's validity);
    # `component_id` also labels the rows of significant_edges() and the CSV.
    comps = out.component_table(atlas)     # tail, component_id, n_edges, n_nodes,
                                           # statistic, p_fwer, significant, ROI names,
@@ -818,8 +829,8 @@ examples (``examples/abide/``, ``examples/open_close/``) for complete runs.
 Speed vs. publication runs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Every entry point defaults to ``n_permutations=1000`` with exact empirical
-p-values (``acceleration=None``). For fast exploration opt into GPD tail
+Every entry point defaults to ``n_permutations=1000`` with empirical
+permutation p-values (``acceleration=None``). For fast exploration opt into GPD tail
 acceleration; for a final result use a larger empirical reference:
 
 .. code-block:: python
@@ -829,7 +840,7 @@ acceleration; for a final result use a larger empirical reference:
    analyze(Y, interest=age, confounds=confounds, n_permutations=200,
            acceleration='gpd', rng=42)
 
-   # Publication (exact finite-permutation reference)
+   # Publication (empirical permutation reference with many permutations)
    analyze(Y, interest=age, confounds=confounds, n_permutations=5000,
            acceleration=None, rng=42)
 

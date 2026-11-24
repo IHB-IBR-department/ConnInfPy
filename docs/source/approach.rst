@@ -261,24 +261,29 @@ Paired conditions — sign-flip each subject's difference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 *Removes:* the direction of each within-subject change. *Preserves:* the
-pairing and each subject's magnitude. If conditions A and B are interchangeable,
-the labelling of each subject's difference as "A−B" or "B−A" is equiprobable,
-so each subject's difference matrix is randomly negated. Because every sign
-pattern is equally likely under the null, this yields an exact, distribution-
-free null.
+pairing and each subject's magnitude. The response is the per-subject
+difference ``B − A`` (``group2 − group1``) on the analysis scale — for
+correlations, Fisher z of each condition before the subtraction. If the two
+conditions are interchangeable within each subject, the labelling of each
+subject's difference as "A−B" or "B−A" is equiprobable, so each subject's
+difference matrix is randomly negated, subject by subject, independently.
 
-The premise is a **symmetric** null: under :math:`H_0` each subject's
-difference — on the analysis scale, Fisher z of A minus Fisher z of B — must
-be distributed like its own negation, and subjects must be independent.
-Within-subject exchangeability of the two conditions gives this. A difference
-in *variance* between the conditions, or anything else that makes the
-within-subject differences asymmetric, does not: the sign patterns are then
-no longer equiprobable, the sign-flip null is no longer exact, and the test's
-Type-I error is not controlled by the permutation (a condition-varying
-covariate does not repair this; the Freedman–Lane route below is itself an
-approximation). The test is about the **mean** difference: a significant edge
-means that the average within-subject change differs from zero, not that every
-subject changes.
+What the null needs is an **invariance of the joint law**: the stacked
+difference matrices of all subjects must have the same distribution after
+any pattern of per-subject sign flips. Independent subjects whose difference
+matrices are centrally symmetric (each matrix distributed like its own
+negation) satisfy this; within-subject exchangeability of A and B is one way
+to get there. Unequal variances of A and B do not by themselves break it — a
+symmetric difference can have asymmetric condition marginals — and nothing
+else about the marginal laws is assumed. Without the invariance, exactness
+and Type-I control of the sign-flip test are not guaranteed, and a
+condition-varying covariate does not repair that (the Freedman–Lane route
+below rests on its own, approximate, premise). With all :math:`2^n` sign
+patterns enumerated the test is exact under the invariance; the engine
+samples patterns at random, which gives the Monte Carlo form of Step 4. For
+edge-wise methods (``tstat``, the TFNBS family) the hypothesis is about the
+**mean** difference: a significant edge means that the average within-subject
+change differs from zero, not that every subject changes.
 
 Predictor with confounds — Freedman–Lane
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -340,7 +345,7 @@ ComBat (below) is the complementary harmonization component.
    # two groups: group labels are permuted internally
    compute_p_val(g1, g2, test_type='two-sample', method='tfnbs', rng=42)
 
-   # paired: each subject's difference is sign-flipped internally (exact null)
+   # paired: each subject's difference is sign-flipped internally (Monte Carlo sign-flip null)
    compute_p_val(rest, task, test_type='paired', method='tfnbs', rng=42)
 
    # predictor + confounds: Freedman–Lane handles the relabelling
@@ -357,47 +362,66 @@ ComBat (below) is the complementary harmonization component.
 Step 4 — comparison of observed to null
 ---------------------------------------
 
-For each relabelled null score-map, a single value is retained: the maximum
-enhanced score over all edges (for ``nbs`` and ``cnbs`` the enhancement has
-already copied each component's or block's statistic onto its edges, so this
-is the largest component or block statistic). Across permutations these
-maxima form the null distribution of the largest score attributable to noise
-alone.
-
-An observed unit is significant if its statistic reaches this null-maximum
-distribution, and its p-value is written onto every edge of the unit. The
-unit is ``result.inference_unit``: ``'edge'`` for ``tstat``, the TFNBS family
-and the BH-FDR variants, ``'component'`` for ``nbs``, ``'block'`` for
-``cnbs``. The p-value of a unit is the proportion of permutation maxima that
-match or exceed its statistic:
+The max-statistic methods — ``tstat``, the TFNBS family and ``nbs`` — retain
+a single value from each relabelled null map: the maximum enhanced score over
+all edges (for ``nbs`` the enhancement has already copied each component's
+statistic onto its edges, so this is the largest component statistic). Across
+permutations these maxima form the null distribution of the largest score
+attributable to noise alone. A unit is declared significant when its
+statistic reaches this null-maximum distribution at the chosen α, and its
+p-value is written onto every edge of the unit. The unit is
+``result.inference_unit``: ``'edge'`` for ``tstat`` and the TFNBS family,
+``'component'`` for ``nbs``. The p-value of a unit is the proportion of
+permutation maxima that match or exceed its statistic:
 
 .. math::
 
    p(e) \;=\; \frac{1 + \#\{\text{permutations whose max} \ge \text{score}(e)\}}
                     {1 + (\text{number of permutations})}
 
-Two design choices are embedded in this formula:
+Two methods stand outside this formula. ``cnbs`` compares every block's
+statistic with that block's *own* permutation null (the same block's value
+in every permuted map, in absolute value under ``two_tailed=True``) and then
+corrects the block p-values across blocks with Bonferroni (FWER over blocks)
+or Benjamini–Hochberg (FDR over blocks); its unit is ``'block'``.
+``bh_fdr_perm`` keeps a per-edge marginal permutation p-value and applies
+Benjamini–Hochberg across the eligible edges; ``bh_fdr`` and ``bonferroni``
+are parametric and use no permutations.
+
+Three design choices are embedded in the formula:
 
 - **Why the maximum?** Comparing every unit to the distribution of the
   *largest* null score keeps the probability of **any** false positive at the
   inference unit at most α **under the global null** (no effect anywhere) —
   weak family-wise error control — without requiring knowledge of the
   inter-edge covariance, which is already reflected in the permutations.
-  **Strong** control (the same bound under any mix of true and false nulls)
-  additionally requires that the null distribution of a true-null unit's
-  statistic not depend on which other units are non-null. That holds for
-  per-edge statistics (``tstat``; the BH-FDR variants control their own error
-  rate), but it is not what ``nbs`` and ``cnbs`` deliver — their unit is the
-  component or the block, so a significant component or block is a claim about
-  the set and never about each of its edges — and for the TFNBS family an
-  edge's enhanced score depends on its neighbours' statistics, so strong
-  edge-level control is not established in general. Read detections at
-  ``result.inference_unit``; ``component_report`` / ``component_table`` and
-  ``node_summary`` keep that unit.
-- **Why the** ``+1``\ **?** The observed data is itself one valid relabelling
-  and is included in the count (Phipson & Smyth 2010). This makes the p-value
-  exact and strictly positive, so a finite permutation set cannot return
-  :math:`p = 0`.
+  Whether a p-value ≤ α means this in the data at hand — here and for the
+  FDR variants — depends on the permutation scheme being valid: the
+  relabelling of Step 3 must leave the data, under the null, distributed as
+  the observed data, and the reconstructed null maps must reproduce the
+  sampling law of the statistics. Sign-flip and group-label permutation do
+  this under their exchangeability premises; Freedman–Lane is an
+  approximation (Winkler et al. 2014), so every GLM p-value inherits that
+  approximation. **Strong** control (the same bound under any mix of true
+  and false nulls) needs more: the *joint* distribution of the true-null
+  units' statistics must be the same whatever the other units are — subset
+  pivotality (Westfall & Troendle 2008; Rempala & Yang 2013) — on top of a
+  valid scheme. Invariance of each marginal null law alone is not enough,
+  and an edge-wise *t* by itself does not establish it for these statistics;
+  for the TFNBS family an edge's enhanced score depends on its neighbours'
+  statistics, and for ``nbs`` the unit is the component, so a significant
+  component is a claim about the set and never about each of its edges. The
+  package asserts strong control for none of its methods; read detections at
+  ``result.inference_unit``, which ``component_report`` / ``component_table``
+  and ``node_summary`` keep.
+- **Why the** ``+1``\ **?** The observed statistic is itself one admissible
+  relabelling and is counted (Phipson & Smyth 2010; Hemerik & Goeman 2017).
+  With relabellings drawn at random with replacement the test is a Monte
+  Carlo test: the ``+1`` rule keeps it valid at level α given a valid scheme
+  and keeps the p-value strictly positive, whereas the naive proportion is
+  slightly liberal. It does not turn a sampled null into the enumerated one —
+  exhaustive enumeration of all relabellings is a different procedure, exact
+  under its premises, and is not what the engine does.
 
 To control the *false-discovery rate* instead (greater sensitivity at the cost
 of some false positives), ``method='bh_fdr_perm'`` replaces the max-statistic
@@ -423,29 +447,30 @@ thresholds, starting at the upper quartile of the null maxima and moving
 upwards until a method-of-moments fit passes an Anderson–Darling check
 (Winkler et al., 2016; Knijnenburg et al., 2009); ``acceleration='gamma'``
 fits a gamma distribution to all null maxima by their moments. Either replaces
-the p-value **only of units that fewer than 10 null maxima reach**; every other
-p-value stays the exact permutation p-value, a failed fit leaves the empirical
-p in place, and no binomial interval is reported for an accelerated result.
+the p-value **only of units that fewer than 10 null maxima reach** (for the
+GPD, only units at or above the fitted threshold); every other p-value stays
+the empirical permutation p-value, a failed fit leaves the empirical p in
+place, and no binomial interval is reported for an accelerated result.
 The replaced values are model-based tail estimates that can be smaller than
 1/(J+1); their accuracy is not established by the number of permutations, and
 the option exists for exploration with a few hundred permutations — reported
-results use the exact default. Known limits of the 2.0.0 implementation
-(NETSTAT-47): the replaced p-value is capped at (min_exceedances + 1)/(J + 1),
-which can be *larger* than the empirical p-value of the same unit — the
-replacement can raise a p, for GPD and gamma alike; the gamma branch has no
+results use the empirical default. Known limits of the 2.0.0 implementation:
+a replaced p-value is capped at min(1, (min_exceedances + 1)/(J + 1)), which
+can be *larger* than the empirical p-value of the same unit — the replacement
+can raise a p, for GPD and gamma alike; the gamma branch has no
 goodness-of-fit check and no eligibility filter, and a statistic below its
-fitted support would receive p = 1 (reproduced in a minimal J = 10 example,
-not observed at J = 200/1000 in a limited check); with a bounded (ξ < 0) GPD
-fit, one unit beyond the fitted endpoint cancels the fit for the whole matrix
-at that threshold, and when no threshold is accepted the empirical p-values
-are returned unchanged; in the GLM and missing-data paths the acceleration is
-applied to every statistic type without a mode check, unlike the pairwise
-max-statistic path; and with ``method='cnbs'`` it is not applied (a
-warning is logged). The
-Anderson–Darling threshold 2.5 is a lenient heuristic filter that has not been
-calibrated for the method-of-moments fit, and the moment conditions on the
-shape parameter are not checked. No FWER, power or anti-conservativeness claim
-is made for accelerated p-values.
+fitted support gets a tail survival function of 1, recorded as that cap —
+which is 1 when J equals min_exceedances (reproduced in a helper-level example
+with J = 10; not observed at J = 200/1000 in a limited check); with a bounded
+(ξ < 0) GPD fit, one unit beyond the fitted endpoint cancels the fit for the
+whole matrix at that threshold, and when no threshold is accepted the
+empirical p-values are returned unchanged; in the GLM and missing-data paths
+the acceleration is applied to every statistic type without a mode check,
+unlike the pairwise max-statistic path; and with ``method='cnbs'`` it is not
+applied (a warning is logged). The Anderson–Darling threshold 2.5 is a lenient
+heuristic filter that has not been calibrated for the method-of-moments fit,
+and the moment conditions on the shape parameter are not checked. No FWER,
+power or anti-conservativeness claim is made for accelerated p-values.
 
 **Directional families.** ``two_tailed=True`` declares one two-sided family
 for pairwise and GLM inference. Max-statistic methods pool positive/negative
@@ -453,10 +478,14 @@ null maxima, cNBS tests absolute block means before across-block correction,
 and pairwise BH methods correct two-sided marginal p-values across eligible
 edges. Directional maps retain the p-value in the observed direction and 1
 in the opposite direction. :func:`~conninfpy.analysis.analyze` defaults to
-this two-sided family — one nominal alpha covers both directions jointly.
-Its ``two_tailed=False`` keeps the legacy separate one-sided families, each
-corrected at the nominal alpha; two families at α=0.05 do not promise a
-combined-direction FWER of 0.05 (use α/2 per tail for that). The low-level
+this two-sided family: one nominal α applies to the error measure of the
+chosen method — FWER for the max-statistic methods and ``bonferroni``, FDR
+for the BH variants — over both directions jointly, and only under that
+measure's premises (above). Its ``two_tailed=False`` keeps the legacy
+separate one-sided families, each corrected at the nominal α; two families
+at α = 0.05 do not promise a combined-direction FWER of 0.05 — for FWER,
+α/2 per tail bounds the combined FWER at α by Bonferroni (under the same
+premises); this is not an FDR statement. The low-level
 :func:`~conninfpy.compute_p_val` / :func:`~conninfpy.compute_p_val_glm`
 entry-points keep ``two_tailed=False`` as their own default.
 
