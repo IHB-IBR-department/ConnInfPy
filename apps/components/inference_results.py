@@ -70,8 +70,22 @@ def _is_omnibus_result(res):
     return hasattr(inner, "keys") and "omnibus" in inner and "positive" not in inner
 
 
+def _declared_primary_idx():
+    """The (E, H) cell declared as primary before the run (never re-chosen here)."""
+    plan = st.session_state.get("run_plan") or {}
+    cell = plan.get("primary_cell")
+    if isinstance(cell, dict) and cell.get("param_idx") is not None:
+        return int(cell["param_idx"]), cell
+    return None, None
+
+
 def _select_grid_slice(res_wrapper, slot):
-    """If ``res`` is a parameter-grid result, let the user pick one (E, H) slice."""
+    """If ``res`` is a parameter-grid result, let the user pick one (E, H) slice.
+
+    The slice browser is descriptive sensitivity only: the primary cell was
+    declared before the run and is badged here; browsing another cell never
+    rewrites the declared primary in the run plan or in an export.
+    """
     inner = unwrap_result(res_wrapper)
     if not getattr(inner, "is_grid", False):
         return inner, None
@@ -82,15 +96,104 @@ def _select_grid_slice(res_wrapper, slot):
     n_cells = len(e_grid)
     if n_cells <= 1:
         return get_2d_result(inner, 0)
+    declared_idx, declared = _declared_primary_idx()
     options = list(range(n_cells))
+    if declared_idx is not None and not (0 <= declared_idx < n_cells):
+        declared_idx = None
     idx = st.selectbox(
-        "TFNBS parameter-grid cell (E, H)",
+        "TFNBS parameter-grid cell (E, H) — descriptive sensitivity browsing",
         options,
-        index=0,
+        index=declared_idx if declared_idx is not None else 0,
         format_func=lambda k: f"Cell {k}: E={e_grid[k]:g}, H={h_grid[k]:g}" if k < len(h_grid) else f"Cell {k}",
         key=persistent_key(f"results:grid_idx:{slot}", scope="results", options=options),
+        help=(
+            "The declared primary cell was fixed before the run. Other cells are "
+            "descriptive sensitivity slices; browsing them changes only this view."
+        ),
+    )
+    if declared is not None:
+        if declared_idx is None:
+            st.caption(
+                "The run plan declares a primary cell that is not a cell of this grid; "
+                "no cell is badged as primary here."
+            )
+        elif idx == declared_idx:
+            st.success(
+                f"Declared primary cell (confirmatory claim): E={declared.get('e'):g}, "
+                f"H={declared.get('h'):g} — fixed before the run."
+            )
+        else:
+            st.warning(
+                f"Descriptive sensitivity slice (cell {idx}). The declared primary cell "
+                f"(E={declared.get('e'):g}, H={declared.get('h'):g}) carries the confirmatory "
+                "claim; this selection is not written into the run plan or an export."
+            )
+    st.caption(
+        "Multiplicity: the (E, H) grid does not create a corrected family-wise conclusion "
+        "for a cell chosen after seeing the data. Only the cell declared before the run "
+        "carries the confirmatory claim; every other cell is a descriptive sensitivity "
+        "analysis, and no p-based automatic best-cell selection is performed."
     )
     return get_2d_result(inner, idx)
+
+
+def _render_coverage_report(res_wrapper, run_plan=None, *, slot="primary", method_name=""):
+    """Coverage facts of an available-case run, and the separation from design NaNs."""
+    inner = unwrap_result(res_wrapper)
+    report = getattr(inner, "missing_report", None)
+    plan = run_plan if isinstance(run_plan, dict) else {}
+    policy = plan.get("missing_policy")
+    unit = (
+        "subject_pair_difference" if plan.get("design_family") == "paired" else "subject"
+    )
+    if report is None:
+        if plan.get("missing_policy") == "available_case":
+            st.caption(
+                "The run was launched with available-case missing handling but this result "
+                "carries no coverage report; per-edge coverage is therefore unknown."
+            )
+        return
+    title = "🧮 Edge coverage (available-case)"
+    if method_name:
+        title += f" — {method_name}"
+    with st.expander(title, expanded=False):
+        try:
+            n_tested = int(report.get("n_edges_tested", 0))
+            n_untested = int(report.get("n_edges_untested", 0))
+            min_cov = float(report.get("min_coverage", 0.0))
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Edges tested", n_tested)
+            c2.metric("Edges not tested", n_untested)
+            c3.metric("Coverage floor", f"{min_cov:.0%}")
+            st.caption(
+                f"Policy `available_case` (recorded at launch: {policy or 'not recorded'}); "
+                f"unit of observation: `{unit}`. Per-edge n ranges "
+                f"{report.get('edge_n_min')}–{int(np.max(np.asarray(report.get('edge_n'))))} "
+                f"(median {float(report.get('edge_n_median') or 0):.1f}) — the tested n "
+                "varies from edge to edge; this is not a complete-case analysis of one "
+                "fixed sample."
+            )
+            subjects_with_missing = report.get("subjects_with_missing") or {}
+            if subjects_with_missing:
+                parts = [
+                    f"{name}: {len(list(values))}"
+                    for name, values in subjects_with_missing.items()
+                ]
+                st.caption("Subjects with at least one non-finite value — " + ", ".join(parts) + ".")
+            if report.get("regions_without_signal"):
+                st.caption(
+                    "ROIs without signal in some subjects (ROI: count) — "
+                    + ", ".join(
+                        f"{k}: {v}" for k, v in list(report["regions_without_signal"].items())[:12]
+                    )
+                )
+        except (TypeError, ValueError) as exc:
+            st.caption(f"Coverage report could not be summarised: {exc}")
+        st.caption(
+            "Coverage is a reporting fact of the per-edge tested family. No additional "
+            "statistical correction is claimed for it, and it does not relax the handling "
+            "of missing required design fields (those rows are excluded before the run)."
+        )
 
 
 def _extract_result_diagnostics_summary(res_wrapper, run_plan=None):
@@ -1099,9 +1202,21 @@ def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, p
     """Render the side-by-side two-method comparison view with explicit compatibility gating."""
     st.markdown("#### 🔄 Side-by-Side Comparison")
     alpha = _run_alpha()
-    p_2d, _ = get_2d_result(primary_res, 0)
+    # A grid primary is compared at its declared-before-the-run primary cell,
+    # the same cell the completion table (primary_edges) was built from; the
+    # companion is scalar. Without a declared cell the historical cell 0 stays.
+    declared_idx, declared_cell = _declared_primary_idx()
+    p_2d, _ = get_2d_result(primary_res, declared_idx if declared_idx is not None else 0)
     c_2d, _ = get_2d_result(comp_res, 0)
     st.caption(f"Detections and maps at the run's α = {alpha:g}. {_family_caption(p_2d)}")
+    if declared_cell is not None and getattr(unwrap_result(primary_res), "is_grid", False):
+        st.caption(
+            f"Primary grid compared at the declared primary cell {declared_idx} "
+            f"(E={declared_cell.get('e'):g}, H={declared_cell.get('h'):g}, fixed before "
+            "the run); the companion method is scalar."
+        )
+    _render_coverage_report(primary_res, st.session_state.get("run_plan"), slot="compare_primary", method_name=primary_name)
+    _render_coverage_report(comp_res, st.session_state.get("run_plan"), slot="compare_comp", method_name=comp_name)
 
     # 1. Compare summary metrics in two columns
     col_p, col_c = st.columns(2)
@@ -1137,7 +1252,9 @@ def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, p
     # 2. Strict companion agreement check (family / unit / contrast / tail / alpha / mask / ROI frame)
     st.divider()
     st.markdown("##### 🤝 Companion Agreement")
-    compat = check_companion_compatibility(primary_res, comp_res, alpha=alpha)
+    compat = check_companion_compatibility(
+        primary_res, comp_res, alpha=alpha, primary_param_idx=declared_idx
+    )
     atlas = _active_atlas(base_atlas)
     if compat["compatible"]:
         sm = compat["summary"]
@@ -1228,6 +1345,7 @@ def _render_single_run_view(res_wrapper, edges_df, method_name, base_atlas, effe
     _render_one_sentence_summary(res, edges_df, method_name, direction_labels)
     _render_summary_metrics(res, edges_df, method_name, direction_labels)
     _render_analyze_decisions_and_diagnostics(res_wrapper, st.session_state.get("run_plan"), method_name)
+    _render_coverage_report(res_wrapper, st.session_state.get("run_plan"), slot=slot, method_name=method_name)
     _render_ground_truth_metrics(edges_df, effect_mask, method_name)
     _render_heatmaps(res, base_atlas, method_name, contrast_name=contrast_name, slot=slot, effect_mask=effect_mask)
     _render_null_max_distribution(res, method_name, contrast_name, slot)
@@ -1258,6 +1376,7 @@ def _render_archive_export(base_atlas, effect_mask):
     n_nodes = np.asarray(inner["omnibus"] if "omnibus" in inner else inner["positive"]).shape[0]
     atlas = atlas_for_annotation(active_analysis_atlas(base_atlas), n_nodes, warn=False)
     grid_cell = st.session_state.get("results:grid_idx:primary")
+    edge_family_mask = st.session_state.get("design:edge_mask_array")
     # Build once per finished run / display cell; the page can rerun freely.
     memo = (
         "_archive_zip", id(result), str(run_plan.get("alpha")), grid_cell,
@@ -1265,6 +1384,7 @@ def _render_archive_export(base_atlas, effect_mask):
         id(st.session_state.get("companion_inference_result")),
         id(st.session_state.get("annotation")),
         id(st.session_state.get("evidence_packet")),
+        id(edge_family_mask),
     )
     if st.session_state.get(memo) is None:
         zip_bytes, _manifest = build_analysis_archive(
@@ -1277,6 +1397,7 @@ def _render_archive_export(base_atlas, effect_mask):
             project_root=PROJECT_ROOT,
             workspace_state=st.session_state,
             include_workspace_data=False,
+            edge_family_mask=edge_family_mask,
         )
         st.session_state[memo] = zip_bytes
     else:
@@ -1381,7 +1502,8 @@ def render_inference_results_view(base_atlas):
             )
             _render_analyze_decisions_and_diagnostics(primary_res, st.session_state.get("run_plan"), primary_method)
 
-            p_2d, _ = get_2d_result(primary_res, 0)
+            detail_idx, _ = _declared_primary_idx()
+            p_2d, _ = get_2d_result(primary_res, detail_idx if detail_idx is not None else 0)
             c_2d, _ = get_2d_result(comp_res, 0)
             tab_p, tab_c = st.tabs([f"Primary Details ({primary_method})", f"Companion Details ({companion_method})"])
             with tab_p:

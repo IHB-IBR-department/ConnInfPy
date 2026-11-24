@@ -1,3 +1,6 @@
+import hashlib
+import io
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -332,7 +335,11 @@ def _build_prelaunch_design_qc_summary(
             "Unpaired Excluded": int(unpaired),
         }
         if unpaired > 0:
-            summary["warnings"].append(f"{unpaired} subject(s) lack one of the two paired conditions and will be excluded.")
+            summary["warnings"].append(
+                f"{unpaired} subject(s) lack one of the two paired conditions; a paired run "
+                "is blocked until both conditions contain exactly the same subjects (no "
+                "silent exclusion, no re-sorting and no positional matching)."
+            )
         if site_col and site_col in df_valid.columns and common:
             idx_b = [df_base[df_base[subject_col] == s].index[0] for s in common]
             idx_t = [df_targ[df_targ[subject_col] == s].index[0] for s in common]
@@ -631,6 +638,150 @@ def _motion_qc_preview(spec, test_type, Y, group1, group2, *, atlas=None, scale=
     )
 
 
+class PairedDesignError(ValueError):
+    """The two conditions of a paired contrast are not a one-to-one subject match."""
+
+
+def _short_list(values, limit=8):
+    """A short, readable enumeration of values for error messages."""
+    values = list(values)
+    items = [str(v) for v in values[:limit]]
+    suffix = ", ..." if len(values) > limit else ""
+    return ", ".join(items) + suffix
+
+
+def _blank_subject_id_mask(series):
+    """True where a subject ID is missing or empty (never filled in or guessed)."""
+    text = series.map(lambda v: "" if v is None else str(v).strip())
+    return text.isin(("", "nan", "NaN", "None", "<NA>", "NaT"))
+
+
+def _paired_design_violations(
+    pheno_df, condition_col, subject_col, baseline_val, target_val
+):
+    """Every reason the two conditions are not a strict one-to-one subject match.
+
+    Nothing is repaired here: the launch and the pre-launch preview both call
+    this so the reported paired n is the analysed paired n.
+    """
+    problems = []
+    for column, label in ((condition_col, "condition"), (subject_col, "subject")):
+        if column not in pheno_df.columns:
+            return [f"the {label} column {column!r} is not in the phenotype table"]
+    frames = {}
+    for value in (baseline_val, target_val):
+        frame = pheno_df[pheno_df[condition_col] == value]
+        label = str(value)
+        frames[label] = frame
+        if frame.empty:
+            problems.append(f"condition {label!r} has no rows")
+            continue
+        blanks = _blank_subject_id_mask(frame[subject_col])
+        if bool(blanks.any()):
+            problems.append(
+                f"condition {label!r} has {int(blanks.sum())} row(s) with an empty subject ID"
+            )
+        ids = frame.loc[~blanks, subject_col].astype(str)
+        duplicates = sorted(set(ids[ids.duplicated(keep=False)]))
+        if duplicates:
+            problems.append(
+                f"condition {label!r} has duplicate subject IDs ({_short_list(duplicates)})"
+            )
+    if problems:
+        return problems
+    a_ids = frames[str(baseline_val)][subject_col].astype(str).tolist()
+    b_ids = frames[str(target_val)][subject_col].astype(str).tolist()
+    b_set, a_set = set(b_ids), set(a_ids)
+    only_a = [s for s in a_ids if s not in b_set]
+    only_b = [s for s in b_ids if s not in a_set]
+    if only_a:
+        problems.append(
+            f"subject(s) measured only in {str(baseline_val)!r}: {_short_list(only_a)}"
+        )
+    if only_b:
+        problems.append(
+            f"subject(s) measured only in {str(target_val)!r}: {_short_list(only_b)}"
+        )
+    if not problems and len(a_ids) != len(b_ids):
+        problems.append(
+            f"the two conditions have different numbers of rows ({len(a_ids)} vs {len(b_ids)})"
+        )
+    return problems
+
+
+def _edge_mask_metadata(mask, source_name=None):
+    """Facts of a validated tested-family mask; the array itself never enters run_plan."""
+    m = np.asarray(mask, dtype=bool)
+    return {
+        "purpose": "edge_family_mask",
+        "sha256": hashlib.sha256(np.ascontiguousarray(m).tobytes()).hexdigest(),
+        "shape": [int(m.shape[0]), int(m.shape[1])],
+        "n_nodes": int(m.shape[0]),
+        "eligible_edges": int(np.triu(m, 1).sum()),
+        "source_filename": None if source_name is None else str(source_name),
+    }
+
+
+def _parse_float_list(text):
+    """Parse a comma-separated float list; returns ``(values, error)``."""
+    parts = [p.strip() for p in str(text or "").replace(";", ",").split(",")]
+    parts = [p for p in parts if p]
+    if not parts:
+        return [], "enter at least one value"
+    values = []
+    for part in parts:
+        try:
+            values.append(float(part))
+        except (TypeError, ValueError):
+            return [], f"{part!r} is not a number"
+    return values, None
+
+
+def _validate_eh_grid(e_values, h_values, e_bounds, h_bounds):
+    """Grid validation mirroring the scalar widget ranges and the engine's pairing."""
+    errors = []
+    if len(e_values) != len(h_values):
+        errors.append(
+            f"E and H lists must have the same length (E={len(e_values)}, H={len(h_values)})"
+        )
+    for name, values, (low, high) in (("E", e_values, e_bounds), ("H", h_values, h_bounds)):
+        out = [v for v in values if not (low <= v <= high)]
+        if out:
+            errors.append(f"{name} values must lie within {low:g}-{high:g}; got {_short_list(out)}")
+    return errors
+
+
+def _resolve_primary_cell(result, primary_cell):
+    """Resolve the declared primary (E, H) cell to the result's grid index.
+
+    The declared cell is fixed before the run; the index is resolved against
+    the result's own ``e_grid``/``h_grid`` when present (the engine pairs the
+    E and H sequences element-wise) and otherwise taken from the declaration.
+    """
+    if not primary_cell:
+        return None, None
+    record = dict(primary_cell)
+    idx = record.get("param_idx")
+    source = "declared_before_run"
+    if bool(getattr(result, "is_grid", False)):
+        e_grid = getattr(result, "e_grid", None)
+        h_grid = getattr(result, "h_grid", None)
+        if e_grid is not None and h_grid is not None and record.get("e") is not None:
+            e_decl, h_decl = float(record["e"]), float(record["h"])
+            matches = [
+                k for k in range(len(e_grid))
+                if np.isclose(float(e_grid[k]), e_decl) and np.isclose(float(h_grid[k]), h_decl)
+            ]
+            if len(matches) == 1:
+                idx = matches[0]
+                source = "result_e_h_grid"
+    if idx is None:
+        idx = 0
+    record["param_idx"] = int(idx)
+    record["resolved_from"] = source
+    return int(idx), record
+
+
 def _build_design_arrays(
     Y,
     pheno_df,
@@ -647,6 +798,8 @@ def _build_design_arrays(
     subject_col=None,
     baseline_val=None,
     target_val=None,
+    paired_confound_cols=None,
+    require_paired_bijection=False,
 ):
     """Slice connectivity + phenotype exactly as the launch does (no widgets).
 
@@ -655,8 +808,20 @@ def _build_design_arrays(
     same NaN filtering, the same group/level selection, condition A/B rows in
     condition A's order and ``group1`` followed by ``group2`` for the
     two-sample path. It does not run or alter any inference.
+
+    Paired contrasts: with ``require_paired_bijection`` (the launch and the
+    pre-launch preview always pass it) the two conditions must be a strict
+    one-to-one subject match. Condition A (baseline) rows keep phenotype
+    order, condition B is matched by subject ID into the same order, and any
+    mismatch raises :class:`PairedDesignError` naming the subjects — no
+    sorting, no intersection and no first-duplicate pick. Without the flag the
+    historical permissive slicing (sorted intersection) is kept for direct
+    callers. ``paired_confound_cols`` builds the condition-specific confound
+    matrices in the same row order as ``group1``/``group2``; the difference
+    ``B - A`` is computed package-side, never here.
     """
     confound_vars = list(confound_vars or [])
+    paired_confound_cols = list(paired_confound_cols or [])
     index_before_filter = list(pheno_df.index)
     req_cols = []
     if test_type == "glm":
@@ -682,8 +847,28 @@ def _build_design_arrays(
     else:
         visible_index = list(pheno_df.index)
 
+    # Condition-specific confound columns: a NaN in either condition's value
+    # excludes that subject's pair (both rows) before the run — a pre-run
+    # exclusion reported to the user, never a silent half-pair drop.
+    n_pairs_dropped_confound = 0
+    if test_type == "paired" and paired_confound_cols and subject_col in pheno_df.columns:
+        present_cols = [c for c in paired_confound_cols if c in pheno_df.columns]
+        if present_cols:
+            bad_rows = pheno_df[present_cols].isna().any(axis=1)
+            if bool(bad_rows.any()):
+                bad_subjects = set(pheno_df.loc[bad_rows, subject_col].tolist())
+                keep_mask = ~pheno_df[subject_col].isin(bad_subjects).to_numpy()
+                n_pairs_dropped_confound = len(bad_subjects)
+                visible_index = [visible_index[k] for k, ok in enumerate(keep_mask) if ok]
+                Y = Y[keep_mask]
+                pheno_df = pheno_df.loc[keep_mask].reset_index(drop=True)
+
     interest = None
     confounds = None
+    confounds_group1 = None
+    confounds_group2 = None
+    ids_group1 = None
+    ids_group2 = None
     group1 = None
     group2 = None
     sites = list(pheno_df[site_col].values) if site_col else None
@@ -717,14 +902,45 @@ def _build_design_arrays(
     elif test_type == "paired":
         df_baseline = pheno_df[pheno_df[condition_col] == baseline_val]
         df_target = pheno_df[pheno_df[condition_col] == target_val]
-        common_subjects = sorted(
-            list(set(df_baseline[subject_col]).intersection(set(df_target[subject_col])))
-        )
-        idx_baseline = [df_baseline[df_baseline[subject_col] == s].index[0] for s in common_subjects]
-        idx_target = [df_target[df_target[subject_col] == s].index[0] for s in common_subjects]
+        if require_paired_bijection:
+            problems = _paired_design_violations(
+                pheno_df, condition_col, subject_col, baseline_val, target_val
+            )
+            if problems:
+                raise PairedDesignError(
+                    "Paired design must be a one-to-one subject match between the two "
+                    "conditions; nothing is dropped, re-sorted or matched by row "
+                    "position. " + " | ".join(problems)
+                )
+            # Condition A keeps phenotype order; condition B follows it by ID.
+            idx_baseline = [int(i) for i in df_baseline.index]
+            target_by_subject = dict(
+                zip(df_target[subject_col].astype(str), df_target.index)
+            )
+            idx_target = [
+                int(target_by_subject[str(s)]) for s in df_baseline[subject_col].astype(str)
+            ]
+            paired_subjects = list(df_baseline[subject_col])
+        else:
+            common_subjects = sorted(
+                list(set(df_baseline[subject_col]).intersection(set(df_target[subject_col])))
+            )
+            idx_baseline = [df_baseline[df_baseline[subject_col] == s].index[0] for s in common_subjects]
+            idx_target = [df_target[df_target[subject_col] == s].index[0] for s in common_subjects]
+            paired_subjects = common_subjects
         group1 = Y[idx_baseline]
         group2 = Y[idx_target]
-        paired_subjects = common_subjects
+        if paired_confound_cols:
+            # Same row order as group1/group2; the B - A difference stays package-side.
+            confounds_group1 = pheno_df.loc[idx_baseline, paired_confound_cols].to_numpy(
+                dtype=np.float64
+            )
+            confounds_group2 = pheno_df.loc[idx_target, paired_confound_cols].to_numpy(
+                dtype=np.float64
+            )
+        ids_group1 = list(paired_subjects)
+        # group2 is in condition A's row order, so its alignment IDs are the same.
+        ids_group2 = list(paired_subjects)
         if site_col:
             baseline_sites = pheno_df.loc[idx_baseline, site_col].astype(str).tolist()
             target_sites = pheno_df.loc[idx_target, site_col].astype(str).tolist()
@@ -775,6 +991,12 @@ def _build_design_arrays(
         "idx_baseline": idx_baseline,
         "idx_target": idx_target,
         "paired_subjects": paired_subjects,
+        "ids_group1": ids_group1,
+        "ids_group2": ids_group2,
+        "confounds_group1": confounds_group1,
+        "confounds_group2": confounds_group2,
+        "condition_confound_cols": list(paired_confound_cols) if confounds_group1 is not None else [],
+        "n_pairs_dropped_confound": n_pairs_dropped_confound,
     }
 
 
@@ -843,7 +1065,10 @@ def _run_inference_background(
     effective_recipe_choice, group_col, ref_group, target_group, interest_var,
     subject_col, condition_col, baseline_val, target_val, confound_vars, site_col,
     active_atlas_signature, data_kind, tested_tail=None, var_equal=None,
-    preprocessing=None, fisher_history=None, roi_indices=None, motion_qc=None
+    preprocessing=None, fisher_history=None, roi_indices=None, motion_qc=None,
+    ids_group1=None, ids_group2=None, confounds_group1=None, confounds_group2=None,
+    missing_policy="raise", min_coverage=0.8, edge_mask_plan=None,
+    primary_cell=None, design_facts=None,
 ):
     """Worker thread body: run the inference and record status.
 
@@ -866,8 +1091,21 @@ def _run_inference_background(
     actually passed (including the network-label vector used by
     network-informed methods) and the enhancement backend — so exports can
     report them without rerunning anything.
+
+    ``ids_group1``/``ids_group2`` and ``confounds_group1``/``confounds_group2``
+    are the paired design's subject IDs (condition A order) and its
+    condition-specific confound rows; the ``B - A`` difference is computed by
+    ``analyze()``, never here. ``missing_policy``/``min_coverage`` are the
+    executed missing-connectivity policy. ``edge_mask_plan`` is the metadata
+    of the validated tested-family mask (the array travels in ``op_kwargs``).
+    ``primary_cell`` is the (E, H) cell declared before the run; on a grid
+    result the completion table is the declared cell, not cell 0.
     """
     from datetime import datetime, timezone
+
+    # Launch facts with defined fallbacks: the engine default is complete-case.
+    missing_policy = "raise" if missing_policy in (None, "") else str(missing_policy)
+    min_coverage = 0.8 if min_coverage is None else float(min_coverage)
 
     started_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
     try:
@@ -950,10 +1188,27 @@ def _run_inference_background(
             preprocessing=preprocessing,
             fisher_history=fisher_history if input_kind == "z" else None,
             motion_qc=motion_qc,
+            ids_group1=ids_group1,
+            ids_group2=ids_group2,
+            confounds_group1=confounds_group1,
+            confounds_group2=confounds_group2,
+            missing=missing_policy,
+            min_coverage=min_coverage,
             **variance_kwargs,
             **primary_run_kwargs
         )
-        edges = res.significant_edges(atlas=annotation_atlas, alpha=alpha)
+        # ``analyze`` returns an AnalyzeResult wrapper; the grid facts and the
+        # p-value maps live on the wrapped inference result.
+        primary_inner = getattr(res, "inference", res)
+        primary_idx, primary_record = (
+            _resolve_primary_cell(primary_inner, primary_cell) if primary_cell else (None, None)
+        )
+        edges = res.significant_edges(
+            atlas=annotation_atlas,
+            alpha=alpha,
+            **({"param_idx": primary_idx}
+               if getattr(primary_inner, "is_grid", False) else {}),
+        )
         
         comp_res = None
         comp_edges = None
@@ -1005,7 +1260,13 @@ def _run_inference_background(
                 **variance_kwargs,
                 **comp_run_kwargs
             )
-            comp_edges = comp_res.significant_edges(atlas=annotation_atlas, alpha=alpha)
+            comp_edges = comp_res.significant_edges(
+                atlas=annotation_atlas,
+                alpha=alpha,
+                **({"param_idx": 0}
+                   if getattr(getattr(comp_res, "inference", comp_res), "is_grid", False)
+                   else {}),
+            )
             
         task.result = res
         task.edges = edges
@@ -1065,15 +1326,23 @@ def _run_inference_background(
             "use_mp": bool(use_mp),
             "acceleration": effective_acceleration,
             "var_equal": var_equal,
-            # The app never overrides analyze()'s missing-data policy; the
-            # default is the policy this run executed with.
-            "missing_policy": "raise",
+            # The executed missing-connectivity policy and its coverage floor;
+            # missing design fields are excluded earlier and never appear here.
+            "missing_policy": missing_policy,
+            "min_coverage": (
+                float(min_coverage) if missing_policy == "available_case" else None
+            ),
+            # Tested-family mask metadata of this run (never the array).
+            "edge_mask": edge_mask_plan,
+            # Declared-before-the-run primary (E, H) cell of a sensitivity grid.
+            "primary_cell": primary_record,
             "r_to_z": False,
             "roi_indices": list(roi_indices) if roi_indices is not None else None,
             "net_labels": net_labels_capture,
             "operator_kwargs": {
                 key: (value.tolist() if hasattr(value, "tolist") else value)
                 for key, value in primary_run_kwargs.items()
+                if key != "edge_mask"  # recorded as metadata (sha256), not as an array
             },
             # Installation fact only: whether the numba module was present in
             # the run environment. Which enhancement backend actually
@@ -1092,6 +1361,12 @@ def _run_inference_background(
             "package_version": __import__("conninfpy").__version__,
             "python_version": __import__("platform").python_version(),
         }
+        if isinstance(design_facts, dict):
+            # Launch facts of the sliced design (paired alignment, pre-run
+            # exclusions); never inferred later from the current widgets.
+            task.run_plan.update(
+                {str(k): v for k, v in design_facts.items() if str(k) not in task.run_plan}
+            )
         task.status = "success"
         task.progress_message = "✅ Completed!"
     except Exception as e:
@@ -1178,6 +1453,14 @@ def render_design_inference_view(base_atlas, tabs_list):
         acceleration_choice = "none" if DEFAULT_ACCELERATION is None else DEFAULT_ACCELERATION
         op_kwargs = {}
         comp_kwargs = {}
+        paired_confound_cols = []
+        missing_policy = "raise"
+        min_coverage = 0.8
+        grid_e_values = None
+        grid_h_values = None
+        primary_cell_decl = None
+        edge_mask_plan = None
+        edge_mask_array = None
         
         with col_left:
             st.markdown("#### 🔍 1. Research Question & Design")
@@ -1262,6 +1545,34 @@ def render_design_inference_view(base_atlas, tabs_list):
                         key=persistent_key('design:acquisition_site_column_optional', scope='design', options=site_options),
                     )
                 
+                paired_confound_candidates = [
+                    column for column in cols
+                    if column not in (subject_col, condition_col, site_col)
+                    and pd.api.types.is_numeric_dtype(pheno_df[column])
+                ]
+                paired_confound_cols = sorted(st.multiselect(
+                    "Condition-specific confounds (value may differ between conditions)",
+                    paired_confound_candidates,
+                    default=[],
+                    key=persistent_key(
+                        'design:paired_condition_specific_confounds',
+                        scope='design', options=paired_confound_candidates, multiple=True,
+                    ),
+                    help=(
+                        "Columns measured once per condition (e.g. condition-level mean "
+                        "motion). The within-subject difference is tested while "
+                        "partialling out that subject's B - A confound difference. The "
+                        "difference is computed inside the analysis engine, never here, "
+                        "and a subject-constant shared table is never substituted for it."
+                    ),
+                ))
+                if paired_confound_cols:
+                    st.caption(
+                        "B - A of the selected columns is computed by the engine. Both "
+                        "condition rows of a subject must carry a value; a missing value "
+                        "excludes that subject's pair before the run with a warning."
+                    )
+
                 st.info(f"**Contrast Direction:**\n• **Positive effect:** {target_val} > {baseline_val}\n• **Negative effect:** {baseline_val} > {target_val}\n\n*Uses within-subject sign-flip permutation (stratum-invariant by construction). Subject-constant additive site effects cancel in differences, though arbitrary site × condition interactions are not controlled.*")
                 test_type = "paired"
                 
@@ -1519,6 +1830,80 @@ def render_design_inference_view(base_atlas, tabs_list):
                     op_kwargs["n"] = n_steps
                     op_kwargs["start_thres"] = start
 
+                    grid_enabled = st.checkbox(
+                        "E/H sensitivity grid (descriptive)",
+                        value=False,
+                        key=persistent_key('design:eh_sensitivity_grid', scope='design'),
+                        help=(
+                            "Evaluate several (E, H) cells in one run. The engine pairs "
+                            "the two lists element-wise, so they must have the same "
+                            "length. Only the cell you declare as primary BEFORE the run "
+                            "carries the confirmatory claim; every other cell is "
+                            "descriptive sensitivity."
+                        ),
+                    )
+                    if grid_enabled:
+                        grid_e_text = st.text_input(
+                            "Extent exponents (E), comma-separated",
+                            value=f"{float(e_exp):g}, {min(2.0, float(e_exp) + 0.5):g}",
+                            key=persistent_key('design:eh_grid_e_values', scope='design'),
+                        )
+                        grid_h_text = st.text_input(
+                            "Height exponents (H), comma-separated",
+                            value=f"{float(h_exp):g}, {min(5.0, float(h_exp) + 1.0):g}",
+                            key=persistent_key('design:eh_grid_h_values', scope='design'),
+                        )
+                        e_values, e_err = _parse_float_list(grid_e_text)
+                        h_values, h_err = _parse_float_list(grid_h_text)
+                        grid_errors = [err for err in (e_err, h_err) if err]
+                        if not grid_errors:
+                            grid_errors = _validate_eh_grid(
+                                e_values, h_values, (0.1, 2.0), (1.0, 5.0)
+                            )
+                        for err in grid_errors:
+                            st.error(f"❌ **E/H grid:** {err}")
+                        if not grid_errors:
+                            cell_labels = [
+                                f"Cell {k}: E={e:g}, H={h:g}"
+                                for k, (e, h) in enumerate(zip(e_values, h_values))
+                            ]
+                            default_primary = next(
+                                (
+                                    k for k, (e, h) in enumerate(zip(e_values, h_values))
+                                    if np.isclose(e, float(e_exp)) and np.isclose(h, float(h_exp))
+                                ),
+                                0,
+                            )
+                            primary_label = st.selectbox(
+                                "Declared primary cell (fixed before the run)",
+                                cell_labels,
+                                index=default_primary,
+                                key=persistent_key(
+                                    'design:eh_grid_primary_cell', scope='design',
+                                    options=cell_labels,
+                                ),
+                            )
+                            primary_idx = cell_labels.index(primary_label)
+                            op_kwargs["e"] = [float(v) for v in e_values]
+                            op_kwargs["h"] = [float(v) for v in h_values]
+                            grid_e_values = [float(v) for v in e_values]
+                            grid_h_values = [float(v) for v in h_values]
+                            primary_cell_decl = {
+                                "e": float(e_values[primary_idx]),
+                                "h": float(h_values[primary_idx]),
+                                "param_idx": int(primary_idx),
+                                "selection": "declared_before_run",
+                            }
+                            st.caption(
+                                "Descriptive sensitivity only: the grid does not create a "
+                                "corrected family-wise conclusion. Only the declared primary "
+                                "cell carries the confirmatory claim; the other cells are "
+                                "sensitivity analyses and a cell chosen after seeing the "
+                                "results cannot be reported as the primary result. No "
+                                "p-based automatic selection is performed."
+                            )
+                        st.caption("The companion method keeps its own scalar E/H.")
+
                     if operator_choice == "fbc_tfnbs":
                         m_min = st.number_input("Minimum block size (m_min)", 1, 100, int(DEFAULT_MIN_CLUSTER_SIZE), 1, key=persistent_key('design:minimum_block_size_m_min', scope='design'))
                         op_kwargs["min_cluster_size"] = m_min
@@ -1539,7 +1924,102 @@ def render_design_inference_view(base_atlas, tabs_list):
                         help="Supply an empirical structural connectivity matrix to derive data-driven Louvain communities instead of using fixed atlas networks.",
                         key=persistent_key('design:sc_prior_matrix_npy_overrides_atlas', scope='design'),
                     )
-                
+
+                st.markdown("**Tested edge family (optional)**")
+                st.caption(
+                    "A boolean N×N mask restricts which edges enter the tested family: "
+                    "the permutation max-statistic is then calibrated on those edges "
+                    "only. It is not an ROI subset and not an SC community label vector."
+                )
+                edge_mask_upload = st.file_uploader(
+                    "Edge family mask (.npy)", type=["npy"], key="design:edge_family_mask_upload"
+                )
+                if edge_mask_upload is not None:
+                    try:
+                        candidate_mask = np.load(
+                            io.BytesIO(edge_mask_upload.getvalue()), allow_pickle=False
+                        )
+                    except Exception as exc:
+                        st.error(
+                            f"❌ **Edge mask:** the file is not a readable .npy array ({exc})."
+                        )
+                    else:
+                        st.session_state["design:edge_mask_array"] = np.asarray(candidate_mask)
+                        st.session_state["design:edge_mask_source"] = getattr(
+                            edge_mask_upload, "name", "upload.npy"
+                        )
+                        persistent_key("design:edge_mask_array", scope="design")
+                        persistent_key("design:edge_mask_source", scope="design")
+                retained_mask = st.session_state.get("design:edge_mask_array")
+                if retained_mask is not None:
+                    retained_arr = np.asarray(retained_mask, dtype=bool)
+                    st.caption(
+                        "Retained mask "
+                        f"`{st.session_state.get('design:edge_mask_source')}` — shape "
+                        f"{retained_arr.shape}, "
+                        f"{int(np.triu(retained_arr, 1).sum())} eligible edges, sha256 "
+                        f"{hashlib.sha256(np.ascontiguousarray(retained_arr).tobytes()).hexdigest()[:16]}…"
+                    )
+                    if st.button("Remove retained edge mask", key="design:edge_mask_clear"):
+                        st.session_state.pop("design:edge_mask_array", None)
+                        st.session_state.pop("design:edge_mask_source", None)
+                        st.rerun()
+
+            st.markdown("##### 🧩 Missing Connectivity Values")
+            st.caption(
+                "Missing values in required design fields (subject, condition, group, site, "
+                "selected covariates) are a different matter: those rows are excluded "
+                "before the run with a warning, as the review panel shows. This control "
+                "only concerns missing (NaN) connectivity values in the matrices."
+            )
+            if test_type in ("paired", "two-sample"):
+                missing_choice = st.radio(
+                    "Missing connectivity policy",
+                    [
+                        "Complete-case (stop on any NaN)",
+                        "Available-case (test each edge on its available subjects)",
+                    ],
+                    index=0,
+                    horizontal=True,
+                    key=persistent_key(
+                        'design:missing_connectivity_policy', scope='design',
+                        options=[
+                            "Complete-case (stop on any NaN)",
+                            "Available-case (test each edge on its available subjects)",
+                        ],
+                    ),
+                    help=(
+                        "Complete-case is the engine default (missing='raise'): a single "
+                        "missing connectivity value stops the run. Available-case fits "
+                        "each edge on the subjects that have a finite value there, so the "
+                        "tested n varies per edge; it does not tolerate missing design "
+                        "fields and adds no new statistical correction."
+                    ),
+                )
+                missing_policy = (
+                    "available_case" if missing_choice.startswith("Available") else "raise"
+                )
+                if missing_policy == "available_case":
+                    min_coverage = float(st.number_input(
+                        "Minimum edge coverage (share of subjects with a finite value)",
+                        min_value=0.5,
+                        max_value=1.0,
+                        value=0.8,
+                        step=0.05,
+                        key=persistent_key('design:minimum_edge_coverage', scope='design'),
+                        help=(
+                            "Engine default 0.8. Edges below this coverage are not tested "
+                            "at all (their p-values are NaN and they are reported as "
+                            "untested); the coverage rule is a reporting decision, not an "
+                            "additional statistical correction."
+                        ),
+                    ))
+            else:
+                st.caption(
+                    "GLM design: missing connectivity stops the run (engine default "
+                    "`missing='raise'`). No policy switch is offered for this path."
+                )
+
             # Option to add sensitivity companion
             st.markdown("##### 🔄 Sensitivity Baseline Comparison")
             run_sensitivity = st.checkbox("Include Sensitivity Companion Analysis", value=False, help="Run both the chosen method and a companion baseline method sequentially to compare results in Tab 3.", key=persistent_key('design:include_sensitivity_companion_analysis', scope='design'))
@@ -1790,6 +2270,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                         condition_col, baseline_val, target_val, subject_col,
                         st.session_state.get("loaded_settings_hash"),
                         tuple(st.session_state.get("roi_indices") or ()),
+                        tuple(paired_confound_cols or ()),
                     )
                     preview_col1, preview_col2 = st.columns([1, 1])
                     compute_preview = preview_col1.button(
@@ -1821,11 +2302,19 @@ def render_design_inference_view(base_atlas, tabs_list):
                                 subject_col=subject_col,
                                 baseline_val=baseline_val,
                                 target_val=target_val,
+                                paired_confound_cols=paired_confound_cols,
+                                require_paired_bijection=(test_type == "paired"),
                             )
                             if prev_arrays["n_dropped"] > 0:
                                 st.warning(
                                     f"⚠️ **Missing Data Excluded:** {prev_arrays['n_dropped']} "
                                     "subject(s) would be dropped for the selected model variables."
+                                )
+                            if prev_arrays.get("n_pairs_dropped_confound"):
+                                st.warning(
+                                    "⚠️ **Pairs excluded for missing condition-specific "
+                                    f"confounds:** {prev_arrays['n_pairs_dropped_confound']} "
+                                    "subject pair(s) would be excluded."
                                 )
                             prev_fd_col = motion_qc_fd_col or detect_fd_column(prev_arrays["pheno_filtered"])
                             prev_spec = _motion_qc_spec_from_arrays(
@@ -1875,6 +2364,13 @@ def render_design_inference_view(base_atlas, tabs_list):
                         )
 
                 st.markdown("**Structured Run Plan:**")
+                # Retained mask facts (validated later against the analysis ROIs;
+                # the metadata here only describes the stored array).
+                if st.session_state.get("design:edge_mask_array") is not None:
+                    edge_mask_plan = _edge_mask_metadata(
+                        st.session_state["design:edge_mask_array"],
+                        st.session_state.get("design:edge_mask_source"),
+                    )
                 method_parameters = _format_method_plan_parameters(operator_choice, op_kwargs)
                 plan_md = f"""
 | Field | Value |
@@ -1888,6 +2384,10 @@ def render_design_inference_view(base_atlas, tabs_list):
 | **Method Parameters** | {method_parameters} |
 | **Atlas Metadata** | {'None' if active_analysis_atlas(base_atlas) is None else f"{len(active_analysis_atlas(base_atlas))} ROIs"} |
 | **Site Strategy** | {effective_recipe_choice} |
+| **Missing Connectivity** | {(f"available-case, minimum edge coverage {min_coverage:.0%}" if missing_policy == "available_case" else "complete-case (stop on any NaN)")} |
+| **Tested Edge Family** | {(f"edge family mask: {edge_mask_plan['eligible_edges']} eligible edges, sha256 {edge_mask_plan['sha256'][:12]}…" if edge_mask_plan else "all edges")} |
+| **E/H Grid** | {(f"{len(grid_e_values)} cells, declared primary E={primary_cell_decl['e']:g}, H={primary_cell_decl['h']:g} (cell {primary_cell_decl['param_idx']})" if primary_cell_decl else "single scalar (E, H)")} |
+| **Condition Confounds** | {(', '.join(paired_confound_cols) + ' (B - A computed by the engine)' if paired_confound_cols else "none")} |
 | **Permutations** | {n_perms} |
 | **Rough Runtime** | `{est_str}` |
 | **P-value Resolution** | ~{resolution:.4f} |
@@ -1905,17 +2405,101 @@ def render_design_inference_view(base_atlas, tabs_list):
                 if question_choice == "Paired Condition" and subject_col is None:
                     st.error("❌ **Subject Column Required:** A subject ID column must be selected for paired condition contrasts.")
                     has_blocking_errors = True
+
+                if test_type == "paired" and subject_col and condition_col:
+                    precheck_cols = [c for c in (condition_col, subject_col, site_col) if c]
+                    frame_precheck = pheno_df.dropna(subset=precheck_cols)
+                    paired_problems = _paired_design_violations(
+                        frame_precheck, condition_col, subject_col, baseline_val, target_val
+                    )
+                    if paired_problems:
+                        st.error(
+                            "❌ **Paired design is not a one-to-one subject match:** "
+                            + " | ".join(paired_problems)
+                            + " Nothing is dropped or matched by row position; fix the "
+                            "subject IDs before running."
+                        )
+                        has_blocking_errors = True
+                    else:
+                        n_verified_pairs = int(
+                            (frame_precheck[condition_col] == baseline_val).sum()
+                        )
+                        st.caption(
+                            f"Paired design verified: {n_verified_pairs} subject(s) measured "
+                            f"in both {baseline_val!r} and {target_val!r}; condition A order is "
+                            "preserved and condition B is matched by subject ID."
+                        )
                     
                 atlas = active_analysis_atlas(base_atlas)
+                data_nodes = (
+                    st.session_state.connectivity_data.shape[1]
+                    if st.session_state.connectivity_data is not None else None
+                )
+                analysis_nodes = (
+                    len(st.session_state.roi_indices)
+                    if st.session_state.roi_indices is not None else data_nodes
+                )
                 if atlas is not None and st.session_state.connectivity_data is not None:
-                    data_nodes = st.session_state.connectivity_data.shape[1]
-                    analysis_nodes = len(st.session_state.roi_indices) if st.session_state.roi_indices is not None else data_nodes
                     if len(atlas) != analysis_nodes:
                         st.error(
                             f"❌ **Atlas/Data Mismatch:** Active data has {analysis_nodes} analysis ROIs, "
                             f"but atlas metadata has {len(atlas)} rows."
                         )
                         has_blocking_errors = True
+
+                # Optional tested-family mask: validated with the engine's own
+                # mask semantics, and blocked for combinations the engine rejects
+                # (no silent fallback to the full family or to complete-case).
+                if st.session_state.get("design:edge_mask_array") is not None:
+                    from conninfpy.stats.pairwise import _check_edge_mask
+
+                    try:
+                        validated_mask = _check_edge_mask(
+                            np.asarray(st.session_state["design:edge_mask_array"]),
+                            int(analysis_nodes) if analysis_nodes else 0,
+                        )
+                    except Exception as exc:
+                        st.error(
+                            "❌ **Edge family mask:** "
+                            f"{exc} The mask must be a boolean symmetric N×N array for the "
+                            f"{analysis_nodes} analysis ROIs."
+                        )
+                        has_blocking_errors = True
+                    else:
+                        edge_mask_plan = _edge_mask_metadata(
+                            validated_mask, st.session_state.get("design:edge_mask_source")
+                        )
+                        if operator_choice not in ("tfnbs", "ni_tfnbs", "nbs", "tstat"):
+                            st.error(
+                                "❌ **Edge family mask:** the engine supports a tested-edge "
+                                f"family only for TFNBS, NI-TFNBS, NBS and t-stat; not for `{operator_choice}`."
+                            )
+                            has_blocking_errors = True
+                        elif missing_policy == "available_case":
+                            st.error(
+                                "❌ **Edge family mask + available-case:** the engine rejects "
+                                "a tested-family mask combined with available-case missing "
+                                "handling. Choose complete-case or run without the mask."
+                            )
+                            has_blocking_errors = True
+                        elif test_type == "glm" or (
+                            test_type == "paired" and paired_confound_cols
+                        ):
+                            st.error(
+                                "❌ **Edge family mask + GLM design:** the GLM route "
+                                "(covariates, or paired condition-specific confounds) has no "
+                                "edge-mask support in the engine. Run the mask with the "
+                                "paired or two-sample contrast, or without covariates."
+                            )
+                            has_blocking_errors = True
+                        else:
+                            edge_mask_array = validated_mask
+                            st.info(
+                                "✅ **Tested edge family:** "
+                                f"{edge_mask_plan['eligible_edges']} of "
+                                f"{int(analysis_nodes) * (int(analysis_nodes) - 1) // 2} edges "
+                                "are eligible; the family-wise correction applies to them only."
+                            )
 
                 use_sc_prior = False
                 sc_net_labels = None
@@ -1988,9 +2572,19 @@ def render_design_inference_view(base_atlas, tabs_list):
                                 subject_col=subject_col,
                                 baseline_val=baseline_val,
                                 target_val=target_val,
+                                paired_confound_cols=paired_confound_cols,
+                                require_paired_bijection=(test_type == "paired"),
                             )
                             if arrays["n_dropped"] > 0:
                                 st.warning(f"⚠️ **Missing Data Excluded:** Automatically dropped {arrays['n_dropped']} subject(s) due to missing (`NaN`) values in selected model variables.")
+                            if arrays.get("n_pairs_dropped_confound"):
+                                st.warning(
+                                    "⚠️ **Pairs excluded for missing condition-specific confounds:** "
+                                    f"{arrays['n_pairs_dropped_confound']} subject pair(s) have no "
+                                    "value for the selected condition-specific confound column(s) in "
+                                    "one of the two conditions, so both rows were excluded before "
+                                    "the run."
+                                )
                             Y = arrays["Y"]
                             pheno_df = arrays["pheno_filtered"]
                             interest = arrays["interest"]
@@ -1998,6 +2592,37 @@ def render_design_inference_view(base_atlas, tabs_list):
                             group1 = arrays["group1"]
                             group2 = arrays["group2"]
                             sites = arrays["sites"]
+                            ids_group1 = arrays["ids_group1"]
+                            ids_group2 = arrays["ids_group2"]
+                            confounds_group1 = arrays["confounds_group1"]
+                            confounds_group2 = arrays["confounds_group2"]
+                            if edge_mask_array is not None:
+                                op_kwargs["edge_mask"] = edge_mask_array
+                            design_facts = {
+                                "n_paired_subjects": (
+                                    int(group1.shape[0]) if test_type == "paired" else None
+                                ),
+                                "paired_subject_order": (
+                                    "condition A (baseline) phenotype order; condition B "
+                                    "matched one-to-one by subject ID"
+                                    if test_type == "paired" else None
+                                ),
+                                "condition_confound_cols": (
+                                    list(arrays.get("condition_confound_cols") or []) or None
+                                ),
+                                "n_pairs_dropped_confound": int(
+                                    arrays.get("n_pairs_dropped_confound") or 0
+                                ),
+                                "missing_design_rows_dropped": int(arrays["n_dropped"]),
+                                "sensitivity_grid": (
+                                    {
+                                        "e": [float(v) for v in grid_e_values],
+                                        "h": [float(v) for v in grid_h_values],
+                                        "n_cells": int(len(grid_e_values)),
+                                    }
+                                    if (grid_e_values and grid_h_values) else None
+                                ),
+                            }
 
                             if operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs"):
                                 if use_sc_prior:
@@ -2089,6 +2714,15 @@ def render_design_inference_view(base_atlas, tabs_list):
                                     fisher_history=st.session_state.get("dataset_fisher_history"),
                                     roi_indices=st.session_state.get("roi_indices"),
                                     motion_qc=motion_qc_spec,
+                                    ids_group1=ids_group1 if test_type == "paired" else None,
+                                    ids_group2=ids_group2 if test_type == "paired" else None,
+                                    confounds_group1=confounds_group1,
+                                    confounds_group2=confounds_group2,
+                                    missing_policy=missing_policy,
+                                    min_coverage=min_coverage,
+                                    edge_mask_plan=edge_mask_plan,
+                                    primary_cell=primary_cell_decl,
+                                    design_facts=design_facts,
                                 )
                             )
                             t.daemon = True

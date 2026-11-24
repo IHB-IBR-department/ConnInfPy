@@ -1096,8 +1096,12 @@ def check_companion_compatibility(
     alpha: float = 0.05,
     primary_alpha: Optional[float] = None,
     comp_alpha: Optional[float] = None,
+    primary_param_idx: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Check whether primary and companion agreement is well-defined.
+
+    ``primary_param_idx`` selects the declared primary cell when the primary
+    result is a parameter grid; without it the historical cell 0 is used.
 
     Agreement requires exact alignment on:
     1) error/hypothesis family (correction + tail_policy + omnibus vs tailed),
@@ -1192,7 +1196,7 @@ def check_companion_compatibility(
                 not np.array_equal(np.asarray(t_p_prov[k]), np.asarray(t_c_prov[k])) for k in t_p_prov
             ):
                 reasons.append("Tested edge mask differs between primary and companion.")
-        p_2d, _ = get_2d_result(p_in, 0)
+        p_2d, _ = get_2d_result(p_in, primary_param_idx if primary_param_idx is not None else 0)
         c_2d, _ = get_2d_result(c_in, 0)
         common_keys = [k for k in ("positive", "negative", "omnibus") if k in p_2d and k in c_2d]
         for k in common_keys:
@@ -1203,7 +1207,7 @@ def check_companion_compatibility(
     if reasons:
         return {"compatible": False, "reasons": reasons, "summary": None, "categories": None}
 
-    p_2d, _ = get_2d_result(p_in, 0)
+    p_2d, _ = get_2d_result(p_in, primary_param_idx if primary_param_idx is not None else 0)
     c_2d, _ = get_2d_result(c_in, 0)
     try:
         tested = _tested_edge_mask(p_2d)

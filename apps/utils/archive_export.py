@@ -555,6 +555,14 @@ def build_replay_config(
         design["condition"] = run_plan.get("condition_col")
         design["subject"] = run_plan.get("subject_col") or "subject_id"
         design["levels"] = [run_plan.get("baseline_condition"), run_plan.get("target_condition")]
+        # Condition-specific confounds (values that may differ between the two
+        # conditions). The CLI reads exactly this key for a paired design and
+        # subtracts B - A itself, so replay keeps the same partialling-out.
+        # Strict subject-ID bijection makes the alignment deterministic:
+        # condition A row order, condition B matched by ID.
+        condition_confounds = run_plan.get("condition_confound_cols")
+        if condition_confounds:
+            design["confounds"] = list(condition_confounds)
     else:
         reasons.append(f"the design family {family!r} of the finished run has no CLI mapping")
         return {"status": "not-replayable", "reasons": reasons, "config": None, "prerequisites": prereqs}
@@ -671,16 +679,57 @@ def build_replay_config(
     else:
         policy = None
     if policy == "available_case":
-        # The GUI never exposes available_case; without the captured
-        # min_coverage the per-edge tested family cannot be reproduced.
-        reasons.append("the run used available-case missing handling but its "
-                       "min_coverage was not captured")
-        return {"status": "not-replayable", "reasons": reasons, "config": None,
-                "prerequisites": prereqs}
-    if policy is not None and policy != "raise":
+        captured_coverage = run_plan.get("min_coverage")
+        if not isinstance(captured_coverage, (int, float, np.floating)):
+            # Legacy plan: the GUI did not capture the coverage floor, so the
+            # per-edge tested family cannot be reproduced.
+            reasons.append("the run used available-case missing handling but its "
+                           "min_coverage was not captured")
+            return {"status": "not-replayable", "reasons": reasons, "config": None,
+                    "prerequisites": prereqs}
+        inference["missing"] = "available_case"
+        inference["min_coverage"] = float(captured_coverage)
+    elif policy is not None and policy != "raise":
         reasons.append(f"unknown missing-data policy {policy!r}")
         return {"status": "not-replayable", "reasons": reasons, "config": None,
                 "prerequisites": prereqs}
+
+    # Declared primary (E, H) cell of a sensitivity grid: a reporting fact fixed
+    # before the run, never re-derived from the archived p-value arrays. The
+    # operator arguments above keep the full grid so the replay reproduces every
+    # cell; the confirmatory cell is named separately.
+    declared_primary = None
+    primary_cell = run_plan.get("primary_cell")
+    if isinstance(primary_cell, Mapping):
+        declared_primary = {
+            "e": primary_cell.get("e"),
+            "h": primary_cell.get("h"),
+            "param_idx": primary_cell.get("param_idx"),
+            "selection": primary_cell.get("selection"),
+            "note": ("cell declared before the run; every other grid cell is a "
+                     "descriptive sensitivity analysis"),
+        }
+
+    # Tested-family mask (edge family): the exact array is bundled with the
+    # archive, so a replay can reproduce the tested family instead of silently
+    # testing all edges.
+    edge_mask_fact = run_plan.get("edge_mask")
+    if isinstance(edge_mask_fact, Mapping):
+        mask_path = "arrays/edge_family_mask.npy"
+        prereqs.append({
+            "kind": "edge-family-mask",
+            "path": mask_path,
+            "detail": ("the tested edge family of the finished run is the boolean "
+                       f"{edge_mask_fact.get('shape')} mask bundled as {mask_path} "
+                       f"({edge_mask_fact.get('eligible_edges')} eligible edges, sha256 "
+                       f"{edge_mask_fact.get('sha256')}, source "
+                       f"{edge_mask_fact.get('source_filename') or 'not recorded'}); "
+                       "pass it as the method's edge_mask. It is not an ROI subset "
+                       "and not an SC community label vector"),
+        })
+        reasons.append("the run restricted the tested edge family with an edge mask; "
+                       "apply the bundled arrays/edge_family_mask.npy as edge_mask "
+                       "before replaying")
 
     roi_indices = run_plan.get("roi_indices")
     if roi_indices:
@@ -711,6 +760,8 @@ def build_replay_config(
     }
     if sourced_from_result:
         out["sourced_from_result"] = sorted(set(sourced_from_result))
+    if declared_primary is not None:
+        out["declared_primary_cell"] = declared_primary
     return out
 
 
@@ -919,9 +970,17 @@ def build_methods_markdown(
         add(f"- Test statistic: {statistic_names.get(plan['t_statistic'], _fmt(plan['t_statistic']))}.")
     missing_scope = getattr(inner, "missing_report", None)
     if missing_scope is not None:
+        coverage = plan.get("min_coverage")
+        coverage_text = (
+            f"The captured coverage floor is {float(coverage):.0%}. "
+            if isinstance(coverage, (int, float, np.floating)) else
+            "The coverage floor was not captured for this run. "
+        )
         add("- Missing data: analysed per-edge with available subjects (available_case); "
             "edges below the coverage threshold were not tested (their p-values are NaN). "
-            "Counts are in the bundle's missing_report.")
+            f"{coverage_text}Counts are in the bundle's missing_report. The tested n "
+            "therefore varies per edge and is never reported as one complete-case sample; "
+            "the coverage rule adds no statistical correction.")
     else:
         add("- Missing data policy: the run stopped on missing connectivity values "
             "(missing='raise'); no missing values were present in the analysed arrays.")
@@ -955,6 +1014,21 @@ def build_methods_markdown(
         add(f"- Parameter grid: the run evaluated {cells} (E, H) cells. The archived "
             f"p-value arrays keep the full grid; the figures show {shown} (a display "
             "fact of the export moment, not an analysis fact).")
+        declared = plan.get("primary_cell")
+        if isinstance(declared, Mapping) and declared.get("e") is not None:
+            add(f"- Declared primary cell (fixed before the run): E={declared.get('e')}, "
+                f"H={declared.get('h')} (cell {declared.get('param_idx')}). Only this cell "
+                "carries the confirmatory claim; every other cell is a descriptive "
+                "sensitivity analysis and the grid forms no corrected family-wise "
+                "conclusion for a cell chosen after seeing the data.")
+    edge_mask = plan.get("edge_mask")
+    if isinstance(edge_mask, Mapping):
+        add(f"- Tested edge family: the run analysed a boolean "
+            f"{edge_mask.get('shape')} mask ({edge_mask.get('eligible_edges')} eligible "
+            f"edges, sha256 {edge_mask.get('sha256')}, source "
+            f"{edge_mask.get('source_filename') or 'not recorded'}). The mask restricts "
+            "which edges enter the tested family; it is not an ROI exclusion subset and "
+            "not an SC community label vector.")
     net_labels = plan.get("net_labels") if isinstance(plan.get("net_labels"), Mapping) else None
     if net_labels:
         source = net_labels.get("source")
@@ -1179,6 +1253,7 @@ def build_analysis_archive(
     workspace_state: Optional[Mapping[str, Any]] = None,
     include_workspace_data: bool = False,
     include_bundle: bool = True,
+    edge_family_mask: Optional[np.ndarray] = None,
 ) -> Tuple[bytes, Dict[str, Any]]:
     """Build the deterministic analysis-archive ZIP bytes and its manifest.
 
@@ -1194,6 +1269,10 @@ def build_analysis_archive(
         Display/annotation atlas in matrix order (used for tables and figures).
     effect_mask : ndarray, optional
         Synthetic generator truth mask, archived as-is when present.
+    edge_family_mask : ndarray, optional
+        The boolean tested-edge-family mask of the finished run, archived as
+        ``arrays/edge_family_mask.npy`` when the run recorded one; it is what a
+        replay needs to reproduce the exact tested family.
     grid_cell : int, optional
         Parameter-grid cell shown in the application at export time (display
         fact; the archived arrays keep the full grid evidence).
@@ -1270,6 +1349,30 @@ def build_analysis_archive(
         effect_mask_available = True
     else:
         effect_mask_available = False
+
+    edge_mask_fact = plan.get("edge_mask")
+    if isinstance(edge_mask_fact, Mapping):
+        if edge_family_mask is None:
+            notes.append("the run recorded a tested-family edge mask but the mask array is "
+                         "not available here; arrays/edge_family_mask.npy is omitted and "
+                         "the replay cannot reproduce the tested family")
+        else:
+            mask_array = np.asarray(edge_family_mask, dtype=bool)
+            # The bundled array must be the mask of the finished run, not a
+            # mask uploaded/changed after it: verify against the recorded hash.
+            recorded_sha = edge_mask_fact.get("sha256")
+            actual_sha = _sha256(np.ascontiguousarray(mask_array).tobytes())
+            if recorded_sha is not None and actual_sha != recorded_sha:
+                notes.append("the available edge mask does not match the sha256 recorded "
+                             "for the finished run (it was changed after the run); "
+                             "arrays/edge_family_mask.npy is omitted and the replay "
+                             "cannot reproduce the tested family")
+            else:
+                files["arrays/edge_family_mask.npy"] = _npy_bytes(mask_array)
+                notes.append("edge_family_mask.npy is the tested-edge-family mask of the "
+                             "finished run (boolean ROI x ROI, eligible edges only), bundled so "
+                             "the tested family can be reproduced; it is not an ROI subset and "
+                             "not a community label vector.")
 
     # ---- tables (α-dependent; skipped honestly when the run α is unknown) ----
     if alpha is not None:
@@ -1360,6 +1463,12 @@ def build_analysis_archive(
             "design_family": plan.get("design_family"),
             "alpha": alpha,
             "seed": plan.get("seed"),
+            # Facts fixed before the run: the executed missing-connectivity
+            # policy, the declared primary grid cell and the tested edge family.
+            "missing_policy": plan.get("missing_policy"),
+            "min_coverage": plan.get("min_coverage"),
+            "primary_cell": plan.get("primary_cell"),
+            "edge_mask": plan.get("edge_mask"),
         },
         "dataset": {
             "name": info.get("name"),

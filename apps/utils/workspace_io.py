@@ -159,6 +159,10 @@ _MANAGED_SESSION_KEYS = (
     "_workspace_source_verification",
     "_workspace_legacy_unknowns",
     "_workspace_restored_meta",
+    # Tested-family mask retained across a restore (registered in the widget
+    # registry under the design scope, restored with its values when saved).
+    "design:edge_mask_array",
+    "design:edge_mask_source",
 )
 
 
@@ -1347,6 +1351,7 @@ def build_workspace_archive(
                 workspace_state=state,
                 include_workspace_data=include_data,
                 include_bundle=False,
+                edge_family_mask=state.get("design:edge_mask_array"),
             )
 
     ws_files, ws_manifest = build_workspace_layer_files(

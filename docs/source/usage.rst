@@ -809,6 +809,93 @@ four explicit sections plus optional subject data:
   tab opens on *4. Brainnetome Annotation* instead.
 
 
+The guided application (Streamlit) — design step
+-----------------------------------------------
+
+The application's *Design & Inference* step exposes four package capabilities
+that are otherwise reachable only through the Python API. Each run still
+answers one scientific question; nothing below changes the statistical engine,
+the permutation scheme, or a correction.
+
+**Paired contrasts with condition-specific confounds.** The paired path needs a
+subject-ID column and a condition column and requires a strict one-to-one
+subject match between the two conditions: condition A (baseline) keeps the
+phenotype row order, condition B is matched by subject ID, and empty IDs,
+duplicate IDs within a condition, a subject measured in only one condition or
+different numbers of rows stop the run before it starts, naming the offending
+subjects. Nothing is dropped, re-sorted or matched by row position. Selecting
+one or more *condition-specific confounds* (columns whose value may differ
+between conditions, such as condition-level motion) passes both condition
+arrays with their subject IDs; the per-subject difference ``B - A`` used by
+:func:`conninfpy.stats.compute_p_val_paired_glm` is computed inside the
+analysis, never in the interface. A subject without a value in either
+condition is excluded (with a warning) before the run, and the preview in the
+review panel describes exactly the arrays that will be analysed.
+
+**Missing design fields vs missing connectivity.** A missing value in a
+required design field (subject, condition, group, site, selected covariates) is
+a data-entry problem: those rows are excluded before the run and the number is
+reported. A missing value inside the connectivity matrices is a different
+question, controlled by *Missing connectivity policy*: ``Complete-case (stop on
+any NaN)`` is the package default (``missing='raise'``), and ``Available-case
+(test each edge on its available subjects)`` tests every edge on the subjects
+that have a finite value there, with a coverage floor (``min_coverage``,
+default 0.8). Available-case does not tolerate missing design fields, does not
+add a statistical correction, and makes the tested n vary from edge to edge;
+the results page reports the tested/untested edge counts, the coverage floor,
+the per-edge n range and the subjects with missing values, and never presents
+that varying n as one complete-case sample. Combinations the engine rejects
+(available-case with a tested-edge-family mask, or a mask with the GLM route)
+are blocked before the run instead of silently falling back to another policy.
+The GLM design keeps ``missing='raise'``.
+
+**Declared tested edge family.** An optional boolean, symmetric ``N x N`` mask
+(``.npy``) restricts which edges enter the tested family, so the family-wise
+correction is calibrated on those edges only. It is validated with the engine's
+own mask rules (shape, symmetry, at least one eligible edge) and is supported
+for TFNBS, NI-TFNBS, NBS and t-stat. The run plan records its purpose
+(``edge_family_mask``), SHA-256, shape, eligible-edge count and source file
+name; the array is bundled as ``arrays/edge_family_mask.npy`` in the archive and
+round-trips through a saved workspace. This mask is not an ROI exclusion subset
+(``roi_indices``) and not a structural-connectivity community label vector
+(``net_labels``); the three are reported separately and never substituted for
+one another.
+
+**Declared primary cell of an (E, H) sensitivity grid.** For the TFNBS family an
+optional grid evaluates several ``(E, H)`` cells in one run; the engine pairs
+the E and H sequences element-wise, so the two lists must have equal length.
+The cell that carries the confirmatory claim is declared *before* the run and
+recorded with its resolved grid index; the result table and the completion view
+use that cell. The results page can still browse other cells, but they are
+labelled descriptive sensitivity: the grid creates no corrected family-wise
+conclusion for a cell chosen after the data were seen, no p-value based
+automatic best-cell selection exists, and browsing does not rewrite the
+declared primary cell in the run plan or in an export. Grid values and the
+declared cell appear in the replay facts of the archive.
+
+Designs the guided interface deliberately does not offer — arbitrary F
+contrasts, multi-row contrasts, interaction terms and EEG-style data — remain
+available through the Python API, for example:
+
+.. code-block:: python
+
+   import numpy as np
+   from conninfpy import analyze
+   from conninfpy.stats import compute_p_val_glm
+
+   # Arbitrary multi-row F contrast (omnibus) on subject-level matrices.
+   X = np.column_stack([np.ones(n), age, sex, motion])
+   C = np.array([[0, 1, -1, 0], [0, 1, 0, -1]], dtype=float)
+   res = compute_p_val_glm(
+       Y, design_matrix=X, contrast=C, stat_type="fstat",
+       method="tfnbs", n_permutations=5000, rng=42,
+   )
+
+   # The same design through the standard recipe (prepare -> harmonize -> GLM).
+   out = analyze(Y, interest={"age": age, "sex": sex}, confounds=[motion],
+                 interactions=[("age", "sex")], method="tfnbs", rng=42)
+
+
 Network-level summaries — ``result.network_summary(atlas)``
 -----------------------------------------------------------
 
