@@ -122,6 +122,114 @@ def _normalize_fact(value):
     return f"{type(value).__name__}:{value!r}"
 
 
+def _phenotype_fingerprint(frame):
+    """Stable content fingerprint of the phenotype table (design-defining).
+
+    Covers row order and index, column names and dtypes, the values and the
+    missing-value markers, so swapping two group labels with identical levels
+    and counts changes the fingerprint. Object identity is deliberately not
+    used: the same content always yields the same fingerprint across reruns.
+    """
+    if frame is None:
+        return None
+    try:
+        import pandas as pd
+
+        values = pd.util.hash_pandas_object(frame, index=True, categorize=False)
+        meta = "|".join(
+            [
+                str(frame.shape),
+                repr([(str(name), str(dtype)) for name, dtype in zip(frame.columns, frame.dtypes)]),
+                repr([str(name) for name in frame.index.names]),
+                f"na={int(frame.isna().sum().sum())}",
+            ]
+        )
+        return (
+            "phenotype",
+            tuple(frame.shape),
+            hashlib.sha256(meta.encode("utf-8")).hexdigest(),
+            hashlib.sha256(np.asarray(values.values, dtype=np.uint64).tobytes()).hexdigest(),
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        return ("phenotype-unavailable", f"{type(exc).__name__}: {exc}")
+
+
+# Every parameter captured by the background worker, mapped to the launch
+# facts that determine it. ``tests/test_netstat27_regressions_r3.py`` asserts
+# that the worker signature and this table stay in step, and that each fact
+# actually reaches the launch signature.
+LAUNCH_FACT_COVERAGE = {
+    # worker parameter -> launch-signature facts that determine it
+    "task": ("__worker_bookkeeping__",),
+    "Y": ("data_id", "data_shape", "data_dtype", "roi_indices"),
+    "interest": ("interest_var", "phenotype", "data_id"),
+    "confounds": ("confounds", "phenotype"),
+    "group1": ("reference_group", "question_choice", "phenotype"),
+    "group2": ("target_group", "question_choice", "phenotype"),
+    "test_type": ("test_type",),
+    "sites": ("site_col", "phenotype"),
+    "harmonization_choice": ("harmonization",),
+    "operator_choice": ("method",),
+    "n_perms": ("n_permutations",),
+    "seed_val": ("seed",),
+    "use_mp": ("use_mp",),
+    "acceleration_choice": ("acceleration",),
+    "op_kwargs": ("final_op_kwargs",),
+    "run_sensitivity": ("run_sensitivity",),
+    "comp_method": ("comp_method",),
+    "comp_kwargs": ("final_comp_kwargs",),
+    "sc_net_labels": ("sc_net_labels", "use_sc_prior", "sc_prior_path"),
+    "use_sc_prior": ("use_sc_prior",),
+    "atlas": ("atlas_signature", "sc_net_labels"),
+    "annotation_atlas": ("atlas_signature", "data_id"),
+    "alpha": ("alpha",),
+    "question_choice": ("question_choice",),
+    "loaded_settings_hash": ("loaded_settings_hash",),
+    "recipe_choice": ("site_recipe",),
+    "effective_recipe_choice": ("effective_site_recipe",),
+    "group_col": ("group_col",),
+    "ref_group": ("reference_group",),
+    "target_group": ("target_group",),
+    "interest_var": ("interest_var",),
+    "subject_col": ("subject_col",),
+    "condition_col": ("condition_col",),
+    "baseline_val": ("baseline_condition",),
+    "target_val": ("target_condition",),
+    "confound_vars": ("confounds",),
+    "site_col": ("site_col",),
+    "active_atlas_signature": ("atlas_signature",),
+    "data_kind": ("data_kind",),
+    "tested_tail": ("tested_tail", "two_tailed"),
+    "var_equal": ("var_equal",),
+    "preprocessing": ("preprocessing",),
+    "fisher_history": ("fisher_history",),
+    "roi_indices": ("roi_indices",),
+    "motion_qc": ("motion_qc_enabled", "motion_qc_fd_col"),
+    "ids_group1": ("phenotype", "subject_col", "condition_col"),
+    "ids_group2": ("phenotype", "subject_col", "condition_col"),
+    "confounds_group1": ("phenotype", "condition_confounds"),
+    "confounds_group2": ("phenotype", "condition_confounds"),
+    "missing_policy": ("missing_policy",),
+    "min_coverage": ("min_coverage",),
+    "edge_mask_plan": ("edge_mask_plan", "edge_mask"),
+    "primary_cell": ("primary_cell",),
+    "design_facts": ("phenotype", "data_id", "grid_e", "grid_h", "condition_confounds"),
+    "n_processes": ("n_processes",),
+}
+
+# Worker parameters whose value is not a launch widget but a deterministic
+# function of the facts listed above (documented derivation, still tested to
+# be a subset of the signature facts).
+DERIVED_LAUNCH_FACTS = {
+    "annotation_atlas": "derived from the same atlas + data identity",
+    "design_facts": "paired counts/drop counts/grid metadata derived from the phenotype, arrays and grid facts",
+    "motion_qc": "the spec is derived from the covered arrays, phenotype, test/condition facts and fd column",
+    "ids_group1/2": "paired subject ids come from the phenotype columns/content",
+    "confounds_group1/2": "condition-specific confound rows come from the phenotype content",
+    "group1/group2/interest/confounds/sites": "design arrays built from the phenotype content by _build_design_arrays",
+}
+
+
 def _run_signature(**facts):
     """Comparable signature of the complete scientific launch/design snapshot.
 
@@ -2872,6 +2980,30 @@ def render_design_inference_view(base_atlas, tabs_list):
                     
                 run_enabled = not has_blocking_errors
                 btn_label = "🚀 Run Multi-Method Inference (Primary + Companion)" if run_sensitivity else "🚀 Run Connectivity Inference"
+
+                # NETSTAT-27: finalize everything the worker will actually
+                # receive BEFORE the launch signature is built. The executed
+                # network labels and the tested-family mask are injected here,
+                # not inside the launch block, so the signature can never
+                # describe pre-injection kwargs (the round-2 ordering bug).
+                # A structural guard in the launch block re-checks this.
+                launch_atlas = active_analysis_atlas(base_atlas)
+                if st.session_state.get("roi_indices") is not None:
+                    launch_atlas = st.session_state.sub_atlas
+                if edge_mask_array is not None:
+                    op_kwargs["edge_mask"] = edge_mask_array
+                if operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs"):
+                    if use_sc_prior:
+                        op_kwargs["net_labels"] = sc_net_labels
+                    elif launch_atlas is not None and atlas_has_networks(launch_atlas):
+                        # Blocked earlier when the atlas has no networks; the
+                        # injection only mirrors what the worker would receive.
+                        op_kwargs["net_labels"] = launch_atlas.network_index()
+                final_op_kwargs = _normalize_fact(op_kwargs)
+                final_comp_kwargs = _normalize_fact(comp_kwargs)
+                signature_phenotype = _phenotype_fingerprint(
+                    st.session_state.get("pheno_df")
+                )
                 
                 if "inference_task" not in st.session_state:
                     st.session_state.inference_task = InferenceTask()
@@ -2908,6 +3040,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                     target_condition=target_val,
                     confounds=tuple(confound_vars or ()),
                     condition_confounds=tuple(paired_confound_cols or ()),
+                    site_col=site_col,
                     tested_tail=tested_tail,
                     var_equal=var_equal,
                     two_tailed=(tested_tail is None),
@@ -2916,10 +3049,8 @@ def render_design_inference_view(base_atlas, tabs_list):
                     acceleration=acceleration_choice,
                     harmonization=harmonization_choice,
                     site_recipe=recipe_choice,
-                    op_kwargs=op_kwargs,
                     run_sensitivity=bool(run_sensitivity),
                     comp_method=comp_method,
-                    comp_kwargs=comp_kwargs,
                     # -- grid / declared cell / tested family --------------
                     grid_e=grid_e_values,
                     grid_h=grid_h_values,
@@ -2935,6 +3066,20 @@ def render_design_inference_view(base_atlas, tabs_list):
                     n_processes=n_processes,
                     motion_qc_enabled=bool(motion_qc_enabled),
                     motion_qc_fd_col=motion_qc_fd_col,
+                    # -- threshold + upstream transforms -------------------
+                    alpha=alpha,
+                    preprocessing=st.session_state.get("dataset_preprocessing"),
+                    fisher_history=st.session_state.get("dataset_fisher_history"),
+                    # -- site recipe actually used, and SC prior source ----
+                    effective_site_recipe=effective_recipe_choice,
+                    use_sc_prior=bool(use_sc_prior),
+                    sc_prior_path=sc_prior_path,
+                    sc_net_labels=_normalize_fact(sc_net_labels),
+                    # -- phenotype content (design-defining) ---------------
+                    phenotype=signature_phenotype,
+                    # -- final enhancement kwargs (post-injection) ---------
+                    final_op_kwargs=final_op_kwargs,
+                    final_comp_kwargs=final_comp_kwargs,
                 )
                 _invalidate_superseded_task(task, job_signature)
 
@@ -2945,11 +3090,10 @@ def render_design_inference_view(base_atlas, tabs_list):
                     if run_action.button(btn_label, type="primary", disabled=not run_enabled, key="run_inference_btn", width="stretch"):
                         try:
                             Y = st.session_state.connectivity_data.copy()
-                            atlas = active_analysis_atlas(base_atlas)
+                            atlas = launch_atlas
                             if st.session_state.roi_indices is not None:
                                 roi_idx = st.session_state.roi_indices
                                 Y = Y[:, roi_idx][:, :, roi_idx]
-                                atlas = st.session_state.sub_atlas
                                 
                             pheno_df = st.session_state.pheno_df
 
@@ -2991,8 +3135,24 @@ def render_design_inference_view(base_atlas, tabs_list):
                             ids_group2 = arrays["ids_group2"]
                             confounds_group1 = arrays["confounds_group1"]
                             confounds_group2 = arrays["confounds_group2"]
-                            if edge_mask_array is not None:
-                                op_kwargs["edge_mask"] = edge_mask_array
+                            # Structural guard (round-2 ordering bug): every
+                            # enhancement kwarg must already be final when the
+                            # launch signature was built. Nothing may be
+                            # injected into op_kwargs/comp_kwargs after this
+                            # point, or the signature would describe a run the
+                            # worker never executes.
+                            if _normalize_fact(op_kwargs) != final_op_kwargs:
+                                raise RuntimeError(
+                                    "op_kwargs changed after the launch signature "
+                                    "was built; build the signature from the final "
+                                    "worker kwargs"
+                                )
+                            if _normalize_fact(comp_kwargs) != final_comp_kwargs:
+                                raise RuntimeError(
+                                    "comp_kwargs changed after the launch signature "
+                                    "was built; build the signature from the final "
+                                    "worker kwargs"
+                                )
                             design_facts = {
                                 "n_paired_subjects": (
                                     int(group1.shape[0]) if test_type == "paired" else None
@@ -3018,12 +3178,6 @@ def render_design_inference_view(base_atlas, tabs_list):
                                     if (grid_e_values and grid_h_values) else None
                                 ),
                             }
-
-                            if operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs"):
-                                if use_sc_prior:
-                                    op_kwargs["net_labels"] = sc_net_labels
-                                else:
-                                    op_kwargs["net_labels"] = atlas.network_index()
 
                             annotation_atlas = atlas_for_annotation(atlas, Y.shape[1])
 
