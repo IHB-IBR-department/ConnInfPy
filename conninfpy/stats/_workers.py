@@ -66,6 +66,11 @@ _worker_thread_limiter: Any = None
 # Summed 0/1 contributions are exact regardless of batch grouping.
 _FOLD_BATCH = 32
 
+# Parent-side poll interval while waiting for a worker result. Waiting is
+# bounded so a cancellation request is rechecked even when every worker is
+# stuck inside a long computation; it changes no result and no ordering.
+_POLL_INTERVAL_S = 0.25
+
 try:
     from tqdm.auto import tqdm
 
@@ -119,6 +124,16 @@ def _task_file(task_func: Callable[..., Any]) -> Iterator[str]:
 def _run_worker_seed(seed: int) -> Any:
     assert _worker_task is not None
     return _worker_task(seed)
+
+
+def _run_worker_chunk_seeds(chunk_seeds: List[int]) -> List[Any]:
+    """Apply the task to one chunk of seeds, in seed order (one IPC message).
+
+    Used by the parent to keep per-chunk results (preserving ``imap``'s
+    chunking and order) while still polling for cancellation between chunks.
+    """
+    assert _worker_task is not None
+    return [_worker_task(seed) for seed in chunk_seeds]
 
 
 def _fold_seeds_in_batches(
@@ -470,12 +485,23 @@ def prepare_run(
     if session is not None:
         if total > 0:
             session._plan(total, label)
-        cancel_fn: Optional[CancelCallback] = session.cancelled
     else:
         callback = progress if callable(progress) else None
-        cancel_fn = (lambda: bool(cancel())) if cancel is not None else None
-    if cancel is not None and session is not None:
-        cancel_fn = session.cancelled
+    # Both cancellation sources are honoured: the session's own predicate and
+    # a separately supplied ``cancel``. Neither replaces the other (a caller
+    # that passes an explicit external cancel must never be ignored).
+    explicit_cancel = cancel
+
+    def _combined_cancel() -> bool:
+        if explicit_cancel is not None and explicit_cancel():
+            return True
+        return session is not None and session.cancelled()
+
+    cancel_fn: Optional[CancelCallback] = (
+        _combined_cancel
+        if (session is not None or explicit_cancel is not None)
+        else None
+    )
     return RunProgress(session, callback, cancel_fn, total)
 
 
@@ -709,18 +735,42 @@ def run_permutations(
             )
         out2: List[T] = []
         try:
-            iterator = pool.imap(_run_worker_seed, seeds, chunksize=chunksize)
+            # Same chunk partition and result order as ``imap`` with this
+            # chunksize, but issued as explicit chunk tasks so the parent can
+            # wait with a bounded timeout and recheck cancellation even when
+            # every worker is stuck inside a long computation.
+            chunk_seeds = [
+                list(seeds[i : i + chunksize]) for i in range(0, n, chunksize)
+            ]
+            pending: deque = deque()
+            next_chunk = 0
+            worker_limit = max(1, 2 * workers)
+
+            def _issue() -> None:
+                nonlocal next_chunk
+                while next_chunk < len(chunk_seeds) and len(pending) < worker_limit:
+                    pending.append(
+                        pool.apply_async(
+                            _run_worker_chunk_seeds, (chunk_seeds[next_chunk],)
+                        )
+                    )
+                    next_chunk += 1
+
             done = 0
-            while True:
-                _check_cancel()  # before blocking on the next completed chunk
-                try:
-                    result = next(iterator)
-                except StopIteration:
+            while pending or next_chunk < len(chunk_seeds):
+                _issue()
+                while True:
+                    _check_cancel()
+                    try:
+                        chunk_results = pending[0].get(timeout=_POLL_INTERVAL_S)
+                    except multiprocessing.TimeoutError:
+                        continue
                     break
-                out2.append(result)
-                done += 1
-                if done % chunksize == 0 or done == n:
-                    _emit(done)
+                pending.popleft()
+                for result in chunk_results:  # worker errors already propagated
+                    out2.append(result)
+                    done += 1
+                _emit(done)
         finally:
             # Always terminate + join, on success, error and cancellation:
             # no worker process or result-handler thread is left behind.
@@ -895,7 +945,15 @@ def run_permutations_reduce(
                 while next_chunk < len(chunks) and len(pending) < chunk_limit:
                     _issue()
                 _check_cancel()
-                partial = pending.popleft().get()  # propagates worker errors
+                # Peek first: a timed-out wait must not drop a partial.
+                while True:
+                    _check_cancel()
+                    try:
+                        partial = pending[0].get(timeout=_POLL_INTERVAL_S)
+                    except multiprocessing.TimeoutError:
+                        continue
+                    break
+                pending.popleft()  # propagates worker errors before this line
                 stats.on_fold(_result_nbytes(partial))
                 total = partial if total is None else total + partial
                 done += len(chunks[stats.chunks_folded - 1])

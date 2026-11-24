@@ -48,20 +48,26 @@ def test_info_reports_worker_context_without_starting_a_pool(tmp_path):
 
 
 def test_info_cache_presence_is_not_a_hit_and_writes_no_cache(tmp_path):
+    """``info`` creates no cache directory, writes no entries, claims no hit.
+
+    NETSTAT-27 R1-5 (round 2): enhancement kernels enable numba caching
+    lazily on first real use, so neither the package import nor this command
+    creates the configured cache directory. With a nonexistent
+    ``NUMBA_CACHE_DIR`` the directory must still be absent afterwards, and
+    the output must say so honestly; hits stay unknown/not measured.
+    """
     proc, env = _run_info(tmp_path)
     text = proc.stdout
     assert "numba cache" in text
     assert "unknown/not measured" in text
     # Presence of files (or their absence) is never reported as a cache hit.
     assert "cache hits unknown/not measured" in text
-    # Importing numba itself may create NUMBA_CACHE_DIR; what matters is that
-    # the diagnostics write no compiled cache entries and never claim a hit.
     cache_dir = env["NUMBA_CACHE_DIR"]
-    files = []
-    for root, _dirs, names in os.walk(cache_dir):
-        files.extend(n for n in names if n.endswith((".nbi", ".nbc")))
-    assert files == [], "diagnostics must not write numba cache entries"
-    assert "0 numba cache file(s) present" in text
+    assert not os.path.exists(cache_dir), (
+        "conninfpy info (including the package import) must not create the "
+        "numba cache directory"
+    )
+    assert "absent: no cache written" in text
 
 
 def test_info_does_not_guess_the_executed_backend(tmp_path):

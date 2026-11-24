@@ -782,29 +782,40 @@ def run(
 def info() -> None:
     """Print versions, the compute backend, resources and cache visibility.
 
-    Every line reports only what this process can actually observe. In
-    particular: numba/JIT availability is not evidence that a JIT kernel
-    ran, and the presence of numba cache files is not a cache hit. Both
-    stay explicitly ``unknown/not measured`` unless a real record exists.
-    Read-only: no cache directory is created, no environment is changed.
+    Read-only and import-conservative: this command deliberately does **not**
+    import numba (importing it creates the configured cache directory). It
+    only looks for an installed distribution (``find_spec`` + distribution
+    metadata) and reads the cache configuration from the environment. So
+    numba *availability* is reported, while runtime importability and which
+    kernel actually executed stay explicitly ``unknown/not measured``. No
+    cache directory is created and no environment or user setting changes.
     """
+    from importlib import metadata, util
+
     from conninfpy import __version__
     from conninfpy.stats._workers import describe_worker_policy
 
     lines = [f"conninfpy  {__version__}", f"python     {platform.python_version()}",
              f"numpy      {np.__version__}"]
-    numba_mod = None
+    numba_version = None
     try:
-        import numba as numba_mod  # noqa: F401
-        lines.append(f"numba      {numba_mod.__version__} (JIT kernels available)")
-    except Exception as exc:  # absent or broken install: both are facts
-        lines.append(f"numba      not available ({type(exc).__name__}); Python/NumPy/SciPy fallback")
-        numba_mod = None
+        spec = util.find_spec("numba")
+    except (ImportError, ValueError):  # pragma: no cover - defensive
+        spec = None
+    if spec is not None:
+        try:
+            numba_version = metadata.version("numba")
+        except metadata.PackageNotFoundError:  # pragma: no cover - exotic install
+            numba_version = "version unknown"
+        lines.append(f"numba      {numba_version} (installed; not imported by this command)")
+    else:
+        lines.append("numba      not installed; Python/NumPy/SciPy fallback")
     lines.append(
         "backend    enhancement kernels: "
-        + ("numba importable, which kernel actually executed is unknown/not measured "
-           "(no runtime dispatcher record)" if numba_mod is not None
-           else "Python/NumPy/SciPy only (numba not importable)")
+        + ("numba installed, but this command does not import it and no runtime "
+           "dispatcher record exists: importability and which kernel actually "
+           "executed are unknown/not measured" if spec is not None
+           else "Python/NumPy/SciPy only (numba not installed)")
     )
     lines.append(f"cpu cores  {os.cpu_count()}")
     from conninfpy.stats._engine import get_available_cores
@@ -829,44 +840,38 @@ def info() -> None:
         pass
     except Exception as exc:  # pragma: no cover - defensive
         lines.append(f"blas       threadpool_info failed: {type(exc).__name__}: {exc}")
-    lines.append(f"numba cache {_numba_cache_line(numba_mod)}")
+    lines.append(f"numba cache {_numba_cache_line(spec is not None)}")
     print("\n".join(lines))
 
 
-def _numba_cache_line(numba_mod: Any) -> str:
-    """Describe the numba cache directory from the filesystem, read-only.
+def _numba_cache_line(numba_installed: bool) -> str:
+    """Describe numba's cache configuration from the environment, read-only.
 
-    Presence of files is reported as a fact and explicitly *not* as evidence
-    of a cache hit: numba exposes no per-kernel hit/miss counter here, so
-    hits stay ``unknown/not measured``.
+    numba is not imported (importing it creates the cache directory), so the
+    path can only come from ``NUMBA_CACHE_DIR``. When it is unset, numba's
+    default is per-module ``__pycache__`` locations, which are not enumerated
+    here. Presence of files is never reported as a cache hit: no per-kernel
+    hit/miss counter is available, so hits stay ``unknown/not measured``.
     """
-    if numba_mod is None:
-        return "not applicable (numba not importable)"
-    cache_dir = None
-    for attr in ("CACHEDIR", "CACHE_DIR"):
-        value = getattr(numba_mod.config, attr, None)
-        if value:
-            cache_dir = os.fspath(value)
-            break
-    if not cache_dir:
-        cache_dir = os.environ.get("NUMBA_CACHE_DIR")
-    disabled = None
-    try:
-        disabled = bool(getattr(numba_mod.config, "DISABLE_JIT", False))
-    except Exception:  # pragma: no cover - version-specific
-        disabled = None
+    if not numba_installed:
+        return "not applicable (numba not installed)"
+    disabled = os.environ.get("NUMBA_DISABLE_JIT", "not set")
+    cache_dir = os.environ.get("NUMBA_CACHE_DIR")
     if not cache_dir:
         return (
-            "dir not configured (empty numba CACHE_DIR: numba falls back to "
+            "dir not configured (NUMBA_CACHE_DIR unset: numba falls back to "
             "per-module __pycache__ directories, which are not enumerated here); "
             f"cache hits unknown/not measured; NUMBA_DISABLE_JIT={disabled}"
         )
     if not os.path.isdir(cache_dir):
-        return (f"dir {cache_dir} (absent: no cache written); cache hits "
-                "unknown/not measured")
+        return (
+            f"dir {cache_dir} (absent: no cache written; this command does not "
+            "create it); cache hits unknown/not measured; "
+            f"NUMBA_DISABLE_JIT={disabled}"
+        )
     count = 0
     try:
-        for root, _dirs, files in os.walk(cache_dir):
+        for _root, _dirs, files in os.walk(cache_dir):
             count += sum(1 for f in files if f.endswith((".nbi", ".nbc")))
     except OSError as exc:  # pragma: no cover - permission-dependent
         return f"dir {cache_dir} (unreadable: {exc}); cache hits unknown/not measured"

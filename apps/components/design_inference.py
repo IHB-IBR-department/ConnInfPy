@@ -98,17 +98,42 @@ def _worker_plan(use_mp, n_processes, n_permutations):
         return {"request_error": f"{type(exc).__name__}: {exc}"}
 
 
+def _normalize_fact(value):
+    """Normalize one launch fact into a comparable, hashable plain value."""
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, np.generic):
+        return _normalize_fact(value.item())
+    if isinstance(value, np.ndarray):
+        arr = np.ascontiguousarray(np.asarray(value))
+        if arr.size <= 200_000:
+            digest = hashlib.sha256(arr.tobytes()).hexdigest()
+        else:  # pragma: no cover - very large arrays stay a shape/type fact
+            digest = f"large:{float(np.nansum(arr))}"
+        return ("ndarray", arr.dtype.str, tuple(arr.shape), digest)
+    if isinstance(value, dict):
+        return tuple(sorted((str(k), _normalize_fact(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_normalize_fact(v) for v in value)
+    if isinstance(value, (set, frozenset)):
+        return tuple(sorted((_normalize_fact(v) for v in value), key=repr))
+    return f"{type(value).__name__}:{value!r}"
+
+
 def _run_signature(**facts):
-    """Comparable, plain-data signature of what a run was launched on."""
-    signature = {}
-    for key, value in facts.items():
-        if isinstance(value, (list, tuple)):
-            signature[key] = tuple("" if v is None else str(v) for v in value)
-        elif value is None:
-            signature[key] = None
-        else:
-            signature[key] = str(value)
-    return signature
+    """Comparable signature of the complete scientific launch/design snapshot.
+
+    Every fact that changes the design or the execution of a run must be
+    passed in: group/condition levels, method and all its parameters, grid
+    values, declared primary cell, edge mask / ROI restriction, condition
+    confounds, site recipe, columns, tail/variance/missing policy, seed,
+    permutation count, worker settings and the data/atlas identity. Values are
+    normalized (nested dicts, sequences, scalars, ndarray digests) so the same
+    facts always produce the same signature.
+    """
+    return {str(key): _normalize_fact(value) for key, value in facts.items()}
 
 
 def _task_cancel_requested(task):
@@ -1269,12 +1294,28 @@ def _run_inference_background(
         except Exception as exc:  # pragma: no cover - defensive
             return {"request_error": f"{type(exc).__name__}: {exc}"}
 
+    def _stale() -> bool:
+        """True when this worker no longer owns the task state."""
+        return getattr(task, "generation", generation) != generation
+
+    def _write(attr, value):
+        """Set a task attribute only for the generation captured at launch.
+
+        Every mutation of task state goes through here (or through an explicit
+        ``_stale()`` check) so a superseded worker can never overwrite the
+        newer generation's status, result, run plan or progress.
+        """
+        if not _stale():
+            setattr(task, attr, value)
+
     def _record_progress(done, total):
+        if _stale():
+            return  # a superseded loop reports nothing to the new generation
         if _progress_cb is not None:
             _progress_cb(done, total)
         stage = session.stage
         if stage is not None:
-            task.progress_stage = stage
+            _write("progress_stage", stage)
 
     session = ProgressSession(
         callback=_record_progress if _progress_cb is not None else None,
@@ -1300,7 +1341,10 @@ def _run_inference_background(
             ("student" if var_equal else "welch") if variance_kwargs
             else ("glm" if test_type == "glm" else None)
         )
-        task.progress_message = f"Executing primary method ({operator_choice.upper()}) permutation loops..."
+        _write(
+            "progress_message",
+            f"Executing primary method ({operator_choice.upper()}) permutation loops...",
+        )
         from conninfpy import analyze
         from conninfpy.defaults import (
             DEFAULT_ACCELERATION,
@@ -1409,7 +1453,10 @@ def _run_inference_background(
         comp_res = None
         comp_edges = None
         if run_sensitivity and comp_method:
-            task.progress_message = f"Executing sensitivity companion ({comp_method.upper()}) permutation loops..."
+            _write(
+                "progress_message",
+                f"Executing sensitivity companion ({comp_method.upper()}) permutation loops...",
+            )
             comp_run_kwargs = dict(comp_kwargs or {})
             if comp_method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
                 comp_run_kwargs.setdefault("e", DEFAULT_EXTENT_EXPONENT)
@@ -1470,12 +1517,12 @@ def _run_inference_background(
             
         session.finalize()
         _ensure_current()
-        task.result = res
-        task.edges = edges
-        task.comp_result = comp_res
-        task.comp_edges = comp_edges
+        _write("result", res)
+        _write("edges", edges)
+        _write("comp_result", comp_res)
+        _write("comp_edges", comp_edges)
         
-        task.run_plan = {
+        run_plan = {
             "question_type": question_choice,
             "alpha": alpha,
             "loaded_settings_hash": loaded_settings_hash,
@@ -1573,39 +1620,45 @@ def _run_inference_background(
         if isinstance(design_facts, dict):
             # Launch facts of the sliced design (paired alignment, pre-run
             # exclusions); never inferred later from the current widgets.
-            task.run_plan.update(
-                {str(k): v for k, v in design_facts.items() if str(k) not in task.run_plan}
+            run_plan.update(
+                {str(k): v for k, v in design_facts.items() if str(k) not in run_plan}
             )
         if primary_record is not None:
-            task.run_plan["primary_cell"] = primary_record
-        task.finished_generation = generation
-        task.status = "success"
-        task.progress_message = "✅ Completed!"
+            run_plan["primary_cell"] = primary_record
+        _write("run_plan", run_plan)
+        _write("finished_generation", generation)
+        _write("status", "success")
+        _write("progress_message", "✅ Completed!")
     except (InferenceCancelled, _StaleJob) as exc:
         # Nothing computed from an incomplete null distribution may survive.
         session.finalize()
-        task.result = None
-        task.edges = None
-        task.comp_result = None
-        task.comp_edges = None
-        task.run_plan = None
-        task.error = None
-        task.finished_generation = generation
-        task.status = "cancelled"
+        if _stale():
+            # Superseded: a newer generation owns this task now. Drop the
+            # payload silently instead of writing over its state.
+            return
+        for attr in ("result", "edges", "comp_result", "comp_edges", "run_plan"):
+            _write(attr, None)
+        _write("error", None)
+        _write("finished_generation", generation)
+        _write("status", "cancelled")
         if not getattr(task, "cancel_reason", None):
-            task.cancel_reason = (
+            _write(
+                "cancel_reason",
                 "superseded by a newer run"
                 if isinstance(exc, _StaleJob)
-                else "cancelled by the user"
+                else "cancelled by the user",
             )
-        task.progress_message = (
+        _write(
+            "progress_message",
             "⏹ Cancelled at a permutation chunk boundary — no p-values, "
-            "no result and no export were produced."
+            "no result and no export were produced.",
         )
     except Exception as e:
-        task.error = f"{e}\n{traceback.format_exc()}"
-        task.status = "failed"
-        task.progress_message = "❌ Failed"
+        if _stale():
+            return  # never write an old failure into a newer generation
+        _write("error", f"{e}\n{traceback.format_exc()}")
+        _write("status", "failed")
+        _write("progress_message", "❌ Failed")
 
 
 def render_design_inference_view(base_atlas, tabs_list):
@@ -2828,30 +2881,60 @@ def render_design_inference_view(base_atlas, tabs_list):
                 # launched on. Comparing the recorded signature on every
                 # rerun cancels a superseded thread cooperatively instead of
                 # letting it publish into a session that has moved on.
+                _signature_data = st.session_state.get("connectivity_data")
+                _signature_mask = st.session_state.get("design:edge_mask_array")
                 job_signature = _run_signature(
+                    # -- data + atlas identity -----------------------------
                     loaded_settings_hash=st.session_state.get("loaded_settings_hash"),
                     atlas_signature=st.session_state.get(
                         "loaded_atlas_signature",
                         st.session_state.get("active_atlas_signature"),
                     ),
-                    data_id=id(st.session_state.get("connectivity_data")),
-                    data_shape=getattr(st.session_state.get("connectivity_data"), "shape", None),
+                    data_id=id(_signature_data),
+                    data_shape=getattr(_signature_data, "shape", None),
+                    data_dtype=getattr(_signature_data, "dtype", None),
+                    roi_indices=st.session_state.get("roi_indices"),
+                    data_kind=st.session_state.get("connectivity_data_kind"),
+                    # -- design family / question / tail -------------------
                     test_type=test_type,
                     question_choice=question_choice,
+                    group_col=group_col,
+                    reference_group=ref_group,
+                    target_group=target_group,
+                    interest_var=interest_var,
+                    condition_col=condition_col,
+                    subject_col=subject_col,
+                    baseline_condition=baseline_val,
+                    target_condition=target_val,
+                    confounds=tuple(confound_vars or ()),
+                    condition_confounds=tuple(paired_confound_cols or ()),
+                    tested_tail=tested_tail,
+                    var_equal=var_equal,
+                    two_tailed=(tested_tail is None),
+                    # -- method + every execution parameter ----------------
                     method=operator_choice,
+                    acceleration=acceleration_choice,
+                    harmonization=harmonization_choice,
+                    site_recipe=recipe_choice,
+                    op_kwargs=op_kwargs,
+                    run_sensitivity=bool(run_sensitivity),
+                    comp_method=comp_method,
+                    comp_kwargs=comp_kwargs,
+                    # -- grid / declared cell / tested family --------------
+                    grid_e=grid_e_values,
+                    grid_h=grid_h_values,
+                    primary_cell=primary_cell_decl,
+                    edge_mask=_signature_mask,
+                    edge_mask_plan=edge_mask_plan,
+                    missing_policy=missing_policy,
+                    min_coverage=min_coverage,
+                    # -- sampling / resources ------------------------------
                     n_permutations=n_perms,
                     seed=seed_val,
                     use_mp=bool(use_mp),
-                    tested_tail=tested_tail,
-                    var_equal=var_equal,
-                    missing_policy=missing_policy,
-                    min_coverage=min_coverage,
-                    site_recipe=recipe_choice,
-                    interest_var=interest_var,
-                    group_col=group_col,
-                    baseline=baseline_val,
-                    target=target_val,
-                    confounds=tuple(confound_vars or ()),
+                    n_processes=n_processes,
+                    motion_qc_enabled=bool(motion_qc_enabled),
+                    motion_qc_fd_col=motion_qc_fd_col,
                 )
                 _invalidate_superseded_task(task, job_signature)
 
@@ -2982,29 +3065,22 @@ def render_design_inference_view(base_atlas, tabs_list):
                                     st.session_state.pop("motion_qc_preview", None)
                                     st.session_state.pop("motion_qc_preview_key", None)
 
-                            task.status = "running"
-                            task.progress_message = "Starting background inference thread..."
-                            task.result = None
-                            task.edges = None
-                            task.comp_result = None
-                            task.comp_edges = None
-                            task.run_plan = None
-                            task.error = None
-                            # NETSTAT-27: new generation + fresh parent-side
-                            # cancel token for every launch. The previous
-                            # thread (if any) keeps its own token and can
-                            # never publish into this generation.
+                            # NETSTAT-27: every launch gets its OWN task object
+                            # and generation. An older background thread holds
+                            # (and can only mutate) the previous object, and
+                            # even that is generation-guarded in the worker.
+                            previous_task = task
+                            if getattr(previous_task, "status", "") == "running":
+                                previous_task.request_cancel("superseded by a new run")
+                            task = InferenceTask()
+                            st.session_state.inference_task = task
                             st.session_state["inference_generation"] = (
                                 int(st.session_state.get("inference_generation", 0)) + 1
                             )
                             task.generation = int(st.session_state["inference_generation"])
-                            task.cancel_event = threading.Event()
-                            task.cancel_reason = None
-                            task.progress_done = 0
-                            task.progress_total = 0
-                            task.progress_stage = None
-                            task.finished_generation = None
                             task.launch_signature = job_signature
+                            task.status = "running"
+                            task.progress_message = "Starting background inference thread..."
                             
                             # Reset in-session results and downstream views/widgets
                             st.session_state.inference_result = None

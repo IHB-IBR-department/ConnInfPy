@@ -172,7 +172,10 @@ def test_cancel_with_no_progress_still_cleans_up(worker_context, tmp_path):
 
     threading.Thread(target=cancel_soon, daemon=True).start()
     _run_guarded(cancel_route)
-    _assert_children_gone(log_path)
+    # With bounded polling the cancel may land before a worker even starts;
+    # any PID that did start must still be gone.
+    if log_path.exists():
+        _assert_children_gone(log_path)
     assert _task_files() == before
 
 
