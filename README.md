@@ -11,23 +11,30 @@
 
 Give ConnInfPy one connectivity matrix per subject and a design (two groups,
 paired conditions, or a continuous predictor with confounds); it returns
-permutation-corrected p-values for every edge, split by direction — FWER from
-the max-statistic null for `tfnbs`, `ni_tfnbs`, `fbc_tfnbs`, `nbs` and `tstat`,
-FWER across blocks or FDR for `cnbs`, FDR for the BH variants — each read at its
-inference unit (edge, component or block). One call to
+corrected p-values for every edge, split by direction — empirical permutation
+p-values for the max-statistic methods (`tfnbs`, `ni_tfnbs`, `fbc_tfnbs`, `nbs`,
+`tstat`: FWER under the premises on the [approach page](https://IHB-IBR-department.github.io/ConnInfPy/approach.html)),
+`cnbs` (FWER across blocks or FDR, by its correction mode), `bh_fdr_perm` (FDR),
+and parametric p-values for `bonferroni` (FWER) and `bh_fdr` (FDR) — each read
+at its inference unit (edge, component or block). One call to
 `conninfpy.analyze()` covers input preparation, optional multi-site
-harmonization, and permutation inference with any of nine methods.
+harmonization, and inference with any of nine methods.
 
 - **Six topology-aware enhancement methods** — NBS-extent, NBS-intensity,
   TFNBS, cNBS, **NI-TFNBS** (network-informed soft block-density prior) and
-  **FBC-TFNBS** (hard block prior with minimum cluster size) — plus three
-  baselines (per-edge $t$, Bonferroni, BH-FDR), all on one permutation engine
-  with the +1 Phipson–Smyth correction.
+  **FBC-TFNBS** (hard block prior with minimum cluster size) — plus the
+  baselines: per-edge $t$ (`tstat`) on the same permutation engine as the
+  enhancement methods (empirical p-values with the +1 Phipson–Smyth
+  correction), permutation-calibrated BH-FDR (`bh_fdr_perm`) as a separate
+  path, and the parametric Bonferroni and BH-FDR baselines, which use no
+  permutations.
 - **Edge-wise GLM with Freedman–Lane permutation** — continuous predictors,
   confounds, $t$/$\beta$/F contrasts, paired designs with condition-varying
   confounds, directional (positive/negative) FWER from the max-statistic null
-  (Freedman–Lane permutation, hence approximate; see the
-  [approach page](https://IHB-IBR-department.github.io/ConnInfPy/approach.html)).
+  for `tstat` and the TFNBS family (Freedman–Lane permutation, hence
+  approximate; see the
+  [approach page](https://IHB-IBR-department.github.io/ConnInfPy/approach.html));
+  `cnbs` and the BH variants as above.
 - **Multi-site data** — parametric empirical-Bayes ComBat (Johnson 2007;
   Fortin 2017/2018) in NumPy, site dummies, and site-blocked permutation.
 - **GPD/gamma tail acceleration (opt-in, off by default)** — for

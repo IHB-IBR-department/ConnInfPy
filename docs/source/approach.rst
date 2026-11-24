@@ -367,12 +367,13 @@ a single value from each relabelled null map: the maximum enhanced score over
 all edges (for ``nbs`` the enhancement has already copied each component's
 statistic onto its edges, so this is the largest component statistic). Across
 permutations these maxima form the null distribution of the largest score
-attributable to noise alone. A unit is declared significant when its
-statistic reaches this null-maximum distribution at the chosen α, and its
-p-value is written onto every edge of the unit. The unit is
+attributable to noise alone. A unit is declared significant when its corrected
+p-value (the rule below) is at most the chosen α, and that p-value is written
+onto every edge of the unit. The unit is
 ``result.inference_unit``: ``'edge'`` for ``tstat`` and the TFNBS family,
-``'component'`` for ``nbs``. The p-value of a unit is the proportion of
-permutation maxima that match or exceed its statistic:
+``'component'`` for ``nbs``. The p-value of a unit counts the permutation
+maxima that match or exceed its statistic, with the observed statistic added
+to both the count and the number of permutations — not a bare proportion:
 
 .. math::
 
@@ -383,7 +384,10 @@ Two methods stand outside this formula. ``cnbs`` compares every block's
 statistic with that block's *own* permutation null (the same block's value
 in every permuted map, in absolute value under ``two_tailed=True``) and then
 corrects the block p-values across blocks with Bonferroni (FWER over blocks)
-or Benjamini–Hochberg (FDR over blocks); its unit is ``'block'``.
+or Benjamini–Hochberg (FDR over blocks) — given valid marginal block
+p-values, single-step Bonferroni bounds the FWER over blocks strongly, without
+any subset-pivotality argument, and BH gives FDR over blocks under its own
+premises; its unit is ``'block'``.
 ``bh_fdr_perm`` keeps a per-edge marginal permutation p-value and applies
 Benjamini–Hochberg across the eligible edges; ``bh_fdr`` and ``bonferroni``
 are parametric and use no permutations.
@@ -401,8 +405,9 @@ Three design choices are embedded in the formula:
   the observed data, and the reconstructed null maps must reproduce the
   sampling law of the statistics. Sign-flip and group-label permutation do
   this under their exchangeability premises; Freedman–Lane is an
-  approximation (Winkler et al. 2014), so every GLM p-value inherits that
-  approximation. **Strong** control (the same bound under any mix of true
+  approximation (Winkler et al. 2014), so GLM p-values computed with
+  Freedman–Lane inherit that approximation (the argument does not extend to
+  other valid schemes a GLM could use). **Strong** control (the same bound under any mix of true
   and false nulls) needs more: the *joint* distribution of the true-null
   units' statistics must be the same whatever the other units are — subset
   pivotality (Westfall & Troendle 2008; Rempala & Yang 2013) — on top of a
@@ -410,8 +415,9 @@ Three design choices are embedded in the formula:
   and an edge-wise *t* by itself does not establish it for these statistics;
   for the TFNBS family an edge's enhanced score depends on its neighbours'
   statistics, and for ``nbs`` the unit is the component, so a significant
-  component is a claim about the set and never about each of its edges. The
-  package asserts strong control for none of its methods; read detections at
+  component is a claim about the set and never about each of its edges. No
+  unconditional guarantee of strong control is given for this max-statistic
+  path; read detections at
   ``result.inference_unit``, which ``component_report`` / ``component_table``
   and ``node_summary`` keep.
 - **Why the** ``+1``\ **?** The observed statistic is itself one admissible
@@ -479,8 +485,10 @@ and pairwise BH methods correct two-sided marginal p-values across eligible
 edges. Directional maps retain the p-value in the observed direction and 1
 in the opposite direction. :func:`~conninfpy.analysis.analyze` defaults to
 this two-sided family: one nominal α applies to the error measure of the
-chosen method — FWER for the max-statistic methods and ``bonferroni``, FDR
-for the BH variants — over both directions jointly, and only under that
+chosen method — FWER for the max-statistic methods and ``bonferroni``, and
+for ``cnbs`` with ``cnbs_correction='bonferroni'``; FDR for the BH variants
+and for ``cnbs`` with ``cnbs_correction='bh'`` — over both directions
+jointly, and only under that
 measure's premises (above). Its ``two_tailed=False`` keeps the legacy
 separate one-sided families, each corrected at the nominal α; two families
 at α = 0.05 do not promise a combined-direction FWER of 0.05 — for FWER,
