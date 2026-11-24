@@ -31,15 +31,12 @@ from pathlib import Path
 import numpy as np
 
 from conninfpy import AtlasInfo, analyze
-from examples.abide._shared.data import load_prepared, build_atlas
+from examples.abide._shared.data import add_prepared_cli, archive_result, build_atlas, describe_selection, load_selected
+from examples.abide.age._inference_cli import add_inference_cli, add_run_cli, describe_contract, resolve_n_perm, tfnbs_kwargs, write_metadata
 
 HERE = Path(__file__).resolve().parents[1]
 DATA_FILE = HERE / "results" / "abide_prepared.npz"
 OUT_DIR = HERE / "results" / "age"
-
-
-def _load(path: Path = DATA_FILE) -> dict:
-    return load_prepared(path)
 
 
 def _build_atlas(data: dict) -> AtlasInfo:
@@ -69,9 +66,12 @@ def run_variant(
     label: str,
     n_perm: int,
     seed: int,
+    tfnbs_n=None,
+    two_tailed: bool = True,
 ) -> None:
     print("\n" + "=" * 72)
     print(f"{label}: interest={interest_name}, confounds={confound_names}")
+    print(f"  {describe_contract(tfnbs_n, two_tailed)}, n_perm={n_perm}, seed={seed}")
     print(f"  harmonize='combat_site_dummies_glm' (Strategy D), site dummies in GLM")
     print("=" * 72)
 
@@ -93,7 +93,7 @@ def run_variant(
         harmonize="combat_site_dummies_glm",                   # Strategy D
         fisher_z=False,
         method="tfnbs",
-        e=0.4, h=3.0, n=10, start_thres=1.65,
+        **tfnbs_kwargs("tfnbs", tfnbs_n, two_tailed),   # 2.0.0: exact integration, one two-sided family
         n_permutations=n_perm,
         acceleration=None,
         rng=seed,
@@ -109,6 +109,20 @@ def run_variant(
         OUT_DIR / f"{label}.npz",
         positive=out.inference["positive"],
         negative=out.inference["negative"],
+        beta=np.asarray(getattr(out.inference, "beta")),
+        subject_ids=np.asarray(data.get("subject_ids", []), dtype=str),
+        roi_names=np.asarray([str(r) for r in data["roi_names"]]),
+    )
+    archive = archive_result(out, OUT_DIR, label)
+    print(f"  saved: {OUT_DIR / archive['bundle']} / {archive['result']}  "
+          f"(bundle_ok={archive['bundle_ok']}, result_ok={archive['result_ok']}, coupling_ok={archive['coupling_ok']})")
+    write_metadata(
+        OUT_DIR / f"{label}_meta.json", script=Path(__file__).name,
+        output=f"{label}.npz", method="tfnbs", interest=interest_name, confounds=confound_names,
+        harmonize="combat_site_dummies_glm", tfnbs_n=tfnbs_n, two_tailed=two_tailed,
+        n_permutations=n_perm, seed=seed, n_subjects=int(Y.shape[0]), n_rois=int(Y.shape[1]),
+        atlas=atlas.source, roi_names=list(data["roi_names"]), net_labels=list(map(int, data["net_labels"])),
+        archive=archive,
     )
     out.to_csv(
         OUT_DIR / f"{label}_edges.csv",
@@ -126,30 +140,35 @@ def main() -> int:
     ap.add_argument("--variant", choices=["age", "age_dx", "fd", "all"],
                     default="all")
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--data-file", type=Path, default=DATA_FILE)
-    ap.add_argument("--output", type=Path, default=OUT_DIR)
+    add_prepared_cli(ap, DATA_FILE)
+    add_run_cli(ap, OUT_DIR)
+    add_inference_cli(ap)
     args = ap.parse_args()
     OUT_DIR = args.output.resolve()
-    n_perm = 500 if args.quick else 5000
+    n_perm = resolve_n_perm(args)
 
-    data = _load(args.data_file)
+    data = load_selected(args)
     atlas = _build_atlas(data)
+    print(describe_selection(args, data))
 
     if args.variant in ("age", "all"):
         run_variant(data, atlas,
                     interest_name="age", confound_names=["sex", "mean_fd"],
-                    label="age_strategy_d", n_perm=n_perm, seed=args.seed)
+                    label="age_strategy_d", n_perm=n_perm, seed=args.seed,
+                    tfnbs_n=args.tfnbs_n, two_tailed=args.two_tailed)
     if args.variant in ("age_dx", "all"):
         run_variant(data, atlas,
                     interest_name="age",
                     confound_names=["sex", "mean_fd", "group"],
                     label="age_controlling_dx_strategy_d",
-                    n_perm=n_perm, seed=args.seed)
+                    n_perm=n_perm, seed=args.seed,
+                    tfnbs_n=args.tfnbs_n, two_tailed=args.two_tailed)
     if args.variant in ("fd", "all"):
         run_variant(data, atlas,
                     interest_name="mean_fd",
                     confound_names=["age", "sex", "group"],
-                    label="fd_strategy_d", n_perm=n_perm, seed=args.seed)
+                    label="fd_strategy_d", n_perm=n_perm, seed=args.seed,
+                    tfnbs_n=args.tfnbs_n, two_tailed=args.two_tailed)
     return 0
 
 

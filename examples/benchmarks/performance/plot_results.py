@@ -51,6 +51,7 @@ import pandas as pd
 
 
 DEFAULT_DIR = Path(__file__).resolve().parents[1] / "res_benchmarks"
+TIMING_DPI = 300   # timing_benchmark.png is exported at print resolution
 
 
 # -----------------------------------------------------------------------------
@@ -102,7 +103,7 @@ def plot_timing_benchmark(df: pd.DataFrame, out_path: Path) -> None:
     ax.grid(True, alpha=0.3, which="both")
 
     fig.tight_layout()
-    fig.savefig(out_path, dpi=120, bbox_inches="tight")
+    fig.savefig(out_path, dpi=TIMING_DPI, bbox_inches="tight")
     plt.close(fig)
 
 

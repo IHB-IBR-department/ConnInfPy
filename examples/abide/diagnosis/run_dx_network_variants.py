@@ -8,6 +8,7 @@ if __package__ in (None, ""):
 import numpy as np
 from pathlib import Path
 from conninfpy import AtlasInfo, analyze
+from examples.abide.age._inference_cli import describe_contract, write_metadata
 
 HERE = Path(__file__).resolve().parents[1]
 DATA_FILE = HERE / "results" / "abide_prepared.npz"
@@ -26,9 +27,12 @@ def run_variants():
     atlas = AtlasInfo(labels=[str(x) for x in data["roi_names"]], 
                       networks=[network_order[i] for i in net_labels.astype(int)])
 
+    # ConnInfPy 2.0.0 contract: exact integration (n=None), one two-sided family,
+    # missing connectivity per available case (never zero-imputed).
     common = dict(Y=Y, interest=group, confounds=confounds, sites=sites, 
                   harmonize="combat_site_dummies_glm", fisher_z=False, n_permutations=500, rng=42,
-                  e=0.4, h=3.0, n=10, start_thres=1.65)
+                  e=0.4, h=3.0, n=None, start_thres=1.65, two_tailed=True, missing="available_case")
+    print(f"  {describe_contract(None, True)}")
 
     # 1. NI-TFNBS
     print("Running NI-TFNBS...")
@@ -44,6 +48,14 @@ def run_variants():
     print("Running cNBS...")
     out = analyze(**common, method="cnbs", net_labels=net_labels)
     out.to_csv(OUT_DIR / "dx_cnbs_edges.csv", atlas=atlas)
+
+    write_metadata(
+        OUT_DIR / "dx_network_variants_meta.json", script=Path(__file__).name,
+        methods=["ni_tfnbs", "fbc_tfnbs", "cnbs"], contrast="ASD vs HC",
+        harmonize="combat_site_dummies_glm", e=0.4, h=3.0, n=None, start_thres=1.65,
+        tfnbs_n=None, two_tailed=True, n_permutations=500, seed=42,
+        n_subjects=int(Y.shape[0]), n_rois=int(Y.shape[1]),
+    )
 
 if __name__ == "__main__":
     run_variants()

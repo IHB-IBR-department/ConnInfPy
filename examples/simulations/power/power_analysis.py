@@ -219,7 +219,10 @@ def _score(p_upper: np.ndarray, alpha: float, planted: np.ndarray, leak: np.ndar
 # BATCHED WORKER — generates data once, computes all (e,h) variants at once
 # =============================================================================
 
-TFNBS_METHODS = {"tfnbs", "ni_tfnbs", "fbc_tfnbs"}
+TFNBS_METHODS = {"tfnbs", "ni_tfnbs", "fbc_tfnbs", "tfnbs_exact"}
+# ``tfnbs_exact`` is the ConnInfPy 2.0.0 exact-integration variant (n=None) of the
+# ``tfnbs`` cell; the legacy ``tfnbs`` entry keeps its configured grid.
+_COMPUTE_METHOD = {"tfnbs_exact": "tfnbs"}
 
 
 def run_single_power_test_batched(
@@ -293,7 +296,7 @@ def run_single_power_test_batched(
     planted, leak, realised = _truth_masks(dataset, triu_idx)
 
     results = []
-    method_key = method.split("_")[0] if method.startswith("nbs_") else method
+    method_key = "nbs" if method.startswith("nbs_") else _COMPUTE_METHOD.get(method, method)
 
     if method in TFNBS_METHODS and len(all_method_params) > 1:
         # BATCHED: collect all (e,h) pairs into lists for 3D mode
@@ -398,6 +401,7 @@ _BENCH_PERMS = 1000
 _TASK_SECS = {
     "tstat": 0.20,
     "tfnbs": 0.40,          # one (e,h) cell; add _TFNBS_SECS_PER_EH per extra cell
+    "tfnbs_exact": 0.40,    # exact integration, same (e,h) cell as tfnbs
     "ni_tfnbs": 0.63,
     "fbc_tfnbs": 0.64,
     "nbs_extent": 0.58,     # per threshold variant
@@ -567,7 +571,7 @@ def load_checkpoint(checkpoint_path: Path) -> Tuple[List[PowerResult], set]:
 def _format_method_params(method: str, method_kwargs: dict) -> str:
     if not method_kwargs:
         return ""
-    if method in {"tfnbs", "ni_tfnbs"}:
+    if method in {"tfnbs", "ni_tfnbs", "tfnbs_exact"}:
         keys = ("e", "h", "n", "start_thres")
     elif method == "fbc_tfnbs":
         keys = ("e", "h", "n", "start_thres", "min_cluster_size")
@@ -610,6 +614,8 @@ def get_method_configs(
     return {
         "tstat": {},
         "tfnbs": tfnbs_configs,
+        # 2.0.0 exact integration in the same (e, h) cells; overrides of ``n`` are ignored here.
+        "tfnbs_exact": [dict(cfg, n=None) for cfg in tfnbs_configs],
         "ni_tfnbs": tfnbs_configs,
         "fbc_tfnbs": fbc_configs,
         "nbs_extent": nbs_configs,

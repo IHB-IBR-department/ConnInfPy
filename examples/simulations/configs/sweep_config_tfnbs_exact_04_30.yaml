@@ -1,0 +1,118 @@
+# TFNBS Power Analysis — single-cell (E=0.4, H=3.0) exact-vs-grid parity configuration
+#
+# Companion to sweep_config_power_1000.yaml (the 176-cell (E,H) grid). Here the
+# TFNBS family runs ONE cell, (E=0.4, H=3.0, start_thres=1.65) = the ConnInfPy
+# 2.0.0 / empirical-analysis cell, so that
+#   tfnbs        — legacy 10-point threshold grid (n_thresholds: 10), and
+#   tfnbs_exact  — exact integration (n=None) in the same cell
+# are compared at parity with the parametric baselines and NBS. Both arms come
+# from the SAME simulated datasets (shared seed / repeats), so the only
+# difference is the TFNBS integration rule.
+#
+# Effect sizes are shifts of the population correlation on the planted edges
+# (Delta r), not Cohen's d (see sweep_config_power_1000.yaml). Power is scored
+# on the g2>g1 map at p <= alpha.
+#
+# Usage:
+#   python examples/simulations/power/power_analysis.py \
+#     --config examples/simulations/configs/sweep_config_tfnbs_exact_04_30.yaml --resume
+#   (add --mode effect-size or --mode sample-size to run one arm; --n-repeats N
+#    overrides the repeat count)
+
+# =============================================================================
+# EFFECT SIZE ANALYSIS
+# =============================================================================
+
+effect_sizes:
+  - 0.075   # Weak
+  - 0.125   # Moderate — key comparison point
+  - 0.25    # Strong
+
+n_samples: 30
+
+# =============================================================================
+# SAMPLE SIZE ANALYSIS
+# =============================================================================
+
+sample_sizes:
+  - 10
+  - 30
+  - 50
+  - 100
+
+effect_size: 0.125
+
+# =============================================================================
+# SCENARIOS — same 10 topologies as the 1000-perm sweep
+# =============================================================================
+
+scenarios:
+  - within_module_dense
+  - between_modules_dense
+  - partial_bipartite_between_modules
+  - gradient_core_periphery_within_module
+  - scattered_cross_block
+  - hub
+  - rich_club
+  - cross_block_connected_chain
+  - chain
+  - fragmented_within_module
+
+# =============================================================================
+# METHODS
+# =============================================================================
+
+methods:
+  - tstat
+  - bonferroni
+  - bh_fdr
+  - tfnbs            # legacy 10-point threshold grid in the (0.4, 3.0) cell
+  - tfnbs_exact      # exact integration (n=None) in the (0.4, 3.0) cell
+  - ni_tfnbs
+  - fbc_tfnbs
+  - nbs_extent_2.0
+  - nbs_intensity_2.0
+  - nbs_extent_3.0
+  - nbs_intensity_3.0
+  - cnbs
+
+# =============================================================================
+# TFNBS PARAMETERS — single cell (scalars, not lists: no batching axis)
+# =============================================================================
+
+tfnbs_options:
+  e: 0.4
+  h: 3.0
+  n_thresholds: 10       # legacy grid for tfnbs / ni_tfnbs / fbc_tfnbs; tfnbs_exact forces n=None
+  start_thres: 1.65
+  fbc_min_cluster_size: 3
+
+nbs_options:
+  threshold: [2.0, 3.0]
+
+# =============================================================================
+# SIMULATION
+# =============================================================================
+
+n_repeats: 100           # simulated datasets per (topology, effect size)
+n_permutations: 1000     # permutations per test
+alpha: 0.05
+
+# =============================================================================
+# NETWORK STRUCTURE (same as the 1000-perm sweep)
+# =============================================================================
+
+n_nodes: 60
+n_modules: 4
+intra_corr: 0.3
+inter_corr: 0.05
+noise_level: 0.05
+time_points: 30
+
+# =============================================================================
+# EXECUTION
+# =============================================================================
+
+seed: 42
+n_jobs: -1
+output_dir: ../results/power/power_tfnbs_exact_04_30

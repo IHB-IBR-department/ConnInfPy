@@ -52,7 +52,8 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 from conninfpy import analyze
-from examples.abide._shared.data import load_prepared
+from examples.abide._shared.data import add_prepared_cli, archive_result, build_atlas, describe_selection, load_selected
+from examples.abide.age._inference_cli import add_inference_cli, describe_contract, write_metadata
 
 HERE = Path(__file__).resolve().parents[1]
 DATA_FILE = HERE / "results" / "abide_prepared.npz"
@@ -67,10 +68,6 @@ PUBLISHED_DEFAULTS = {
     (0.50, 2.00): "Smith & Nichols 2009",
     (0.75, 3.00): "Baggio 2018",
 }
-
-
-def _load(path: Path = DATA_FILE) -> dict:
-    return load_prepared(path)
 
 
 def _pairwise(pmaps: np.ndarray, labels: list, alpha: float) -> tuple:
@@ -163,31 +160,38 @@ def _make_eh_panels(
         fontsize=14,
     )
     fig.tight_layout(rect=[0, 0, 1, 0.94])
-    fig.savefig(out_path, dpi=160, bbox_inches="tight")
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
 
 
 def main():
     global OUT_DIR
+    default_out = OUT_DIR.resolve()
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n-permutations", type=int, default=5000)
+    ap.add_argument("--n-permutations", "--n-perm", dest="n_permutations", type=int, default=5000)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--data-file", type=Path, default=DATA_FILE)
-    ap.add_argument("--output", type=Path, default=OUT_DIR)
+    ap.add_argument("--output", "--output-dir", dest="output", type=Path, default=OUT_DIR)
+    add_prepared_cli(ap, DATA_FILE)
+    add_inference_cli(ap)
     args = ap.parse_args()
     OUT_DIR = args.output.resolve()
     alpha = 0.05
+    print(f"{describe_contract(args.tfnbs_n, args.two_tailed)}, n_perm={args.n_permutations}, seed={args.seed}")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+    plot_dir = PLOTS_DIR if OUT_DIR == default_out else OUT_DIR
+    plot_dir.mkdir(parents=True, exist_ok=True)
 
-    data = _load(args.data_file)
+    data = load_selected(args)
+    atlas = build_atlas(data)
     Y = data["connectivity_z"]
+    print(describe_selection(args, data))
     confounds = np.column_stack([
         data["sex"].astype(float),
         data["mean_fd"].astype(float)
     ])
     net_labels = data["net_labels"]
+    roi_ids = list(map(str, data["roi_names"]))
     print(f"Loaded ABIDE: n={Y.shape[0]}, N={Y.shape[1]}")
 
     cells = list(product(E_GRID, H_GRID))
@@ -199,6 +203,7 @@ def main():
 
     methods = ["tfnbs", "ni_tfnbs", "fbc_tfnbs"]
     all_rows = []
+    archives = {}
 
     for mname in methods:
         print(f"\nRunning {mname} sweep ({K} cells) ...")
@@ -208,7 +213,9 @@ def main():
             Y, interest=data["age"].astype(float), confounds=confounds,
             sites=data["site"], harmonize="combat_site_dummies_glm",  # as the age map
             fisher_z=False, method=mname,
-            e=e_list, h=h_list, n=10, start_thres=1.65,
+            e=e_list, h=h_list, n=args.tfnbs_n, start_thres=1.65,
+            two_tailed=args.two_tailed, missing="available_case",
+            atlas=atlas, roi_ids=roi_ids,
             n_permutations=args.n_permutations, acceleration=None,
             rng=args.seed, use_mp=True,
             **kwargs
@@ -218,6 +225,9 @@ def main():
         neg = np.asarray(out.inference["negative"])
         np.savez_compressed(OUT_DIR / f"pmaps_{mname}.npz", positive=pos, negative=neg,
                             cells=np.array(labels))
+        archives[mname] = archive_result(out, OUT_DIR, f"eh_{mname}")   # grid result: bundle may be unsupported
+        print(f"  archive: bundle_ok={archives[mname]['bundle_ok']}, result_ok={archives[mname]['result_ok']}, "
+              f"coupling_ok={archives[mname]['coupling_ok']}")
 
         pos_edges, neg_edges = pos[iu], neg[iu]
         for k, (e, h) in enumerate(cells):
@@ -251,8 +261,18 @@ def main():
 
     df = pd.DataFrame(all_rows)
     df.to_csv(OUT_DIR / "grid_summary.csv", index=False)
+    write_metadata(
+        OUT_DIR / "grid_summary_meta.json", script=Path(__file__).name,
+        output="grid_summary.csv", interest="age", confounds=["sex", "mean_fd"],
+        harmonize="combat_site_dummies_glm", methods=methods,
+        E_grid=list(E_GRID), H_grid=list(H_GRID), start_thres=1.65,
+        tfnbs_n=args.tfnbs_n, two_tailed=args.two_tailed,
+        n_permutations=args.n_permutations, seed=args.seed, alpha=alpha, acceleration=None,
+        atlas=atlas.source, roi_names=roi_ids,
+        net_labels=list(map(int, data["net_labels"])), missing="available_case", archive=archives,
+    )
 
-    plot_path = PLOTS_DIR / "plot5_tfnbs_grid_sensitivity.png"
+    plot_path = plot_dir / "plot5_tfnbs_grid_sensitivity.png"
     _make_eh_panels(df, str(plot_path))
     print(f"\nFig saved: {plot_path}")
 

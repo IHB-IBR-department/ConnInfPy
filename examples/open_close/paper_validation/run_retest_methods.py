@@ -17,6 +17,12 @@ whose run-3 is incomplete; see openclose_loader docstring).
 
 Runtime: ~1–2 min per perm-based method × 6 methods ≈ 10 min total on
 M5 with use_mp=True at n_permutations=1000.
+
+ConnInfPy 2.0.0 contract: TFNBS-family selectors use exact integration
+(``--tfnbs-n none``) and every selector runs as one two-sided family
+(``--two-tailed``); ``--tfnbs-n 10 --one-tailed`` reproduces the legacy cell
+for the 2x2 control. The resolved parameters are written to
+``pmap_china_retest_<method>_meta.json`` next to every p-map.
 """
 from __future__ import annotations
 
@@ -36,19 +42,23 @@ import numpy as np
 from conninfpy import compute_p_val
 from examples.open_close._shared.data import OpenCloseDataset, DATA_DIR
 from examples.open_close._shared.paths import METHOD_MAPS
+from examples.open_close._shared.inference import (
+    TFNBS_200, add_inference_cli, apply_contract, describe_contract, write_metadata,
+)
 
 
 MAPS_DIR = METHOD_MAPS
 
-# Matches examples/open_close/ml_transfer/run_ml_feature_selection.py
+# Matches examples/open_close/ml_transfer/run_ml_feature_selection.py.
+# TFNBS entries carry the 2.0.0 cell; ``n`` and ``two_tailed`` are resolved from the CLI.
 SELECTORS = {
     "tstat":    dict(method="tstat"),
-    "tfnbs":    dict(method="tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65),
+    "tfnbs":    dict(method="tfnbs", **TFNBS_200),
     "nbs_20":   dict(method="nbs", threshold=2.0),
     "nbs_30":   dict(method="nbs", threshold=3.0),
     "cnbs":     dict(method="cnbs"),
-    "ni_tfnbs": dict(method="ni_tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65),
-    "fbc_tfnbs":dict(method="fbc_tfnbs", e=0.4, h=3.0, n=10, start_thres=1.65),
+    "ni_tfnbs": dict(method="ni_tfnbs", **TFNBS_200),
+    "fbc_tfnbs":dict(method="fbc_tfnbs", **TFNBS_200),
     "bh_fdr":   dict(method="bh_fdr"),
 }
 
@@ -61,10 +71,19 @@ def main() -> None:
     ap.add_argument("--methods", nargs="+", default=list(SELECTORS.keys()))
     ap.add_argument("--data-dir", type=Path, default=DATA_DIR)
     ap.add_argument("--output", type=Path, default=MAPS_DIR)
+    add_inference_cli(ap)
     args = ap.parse_args()
     MAPS_DIR = args.output.resolve()
 
     MAPS_DIR.mkdir(parents=True, exist_ok=True)
+    write_metadata(
+        MAPS_DIR / "pmap_china_retest_meta.json", script=Path(__file__).name,
+        contrast="china close run0 vs run1 (paired)", methods=args.methods,
+        n_permutations=args.n_permutations, seed=args.seed,
+        tfnbs_e=TFNBS_200["e"], tfnbs_h=TFNBS_200["h"], tfnbs_start_thres=TFNBS_200["start_thres"],
+        tfnbs_n=args.tfnbs_n, two_tailed=args.two_tailed,
+    )
+    print(f"{describe_contract(args.tfnbs_n, args.two_tailed)}")
 
     ds = OpenCloseDataset.load("china", data_dir=args.data_dir)
     mask = ds.retest_subject_mask()
@@ -81,7 +100,7 @@ def main() -> None:
         if name not in SELECTORS:
             print(f"skip unknown method: {name}")
             continue
-        kwargs = dict(SELECTORS[name])
+        kwargs = apply_contract(SELECTORS[name], args.tfnbs_n, args.two_tailed)
         if kwargs["method"] in ("cnbs", "ni_tfnbs", "fbc_tfnbs"):
             kwargs["net_labels"] = net_labels
 
@@ -104,6 +123,14 @@ def main() -> None:
 
         out_path = MAPS_DIR / f"pmap_china_retest_{name}.npz"
         np.savez(out_path, **{k: p[k] for k in p})
+        write_metadata(
+            MAPS_DIR / f"pmap_china_retest_{name}_meta.json", script=Path(__file__).name,
+            output=out_path.name,
+            kwargs={k: v for k, v in kwargs.items() if k != "net_labels"},
+            tfnbs_n=args.tfnbs_n, two_tailed=args.two_tailed,
+            n_permutations=args.n_permutations, seed=args.seed, test_type="paired",
+            n_paired=int(c0.shape[0]), n_rois=int(c0.shape[1]),
+        )
         print(f"    saved: {out_path}")
 
 

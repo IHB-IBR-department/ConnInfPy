@@ -1,0 +1,78 @@
+# GLM Validation - ConnInfPy 2.0.0 Paper Configuration
+#
+# Same grid as glm_config_1000.yaml (which stays untouched as the legacy
+# n=50 / per-tail record), calibrated to the 2.0.0 inference contract:   - exact TFNBS integration inside the permutation loop (tfnbs_n: null),
+#   - one two-sided family against the joint max-null (two_tailed: true),
+#   - e=0.4, h=3.0, start_thres=1.65 (package defaults), 1000 permutations.
+# `resume: true` makes every invocation skip cells already in the per-run
+# checkpoint / results CSV, so an interrupted overnight run simply continues.
+#
+# Usage:
+#   python examples/simulations/glm/glm_validation.py \
+#     --config examples/simulations/configs/glm_config_2_0_1000.yaml
+#   (override with --mode calibration, --one-tailed, --tfnbs-n 10, ...)
+
+mode: all
+
+# Methods: the GLM pipeline (compute_p_val_glm) has no parametric bonferroni / bh_fdr
+# baselines (they exist only in compute_p_val / fpr_calibration); the four NBS
+# threshold variants complete the comparison set.
+methods:
+  - tstat
+  - tfnbs
+  - ni_tfnbs
+  - fbc_tfnbs
+  - nbs_extent_2.0
+  - nbs_intensity_2.0
+  - nbs_extent_3.0
+  - nbs_intensity_3.0
+  - cnbs
+
+# Null FWER calibration
+n_null: 1000
+sample_sizes: [30, 60, 100]
+
+# Continuous-covariate power
+n_repeats: 30
+n_subjects: 60
+effect_sizes: [0.10, 0.20, 0.30]
+scenarios:
+  - within_module_dense
+  - between_modules_dense
+  - hub
+  - chain
+  - scattered_cross_block
+
+# Inference
+n_permutations: 1000
+alpha: 0.05
+n_jobs: -1
+use_mp: false
+seed: 42
+resume: true
+checkpoint_every: 100   # rows per atomic checkpoint part file (270 parts for the full run)
+
+# Network/data generation
+n_nodes: 60
+n_modules: 4
+time_points: 30
+intra_corr: 0.3
+inter_corr: 0.05
+uniform_corr: 0.15
+noise_level: 0.05
+
+# GLM covariates
+interest_confound_corr: 0.3
+confound_effect_size: 0.15
+confound_scenario: between_modules_dense
+
+# Method parameters: ConnInfPy 2.0.0 defaults (exact integration, two-sided family)
+tfnbs_e: 0.4
+tfnbs_h: 3.0
+tfnbs_n: null
+tfnbs_start_thres: 1.65
+nbs_threshold: 2.0
+fbc_min_cluster: 3
+two_tailed: true
+
+output_dir: ../results/glm/glm_validation_2_0_1000

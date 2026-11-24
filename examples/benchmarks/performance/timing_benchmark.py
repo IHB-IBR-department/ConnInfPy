@@ -7,9 +7,14 @@ if __package__ in (None, ""):
 from examples._shared.paths import ROOT, config_path
 
 import argparse
+import json
+import os
+import platform
+import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -26,6 +31,12 @@ ALL_METHODS = [
     "tfnbs",
     "nbs",
     "glm_tfnbs",
+]
+# Legacy 10-point threshold-grid rows (``--include-n10``) so exact-vs-grid speed is
+# directly visible next to the 2.0.0 exact rows.
+N10_METHODS = [
+    "tfnbs_n10",
+    "glm_tfnbs_n10",
 ]
 
 
@@ -48,16 +59,25 @@ def _generate_glm_data(n_nodes: int, n_samples: int, topology: str = "within_mod
 # Map user-facing method names to compute_p_val method + extra kwargs
 METHOD_TO_API = {
     "tfnbs": "tfnbs",
+    "tfnbs_n10": "tfnbs",
     "nbs": "nbs",
     "glm_tfnbs": "tfnbs",
+    "glm_tfnbs_n10": "tfnbs",
 }
+
+# ConnInfPy 2.0.0 TFNBS defaults: exact integration (n=None) inside the
+# permutation loop. (Before 2.0.0 this benchmark timed e=0.5, h=2.0, n=30,
+# start_thres=1.25.)
+TFNBS_200_DEFAULTS = {"e": 0.4, "h": 3.0, "n": None, "start_thres": 1.65}
 
 
 def _get_method_kwargs(method: str):
     """Return extra kwargs for compute_p_val / compute_p_val_glm."""
     kw = {}
     if "tfnbs" in method:
-        kw.update(e=0.5, h=2.0, n=30, start_thres=1.25)
+        kw.update(TFNBS_200_DEFAULTS)
+        if method.endswith("_n10"):
+            kw["n"] = 10          # legacy grid, for the exact-vs-grid comparison
     if "nbs" in method and "tfnbs" not in method:
         kw["threshold"] = 2.0
         kw["nbs_stat"] = "extent"
@@ -76,12 +96,13 @@ def time_method(
     api_method = METHOD_TO_API[method]
     kw = _get_method_kwargs(method)
 
-    if method == "glm_tfnbs":
+    if method.startswith("glm_tfnbs"):
         Y, age = _generate_glm_data(n_nodes, n_samples, topology=topology, seed=seed)
         t0 = time.perf_counter()
         compute_p_val_glm(
             Y, interest=age,
             n_permutations=n_perms,
+            two_tailed=True,                 # 2.0.0 contract (joint max-null)
             method=api_method,
             use_mp=False,
             rng=seed,
@@ -94,6 +115,7 @@ def time_method(
         compute_p_val(
             group1, group2,
             n_permutations=n_perms,
+            two_tailed=True,                 # 2.0.0 contract (joint max-null)
             test_type="two-sample",
             method=api_method,
             use_mp=False,
@@ -101,6 +123,73 @@ def time_method(
             **kw,
         )
         return time.perf_counter() - t0
+
+
+# ── JIT warm-up ────────────────────────────────────────────────────────────────
+
+WARM_UP_PERMS = 3
+
+
+def warm_up(method: str, n_nodes: int, n_samples: int, topology: str = "within_module_dense",
+            seed: int = 42) -> None:
+    """Untimed call that compiles the numba kernels for THIS method.
+
+    The exact (``n=None``) and the grid (``n=10``) TFNBS paths compile different
+    specialisations, so every method row is warmed separately before timing;
+    without this the first ``tfnbs`` row carried ~0.7 s of JIT in a ~5 ms run.
+    """
+    time_method(method, n_nodes, n_samples, WARM_UP_PERMS, topology=topology, seed=seed)
+
+
+# ── hardware / provenance metadata ────────────────────────────────────────────
+
+def _git_sha() -> str:
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True, cwd=str(ROOT),
+        ).stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+def _cpu_brand() -> str:
+    try:   # macOS
+        out = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        if out:
+            return out
+    except Exception:
+        pass
+    return platform.processor() or platform.machine()
+
+
+def _ram_gb() -> float:
+    try:
+        import psutil
+        return round(psutil.virtual_memory().total / 1024**3, 1)
+    except Exception:
+        try:
+            return round(int(subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True,
+                                            text=True, check=True).stdout.strip()) / 1024**3, 1)
+        except Exception:
+            return float("nan")
+
+
+def hardware_metadata() -> dict:
+    """Machine + software context, recorded in every timing row and a companion JSON."""
+    try:
+        import numba
+        numba_version = numba.__version__
+    except Exception:
+        numba_version = None
+    return {
+        "cpu_brand": _cpu_brand(),
+        "n_cores": os.cpu_count(),
+        "ram_gb": _ram_gb(),
+        "git_sha": _git_sha(),
+        "python_version": platform.python_version(),
+        "numba_version": numba_version,
+    }
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -113,8 +202,10 @@ def run_benchmark(
     n_samples: int = 30,
     repeats: int = 3,
     seed: int = 42,
+    hw: Optional[dict] = None,
 ):
     """Run the full timing benchmark and return a DataFrame."""
+    hw = hw or {}
     rows = []
     total_tasks = (
         len(n_nodes_list) * len(n_perms_list) * len(methods) * len(topologies) * repeats
@@ -134,6 +225,7 @@ def run_benchmark(
                 print(f"  {'-'*64}")
 
                 for method in methods:
+                    warm_up(method, n_nodes, n_samples, topology=topology, seed=seed)   # untimed
                     times = []
                     for r in range(repeats):
                         t = time_method(method, n_nodes, n_samples, n_perms, topology=topology, seed=seed + r)
@@ -164,6 +256,12 @@ def run_benchmark(
                         "per_perm_ms": round(per_perm_ms, 4),
                         "per_edge_perm_us": round(per_edge_perm_us, 4),
                         "repeats": repeats,
+                        "two_tailed": True,
+                        "warm_up_perms": WARM_UP_PERMS,
+                        "tfnbs_e": TFNBS_200_DEFAULTS["e"] if "tfnbs" in method else None,
+                        "tfnbs_h": TFNBS_200_DEFAULTS["h"] if "tfnbs" in method else None,
+                        "tfnbs_n": (10 if method.endswith("_n10") else None) if "tfnbs" in method else None,
+                        **hw,
                     })
 
     return pd.DataFrame(rows)
@@ -282,12 +380,24 @@ def main():
         "--seed", type=int, default=42,
         help="Random seed (default: 42)",
     )
+    parser.add_argument(
+        "--include-n10", action="store_true",
+        help=f"Also time the legacy 10-point TFNBS threshold grid ({N10_METHODS}) "
+             f"next to the 2.0.0 exact rows.",
+    )
     args = parser.parse_args()
+    methods = list(args.methods)
+    if args.include_n10:
+        methods += [m for m in N10_METHODS if m not in methods]
 
+    hw = hardware_metadata()
     print("ConnInfPy Timing Benchmark")
+    print(f"  machine:    {hw['cpu_brand']}, {hw['n_cores']} cores, {hw['ram_gb']} GB RAM, "
+          f"python {hw['python_version']}, numba {hw['numba_version']}, git {hw['git_sha'][:12]}")
+    print(f"  tfnbs:      {TFNBS_200_DEFAULTS}")
     print(f"  n_nodes:    {args.n_nodes}")
     print(f"  n_perms:    {args.n_perms}")
-    print(f"  methods:    {args.methods}")
+    print(f"  methods:    {methods}")
     print(f"  topologies: {args.topologies}")
     print(f"  n_samples:  {args.n_samples}")
     print(f"  repeats:    {args.repeats}")
@@ -295,11 +405,12 @@ def main():
     df = run_benchmark(
         n_nodes_list=args.n_nodes,
         n_perms_list=args.n_perms,
-        methods=args.methods,
+        methods=methods,
         topologies=args.topologies,
         n_samples=args.n_samples,
         repeats=args.repeats,
         seed=args.seed,
+        hw=hw,
     )
 
     print_summary_table(df)
@@ -308,7 +419,23 @@ def main():
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(out_path, index=False)
+        meta_path = out_path.with_name(out_path.stem + "_meta.json")
+        meta_path.write_text(json.dumps(
+            {
+                **hw,
+                "platform": platform.platform(),
+                "numpy_version": np.__version__,
+                "pandas_version": pd.__version__,
+                "tfnbs_defaults": TFNBS_200_DEFAULTS,
+                "two_tailed": True,
+                "warm_up_perms": WARM_UP_PERMS,
+                "args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
+                "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            },
+            indent=2, default=str,
+        ))
         print(f"\nResults saved to {out_path}")
+        print(f"Hardware metadata saved to {meta_path}")
 
 
 if __name__ == "__main__":

@@ -182,6 +182,12 @@ class FPRConfig:
         if nbs_kwargs is not None:
             return nbs_kwargs
 
+        if method == "tfnbs_exact":
+            # ConnInfPy 2.0.0 exact-integration TFNBS in the same (e, h, start_thres)
+            # cell as ``tfnbs``; the legacy ``tfnbs`` entry keeps its ``tfnbs_n`` grid.
+            return {"e": self.tfnbs_e, "h": self.tfnbs_h, "n": None,
+                    "start_thres": self.tfnbs_start_thres}
+
         configs = {
             "tstat": {},
             "tfnbs": {
@@ -211,6 +217,8 @@ class FPRConfig:
 
     def get_compute_method(self, method: str) -> str:
         """Map display method name to compute_p_val method name."""
+        if method == "tfnbs_exact":
+            return "tfnbs"
         if self._parse_nbs_method(method) is not None:
             return "nbs"
         return method
@@ -586,7 +594,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument(
         "--methods", nargs="+", default=None,
-        help="Methods to test (overrides config)",
+        help="Methods to test (overrides config). 'tfnbs_exact' = exact-integration "
+             "TFNBS (ConnInfPy 2.0.0, same e/h cell as 'tfnbs'); nbs_extent_2.0 / "
+             "nbs_intensity_2.0 / *_3.0 select the NBS threshold by suffix.",
     )
     parser.add_argument(
         "--alpha", type=float, default=None,
