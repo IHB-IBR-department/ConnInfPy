@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "generated_by": "NETSTAT-48 writer (data package + spike); no public API in this change",
+ "generated_by": "data packaging: label tables, NIfTI maps and this provenance record; no public API uses these files in this release",
  "generated_with": {
   "python": "3.12.14",
   "nibabel": "5.4.2",
@@ -16,7 +16,7 @@
   "citation": "Diedrichsen J, Zhi D, Nettekoven C. A collection of Atlasses for the human cerebellum, v1.2 (CITATION.cff)",
   "template_space_space-MNI": {
    "declared": "MNI152NLin6AsymC (cerebellar-only crop of the FSL MNI152NLin6Asym template), README at the pinned commit",
-   "verification": "header/grid geometry only; template-image identity NOT independently verified in NETSTAT-48"
+   "verification": "header/grid geometry only; template-image identity NOT independently verified"
   },
   "files": {
    "atl-Anatom_space-MNI_dseg.nii.gz": {
@@ -604,6 +604,6 @@
  "notes": [
   "Buckner maps are int8 (labels fit in int8), qform_code=0 with sform_code=2; qform and sform agree; xyzt_units code 0 (zooms 1.0 read as mm by convention).",
   "NettekovenSym32 shares the Diedrichsen grid (153x103x84, LAS); Buckner grid is 141x95x87, RAS.",
-  "This file records data provenance and spike facts only; the optional composite layer and its ID offset are NOT decided here (owner review pending)."
+  "This file records data provenance and the measured grid/overlap facts only; no composite layer with the Brainnetome atlas is implemented in this release and no region-ID offset is assigned here."
  ]
 }

@@ -368,6 +368,17 @@ non-commercial use with attribution and share-alike (see
 `conninfpy/atlas_data/NOTICE_BRAINNETOME.txt`); the MIT licence covers the
 code only.
 
+The package also bundles the DiedrichsenLab cerebellar atlases v1.2 as data
+resources: label tables and NIfTI maps for `atl-Anatom` (Diedrichsen 2009),
+`atl-Buckner7` / `atl-Buckner17` (Buckner 2011) and `atl-NettekovenSym32`
+(Nettekoven 2024). Their voxel grids lie on the same 1 mm lattice as the
+Brainnetome map (integer-lattice coincidence, no resampling), and the upstream
+release notes declare the collection CC-BY. Sources, SHA256 hashes, per-file
+licence notes and the measured overlap with the Brainnetome map are recorded in
+`conninfpy/atlas_data/cerebellar_atlases_provenance.json` (template identity
+itself was not independently verified). No atlas-combining layer is implemented
+in this release: `analyze()` and `AtlasInfo` do not use these files yet.
+
 ## Advanced API
 
 `analyze()` is built from public modules you can use directly:
@@ -383,7 +394,7 @@ code only.
 | `conninfpy.interpret` | Brainnetome annotation (`annotate_rois`, `interpret_result`) and the descriptive motion / QC–FC diagnostics (`motion_qc_fc`, `motion_qc_fc_paired`) |
 | `conninfpy.loaders` | Manifest-based loading (`load`, `ManifestLoader`) and the bundled loaders |
 | `conninfpy.sim` | Synthetic connectivity with planted effects and the 20 topology scenarios |
-| `conninfpy.plot` | Figures |
+| `conninfpy.plot` | Figures: `summary_figure`, `plot_network_summary`, `plot_connectogram` and the descriptive `plot_coupling_classes` matrix |
 
 Worked examples for each are in the
 [usage guide](https://IHB-IBR-department.github.io/ConnInfPy/usage.html).
