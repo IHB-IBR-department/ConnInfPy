@@ -102,6 +102,25 @@ def _markers(ax: Axes):
     return out
 
 
+def _contour_points(ax: Axes) -> np.ndarray:
+    """Vertices of every non-scatter collection, i.e. of the alpha contour."""
+    chunks = []
+    for coll in ax.collections:
+        if coll.get_label() == "homotopy pair (BNA homolog_id)":
+            continue
+        for path in coll.get_paths():
+            vertices = np.asarray(path.vertices, dtype=float)
+            if vertices.size:
+                chunks.append(vertices)
+    if not chunks:
+        return np.empty((0, 2), dtype=float)
+    return np.vstack(chunks)
+
+
+#: The descriptive scope of the colour matrix, independent of ``alpha``.
+MATRIX_SCOPE = "descriptive coupling classes of cells with available predicted profiles"
+
+
 def _atlas(ids, n: int) -> AtlasInfo:
     ids = np.asarray(ids, dtype=np.int64)
     assert len(ids) == n
@@ -220,18 +239,72 @@ def test_unit_specific_overlay_wording(method, unit):
     ax = plot_coupling_classes(res, alpha=0.05)
     assert ax.attrs["inference_unit"] == unit
     assert ax.attrs["descriptive"] is True
-    assert ax.attrs["applies_to"] == f"edges of the detected {unit}s"
+    assert ax.attrs["applies_to"] == MATRIX_SCOPE
+    assert "detected" not in ax.attrs["applies_to"]
+    contour = ax.attrs["contour"]
+    assert contour["applies_to"] == f"edges of the detected {unit}s"
+    assert contour["alpha"] == 0.05
     legend = _legend(ax)
     assert any(f"edges of detected {unit}s" in text for text in legend)
     assert not any("significant edges" in text for text in legend)
     assert any("α=0.05" in text for text in legend)
+    assert contour["label"] in legend
+
+
+@pytest.mark.parametrize("method, unit", [("nbs", "component"), ("cnbs", "block")])
+def test_no_alpha_colours_matrix_without_contour(method, unit):
+    """alpha=None: the class matrix is drawn, but there is no contour."""
+    res = _synthetic_result(method=method)
+    ax = plot_coupling_classes(res)
+    codes = _codes(ax)
+    off_diagonal = ~np.eye(codes.shape[0], dtype=bool)
+    painted = (codes >= 0) & off_diagonal
+    assert painted.sum() >= 6  # several painted classes, no alpha involved
+    assert np.all(np.isfinite(codes[painted]))
+    assert _contour_points(ax).shape[0] == 0  # no atlas -> no collections at all
+    legend = _legend(ax)
+    assert not any("α=" in text for text in legend)
+    assert not any("detected" in text for text in legend)
+    assert ax.attrs["inference_unit"] == unit  # unit record, not a detection claim
+    assert ax.attrs["contour"] is None
+    assert ax.attrs["applies_to"] == MATRIX_SCOPE
+    assert "detected" not in ax.attrs["applies_to"]
+
+
+@pytest.mark.parametrize("method, unit", [("nbs", "component"), ("cnbs", "block")])
+def test_contour_scope_differs_from_matrix_scope(method, unit):
+    """alpha=0.05: contour covers the significant edge, the matrix does not."""
+    res = _synthetic_result(method=method, p_sig_edges=[(2, 3)])
+    ax = plot_coupling_classes(res, alpha=0.05)
+    codes = _codes(ax)
+    # a non-significant but classified cell stays painted, outside the contour
+    assert np.isfinite(codes[0, 1]) and np.isfinite(codes[1, 0])
+    assert np.isfinite(codes[2, 3]) and np.isfinite(codes[3, 2])
+    points = _contour_points(ax)
+    assert points.shape[0] > 0  # the overlay contour is drawn
+    # imshow coordinates: x = column index, y = row index
+    centres = np.array([[3.0, 2.0], [2.0, 3.0]])  # cells (2, 3) and (3, 2)
+    distances = np.linalg.norm(points[:, None, :] - centres[None, :, :], axis=2)
+    assert distances.min(axis=1).max() <= 1.0  # all vertices hug (2, 3)/(3, 2)
+    corners = np.array([[1.0, 0.0], [0.0, 1.0]])  # cells (0, 1) and (1, 0)
+    far = np.linalg.norm(points[:, None, :] - corners[None, :, :], axis=2)
+    assert far.min() > 1.0  # nothing is outlined around the painted (0, 1) cell
+    assert ax.attrs["applies_to"] == MATRIX_SCOPE
+    contour = ax.attrs["contour"]
+    assert contour["applies_to"] == f"edges of the detected {unit}s"
+    assert contour["alpha"] == 0.05
+    legend = _legend(ax)
+    assert any(f"edges of detected {unit}s" in text for text in legend)
+    assert not any("significant edges" in text for text in legend)
 
 
 def test_edge_unit_overlay_says_significant_edges():
     res = _synthetic_result(p_sig_edges=[(2, 3)])
     ax = plot_coupling_classes(res, alpha=0.05)
     assert ax.attrs["inference_unit"] == "edge"
-    assert ax.attrs["applies_to"] == "edge"
+    assert ax.attrs["applies_to"] == MATRIX_SCOPE
+    assert ax.attrs["contour"]["applies_to"] == "significant edges"
+    assert ax.attrs["contour"]["alpha"] == 0.05
     legend = _legend(ax)
     assert any(text.startswith("significant edges (") for text in legend)
     assert not any("detected" in text for text in legend)
@@ -240,6 +313,8 @@ def test_edge_unit_overlay_says_significant_edges():
 
     fig, existing = plt.subplots()
     assert plot_coupling_classes(res, ax=existing) is existing
+    assert existing.attrs["contour"] is None  # no alpha -> explicitly no contour
+    assert existing.attrs["applies_to"] == MATRIX_SCOPE
     plt.close(fig)
 
 

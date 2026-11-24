@@ -101,12 +101,17 @@ def plot_coupling_classes(
 ) -> Axes:
     """Categorical heatmap of how coupling changes between two profiles.
 
-    The matrix is a descriptive map of the class each tested edge falls in
-    (see :data:`conninfpy.stats._estimates.COUPLING_CLASSES`), taken
-    verbatim from :meth:`conninfpy.InferenceResult.coupling` — this helper
-    classifies nothing itself. The plot is symmetric and drawn in full; the
-    diagonal is masked. Classes are descriptive labels on the recorded
-    scale, not evidence of significance.
+    The matrix is descriptive and covers every cell whose two predicted
+    profiles are both available: the class of a cell is the class of its
+    ``a`` → ``b`` change at the recorded scale, computed from
+    ``result.predicted()`` for the two profiles and taken verbatim from
+    :meth:`conninfpy.InferenceResult.coupling` (see
+    :data:`conninfpy.stats._estimates.COUPLING_CLASSES`) — this helper
+    classifies nothing itself. A NaN in either predicted profile leaves the
+    cell without a class, drawn as the neutral ``'missing'`` category. The
+    plot is symmetric and drawn in full; the diagonal is masked. Classes are
+    descriptive labels on the recorded scale, not evidence of significance,
+    and the colour matrix stays fully descriptive at any ``alpha``.
 
     Homotopy pairs are marked from BNA metadata only: with an atlas that
     carries ``label_ids`` (BNA ``roi_id`` per matrix row) and a
@@ -135,12 +140,17 @@ def plot_coupling_classes(
         Source of ``homolog_id``. Requires ``atlas.label_ids``; otherwise
         every pair is unknown.
     alpha : float, optional
-        If given, overlay the edges returned by
+        If given, outline the edges returned by
         ``result.significant_edges(alpha=alpha, tail='both')``. For an
         edge-level result these are significant edges; for ``nbs`` /
         ``cnbs`` results they are the edges of the detected components /
-        blocks, and the legend says exactly that. No new threshold,
-        p-value or edge discovery is introduced here.
+        blocks, and the legend says exactly that. The contour bounds the
+        overlay only; the colour matrix keeps its descriptive meaning. No
+        new threshold, p-value or edge discovery is introduced here, and the
+        contour is not a joint detection claim: as noted for
+        :meth:`InferenceResult.significant_edges`, with separate one-sided
+        families filtering both tails at ``alpha`` does not imply joint FWER
+        at ``alpha``.
     ax : matplotlib Axes, optional
         Plot into this axis; otherwise a new ``(5.6, 5.0)`` figure is
         created.
@@ -153,9 +163,14 @@ def plot_coupling_classes(
         The axis, carrying ``attrs``:
 
         ``descriptive`` (True), ``inference_unit`` (``result.inference_unit``),
-        ``applies_to`` (``'edge'`` or ``'edges of the detected
-        components|blocks'``), ``homology`` (``'bna homolog_id'`` or
-        ``'unknown'``), and the descriptive extras ``homotopy_pairs``,
+        ``applies_to`` (always the scope of the colour matrix:
+        ``'descriptive coupling classes of cells with available predicted
+        profiles'``), ``contour`` (``None`` when ``alpha`` is ``None`` -
+        no contour is drawn; otherwise a dict with ``'applies_to'``
+        (``'significant edges'`` for edge results, else ``'edges of the
+        detected components|blocks'``), ``'alpha'`` (float) and ``'label'``
+        (the legend text of the overlay)), ``homology`` (``'bna homolog_id'``
+        or ``'unknown'``), and the descriptive extras ``homotopy_pairs``,
         ``homology_unknown_rois``, ``profiles``, ``near_zero``, ``alpha``.
 
         The legend lists the class strings present in the matrix in
@@ -222,7 +237,7 @@ def plot_coupling_classes(
 
     # ---------------------------------------------------------------- overlay
     unit = str(result.inference_unit)
-    applies_to = "edge" if unit == "edge" else f"edges of the detected {unit}s"
+    contour: Optional[Dict[str, Any]] = None
     overlay_label = None
     if alpha is not None:
         overlay_label = (
@@ -230,6 +245,15 @@ def plot_coupling_classes(
             if unit == "edge"
             else f"edges of detected {unit}s (α={alpha:g})"
         )
+        contour = {
+            "applies_to": (
+                "significant edges"
+                if unit == "edge"
+                else f"edges of the detected {unit}s"
+            ),
+            "alpha": float(alpha),
+            "label": overlay_label,
+        }
         edges = result.significant_edges(alpha=float(alpha), tail="both")
         overlay = np.zeros((N, N), dtype=bool)
         if len(edges):
@@ -334,7 +358,8 @@ def plot_coupling_classes(
     metadata = {
         "descriptive": True,
         "inference_unit": unit,
-        "applies_to": applies_to,
+        "applies_to": "descriptive coupling classes of cells with available predicted profiles",
+        "contour": contour,
         "homology": homology,
         "homotopy_pairs": pairs,
         "homology_unknown_rois": unknown_rois,
