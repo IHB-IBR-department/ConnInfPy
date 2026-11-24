@@ -116,6 +116,12 @@ class TestRoiAnnotation(unittest.TestCase):
         r = annotate_rois([POINTS["L dlPFC"]], reference=self.ref, support="sphere", radius_mm=6,
                           space="MNI152NLin2009cAsym").table.iloc[0]
         self.assertIn("approximate space", r["flags"])
+        # the offset between template grids is not quantified, so no number is promised
+        self.assertNotIn("1-3", r["flags"])
+        self.assertIn("unquantified", r["flags"])
+        exact = annotate_rois([POINTS["L dlPFC"]], reference=self.ref, support="sphere", radius_mm=6,
+                              space="MNI152NLin6Asym").table.iloc[0]
+        self.assertNotIn("approximate space", exact["flags"])
 
     def test_profiles_are_listed_not_combined(self):
         ref = _reference()

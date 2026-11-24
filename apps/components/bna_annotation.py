@@ -30,6 +30,13 @@ _SPACES = {
     "MNI152NLin2009cAsym": "fMRIPrep MNI152NLin2009cAsym",
 }
 
+# No numeric accuracy is promised: the offset between template grids is not
+# quantified by the atlas, so every other MNI variant is only flagged approximate.
+_SPACE_HELP = (
+    "FSL MNI152 is the atlas's own grid (exact); other MNI variants differ from that grid by an "
+    "unquantified amount and every ROI is flagged approximate. Ignored for Brainnetome regions."
+)
+
 
 @st.cache_resource(show_spinner=False)
 def _reference():
@@ -101,8 +108,7 @@ def render_bna_annotation_view(base_atlas):
         space = st.selectbox(
             "Template the signals were extracted in", list(_SPACES), format_func=_SPACES.get,
             index=list(_SPACES).index(saved.get("space", "MNI152")),
-            help="FSL MNI152 is the atlas's own grid (exact); other MNI variants differ by about 1-3 mm and "
-                 "every ROI is flagged approximate. Ignored for Brainnetome regions.",
+            help=_SPACE_HELP,
             key=persistent_key('annotation:template_the_signals_were_extracted_in', scope='annotation', options=list(_SPACES)),
         )
         c4, c5 = st.columns(2)
@@ -170,7 +176,11 @@ def render_bna_annotation_view(base_atlas):
             "are unchanged. No enrichment test is performed."
         )
         st.caption(unit_ctx["roi_selection_rule"])
-        if st.session_state.evidence_packet is not None:
+        packet = st.session_state.evidence_packet
+        restriction = ((packet or {}).get("query") or {}).get("roi_restriction") or {}
+        if restriction.get("statement"):
+            st.caption(restriction["statement"])
+        if packet is not None:
             st.info(describe_coverage(st.session_state.evidence_packet)["report_sentence"])
         elif detected.empty:
             st.info("No detected connections at this threshold. The analysis is complete.")

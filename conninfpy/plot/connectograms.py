@@ -407,10 +407,12 @@ def plot_connectogram(
         f"{n_low} below min_coverage), each {how} (Brainnetome {level})"
     )
     n_det = coverage.get("detected_total", 0)
-    text = f"{place}; no detected connections"
+    unit = coverage.get("inference_unit", "edge")
+    unit_note = "" if unit == "edge" else f" (member edges of detected {unit}s)"
+    text = f"{place}{unit_note}; no detected connections"
     if n_det:
         text = (
-            f"{place}; {len(links)} chord{'s' if len(links) != 1 else ''} ≥ "
+            f"{place}{unit_note}; {len(links)} chord{'s' if len(links) != 1 else ''} ≥ "
             f"{min_weight:g} connection carry "
             f"{shown:.0f} of {n_det} detected connections ({shown / n_det:.0%})"
         )

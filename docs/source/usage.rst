@@ -886,9 +886,11 @@ distance check, evidence packet, connectograms):
   ``space`` defaults to it (``'MNI152NLin6Asym'``, no flag). Set ``space``
   to the template the signals were extracted in: other MNI variants
   (``'MNI152NLin2009cAsym'``, fMRIPrep's default output; ``'MNI152'`` when
-  the variant is unknown) differ by about 1–3 mm and every ROI is flagged
-  approximate. Talairach coordinates are refused (convert them first, e.g.
-  Lancaster et al., 2007).
+  the variant is unknown) differ from that grid by an unquantified amount,
+  and every ROI is flagged approximate. No numeric offset is promised:
+  neither the atlas nor the analysis knows the voxel-wise displacement
+  between template grids. Talairach coordinates are refused (convert them
+  first, e.g. Lancaster et al., 2007).
 - **Identity first.** Each ROI carries its subregion, gyrus, lobe, hemisphere,
   cytoarchitectonic description, Yeo-7 and Yeo-17 networks (cortex only; each
   assigned under the same purity rule on its own shares, with

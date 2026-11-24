@@ -3,7 +3,9 @@
 The packet holds only what the analysis and the atlas support:
 
 * ``query`` - the contrast, the source atlas, the detected connections and
-  their inference unit (edge, component or block);
+  their inference unit (edge, component or block), plus ``roi_restriction``:
+  which unit the ROI counts belong to, the counts they are built from and the
+  names of the unassigned and mixed ROIs;
 * ``reference`` - Brainnetome atlas and BrainMap provenance, ROI support;
 * ``rois`` - anatomy of every endpoint ROI (assignment level, region, lobe,
   hemisphere, structure, cytoarchitectonic description, Yeo network,
@@ -36,6 +38,9 @@ DEFAULT_CAVEATS = [
     "block is not individually significant.",
     "ROIs are described by the tissue they sampled (sphere or parcel overlap); 'mixed' and 'unassigned' "
     "ROIs carry no single regional label.",
+    "ROI-level counts are member edges of the connections detected at the method's inference unit "
+    "(edge, component or block); 'unassigned' and 'mixed' ROIs keep their own group and are never "
+    "folded into a total.",
 ]
 
 _ROI_FIELDS = ("assigned", "level", "region", "lobe", "hemisphere", "structure", "description",
@@ -117,12 +122,32 @@ def build_annotation_evidence(
 
     settings = rois.settings
     prov = settings.get("provenance", {})
+    unit = str(inference_unit or "edge")
+    unit_phrase = "significant edges" if unit == "edge" else f"edges of the detected {unit}s"
+    levels = [str(x) for x in t["level"]]
+    all_names = [str(x) for x in t["roi"]]
+    unassigned_rois = [n for n, lv in zip(all_names, levels) if lv == "unassigned"]
+    mixed_rois = [n for n, lv in zip(all_names, levels) if lv == "mixed"]
+    roi_restriction = {
+        "applies_to": unit,
+        "counts": {"n_rois": len(t), "n_endpoint_rois": len(roi_entries),
+                   "n_unassigned_rois": len(unassigned_rois), "n_mixed_rois": len(mixed_rois),
+                   "n_detected_edges": int(len(edges))},
+        "unassigned_rois": unassigned_rois,
+        "mixed_rois": mixed_rois,
+        "statement": (
+            f"ROI entries count member {unit_phrase} ({len(edges)} detected, inference unit: {unit}); "
+            f"they are not independent ROI findings. {len(unassigned_rois)} unassigned and "
+            f"{len(mixed_rois)} mixed ROI(s) keep their own group and are not placed in the unit-level "
+            "aggregation."),
+    }
     return {
         "query": {
             "source": source, "contrast": contrast_name,
             "atlas": source_atlas or f"{len(t)} ROIs ({settings.get('support')} support)",
             "roi_ids": endpoint_ids, "edge_count": int(len(edges)),
-            "inference_unit": inference_unit, "region_pairs": region_pairs,
+            "inference_unit": unit, "region_pairs": region_pairs,
+            "roi_restriction": roi_restriction,
         },
         "reference": {
             "atlas": prov.get("atlas", "Brainnetome BNA-246 (Fan et al. 2016)"),
@@ -204,22 +229,34 @@ def summarize_terms(evidence: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def describe_coverage(evidence: Dict[str, Any]) -> Dict[str, Any]:
-    """Factual description of what the annotation can support (no quality label)."""
+    """Factual description of what the annotation can support (no quality label).
+
+    ``roi_restriction`` repeats the packet's statement of which inference unit
+    the ROI counts belong to and which ROIs are unassigned or mixed; those
+    ROIs stay counted as such instead of disappearing behind one total.
+    """
     rois = evidence["rois"]
     n = len(rois)
+    query = evidence["query"]
+    restriction = query.get("roi_restriction") or {}
     with_terms = sum(1 for r in rois if r.get("profile_status") == "terms")
     unassigned = sum(1 for r in rois if r.get("level") == "unassigned")
     mixed = sum(1 for r in rois if r.get("level") == "mixed")
     present = [d["domain"] for d in summarize_terms(evidence)["domains"] if d["n_rois"]]
+    unit = query["inference_unit"]
     sentence = (
-        f"The {evidence['query']['edge_count']} detected connections (inference unit: "
-        f"{evidence['query']['inference_unit']}) involve {n} ROIs; {with_terms} of them cover Brainnetome "
-        f"regions with published BrainMap terms"
+        f"The {query['edge_count']} detected connections (inference unit: {unit}) involve {n} ROIs; "
+        f"{with_terms} of them cover Brainnetome regions with published BrainMap terms"
         + (f" (domains: {', '.join(present)})" if present else "")
         + f", {mixed} are anatomically mixed and {unassigned} unassigned."
     )
+    if restriction:
+        sentence += (f" ROI counts are member {('significant edges' if unit == 'edge' else f'edges of the detected {unit}s')}; "
+                     "unassigned and mixed ROIs keep their own group and are not placed in the unit-level "
+                     "aggregation.")
     return {"n_endpoint_rois": n, "n_with_terms": with_terms, "n_mixed": mixed,
-            "n_unassigned": unassigned, "domains_present": present, "report_sentence": sentence}
+            "n_unassigned": unassigned, "domains_present": present, "report_sentence": sentence,
+            "inference_unit": unit, "roi_restriction": restriction}
 
 
 __all__ = ["DEFAULT_CAVEATS", "build_annotation_evidence", "validate_evidence", "summarize_terms",

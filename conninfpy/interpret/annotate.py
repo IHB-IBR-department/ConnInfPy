@@ -180,8 +180,9 @@ def annotate_rois(
     space : str
         Template of the coordinates. ``'MNI152NLin6Asym'`` (FSL MNI152, the
         atlas's own grid) is exact; ``'MNI152'``, ``'MNI152NLin2009cAsym'``
-        (fMRIPrep) and similar MNI variants differ by about 1-3 mm and are
-        flagged approximate. The default assumes FSL MNI152 and adds no flag,
+        (fMRIPrep) and similar MNI variants differ from that grid by an
+        unquantified amount and are flagged approximate. The default assumes
+        FSL MNI152 and adds no flag,
         so set ``space`` whenever the signals were extracted in another
         template (fMRIPrep's default output is ``'MNI152NLin2009cAsym'``;
         ``'MNI152'`` when the variant is unknown). Talairach coordinates must
@@ -442,7 +443,7 @@ def _describe(r, name, centre, world, w, m, regions, ref, support, radius, space
     coverage = float(w.sum())
     flags: List[str] = []
     if space in _APPROX_SPACES:
-        flags.append(f"approximate space ({space} vs FSL MNI152, ~1-3 mm)")
+        flags.append(f"approximate space ({space} vs FSL MNI152, offset unquantified)")
     if support == "point":
         flags.append("point estimate (support unknown)")
     if nearest is not None:
@@ -638,9 +639,19 @@ def _circuit(sa: str, sb: str) -> str:
     return "subcortical: " + "–".join(sorted(s.replace("_", " ") for s in (sa, sb)))
 
 
+_NO_NETWORK = frozenset({"", "mixed", "unknown", "n/a", "none", "unassigned", "not applicable",
+                         "not_applicable"})
+
+
 def _network(a: str, b: str) -> str:
-    bad = ("", "mixed", "not applicable")
-    if a in bad or b in bad:
+    """Network relation of two endpoint labels, or 'n/a' when a label names no network.
+
+    An 'unknown' or 'not applicable' label means the source atlas has no
+    network there; it is never turned into a network (no 'within unknown'),
+    and the label itself is kept in the tables and figures.
+    """
+    a, b = str(a), str(b)
+    if a.lower() in _NO_NETWORK or b.lower() in _NO_NETWORK:
         return "n/a"
     return f"within {a}" if a == b else "between"
 
@@ -694,6 +705,11 @@ def summarize_annotation(
       detections vs tested connections shorter than the first band. A
       contrast that covaries with head motion often shows short-range
       increases and long-range decreases (Power et al. 2012).
+
+    ``meta['roi_restriction']`` records which inference unit the ROI tables
+    describe, the counts they are built from, and the names of the
+    ``unassigned`` and ``mixed`` ROIs: those stay their own group and are
+    never folded into a total.
     """
     import pandas as pd
     from scipy import stats
@@ -770,6 +786,24 @@ def summarize_annotation(
     meta = {"alpha": alpha, "tail": tail, "level": level, "n_tested": n_tested, "n_detected": n_det,
             "inference_unit": getattr(result, "inference_unit", "edge"),
             "note": "descriptive; no enrichment test; original correction unchanged"}
+    unit = meta["inference_unit"]
+    unit_phrase = "significant edges" if unit == "edge" else f"edges of the detected {unit}s"
+    levels = list(rois.table["level"])
+    roi_names = [str(n) for n in rois.table["roi"]]
+    unassigned = [n for n, lv in zip(roi_names, levels) if lv == "unassigned"]
+    mixed_rois = [n for n, lv in zip(roi_names, levels) if lv == "mixed"]
+    meta["roi_restriction"] = {
+        "applies_to": unit,
+        "counts": {"n_rois": len(rois), "n_unassigned_rois": len(unassigned),
+                   "n_mixed_rois": len(mixed_rois), "n_tested_edges": n_tested,
+                   "n_detected_edges": n_det},
+        "unassigned_rois": unassigned,
+        "mixed_rois": mixed_rois,
+        "statement": (
+            f"ROI-level counts are member {unit_phrase} at this alpha (n_detected={n_det} of "
+            f"n_tested={n_tested}), not independent ROI findings; the {len(unassigned)} unassigned and "
+            f"{len(mixed_rois)} mixed ROI(s) keep their own group and are never folded into a total."),
+    }
     return {"relations": relations, "regions": regions, "domains": domains, "distance_qc": qc,
             "edges": ann, "meta": meta}
 
@@ -841,11 +875,13 @@ def aggregate_connections(
     weight rows are zero, so their connections carry no rows here. The
     returned frame carries ``df.attrs['coverage']`` with the atlas coverage of
     the aggregation: ``n_rois``, ``n_placed``, ``unplaced_no_support`` and
-    ``unplaced_low_coverage`` (ROI names), ``detected_total`` and
-    ``detected_placed`` (detected connections of ``tail`` with finite p —
-    all, vs. those with both endpoints placed; counted once with
-    ``tail='both'``), ``tested_total`` / ``tested_placed``, and ``level``,
-    ``assign``, ``tail``. Use it to report placement alongside the table;
+    ``unplaced_low_coverage`` (ROI names), ``unplaced_rois`` (both lists),
+    ``detected_total`` and ``detected_placed`` (detected connections of
+    ``tail`` with finite p — all, vs. those with both endpoints placed; counted
+    once with ``tail='both'``), ``tested_total`` / ``tested_placed``,
+    ``inference_unit`` (the unit of the result whose member connections are
+    counted: edge, component or block), and ``level``, ``assign``, ``tail``.
+    Use it to report placement alongside the table;
     :func:`conninfpy.plot.connectograms.plot_connectogram` puts it in its
     footer and defaults to ``assign='dominant'`` while this function defaults
     to the fractional ``'weighted'``.
@@ -906,6 +942,8 @@ def aggregate_connections(
         "detected_placed": int((det & placed[i] & placed[j]).sum()),
         "tested_total": int(len(i)),
         "tested_placed": int((placed[i] & placed[j]).sum()),
+        "unplaced_rois": [nm for nm, u in zip(names, unassigned) if u],
+        "inference_unit": getattr(result, "inference_unit", "edge"),
         "level": level, "assign": assign, "tail": tail,
     }
     return df

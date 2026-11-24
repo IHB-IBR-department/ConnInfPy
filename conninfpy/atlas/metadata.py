@@ -244,6 +244,21 @@ class AtlasInfo:
             ``atlas.image``, so extraction with that image skips them too.
         source : str, optional
             Provenance string.
+
+        Notes
+        -----
+        The atlas keeps what the label image and the LUT state, and nothing
+        else. Label values are read in ascending order (the order nilearn's
+        ``NiftiLabelsMasker`` extracts them) and ``label_ids`` keeps the
+        original values, which need not start at 1 or be consecutive. LUT
+        columns other than the id, ``name`` and ``network`` — a ``structure``
+        column included — are not carried, because :class:`AtlasInfo` has no
+        such field. A label without a LUT record is named ``region_<id>`` and
+        gets the network ``'unassigned'`` when the LUT carries network labels
+        at all; a network value such as ``'unknown'`` or ``'not_applicable'``
+        is kept verbatim and never replaced by a guess. No template is
+        recorded: the image is assumed to be on the reference grid the caller
+        annotates with.
         """
         nib_img, data = _load_label_image(img)
         table = _read_lut(lut)
