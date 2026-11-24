@@ -1240,6 +1240,17 @@ def _attrs_json(attrs: Mapping[str, Any]) -> bytes:
     return _dumps_json(dict(attrs))
 
 
+def _shape_matches_recorded(recorded: Any, actual_shape: Sequence[int]) -> bool:
+    """True when the recorded mask shape is exactly the array's shape (2-D)."""
+    if not isinstance(recorded, (list, tuple)) or len(recorded) != 2:
+        return False
+    try:
+        recorded_shape = tuple(int(v) for v in recorded)
+    except (TypeError, ValueError):
+        return False
+    return recorded_shape == tuple(int(s) for s in actual_shape)
+
+
 def build_analysis_archive(
     result: Any,
     run_plan: Mapping[str, Any],
@@ -1358,15 +1369,30 @@ def build_analysis_archive(
                          "the replay cannot reproduce the tested family")
         else:
             mask_array = np.asarray(edge_family_mask, dtype=bool)
-            # The bundled array must be the mask of the finished run, not a
-            # mask uploaded/changed after it: verify against the recorded hash.
             recorded_sha = edge_mask_fact.get("sha256")
-            actual_sha = _sha256(np.ascontiguousarray(mask_array).tobytes())
-            if recorded_sha is not None and actual_sha != recorded_sha:
-                notes.append("the available edge mask does not match the sha256 recorded "
-                             "for the finished run (it was changed after the run); "
-                             "arrays/edge_family_mask.npy is omitted and the replay "
-                             "cannot reproduce the tested family")
+            recorded_shape = edge_mask_fact.get("shape")
+            # Bundle ONLY the mask of the finished run: a recorded sha256 is
+            # required, the bytes must hash to it, and the recorded shape must
+            # equal the array's shape (a reshape shares the bool bytes but is a
+            # different ROI x ROI family).
+            mismatch = None
+            if not isinstance(recorded_sha, str) or not recorded_sha.strip():
+                mismatch = ("the finished run did not record a sha256 for its edge mask, so "
+                            "the available mask cannot be verified as the one that was "
+                            "tested")
+            elif np.asarray(edge_family_mask).ndim != 2:
+                mismatch = ("the available edge mask is not a 2-D ROI x ROI array "
+                            f"(shape {tuple(int(s) for s in np.asarray(edge_family_mask).shape)})")
+            elif _sha256(np.ascontiguousarray(mask_array).tobytes()) != recorded_sha:
+                mismatch = ("the available edge mask does not match the sha256 recorded "
+                            "for the finished run (it was changed after the run)")
+            elif not _shape_matches_recorded(recorded_shape, mask_array.shape):
+                mismatch = (f"the available edge mask has shape {list(mask_array.shape)} but "
+                            f"the finished run recorded {recorded_shape!r}; a reshaped mask "
+                            "is not the tested family")
+            if mismatch is not None:
+                notes.append(f"{mismatch}; arrays/edge_family_mask.npy is omitted and the "
+                             "replay cannot reproduce the tested family")
             else:
                 files["arrays/edge_family_mask.npy"] = _npy_bytes(mask_array)
                 notes.append("edge_family_mask.npy is the tested-edge-family mask of the "

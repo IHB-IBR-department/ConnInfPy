@@ -1020,3 +1020,322 @@ def test_archive_omits_a_mask_changed_after_the_run(tmp_path: Path):
     )
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         assert "arrays/edge_family_mask.npy" in zf.namelist()
+
+
+# ----------------------------------------------------------------------
+# 7. Round-1 parent review regressions (4 defects)
+# ----------------------------------------------------------------------
+def test_edge_mask_metadata_rejects_malformed_shapes():
+    """A malformed mask is a validation error, never an IndexError in render."""
+    from apps.components.design_inference import _edge_mask_metadata
+
+    for malformed in (
+        np.zeros(3, dtype=bool),          # 1-D
+        np.zeros((2, 3), dtype=bool),     # non-square 2-D
+        np.zeros((0, 0), dtype=bool),     # empty
+        np.zeros((2, 3, 4), dtype=bool),  # 3-D
+    ):
+        with pytest.raises(ValueError) as excinfo:
+            _edge_mask_metadata(malformed)
+        assert "square 2-D" in str(excinfo.value)
+        assert not isinstance(excinfo.value, IndexError)
+
+    # Symmetry is the engine validator's job and stays a clear error.
+    asymmetric = np.zeros((4, 4), dtype=bool)
+    asymmetric[0, 1] = True
+    with pytest.raises(ValueError) as excinfo:
+        _check_edge_mask(asymmetric, 4)
+    assert "symmetric" in str(excinfo.value)
+
+    # A valid square mask still yields the recorded facts.
+    good = np.zeros((4, 4), dtype=bool)
+    good[0, 1] = good[1, 0] = True
+    facts = _edge_mask_metadata(good, "family.npy")
+    assert facts["shape"] == [4, 4] and facts["eligible_edges"] == 1
+
+
+def test_design_page_with_malformed_stored_mask_blocks_the_run():
+    """A 1-D stored mask must render with a clear error and a blocked launch."""
+    app = _design_app()
+    app.session_state["design:edge_mask_array"] = np.zeros(3, dtype=bool)
+    app.session_state["design:edge_mask_source"] = "broken.npy"
+    app.run()
+    assert not app.exception
+    errors = "\n".join(e.value for e in app.error)
+    assert "square 2-D" in errors          # retained-mask caption / run-plan line
+    assert "Edge family mask" in errors    # engine validator blocking message
+    assert app.button(key="run_inference_btn").disabled
+    # The run-plan table reports the invalid mask instead of claiming "all edges".
+    plan_md = "\n".join(m.value for m in app.markdown)
+    assert "invalid retained mask" in plan_md
+
+
+def _tstat_result_and_plan():
+    from conninfpy import analyze
+
+    n, N = 8, 4
+    Y = _corr_stack(n, N, seed=23)
+    group = np.array([0, 1] * (n // 2), dtype=float)
+    res = analyze(
+        Y, interest=group, method="tstat", input="z", r_to_z=False,
+        n_permutations=10, rng=1, use_mp=False, acceleration=None,
+    )
+    plan = _plan_with_new_facts()
+    plan["method"] = "tstat"
+    plan["operator_kwargs"] = {}
+    plan["primary_cell"] = None
+    return res, plan, {"mode": "Generate Synthetic Dataset", "name": "fixture"}
+
+
+def _archive_member_and_notes(res, plan, info, mask):
+    import io
+    import zipfile
+
+    from apps.utils.archive_export import build_analysis_archive
+
+    zip_bytes, manifest = build_analysis_archive(
+        res, plan, info, edge_family_mask=mask, include_bundle=False,
+    )
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = set(zf.namelist())
+    return names, list(manifest.get("notes", []))
+
+
+def test_archive_omits_mask_without_a_recorded_sha():
+    """No recorded sha256 means the mask cannot be verified: never bundle it."""
+    res, plan, info = _tstat_result_and_plan()
+    plan["edge_mask"] = dict(plan["edge_mask"])
+    plan["edge_mask"].pop("sha256")
+    mask = np.zeros((4, 4), dtype=bool)
+    mask[0, 1] = mask[1, 0] = True
+
+    names, notes = _archive_member_and_notes(res, plan, info, mask)
+    assert "arrays/edge_family_mask.npy" not in names
+    assert any("did not record a sha256" in note for note in notes)
+    assert any("cannot reproduce the tested family" in note for note in notes)
+
+    for empty in (None, "", "   "):
+        plan["edge_mask"]["sha256"] = empty
+        names, notes = _archive_member_and_notes(res, plan, info, mask)
+        assert "arrays/edge_family_mask.npy" not in names
+        assert any("did not record a sha256" in note for note in notes)
+
+
+def test_archive_omits_a_reshaped_mask_with_matching_bytes():
+    """Same bool bytes, different ROI x ROI shape: a different tested family."""
+    res, plan, info = _tstat_result_and_plan()
+    mask = np.zeros((4, 4), dtype=bool)
+    mask[0, 1] = mask[1, 0] = True
+    reshaped = mask.reshape(2, 8)
+    assert plan["edge_mask"]["shape"] == [4, 4]
+    # The bytes (and therefore the sha256) are identical.
+    import hashlib
+
+    assert (
+        hashlib.sha256(np.ascontiguousarray(reshaped.astype(bool)).tobytes()).hexdigest()
+        == plan["edge_mask"]["sha256"]
+    )
+
+    names, notes = _archive_member_and_notes(res, plan, info, reshaped)
+    assert "arrays/edge_family_mask.npy" not in names
+    assert any("recorded" in note and "shape" in note for note in notes)
+    assert any("cannot reproduce the tested family" in note for note in notes)
+
+    # The mask with the recorded shape and bytes is still bundled.
+    names, notes = _archive_member_and_notes(res, plan, info, mask)
+    assert "arrays/edge_family_mask.npy" in names
+    assert not any("cannot reproduce the tested family" in note for note in notes)
+
+
+def _run_worker_with_result(task, result, **overrides):
+    """Run the real worker against a fake grid result and record edge calls."""
+    from apps.components.design_inference import _run_inference_background
+
+    args = {name: None for name in inspect.signature(_run_inference_background).parameters}
+    args.update(
+        task=task, test_type="paired", operator_choice="tfnbs", n_perms=20, seed_val=42,
+        use_mp=False, acceleration_choice="none",
+        op_kwargs={"e": [0.5, 0.75], "h": [2.0, 2.0], "n": 50, "start_thres": 1.0},
+        run_sensitivity=False, alpha=0.05, question_choice="Paired Condition",
+        subject_col="subject_id", condition_col="condition",
+        baseline_val="rest", target_val="task", confound_vars=[],
+        active_atlas_signature="fixture", data_kind="fisher_z",
+        group1=np.zeros((3, 4, 4)), group2=np.zeros((3, 4, 4)),
+    )
+    args.update(overrides)
+    with patch("conninfpy.analyze", return_value=result):
+        _run_inference_background(**args)
+
+
+def _grid_result(e_grid, h_grid, calls):
+    def _significant_edges(**kwargs):
+        calls.append(kwargs)
+        return []
+
+    return SimpleNamespace(
+        significant_edges=_significant_edges,
+        is_grid=True,
+        e_grid=np.asarray(e_grid, dtype=float),
+        h_grid=np.asarray(h_grid, dtype=float),
+        wall_time_s=0.01,
+        fisher=None,
+        design={},
+    )
+
+
+def test_worker_rejects_a_declared_primary_cell_absent_from_the_grid():
+    from apps.components.design_inference import InferenceTask
+
+    calls = []
+    task = InferenceTask()
+    _run_worker_with_result(
+        task,
+        _grid_result([0.5, 0.75], [2.0, 2.0], calls),
+        primary_cell={"e": 0.99, "h": 2.0, "param_idx": 1, "selection": "declared_before_run"},
+    )
+    assert task.status == "failed"
+    assert "not a cell of the completed" in (task.error or "")
+    assert calls == []  # no completion table for a different cell
+
+
+def test_worker_rejects_an_ambiguous_declared_primary_cell():
+    from apps.components.design_inference import InferenceTask
+
+    calls = []
+    task = InferenceTask()
+    _run_worker_with_result(
+        task,
+        _grid_result([0.5, 0.5], [2.0, 2.0], calls),
+        primary_cell={"e": 0.5, "h": 2.0, "param_idx": 0, "selection": "declared_before_run"},
+    )
+    assert task.status == "failed"
+    assert "ambiguous" in (task.error or "")
+    assert calls == []
+
+
+def test_worker_rejects_an_index_contradicting_the_declared_coordinates():
+    from apps.components.design_inference import InferenceTask
+
+    calls = []
+    task = InferenceTask()
+    _run_worker_with_result(
+        task,
+        _grid_result([0.5, 0.75], [2.0, 2.0], calls),
+        primary_cell={"e": 0.75, "h": 2.0, "param_idx": 0, "selection": "declared_before_run"},
+    )
+    assert task.status == "failed"
+    assert "contradicts" in (task.error or "")
+    assert calls == []
+
+
+def test_results_page_never_badges_a_mismatched_declared_primary():
+    """A reloaded plan whose (E, H) is not in this grid must not claim the badge."""
+    from conninfpy import analyze
+    from conninfpy.atlas import AtlasInfo
+    from apps.utils.result_views import get_2d_result
+
+    n, N = 10, 4
+    Y = _corr_stack(n, N, seed=29)
+    group = np.array([0, 1] * 5, dtype=float)
+    res = analyze(
+        group1=Y[:5], group2=Y[5:], test_type="two-sample", method="tfnbs",
+        e=[0.5, 0.75], h=[2.0, 2.0], input="z", r_to_z=False,
+        n_permutations=20, rng=1, use_mp=False, acceleration=None,
+    )
+    assert res.inference.is_grid
+    atlas = AtlasInfo(labels=[f"ROI{i}" for i in range(N)], networks=["Vis"] * N)
+    app = AppTest.from_file(str(APP), default_timeout=180)
+    app.session_state.connectivity_data = Y
+    app.session_state.pheno_df = pd.DataFrame({"group": group})
+    app.session_state.loaded_reference_atlas = atlas
+    app.session_state.loaded_atlas_signature = "fixture"
+    app.session_state.loaded_settings_hash = "fixture"
+    app.session_state.inference_result = res
+    app.session_state.edges_df = get_2d_result(res, 1)[0].significant_edges(atlas=atlas, alpha=0.05)
+    app.session_state.run_plan = {
+        "method": "tfnbs",
+        "alpha": 0.05,
+        "design_family": "two-sample",
+        "primary_cell": {"e": 0.99, "h": 2.0, "param_idx": 1, "selection": "declared_before_run"},
+    }
+    app.session_state.active_tab = "3. Inference Results"
+    app.run()
+    assert not app.exception
+    assert "Declared primary cell" not in "\n".join(s.value for s in app.success)
+    warnings_text = "\n".join(w.value for w in app.warning)
+    assert "does not match this result's (E, H) grid" in warnings_text
+    # Browsing stays descriptive and the run plan is untouched.
+    selector = next(s for s in app.selectbox if "TFNBS parameter-grid cell" in s.proto.label)
+    assert selector.value == 0
+    selector.set_value(1).run()
+    assert not app.exception
+    assert len(app.success) == 0 or "Declared primary cell" not in "\n".join(
+        s.value for s in app.success
+    )
+    assert app.session_state.run_plan["primary_cell"]["e"] == pytest.approx(0.99)
+
+
+def test_comparative_view_validates_the_declared_primary_against_its_grid():
+    """The comparison view and its detail tabs use only a validated declaration."""
+    from conninfpy import analyze
+    from conninfpy.atlas import AtlasInfo
+    from apps.utils.result_views import get_2d_result
+
+    n, N = 10, 4
+    Y = _corr_stack(n, N, seed=33)
+    group = np.array([0, 1] * 5, dtype=float)
+    grid = analyze(
+        Y, interest=group, method="tfnbs", e=[0.5, 0.75], h=[2.0, 2.0], n=50,
+        input="z", r_to_z=False, n_permutations=10, rng=1, use_mp=False, acceleration=None,
+    )
+    companion = analyze(
+        Y, interest=group, method="tstat", input="z", r_to_z=False,
+        n_permutations=10, rng=1, use_mp=False, acceleration=None,
+    )
+    atlas = AtlasInfo(labels=[f"ROI{i}" for i in range(N)], networks=["Vis"] * N)
+
+    def _app(primary_cell):
+        app = AppTest.from_file(str(APP), default_timeout=180)
+        app.session_state.connectivity_data = Y
+        app.session_state.pheno_df = pd.DataFrame({"group": group})
+        app.session_state.loaded_reference_atlas = atlas
+        app.session_state.loaded_atlas_signature = "fixture"
+        app.session_state.loaded_settings_hash = "fixture"
+        app.session_state.inference_result = grid
+        app.session_state.edges_df = get_2d_result(grid, 1)[0].significant_edges(
+            atlas=atlas, alpha=0.05
+        )
+        app.session_state.companion_inference_result = companion
+        app.session_state.companion_edges_df = companion.significant_edges(atlas=atlas, alpha=0.05)
+        app.session_state.companion_method = "tstat"
+        app.session_state.run_plan = {
+            "method": "tfnbs", "alpha": 0.05, "design_family": "glm",
+            "primary_cell": primary_cell,
+        }
+        app.session_state.active_tab = "3. Inference Results"
+        app.run()
+        assert not app.exception
+        next(r for r in app.radio if "Select Result View Mode" in r.proto.label).set_value(
+            "Side-by-Side Comparison"
+        ).run()
+        assert not app.exception
+        return app
+
+    valid = _app({"e": 0.75, "h": 2.0, "param_idx": 1, "selection": "declared_before_run"})
+    captions = "\n".join(c.value for c in valid.caption)
+    assert "compared at the declared primary cell 1" in captions
+    assert "does not match this result's (E, H) grid" not in "\n".join(
+        w.value for w in valid.warning
+    )
+
+    mismatched = _app({"e": 0.99, "h": 2.0, "param_idx": 1, "selection": "declared_before_run"})
+    warnings_text = "\n".join(w.value for w in mismatched.warning)
+    assert "does not match this result's (E, H) grid" in warnings_text
+    assert "compared at the declared primary cell" not in "\n".join(
+        c.value for c in mismatched.caption
+    )
+
+    out_of_range = _app({"e": 0.75, "h": 2.0, "param_idx": 9, "selection": "declared_before_run"})
+    assert "does not match this result's (E, H) grid" in "\n".join(
+        w.value for w in out_of_range.warning
+    )

@@ -710,8 +710,20 @@ def _paired_design_violations(
 
 
 def _edge_mask_metadata(mask, source_name=None):
-    """Facts of a validated tested-family mask; the array itself never enters run_plan."""
-    m = np.asarray(mask, dtype=bool)
+    """Facts of a validated tested-family mask; the array itself never enters run_plan.
+
+    Raises ``ValueError`` for anything that is not a non-empty square 2-D array,
+    so a malformed stored/uploaded mask is reported instead of raising an
+    ``IndexError`` deep in a caption or the run-plan table.
+    """
+    m = np.asarray(mask)
+    if m.ndim != 2 or int(m.shape[0]) != int(m.shape[1]) or int(m.shape[0]) == 0:
+        shape = tuple(int(s) for s in m.shape)
+        raise ValueError(
+            "an edge family mask must be a square 2-D (ROI x ROI) array; "
+            f"got shape {shape}"
+        )
+    m = m.astype(bool)
     return {
         "purpose": "edge_family_mask",
         "sha256": hashlib.sha256(np.ascontiguousarray(m).tobytes()).hexdigest(),
@@ -754,31 +766,68 @@ def _validate_eh_grid(e_values, h_values, e_bounds, h_bounds):
 def _resolve_primary_cell(result, primary_cell):
     """Resolve the declared primary (E, H) cell to the result's grid index.
 
-    The declared cell is fixed before the run; the index is resolved against
-    the result's own ``e_grid``/``h_grid`` when present (the engine pairs the
-    E and H sequences element-wise) and otherwise taken from the declaration.
+    The cell was declared before the run. When the result carries its own
+    ``e_grid``/``h_grid`` the declaration must name EXACTLY ONE cell of that
+    grid: a cell that is absent, ambiguous (two identical (E, H) cells) or
+    contradicted by the recorded index raises ``ValueError`` instead of
+    silently reporting a different cell. Without a grid the declaration cannot
+    be honoured at all and also raises.
     """
     if not primary_cell:
         return None, None
     record = dict(primary_cell)
-    idx = record.get("param_idx")
-    source = "declared_before_run"
-    if bool(getattr(result, "is_grid", False)):
-        e_grid = getattr(result, "e_grid", None)
-        h_grid = getattr(result, "h_grid", None)
-        if e_grid is not None and h_grid is not None and record.get("e") is not None:
-            e_decl, h_decl = float(record["e"]), float(record["h"])
-            matches = [
-                k for k in range(len(e_grid))
-                if np.isclose(float(e_grid[k]), e_decl) and np.isclose(float(h_grid[k]), h_decl)
-            ]
-            if len(matches) == 1:
-                idx = matches[0]
-                source = "result_e_h_grid"
-    if idx is None:
-        idx = 0
+    if not bool(getattr(result, "is_grid", False)):
+        raise ValueError(
+            "a primary (E, H) cell was declared before the run, but the completed "
+            "result carries no (E, H) parameter grid; the declared primary cell "
+            "cannot be reported"
+        )
+    e_grid = getattr(result, "e_grid", None)
+    h_grid = getattr(result, "h_grid", None)
+    if e_grid is None or h_grid is None or len(e_grid) != len(h_grid) or len(e_grid) == 0:
+        raise ValueError(
+            "the completed result carries an (E, H) grid but not its E/H axis labels; "
+            "the declared primary cell cannot be resolved against it"
+        )
+    e_decl, h_decl = record.get("e"), record.get("h")
+    if e_decl is None or h_decl is None:
+        raise ValueError(
+            "the run plan declares a primary cell without its (E, H) coordinates; "
+            "the cell cannot be verified against the completed grid"
+        )
+    e_decl, h_decl = float(e_decl), float(h_decl)
+    matches = [
+        k for k in range(len(e_grid))
+        if np.isclose(float(e_grid[k]), e_decl) and np.isclose(float(h_grid[k]), h_decl)
+    ]
+    if not matches:
+        raise ValueError(
+            f"the declared primary cell E={e_decl:g}, H={h_decl:g} is not a cell of the "
+            f"completed (E, H) grid (E={[float(x) for x in e_grid]}, "
+            f"H={[float(x) for x in h_grid]}); no cell can be reported as primary"
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f"the declared primary cell E={e_decl:g}, H={h_decl:g} matches {len(matches)} "
+            "cells of the completed grid; the declaration is ambiguous"
+        )
+    idx = matches[0]
+    declared_idx = record.get("param_idx")
+    if declared_idx is not None:
+        try:
+            declared_idx = int(declared_idx)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"the recorded primary grid index {record.get('param_idx')!r} is not an integer"
+            ) from exc
+        if declared_idx != idx:
+            raise ValueError(
+                f"the run plan records primary grid index {declared_idx}, but the declared "
+                f"cell E={e_decl:g}, H={h_decl:g} is index {idx}; the declaration contradicts "
+                "itself"
+            )
     record["param_idx"] = int(idx)
-    record["resolved_from"] = source
+    record["resolved_from"] = "result_e_h_grid"
     return int(idx), record
 
 
@@ -1203,6 +1252,11 @@ def _run_inference_background(
         primary_idx, primary_record = (
             _resolve_primary_cell(primary_inner, primary_cell) if primary_cell else (None, None)
         )
+        if getattr(primary_inner, "is_grid", False) and primary_idx is None:
+            raise ValueError(
+                "the analysis returned an (E, H) grid but no primary cell was declared "
+                "before the run; a grid cell must be declared to report a completion table"
+            )
         edges = res.significant_edges(
             atlas=annotation_atlas,
             alpha=alpha,
@@ -1367,6 +1421,8 @@ def _run_inference_background(
             task.run_plan.update(
                 {str(k): v for k, v in design_facts.items() if str(k) not in task.run_plan}
             )
+        if primary_record is not None:
+            task.run_plan["primary_cell"] = primary_record
         task.status = "success"
         task.progress_message = "✅ Completed!"
     except Exception as e:
@@ -1460,6 +1516,7 @@ def render_design_inference_view(base_atlas, tabs_list):
         grid_h_values = None
         primary_cell_decl = None
         edge_mask_plan = None
+        edge_mask_plan_error = None
         edge_mask_array = None
         
         with col_left:
@@ -1952,14 +2009,25 @@ def render_design_inference_view(base_atlas, tabs_list):
                         persistent_key("design:edge_mask_source", scope="design")
                 retained_mask = st.session_state.get("design:edge_mask_array")
                 if retained_mask is not None:
-                    retained_arr = np.asarray(retained_mask, dtype=bool)
-                    st.caption(
-                        "Retained mask "
-                        f"`{st.session_state.get('design:edge_mask_source')}` — shape "
-                        f"{retained_arr.shape}, "
-                        f"{int(np.triu(retained_arr, 1).sum())} eligible edges, sha256 "
-                        f"{hashlib.sha256(np.ascontiguousarray(retained_arr).tobytes()).hexdigest()[:16]}…"
-                    )
+                    retained_arr = np.asarray(retained_mask)
+                    try:
+                        retained_facts = _edge_mask_metadata(
+                            retained_arr, st.session_state.get("design:edge_mask_source")
+                        )
+                    except ValueError as exc:
+                        st.error(
+                            f"❌ **Edge family mask:** {exc}. The stored mask is not a "
+                            "tested-family mask; the run is blocked until it is replaced "
+                            "or removed."
+                        )
+                    else:
+                        st.caption(
+                            "Retained mask "
+                            f"`{st.session_state.get('design:edge_mask_source')}` — shape "
+                            f"{retained_facts['shape'][0]}×{retained_facts['shape'][1]}, "
+                            f"{retained_facts['eligible_edges']} eligible edges, sha256 "
+                            f"{retained_facts['sha256'][:16]}…"
+                        )
                     if st.button("Remove retained edge mask", key="design:edge_mask_clear"):
                         st.session_state.pop("design:edge_mask_array", None)
                         st.session_state.pop("design:edge_mask_source", None)
@@ -2365,12 +2433,26 @@ def render_design_inference_view(base_atlas, tabs_list):
 
                 st.markdown("**Structured Run Plan:**")
                 # Retained mask facts (validated later against the analysis ROIs;
-                # the metadata here only describes the stored array).
+                # the metadata here only describes the stored array and a
+                # malformed mask must not crash the page).
                 if st.session_state.get("design:edge_mask_array") is not None:
-                    edge_mask_plan = _edge_mask_metadata(
-                        st.session_state["design:edge_mask_array"],
-                        st.session_state.get("design:edge_mask_source"),
+                    try:
+                        edge_mask_plan = _edge_mask_metadata(
+                            st.session_state["design:edge_mask_array"],
+                            st.session_state.get("design:edge_mask_source"),
+                        )
+                    except ValueError as exc:
+                        edge_mask_plan_error = str(exc)
+                        edge_mask_plan = None
+                if edge_mask_plan_error is not None:
+                    edge_mask_summary = f"invalid retained mask — {edge_mask_plan_error}"
+                elif edge_mask_plan:
+                    edge_mask_summary = (
+                        f"edge family mask: {edge_mask_plan['eligible_edges']} eligible "
+                        f"edges, sha256 {edge_mask_plan['sha256'][:12]}…"
                     )
+                else:
+                    edge_mask_summary = "all edges"
                 method_parameters = _format_method_plan_parameters(operator_choice, op_kwargs)
                 plan_md = f"""
 | Field | Value |
@@ -2385,7 +2467,7 @@ def render_design_inference_view(base_atlas, tabs_list):
 | **Atlas Metadata** | {'None' if active_analysis_atlas(base_atlas) is None else f"{len(active_analysis_atlas(base_atlas))} ROIs"} |
 | **Site Strategy** | {effective_recipe_choice} |
 | **Missing Connectivity** | {(f"available-case, minimum edge coverage {min_coverage:.0%}" if missing_policy == "available_case" else "complete-case (stop on any NaN)")} |
-| **Tested Edge Family** | {(f"edge family mask: {edge_mask_plan['eligible_edges']} eligible edges, sha256 {edge_mask_plan['sha256'][:12]}…" if edge_mask_plan else "all edges")} |
+| **Tested Edge Family** | {edge_mask_summary} |
 | **E/H Grid** | {(f"{len(grid_e_values)} cells, declared primary E={primary_cell_decl['e']:g}, H={primary_cell_decl['h']:g} (cell {primary_cell_decl['param_idx']})" if primary_cell_decl else "single scalar (E, H)")} |
 | **Condition Confounds** | {(', '.join(paired_confound_cols) + ' (B - A computed by the engine)' if paired_confound_cols else "none")} |
 | **Permutations** | {n_perms} |

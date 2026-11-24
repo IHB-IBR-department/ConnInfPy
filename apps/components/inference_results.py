@@ -70,13 +70,76 @@ def _is_omnibus_result(res):
     return hasattr(inner, "keys") and "omnibus" in inner and "positive" not in inner
 
 
-def _declared_primary_idx():
-    """The (E, H) cell declared as primary before the run (never re-chosen here)."""
+def _declared_primary_idx(inner=None):
+    """The declared primary (E, H) cell, validated against a result's own grid.
+
+    Returns ``(idx, cell, status)``. ``status`` is ``'no-declaration'`` when the
+    run plan records no primary cell, ``'validated'`` when the declared (E, H)
+    names exactly one cell of this result's grid (and the recorded index agrees),
+    ``'index-only'`` when the plan records an index but no coordinates (it cannot
+    be verified here), and ``'mismatch'`` when the declaration does not name a
+    cell of this grid. Only a ``'validated'`` declaration is displayed as the
+    confirmatory primary; nothing is re-chosen here.
+    """
     plan = st.session_state.get("run_plan") or {}
     cell = plan.get("primary_cell")
-    if isinstance(cell, dict) and cell.get("param_idx") is not None:
-        return int(cell["param_idx"]), cell
-    return None, None
+    if not isinstance(cell, dict):
+        return None, None, "no-declaration"
+    if inner is None:
+        inner = unwrap_result(st.session_state.get("inference_result"))
+    if not getattr(inner, "is_grid", False):
+        return None, cell, "mismatch"
+    raw_e = getattr(inner, "e_grid", None)
+    raw_h = getattr(inner, "h_grid", None)
+    e_grid = [] if raw_e is None else [float(v) for v in raw_e]
+    h_grid = [] if raw_h is None else [float(v) for v in raw_h]
+    n_cells = len(e_grid)
+    if n_cells == 0 or len(h_grid) != n_cells:
+        return None, cell, "mismatch"
+    recorded_idx = cell.get("param_idx")
+    index = None
+    if recorded_idx is not None:
+        try:
+            index = int(recorded_idx)
+        except (TypeError, ValueError):
+            return None, cell, "mismatch"
+        if not (0 <= index < n_cells):
+            return None, cell, "mismatch"
+    e_decl, h_decl = cell.get("e"), cell.get("h")
+    if e_decl is None or h_decl is None:
+        return (index, cell, "index-only") if index is not None else (None, cell, "mismatch")
+    matches = [
+        k for k in range(n_cells)
+        if np.isclose(float(e_grid[k]), float(e_decl))
+        and np.isclose(float(h_grid[k]), float(h_decl))
+    ]
+    if len(matches) != 1:
+        return None, cell, "mismatch"
+    if index is not None and index != matches[0]:
+        return None, cell, "mismatch"
+    return matches[0], cell, "validated"
+
+
+def _primary_slice_idx(inner, *, context: str):
+    """Display index for a grid result's primary cell, with an explicit note.
+
+    A declaration that does not name a cell of *this* grid never silently drives
+    a view: the caller falls back to cell 0 and the reason is shown.
+    """
+    idx, _cell, status = _declared_primary_idx(inner)
+    if status == "mismatch":
+        st.warning(
+            f"{context}: the run plan's declared primary cell does not match this result's "
+            "(E, H) grid (coordinates or index out of range). No cell is claimed as the "
+            "confirmatory primary here; the view falls back to cell 0 and any browsing "
+            "stays descriptive."
+        )
+    elif status == "index-only":
+        st.caption(
+            f"{context}: the run plan records only the primary cell index, so it cannot be "
+            "verified against this grid's (E, H) coordinates."
+        )
+    return (idx if idx is not None else 0), status
 
 
 def _select_grid_slice(res_wrapper, slot):
@@ -96,10 +159,8 @@ def _select_grid_slice(res_wrapper, slot):
     n_cells = len(e_grid)
     if n_cells <= 1:
         return get_2d_result(inner, 0)
-    declared_idx, declared = _declared_primary_idx()
+    declared_idx, declared, declared_status = _declared_primary_idx(inner)
     options = list(range(n_cells))
-    if declared_idx is not None and not (0 <= declared_idx < n_cells):
-        declared_idx = None
     idx = st.selectbox(
         "TFNBS parameter-grid cell (E, H) — descriptive sensitivity browsing",
         options,
@@ -111,13 +172,20 @@ def _select_grid_slice(res_wrapper, slot):
             "descriptive sensitivity slices; browsing them changes only this view."
         ),
     )
-    if declared is not None:
-        if declared_idx is None:
-            st.caption(
-                "The run plan declares a primary cell that is not a cell of this grid; "
-                "no cell is badged as primary here."
-            )
-        elif idx == declared_idx:
+    if declared_status == "mismatch":
+        st.warning(
+            "The run plan's declared primary cell does not match this result's (E, H) "
+            "grid (E or H coordinates not found, or the recorded index is out of range). "
+            "No cell is badged as the confirmatory primary; every slice here is "
+            "descriptive."
+        )
+    elif declared_status == "index-only":
+        st.caption(
+            "The run plan records only the primary cell index, so it cannot be verified "
+            "against this grid's (E, H) coordinates."
+        )
+    elif declared is not None:
+        if idx == declared_idx:
             st.success(
                 f"Declared primary cell (confirmatory claim): E={declared.get('e'):g}, "
                 f"H={declared.get('h'):g} — fixed before the run."
@@ -1204,12 +1272,18 @@ def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, p
     alpha = _run_alpha()
     # A grid primary is compared at its declared-before-the-run primary cell,
     # the same cell the completion table (primary_edges) was built from; the
-    # companion is scalar. Without a declared cell the historical cell 0 stays.
-    declared_idx, declared_cell = _declared_primary_idx()
-    p_2d, _ = get_2d_result(primary_res, declared_idx if declared_idx is not None else 0)
+    # companion is scalar. A declaration that does not match this grid falls
+    # back to cell 0 with an explicit note (never silently).
+    declared_idx, declared_cell, declared_status = _declared_primary_idx(
+        unwrap_result(primary_res)
+    )
+    primary_slice, _primary_status = _primary_slice_idx(
+        unwrap_result(primary_res), context="Side-by-side primary"
+    )
+    p_2d, _ = get_2d_result(primary_res, primary_slice)
     c_2d, _ = get_2d_result(comp_res, 0)
     st.caption(f"Detections and maps at the run's α = {alpha:g}. {_family_caption(p_2d)}")
-    if declared_cell is not None and getattr(unwrap_result(primary_res), "is_grid", False):
+    if declared_status == "validated" and getattr(unwrap_result(primary_res), "is_grid", False):
         st.caption(
             f"Primary grid compared at the declared primary cell {declared_idx} "
             f"(E={declared_cell.get('e'):g}, H={declared_cell.get('h'):g}, fixed before "
@@ -1253,7 +1327,7 @@ def _render_comparative_view(primary_res, primary_edges, comp_res, comp_edges, p
     st.divider()
     st.markdown("##### 🤝 Companion Agreement")
     compat = check_companion_compatibility(
-        primary_res, comp_res, alpha=alpha, primary_param_idx=declared_idx
+        primary_res, comp_res, alpha=alpha, primary_param_idx=primary_slice
     )
     atlas = _active_atlas(base_atlas)
     if compat["compatible"]:
@@ -1502,8 +1576,10 @@ def render_inference_results_view(base_atlas):
             )
             _render_analyze_decisions_and_diagnostics(primary_res, st.session_state.get("run_plan"), primary_method)
 
-            detail_idx, _ = _declared_primary_idx()
-            p_2d, _ = get_2d_result(primary_res, detail_idx if detail_idx is not None else 0)
+            detail_slice, _detail_status = _primary_slice_idx(
+                unwrap_result(primary_res), context="Comparison details tab"
+            )
+            p_2d, _ = get_2d_result(primary_res, detail_slice)
             c_2d, _ = get_2d_result(comp_res, 0)
             tab_p, tab_c = st.tabs([f"Primary Details ({primary_method})", f"Companion Details ({companion_method})"])
             with tab_p:
