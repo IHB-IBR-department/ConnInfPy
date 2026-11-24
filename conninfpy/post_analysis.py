@@ -240,6 +240,13 @@ class ResultBundle:
                     if getattr(outer, "design_diagnostics", None) is not None
                     else getattr(result, "design_diagnostics", None)
                 ),
+                # NETSTAT-28: additive, opt-in descriptive motion/QC-FC side-car.
+                # Absent in legacy bundles (""unavailable""), never reconstructed.
+                "motion_qc": deepcopy(
+                    getattr(outer, "motion_qc", None)
+                    if getattr(outer, "motion_qc", None) is not None
+                    else getattr(result, "motion_qc", None)
+                ),
                 "combat_diagnostics": deepcopy(
                     getattr(outer, "combat_diagnostics", None)
                     if getattr(outer, "combat_diagnostics", None) is not None

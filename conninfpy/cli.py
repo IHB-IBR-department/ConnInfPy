@@ -14,6 +14,12 @@ writes three files to the output directory:
   summary, resolved tail/correction/native-unit policy, the significance
   level ``alpha``, warnings (``flags``), and run time
 
+Optional descriptive diagnostics are opt-in through ``diagnostics.motion_qc``
+(or ``--motion-qc``); they are summarised before inference, written into
+``provenance.json`` and never change the analysis. ``diagnostics.motion_qc.fd``
+names the phenotype FD column (``Motion_FD``/``func_mean_fd`` are auto-detected);
+no FD is ever invented and an unavailable FD is reported as such.
+
 Both directions are reported, so ``inference.two_tailed`` defaults to True
 (one two-sided family; a single alpha covers both directions). Set it
 explicitly to False for the legacy separate one-sided families (each at the
@@ -47,7 +53,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -56,7 +62,8 @@ import yaml
 from conninfpy._shared.alignment import IdAlignmentError, paired_id_permutation
 
 DESIGNS = ("glm", "two-sample", "paired", "one-sample")
-_TOP_LEVEL_KEYS = {"data", "input", "design", "inference", "atlas", "alpha", "output", "connectivity"}
+_TOP_LEVEL_KEYS = {"data", "input", "design", "inference", "atlas", "alpha", "output", "connectivity",
+                    "diagnostics"}
 _KIND_TO_INPUT = {"correlation": "r", "fisher_z": "z"}
 _BUILTIN_ATLASES = ("schaefer_100_yeo7", "schaefer_200_yeo7", "schaefer_400_yeo7", "bna_246")
 
@@ -486,12 +493,170 @@ def _monte_carlo_summary(result: Any, alpha: float) -> Dict[str, Any]:
     return report_summary(build_report(result, alpha=alpha))
 
 
+def _motion_qc_row_groups(dataset: Any, cfg: Dict[str, Any]) -> Dict[str, np.ndarray]:
+    """Dataset-order row indices of the observations ``build_analysis`` analyses.
+
+    Reuses the same design columns and level rules, purely to align an opt-in
+    FD vector with the rows actually analysed; it never changes any analysis
+    input. A caller-side length guard below fails closed if the two ever drift.
+    """
+    design = cfg["design"]
+    kind = design["type"]
+    pheno = dataset.pheno.reset_index(drop=True)
+    if kind == "glm":
+        used = (_as_list(design.get("interest")) + _as_list(design.get("confounds"))
+                + _as_list(design.get("sites")))
+        keep = _columns(pheno, used, "design").notna().all(axis=1).to_numpy()
+        return {"observations": np.flatnonzero(keep)}
+    if kind == "two-sample":
+        group_col = design.get("group")
+        levels = design.get("levels")
+        used = [group_col] + _as_list(design.get("sites"))
+        keep = _columns(pheno, used, "design").notna().all(axis=1).to_numpy()
+        keep = keep & pheno[group_col].isin(levels).to_numpy()
+        return {
+            "group1": np.flatnonzero(keep & (pheno[group_col] == levels[0]).to_numpy()),
+            "group2": np.flatnonzero(keep & (pheno[group_col] == levels[1]).to_numpy()),
+        }
+    if kind == "one-sample":
+        return {"observations": np.arange(len(pheno), dtype=int)}
+    if kind == "paired":
+        cond_col = design.get("condition") or getattr(dataset, "condition_column", None)
+        levels = design.get("levels")
+        if not cond_col or not levels or len(levels) != 2:
+            raise ConfigError("paired motion_qc needs design.condition and two design.levels.")
+        return {
+            "group1": pheno.index[pheno[cond_col] == levels[0]].to_numpy(),
+            "group2": pheno.index[pheno[cond_col] == levels[1]].to_numpy(),
+        }
+    raise ConfigError(f"motion_qc does not support design type {kind!r}.")
+
+
+def _motion_qc_spec(
+    dataset: Any,
+    cfg: Dict[str, Any],
+    *,
+    kwargs: Optional[Dict[str, Any]] = None,
+    enabled: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """Build ``analyze(motion_qc=...)`` from ``diagnostics.motion_qc``.
+
+    Opt-in and descriptive: an absent block (and no ``--motion-qc``) returns
+    ``None`` and changes nothing. FD is taken from the named phenotype column
+    (or the strict ``Motion_FD``/``func_mean_fd`` auto-detection) and sliced
+    to exactly the rows the analysis uses; nothing is fabricated, and a
+    missing FD column stays an explicit descriptive status rather than an
+    error. Paired designs get one FD vector per condition, in each
+    condition's original row order.
+    """
+    block = (cfg.get("diagnostics") or {}).get("motion_qc") if "diagnostics" in cfg else None
+    if block is None:
+        if not enabled:
+            return None
+        block = {}
+    if not isinstance(block, Mapping):
+        raise ConfigError("diagnostics.motion_qc must be a mapping.")
+    allowed = {"fd", "fd_units", "pool", "space", "condition_a", "condition_b", "unit_of_observation"}
+    unknown = set(block) - allowed
+    if unknown:
+        raise ConfigError(
+            f"unknown diagnostics.motion_qc key(s): {sorted(unknown)}; allowed: {sorted(allowed)}"
+        )
+    pheno = getattr(dataset, "pheno", None)
+    if pheno is None:
+        raise ConfigError("motion_qc needs a phenotype table to read FD from.")
+    from conninfpy.interpret.motion_qc import detect_fd_column
+
+    fd_column = block.get("fd")
+    if fd_column is None:
+        fd_column = detect_fd_column(pheno)
+    elif fd_column not in pheno.columns:
+        raise ConfigError(f"diagnostics.motion_qc.fd={fd_column!r} is not a phenotype column.")
+    fd_values = None
+    if fd_column is not None:
+        fd_values = pd.to_numeric(pheno[fd_column], errors="coerce").to_numpy(dtype=np.float64)
+
+    groups = _motion_qc_row_groups(dataset, cfg)
+    design = cfg["design"]
+    kind = design["type"]
+    if kwargs is not None:
+        if kind == "glm":
+            expected = {"observations": len(np.asarray(kwargs.get("interest")).ravel())}
+        elif kind == "two-sample":
+            expected = {
+                "group1": int(kwargs["group1"].shape[0]),
+                "group2": int(kwargs["group2"].shape[0]),
+            }
+        elif kind == "paired":
+            expected = {
+                "group1": int(kwargs["group1"].shape[0]),
+                "group2": int(kwargs["group2"].shape[0]),
+            }
+        else:  # one-sample
+            expected = {"observations": int(kwargs["group1"].shape[0])}
+        mismatched = {
+            name: (len(groups[name]), count)
+            for name, count in expected.items()
+            if name not in groups or len(groups[name]) != count
+        }
+        if mismatched:
+            raise ConfigError(
+                "motion_qc row alignment guard: design rows disagree with the analysed "
+                f"observations ({mismatched}); the side-car was not attached."
+            )
+
+    spec: Dict[str, Any] = {"pheno": pheno, "subject_ids": getattr(dataset, "subject_ids", None)}
+    for key in ("fd_units", "space", "condition_a", "condition_b", "unit_of_observation"):
+        if block.get(key) is not None:
+            spec[key] = block[key]
+    if block.get("pool") is not None:
+        spec["pool"] = bool(block["pool"])
+    condition_column = getattr(dataset, "condition_column", None)
+
+    if kind == "paired":
+        levels = design.get("levels") or []
+        spec["condition_a"] = str(block.get("condition_a", levels[0]))
+        spec["condition_b"] = str(block.get("condition_b", levels[1]))
+        if condition_column:
+            spec["condition_a"] = str(block.get("condition_a", levels[0]))
+        if fd_values is not None:
+            spec["fd_group1"] = fd_values[groups["group1"]]
+            spec["fd_group2"] = fd_values[groups["group2"]]
+            spec["fd_source_name"] = fd_column
+        return spec
+
+    order = (
+        groups["group1"].tolist() + groups["group2"].tolist()
+        if "group1" in groups else groups["observations"].tolist()
+    )
+    if spec.get("subject_ids") is not None:
+        full_ids = list(spec["subject_ids"])
+        if len(full_ids) == len(pheno):
+            spec["subject_ids"] = [full_ids[k] for k in order]
+        else:
+            spec.pop("subject_ids", None)
+    if fd_values is not None:
+        spec["fd"] = fd_values[order]
+        spec["fd_source_name"] = fd_column
+    spec["index_values"] = [pheno.index[k] for k in order]
+    if kind == "two-sample":
+        levels = design.get("levels") or []
+        spec["condition_labels"] = (
+            [str(levels[0])] * len(groups["group1"])
+            + [str(levels[1])] * len(groups["group2"])
+        )
+    elif condition_column and condition_column in pheno.columns:
+        spec["condition_labels"] = [str(v) for v in pheno[condition_column].to_numpy()[order]]
+    return spec
+
+
 def run(
     config_path: "str | os.PathLike[str]",
     out_dir: "str | os.PathLike[str] | None" = None,
     *,
     n_permutations: Optional[int] = None,
     use_mp: Optional[bool] = None,
+    motion_qc: bool = False,
 ) -> Dict[str, Path]:
     """Run one analysis file; return the paths written, keyed by name."""
     from conninfpy import __version__
@@ -518,6 +683,9 @@ def run(
         inference["use_mp"] = use_mp
     atlas = _atlas(cfg.get("atlas"), dataset, base, summary["n_regions"])
     alpha = float(cfg.get("alpha", 0.05))
+    motion_qc_spec = _motion_qc_spec(dataset, cfg, kwargs=kwargs, enabled=motion_qc)
+    if motion_qc_spec is not None:
+        kwargs = {**kwargs, "motion_qc": motion_qc_spec}
 
     t0 = time.perf_counter()
     result = analyze(**kwargs, **inference, atlas=atlas)
@@ -573,6 +741,8 @@ def run(
             "resolved_strategy": getattr(res, "resolved_strategy", None),
             "combat_diagnostics": res.combat_diagnostics,
             "design_diagnostics": res.design_diagnostics,
+            # NETSTAT-28: additive descriptive side-car (absent unless opted in).
+            "motion_qc": getattr(res, "motion_qc", None),
             "fisher": (inf.analysis_provenance.get("fisher")
                        if isinstance(getattr(inf, "analysis_provenance", None), dict) else None),
             "design": None if design is None else {
@@ -646,6 +816,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p_run.add_argument("--out", help="output directory (default: 'output' in the file)")
     p_run.add_argument("--n-permutations", type=int, help="override inference.n_permutations")
     p_run.add_argument("--no-mp", action="store_true", help="run in a single process")
+    p_run.add_argument(
+        "--motion-qc",
+        action="store_true",
+        help="add the descriptive motion/QC-FC side-car (FD from diagnostics.motion_qc.fd "
+             "or an auto-detected Motion_FD/func_mean_fd phenotype column)",
+    )
     sub.add_parser("info", help="show versions and the compute backend")
     args = parser.parse_args(argv)
 
@@ -654,7 +830,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
     try:
         run(args.config, args.out, n_permutations=args.n_permutations,
-            use_mp=False if args.no_mp else None)
+            use_mp=False if args.no_mp else None, motion_qc=args.motion_qc)
     except (ConfigError, FileNotFoundError, ValueError) as exc:
         print(f"conninfpy: error: {exc}", file=sys.stderr)
         return 1

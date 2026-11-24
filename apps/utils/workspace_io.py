@@ -651,6 +651,9 @@ class _Codec:
                 "design_diagnostics": self.encode(value.design_diagnostics, hint=f"{hint}_design"),
                 "flags": self.encode(list(value.flags), hint=f"{hint}_flags"),
                 "resolved_strategy": self.encode(value.resolved_strategy, hint=f"{hint}_strategy"),
+                # NETSTAT-28: additive opt-in descriptive side-car. Absent in
+                # older states (decoded as None), never reconstructed.
+                "motion_qc": self.encode(getattr(value, "motion_qc", None), hint=f"{hint}_motion_qc"),
             }
         if cls_name == "InferenceResult" and mod_name.startswith("conninfpy"):
             return self._encode_inference_result(value, hint=hint)
@@ -1074,6 +1077,7 @@ class _Decoder:
                 design_diagnostics=self.decode(node.get("design_diagnostics")),
                 flags=list(self.decode(node.get("flags") or [])),
                 resolved_strategy=self.decode(node.get("resolved_strategy")),
+                motion_qc=self.decode(node.get("motion_qc")),
             )
 
         raise WorkspaceArchiveError(f"Unsupported tagged object type in workspace state: {tag!r}")

@@ -30,6 +30,7 @@ from apps.utils.result_views import (
     prepare_cnbs_blocks_table,
     prepare_network_summary,
     prepare_node_summary,
+    motion_qc_sidecar,
     prepare_predicted_coupling_summary,
     recorded_native_detection_count,
     unwrap_result,
@@ -148,6 +149,7 @@ def _extract_result_diagnostics_summary(res_wrapper, run_plan=None):
         "flags": flags,
         "combat_diagnostics": combat_diag,
         "design_diagnostics": design_diag,
+        "motion_qc": motion_qc_sidecar(res_wrapper),
     }
 
 
@@ -174,11 +176,13 @@ def _render_analyze_decisions_and_diagnostics(res_wrapper, run_plan=None, method
     flags = info["flags"]
     combat_diag = info["combat_diagnostics"]
     design_diag = info["design_diagnostics"]
+    motion_qc = info["motion_qc"]
 
     has_any = bool(
         flags
         or combat_diag is not None
         or design_diag is not None
+        or motion_qc is not None
         or info["harmonize_requested"] is not None
         or info["effective_site_recipe"] is not None
         or info["resolved_strategy"] not in ("none", "unknown / not recorded")
@@ -289,6 +293,190 @@ def _render_analyze_decisions_and_diagnostics(res_wrapper, run_plan=None, method
 
             for dfl in design_diag.get("flags") or []:
                 st.warning(f"Design diagnostic: {dfl}")
+
+        _render_motion_qc_sidecar(motion_qc)
+
+
+def _render_motion_qc_sidecar(diag, *, key_prefix: str = "results_motion_qc"):
+    """Render the saved descriptive motion / QC-FC side-car (NETSTAT-28).
+
+    The diagnostic was computed before inference and never fed the run; the
+    section shows its FD provenance, per-observation table, descriptive
+    QC-FC/distance associations and every explicit unavailable reason.
+    """
+    if not diag:
+        return
+    from conninfpy.interpret.report import motion_qc_markdown
+
+    status = str(diag.get("status"))
+    st.markdown("**Motion / QC–FC Side-Car (`motion_qc`, descriptive; computed before inference):**")
+    if status == "available":
+        st.success(f"Status: `{status}` — descriptive Spearman only; no p-values and no effect on inference.")
+    else:
+        st.warning(
+            f"Status: `{status}` — {diag.get('status_reason') or 'see the explicit unavailable reasons below'}. "
+            "Nothing was fabricated for the unavailable part."
+        )
+
+    def _arm_metrics(arm):
+        inputs = arm.get("input") or {}
+        fd = arm.get("fd") or {}
+        qc = arm.get("qc_fc") or {}
+        q = qc.get("quantiles") or {}
+        subj = qc.get("subject_level") or {}
+        source = fd.get("source") or {}
+        return [
+            ("FD source", str(source.get("name") or source.get("kind") or "unavailable")),
+            ("Input scale", str(inputs.get("scale"))),
+            ("Mean field", str(inputs.get("mean_label"))),
+            ("Observations", arm.get("n_observations")),
+            ("Edges", arm.get("n_edges")),
+            ("Median edge rho", "—" if q.get("median") is None else f"{q['median']:.3f}"),
+            ("Edges with rho", f"{qc.get('n_edges_with_association')}/{qc.get('n_edges_total')}"),
+            ("Subject rho", "—" if subj.get("rho") is None else f"{subj['rho']:.3f}"),
+        ]
+
+    if str(diag.get("kind")) == "motion_qc_fc_paired":
+        pooling = diag.get("pooling") or {}
+        st.caption(f"Pooling: `{pooling.get('status')}` — {pooling.get('note') or ''}")
+        rows = []
+        for name, arm in (diag.get("conditions") or {}).items():
+            for label, value in _arm_metrics(arm):
+                rows.append({"Condition": name, "Metric": label, "Value": str(value)})
+        if diag.get("pooled"):
+            for label, value in _arm_metrics(diag["pooled"]):
+                rows.append({"Condition": "pooled", "Metric": label, "Value": str(value)})
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        for name, arm in (diag.get("conditions") or {}).items():
+            _motion_qc_subject_table(arm, label=f"Condition {name}", key=f"{key_prefix}_{name}")
+            _motion_qc_roi_table(arm, label=f"Condition {name}", key=f"{key_prefix}_{name}")
+        if diag.get("pooled"):
+            _motion_qc_subject_table(diag["pooled"], label="Pooled", key=f"{key_prefix}_pooled")
+            _motion_qc_roi_table(diag["pooled"], label="Pooled", key=f"{key_prefix}_pooled")
+        difference = diag.get("difference") or {}
+        st.caption(f"Condition difference: `{difference.get('status')}` — {difference.get('reason') or ''}")
+    else:
+        metrics = _arm_metrics(diag)
+        cols = st.columns(min(len(metrics), 4))
+        for idx, (label, value) in enumerate(metrics):
+            cols[idx % len(cols)].metric(label, str(value))
+        _motion_qc_subject_table(diag, label="Per-observation", key=key_prefix)
+        _motion_qc_roi_table(diag, label="Per-ROI", key=key_prefix)
+
+    adjustment = diag.get("adjustment") or {}
+    st.caption(
+        f"Adjustment: `{adjustment.get('mode')}`"
+        + (f" — {adjustment.get('note')}" if adjustment.get("note") else "")
+    )
+    res = adjustment.get("residualization")
+    if isinstance(res, dict):
+        st.caption(
+            f"Residualisation: rank {res.get('matrix_rank')}/{res.get('n_columns')}, "
+            f"residual df {res.get('residual_df_min')}–{res.get('residual_df_max')} per edge, "
+            f"intercept present: {res.get('intercept_present')}, "
+            f"{res.get('n_edges_insufficient_df')} edge(s) below 2 residual df, "
+            f"{res.get('n_edges_zero_residual_variance')} with zero residual variance"
+            + (f" — {res.get('reason')}" if res.get("status") != "applied" else "")
+        )
+        if res.get("partial_spearman") is False:
+            st.caption(
+                "FC-only residualisation: edge values were residualised and then compared "
+                "with the raw FD; this is NOT a partial Spearman coefficient."
+            )
+    dist = diag.get("distance") or {}
+    if dist:
+        value = dist.get("spearman_mean_vs_distance")
+        qc_dist = dist.get("qc_fc_vs_distance") or {}
+        qc_value = qc_dist.get("rho")
+        st.caption(
+            f"Distance ({dist.get('coordinates_source') or 'unavailable'}, space: {dist.get('space') or 'not declared'}): "
+            f"`{dist.get('status')}`"
+            + (f" — {dist.get('reason')}" if dist.get("status") != "available" and dist.get("reason") else "")
+        )
+        st.caption(
+            "Two separate descriptive measures (never mixed): "
+            "edge level `spearman_mean_vs_distance` = "
+            + (f"{value:.3f}" if isinstance(value, (int, float)) else "—")
+            + f" over {dist.get('n_edges_used')} edges (mean edge value vs distance); "
+            "QC–FC vs distance `qc_fc_vs_distance` = "
+            + (f"{qc_value:.3f}" if isinstance(qc_value, (int, float)) else "—")
+            + f" over {qc_dist.get('n_pairs')} edge(s) with a valid association "
+            f"(status `{qc_dist.get('status')}`"
+            + (f" — {qc_dist.get('reason')}" if qc_dist.get("reason") and qc_dist.get("status") != "available" else "")
+            + ")."
+        )
+    for item in diag.get("unavailable") or []:
+        st.warning(f"Unavailable: `{item.get('field')}` — {item.get('status')}: {item.get('reason')}")
+    for note in diag.get("notes") or []:
+        st.caption(note)
+
+    markdown = motion_qc_markdown(diag)
+    if markdown:
+        st.download_button(
+            "Download motion/QC–FC report section (Markdown)",
+            data=markdown,
+            file_name="motion_qc_report_section.md",
+            mime="text/markdown",
+            key=f"{key_prefix}_download",
+        )
+
+
+def _motion_qc_subject_table(arm, *, label: str, key: str):
+    """Per-observation FD / mean|r| / NaN / negative table with denominators."""
+    subjects = arm.get("subjects") or {}
+    inputs = arm.get("input") or {}
+    mean_label = str(inputs.get("mean_label") or "mean_abs_value")
+    values = subjects.get(mean_label) or []
+    if not values:
+        return
+    frame = pd.DataFrame({
+        "subject": subjects.get("subject_ids") or [None] * len(values),
+        "condition": subjects.get("condition") or [None] * len(values),
+        "fd_mm": subject_fd if (subject_fd := subjects.get("fd")) is not None else [None] * len(values),
+        mean_label: values,
+        "nan_share": subjects.get("nan_share") or [None] * len(values),
+        "negative_share": subjects.get("negative_share") or [None] * len(values),
+    })
+    st.caption(
+        f"{label}: NaN share over all upper-triangle edges "
+        f"(denominator {subjects.get('nan_denominator')}); negative share over finite edges "
+        "(per-row denominator in the saved diagnostic)."
+    )
+    st.dataframe(frame, hide_index=True, width="stretch")
+    st.download_button(
+        "Download per-observation table (CSV)",
+        data=frame.to_csv(index=False),
+        file_name=f"motion_qc_{key}.csv",
+        mime="text/csv",
+        key=f"{key}_csv",
+    )
+
+
+def _motion_qc_roi_table(arm, *, label: str, key: str):
+    """Per-ROI NaN/Inf counts with the explicit non-diagonal-edge denominator."""
+    roi = (arm or {}).get("roi_nonfinite") or {}
+    if not roi.get("nan_count"):
+        return
+    rows = [
+        {"roi": roi.get("roi_id")[idx] if roi.get("roi_id") else idx,
+         "nan": nan, "inf": inf, "nonfinite_share": share}
+        for idx, (nan, inf, share) in enumerate(zip(
+            roi.get("nan_count") or [], roi.get("inf_count") or [],
+            roi.get("nonfinite_share") or [],
+        ))
+        if (nan or inf)
+    ]
+    if not rows:
+        st.caption(
+            f"{label}: no non-finite entries on any ROI "
+            f"(denominator {roi.get('denominator')} = observations × (ROIs − 1))."
+        )
+        return
+    st.caption(
+        f"{label}: per-ROI non-finite entries (non-diagonal edges, denominator "
+        f"{roi.get('denominator')}; NaN and Inf counted separately)."
+    )
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
 
 def _render_one_sentence_summary(res, edges_df, method_name, direction_labels):

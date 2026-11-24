@@ -137,6 +137,9 @@ class InterpretationReport:
         out.append("\n**Lobe groups** (ROIs not ≥ 50 % in one lobe are 'mixed')\n\n" + md_table(g, n=12))
         out.append("\n**BrainMap domains** (unique ROIs; overlapping memberships)\n\n" + md_table(self.domains))
         out.append("\n**Distance QC**\n\n" + md_table(self.distance_qc))
+        sidecar = getattr(self.result, "motion_qc", None)
+        if sidecar:
+            out.append(motion_qc_markdown(sidecar, level=2))
         return "".join(out)
 
 
@@ -216,6 +219,181 @@ def roi_markdown(rois: RoiAnnotation, title: str) -> str:
             f"Median subregion purity {rois.table['region_purity'].median():.2f}. Network labels: {source}.\n")
 
 
+def _adjustment_type_label(adjustment: Mapping[str, Any]) -> str:
+    """Plain label for the adjustment state (partial Spearman is never claimed)."""
+    mode = str(adjustment.get("mode"))
+    if mode == "fc_residualized_not_partial":
+        return "edge-value residualisation only (NOT partial Spearman)"
+    if mode == "none":
+        return "unadjusted (no nuisance matrix supplied)"
+    return f"unavailable ({adjustment.get('reason') or mode})"
+
+
+def _motion_qc_arm_markdown(diag: Mapping[str, Any], title: str, *, max_rows: int = 8) -> str:
+    """One descriptive arm: provenance, per-observation table, QC-FC, distance."""
+    out: list = []
+    if title:
+        out.append(f"\n**{title}**\n")
+    status = str(diag.get("status"))
+    reason = diag.get("status_reason")
+    out.append(f"\nStatus: `{status}`" + (f" — {reason}" if reason and status != "available" else "") + ".\n")
+    fd = diag.get("fd") or {}
+    source = fd.get("source") or {}
+    inputs = diag.get("input") or {}
+    provenance = [
+        ("FD source", f"{source.get('kind', 'unavailable')}"
+                      + (f" (`{source.get('name')}`)" if source.get("name") else "")),
+        ("FD units", str(fd.get("units") or "unknown")),
+        ("FD convention", str(fd.get("convention") or "unknown")),
+        ("FD alignment", str(fd.get("id_alignment") or "not applicable")),
+        ("Input scale", f"{inputs.get('scale')} (source: {inputs.get('scale_source')})"),
+        ("Per-observation mean field", str(inputs.get("mean_label"))),
+        ("Transform", str(inputs.get("transform"))),
+        ("Observations / ROIs / edges", f"{diag.get('n_observations')} / {diag.get('n_rois')} / {diag.get('n_edges')}"),
+        ("Adjustment", str((diag.get("adjustment") or {}).get("mode"))),
+        ("Adjustment type", _adjustment_type_label((diag.get("adjustment") or {}))),
+    ]
+    out.append("\n| Provenance | Value |\n|---|---|\n" + "\n".join(f"| {k} | {v} |" for k, v in provenance) + "\n")
+
+    subjects = diag.get("subjects") or {}
+    mean_label = str(inputs.get("mean_label") or "mean_abs_value")
+    if subjects.get(mean_label):
+        ids = subjects.get("subject_ids")
+        cond = subjects.get("condition")
+        index_values = subjects.get("index_values")
+        rows = []
+        for idx, value in enumerate(subjects[mean_label][:max_rows]):
+            rows.append({
+                "row": idx if not index_values else index_values[idx],
+                "subject": "" if not ids else ids[idx],
+                "condition": "" if not cond else cond[idx],
+                "fd_mm": (subjects.get("fd") or [None] * len(subjects[mean_label]))[idx],
+                mean_label: value,
+                "nan_share": (subjects.get("nan_share") or [None] * len(subjects[mean_label]))[idx],
+                "negative_share": (subjects.get("negative_share") or [None] * len(subjects[mean_label]))[idx],
+                "negative_denominator": (subjects.get("negative_denominator") or [None] * len(subjects[mean_label]))[idx],
+            })
+        table = pd.DataFrame(rows).astype(object).where(pd.DataFrame(rows).notna(), "")
+        out.append("\nPer-observation table (first rows; NaN denominator = n_rois*(n_rois-1)/2 = "
+                   f"{subjects.get('nan_denominator')}, negative denominator = finite edges)\n\n"
+                   + md_table(table, fmt="{:.4f}"))
+        out.append(f"\nShowing {min(max_rows, len(rows))} of {len(subjects[mean_label])} observation(s).\n")
+
+    qc = diag.get("qc_fc") or {}
+    q = qc.get("quantiles") or {}
+    f = lambda v: "—" if v is None else f"{float(v):.3f}"
+    section = f"""
+| QC-FC (descriptive Spearman, no p-values) | Value |
+|---|---|
+| Edges with a valid association | {qc.get('n_edges_with_association')} / {qc.get('n_edges_total')} |
+| Insufficient complete pairs (< {qc.get('min_complete_pairs')}) | {qc.get('n_edges_insufficient_pairs')} |
+| Constant FD on complete pairs | {qc.get('n_edges_constant_fd')} |
+| Constant edge on complete pairs | {qc.get('n_edges_constant_edge')} |
+| rho median (q25 / q75) | {f(q.get('median'))} ({f(q.get('q25'))} / {f(q.get('q75'))}) |
+| rho q10 / q90 | {f(q.get('q10'))} / {f(q.get('q90'))} |
+| rho min / max | {f(q.get('min'))} / {f(q.get('max'))} |
+| Subject mean |r| vs FD (rho, n) | {f((qc.get('subject_level') or {}).get('rho'))} ({(qc.get('subject_level') or {}).get('n')}) |
+"""
+    out.append(section)
+    roi_nf = diag.get("roi_nonfinite") or {}
+    if roi_nf.get("nan_count"):
+        bad = [
+            (idx, nan, inf, share)
+            for idx, (nan, inf, share) in enumerate(zip(
+                roi_nf.get("nan_count") or [],
+                roi_nf.get("inf_count") or [],
+                roi_nf.get("nonfinite_share") or [],
+            ))
+            if (nan or inf)
+        ]
+        out.append(
+            "\nPer-ROI non-finite entries (non-diagonal edges, "
+            f"denominator {roi_nf.get('denominator')} = observations × (ROIs − 1); "
+            "NaN and Inf counted separately).\n"
+        )
+        if bad:
+            table = pd.DataFrame([
+                {"roi_index": idx, "nan": nan, "inf": inf,
+                 "nonfinite_share": share if share is not None else ""}
+                for idx, nan, inf, share in bad[:max_rows]
+            ])
+            out.append("\n" + md_table(table) + "\n")
+            out.append(f"Showing {min(max_rows, len(bad))} of {len(bad)} ROI(s) with non-finite entries.\n")
+        else:
+            out.append("No non-finite entries on any ROI.\n")
+
+    dist = diag.get("distance") or {}
+    qc_dist = dist.get("qc_fc_vs_distance") or {}
+    out.append("\nDistance (known coordinates only): "
+               f"status `{dist.get('status')}`"
+               + (f" — {dist.get('reason')}" if dist.get("status") != "available" else "")
+               + ". Two separate descriptive measures:\n"
+               f"- edge level `spearman_mean_vs_distance` = "
+               f"{f(dist.get('spearman_mean_vs_distance'))} over {dist.get('n_edges_used')} edges "
+               "(mean edge value vs distance; NOT the distance dependence of QC-FC);\n"
+               f"- QC-FC vs distance `qc_fc_vs_distance` = {f(qc_dist.get('rho'))} "
+               f"over {qc_dist.get('n_pairs')} edge(s) with a valid association "
+               f"(status `{qc_dist.get('status')}`"
+               + (f", {qc_dist.get('reason')}" if qc_dist.get("status") not in ("available", None) and qc_dist.get("reason") else "")
+               + ").\n")
+    adjustment = diag.get("adjustment") or {}
+    residualization = adjustment.get("residualization") or {}
+    if adjustment.get("mode") == "fc_residualized_not_partial" and residualization:
+        out.append(
+            "\nResidualisation (FC-only, **not** partial Spearman): rank "
+            f"{residualization.get('matrix_rank')}/{residualization.get('n_columns')}, "
+            f"residual df {residualization.get('residual_df_min')}–"
+            f"{residualization.get('residual_df_max')} on each edge's complete rows; "
+            f"{residualization.get('n_edges_insufficient_df')} edge(s) below 2 residual df, "
+            f"{residualization.get('n_edges_zero_residual_variance')} with zero residual "
+            "variance (both reported, never interpreted).\n"
+        )
+    unavailable = diag.get("unavailable") or []
+    if unavailable:
+        out.append("\nExplicitly unavailable:\n" + "".join(
+            f"- `{item.get('field')}`: {item.get('status')} — {item.get('reason')}\n"
+            for item in unavailable
+        ))
+    for note in diag.get("notes") or []:
+        out.append(f"\n- {note}\n")
+    return "".join(out)
+
+
+def motion_qc_markdown(
+    diag: Optional[Mapping[str, Any]],
+    *,
+    heading: str = "Motion / QC-FC side-car (descriptive, before inference)",
+    level: int = 2,
+    max_rows: int = 8,
+) -> str:
+    """Markdown section for a saved ``motion_qc`` diagnostic (or ``""``).
+
+    Reports the FD provenance (source, units, unrecorded convention), the
+    native-scale handling, the per-observation table with denominators, the
+    descriptive QC-FC and distance associations, and every explicit
+    unavailable reason. No p-values are produced and nothing is tested.
+    """
+    if not diag:
+        return ""
+    out = [f"\n{'#' * int(level)} {heading}\n"]
+    out.append(
+        "\nDescriptive only: Spearman rank agreement without p-values, no null "
+        "distribution, no exclusions, and no effect on inference.\n"
+    )
+    if str(diag.get("kind")) == "motion_qc_fc_paired":
+        pooling = diag.get("pooling") or {}
+        out.append(f"\nPooling: `{pooling.get('status')}` — {pooling.get('note') or ''}\n")
+        for name, arm in (diag.get("conditions") or {}).items():
+            out.append(_motion_qc_arm_markdown(arm, f"Condition {name}", max_rows=max_rows))
+        if diag.get("pooled"):
+            out.append(_motion_qc_arm_markdown(diag["pooled"], "Pooled (stacked conditions, verified identity)", max_rows=max_rows))
+        difference = diag.get("difference") or {}
+        out.append(f"\nCondition difference: `{difference.get('status')}` — {difference.get('reason') or ''}\n")
+    else:
+        out.append(_motion_qc_arm_markdown(diag, "", max_rows=max_rows))
+    return "".join(out)
+
+
 def reproduction_note(result: Any, stored: Any, alpha: float = 0.05) -> str:
     """Compare a result's p-value maps with a stored ``.npz`` (keys 'positive', 'negative')."""
     if stored is None or not Path(stored).exists():
@@ -235,4 +413,5 @@ def md_table(df: pd.DataFrame, n: Optional[int] = None, fmt: str = "{:.3f}") -> 
     return head + "\n".join(rows) + "\n"
 
 
-__all__ = ["InterpretationReport", "interpret_result", "roi_markdown", "reproduction_note"]
+__all__ = ["InterpretationReport", "interpret_result", "roi_markdown", "reproduction_note",
+           "motion_qc_markdown"]

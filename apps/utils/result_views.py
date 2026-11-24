@@ -955,6 +955,29 @@ def build_null_max_figure(res_2d: Any, method_name: str = "") -> Tuple[Optional[
     return fig, {"available": True, "tails": tails_to_plot, "observed_max_note": observed_note}
 
 
+def motion_qc_sidecar(res_wrapper: Any) -> Optional[Dict[str, Any]]:
+    """Saved descriptive motion / QC-FC side-car, from any supported carrier.
+
+    Reads an ``AnalyzeResult`` (or its dict form), an inference result, or a
+    saved bundle/run-plan metadata mapping. Absent (legacy results, diagnostics
+    not opted in) returns ``None`` -- nothing is reconstructed or guessed.
+    """
+    from conninfpy._compat import TailResult
+
+    if isinstance(res_wrapper, dict) and not isinstance(res_wrapper, TailResult):
+        value = res_wrapper.get("motion_qc")
+        if isinstance(value, dict):
+            return value
+    meta = getattr(res_wrapper, "metadata", None)
+    if isinstance(meta, dict) and isinstance(meta.get("motion_qc"), dict):
+        return meta["motion_qc"]
+    for holder in (res_wrapper, getattr(res_wrapper, "inference", None)):
+        value = getattr(holder, "motion_qc", None)
+        if isinstance(value, dict):
+            return value
+    return None
+
+
 def _provenance_or_none(res_wrapper: Any) -> Optional[Dict[str, Any]]:
     inner = unwrap_result(res_wrapper)
     prov = getattr(inner, "analysis_provenance", None)

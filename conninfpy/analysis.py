@@ -15,7 +15,7 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -64,6 +64,10 @@ class AnalyzeResult:
     design_diagnostics: Optional[Dict[str, Any]] = None
     flags: list = field(default_factory=list)
     resolved_strategy: Optional[str] = None
+    #: Optional descriptive motion / QC-FC side-car (NETSTAT-28); ``None``
+    #: unless the caller opted in with ``motion_qc=``. It never affects
+    #: inference and carries its own provenance and unavailable reasons.
+    motion_qc: Optional[Dict[str, Any]] = None
 
     def __getitem__(self, key: str) -> Any:
         # Forward dict-style access to the underlying result so
@@ -404,6 +408,86 @@ def _estimator_aware_units(scale: str, record: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _motion_qc_common(spec: Mapping[str, Any], kind: str, atlas: Any) -> Dict[str, Any]:
+    """Shared motion_qc_fc kwargs resolved from one analyze(motion_qc=...) spec."""
+    explicit_input = spec.get("input")
+    if explicit_input is not None:
+        scale = explicit_input
+        scale_source = spec.get("input_source") or "explicit motion_qc input="
+    else:
+        scale = kind
+        scale_source = spec.get("input_source") or "analyze resolved input scale"
+    return dict(
+        pheno=spec.get("pheno"),
+        fd_units=spec.get("fd_units", "mm"),
+        nuisance=spec.get("nuisance"),
+        nuisance_names=spec.get("nuisance_names"),
+        coords=spec.get("coords"),
+        atlas=spec.get("atlas", atlas),
+        space=spec.get("space"),
+        roi_ids=spec.get("roi_ids"),
+        scale=scale,
+        scale_source=scale_source,
+        pheno_subject_column=spec.get("pheno_subject_column"),
+        fd_source_name=spec.get("fd_source_name"),
+        unit_of_observation=spec.get("unit_of_observation", "subject"),
+        input_stage="native input before Fisher/ComBat and before inference",
+    )
+
+
+def _motion_qc_single_diagnostics(
+    spec: Mapping[str, Any], data: Any, kind: str, atlas: Any
+) -> Dict[str, Any]:
+    """One-set descriptive motion/QC-FC diagnostics (GLM, two-sample, one-sample)."""
+    from conninfpy.interpret.motion_qc import motion_qc_fc
+
+    return motion_qc_fc(
+        data,
+        fd=spec.get("fd"),
+        subject_ids=spec.get("subject_ids"),
+        condition_labels=spec.get("condition_labels"),
+        condition=spec.get("condition"),
+        index_values=spec.get("index_values"),
+        **(_motion_qc_common(spec, kind, atlas)),
+    )
+
+
+def _motion_qc_paired_diagnostics(
+    spec: Mapping[str, Any], group1: Any, group2: Any, kind: str, atlas: Any
+) -> Dict[str, Any]:
+    """Per-condition descriptive diagnostics for a paired design (A/B separate)."""
+    from conninfpy.interpret.motion_qc import motion_qc_fc_paired
+
+    return motion_qc_fc_paired(
+        group1,
+        group2,
+        fd_group1=spec.get("fd_group1", spec.get("fd")),
+        fd_group2=spec.get("fd_group2"),
+        subject_ids=spec.get("subject_ids"),
+        pool=spec.get("pool", True),
+        condition_a=spec.get("condition_a", "A"),
+        condition_b=spec.get("condition_b", "B"),
+        id_alignment=spec.get("id_alignment_verified"),
+        **(_motion_qc_common(spec, kind, atlas)),
+    )
+
+
+def _motion_qc_flag(diag: Mapping[str, Any]) -> str:
+    """One plain-English flag line for the opted-in side-car."""
+    status = str(diag.get("status"))
+    if status == "available":
+        where = "per condition" if diag.get("kind") == "motion_qc_fc_paired" else "one observation set"
+        return (
+            "motion/QC-FC side-car enabled (descriptive Spearman only, no p-values; "
+            f"{where}; inference unaffected): status=available."
+        )
+    reason = diag.get("status_reason") or "see motion_qc.unavailable"
+    return (
+        "motion/QC-FC side-car enabled (descriptive only, inference unaffected) but "
+        f"not fully available: status={status} - {reason}"
+    )
+
+
 def analyze(
     Y: Optional[npt.NDArray[np.float64]] = None,
     *,
@@ -446,6 +530,7 @@ def analyze(
     contrast_id: Optional[str] = None,
     preprocessing: Optional[Dict[str, Any]] = None,
     fisher_history: Optional[Sequence[Mapping[str, Any]]] = None,
+    motion_qc: Optional[Mapping[str, Any]] = None,
     **method_kwargs: Any,
 ) -> Union[AnalyzeResult, Dict[str, AnalyzeResult]]:
     """Run the standard prepare → harmonize → GLM/two-sample → infer recipe.
@@ -710,6 +795,32 @@ def analyze(
         history — this call never re-transforms or re-counts them.
         ``input='z'`` without a history records the upstream transform as
         unknown; ``input='r'`` transforms here and records its own entry.
+    motion_qc : mapping, optional
+        Opt-in descriptive motion / QC-FC side-car diagnostics, computed on
+        the native input **before** any Fisher/ComBat step and before
+        inference (see :mod:`conninfpy.interpret.motion_qc`). Off by default:
+        with ``None`` nothing is computed and the result is unchanged.
+
+        Recognised keys: ``fd`` (phenotype column name or a per-observation
+        vector aligned to the analysis observations: ``Y`` for the GLM path,
+        ``group1 + group2`` concatenated for the two-sample path, ``group1``
+        for a paired/one-sample path), ``fd_group1``/``fd_group2`` (paired
+        conditions; ``fd_group2`` follows the original condition-B row order
+        and is moved into condition A's order with the same ID permutation as
+        the data), ``pheno`` (for FD column lookup and subject-ID checks),
+        ``subject_ids`` (exact identity check, no normalisation), ``input``
+        (override the resolved ``'r'``/``'z'`` scale), ``nuisance`` (an
+        aligned design matrix **including an intercept**; only this enables
+        residualisation), ``nuisance_names``, ``coords``/``atlas``/``space``
+        (known ROI coordinates for the distance part), ``roi_ids``,
+        ``pool`` (paired pooling, only with verified identity),
+        ``condition_a``/``condition_b``, ``fd_units``, ``pheno_subject_column``.
+
+        The diagnostics are returned as ``result.motion_qc`` (also attached
+        to the wrapped inference result for report/export), with an explicit
+        ``status`` and every unavailable reason. They add one ``flags`` entry
+        and nothing else: p-maps, statistics, masks, sampling and RNG
+        consumption are bit-identical with and without them.
     **method_kwargs
         Forwarded to the underlying pipeline (e.g. ``net_labels``,
         ``min_cluster_size``, ``threshold``).
@@ -727,6 +838,10 @@ def analyze(
     """
     flags: list = []
     combat_diag: Optional[Dict[str, Any]] = None
+    # Opt-in, additive motion / QC-FC side-car (NETSTAT-28). ``None`` means the
+    # caller did not opt in: no diagnostic is computed and no result changes.
+    motion_qc_diag: Optional[Dict[str, Any]] = None
+    motion_qc_spec: Optional[Dict[str, Any]] = dict(motion_qc) if motion_qc is not None else None
     # Known preprocessing facts (three-state, with sources); normalized once so
     # every result and export carries the same record. None stays unknown.
     preprocessing_record = normalize_preprocessing_record(preprocessing)
@@ -819,6 +934,25 @@ def analyze(
             raise ValueError(str(exc)) from exc
         group2 = b_data[perm]
         reordered = ["group2"] + (["confounds_group2"] if had_condition_confounds else [])
+        if motion_qc_spec is not None and motion_qc_spec.get("fd_group2") is not None:
+            # The side-car is descriptive, but its condition-B FD must follow the
+            # exact same rows as condition B: reorder it with the one permutation.
+            from conninfpy.interpret.motion_qc import _resolve_fd_vector
+
+            fd_b = _resolve_fd_vector(
+                motion_qc_spec["fd_group2"], motion_qc_spec.get("pheno"),
+                int(b_data.shape[0]), "motion_qc['fd_group2']",
+            )
+            motion_qc_spec["fd_group2"] = fd_b[perm]
+            motion_qc_spec["fd_group2_alignment"] = (
+                "condition-B FD moved into condition A's row order with the same "
+                "subject-ID permutation as condition B"
+            )
+        if motion_qc_spec is not None and ids_group1 is not None:
+            motion_qc_spec["subject_ids"] = tuple(ids_group1)
+            # analyze verified the A<->B bijection and moved condition B (and its
+            # FD) into A order; the descriptive side-car records that fact.
+            motion_qc_spec["id_alignment_verified"] = "exact_id_match"
         paired_alignment = alignment_record(
             perm,
             n_subjects=n_a,
@@ -859,6 +993,11 @@ def analyze(
             raise ValueError("paired interest with correlations requires Fisher transformation; r_to_z=False is not supported")
         if harmonize not in (None, "auto"):
             raise ValueError("paired interest supports harmonize=None or 'auto'; harmonization of condition differences is not automatic")
+        if motion_qc_spec is not None:
+            motion_qc_diag = _motion_qc_paired_diagnostics(
+                motion_qc_spec, a, b, original_kind, atlas
+            )
+            flags.append(_motion_qc_flag(motion_qc_diag))
         if (confounds_group1 is None) != (confounds_group2 is None):
             raise ValueError("supply both condition-specific confounds or neither")
         n_subject_confounds = 0 if confounds is None else _as_2d(confounds).shape[1]
@@ -1095,6 +1234,23 @@ def analyze(
     # ---- Input preparation: zero diagonal, Fisher r→z exactly once ----
     stacks = [Y] if glm_mode else [g for g in (group1, group2) if g is not None]
     kind = _resolve_input_kind(input, fisher_z, stacks)
+    if motion_qc_spec is not None and motion_qc_diag is None:
+        # Described on the caller's native input, before Fisher/ComBat/inference.
+        if ttest_mode and test_type == "paired" and group1 is not None and group2 is not None:
+            motion_qc_diag = _motion_qc_paired_diagnostics(
+                motion_qc_spec, group1, group2, kind, atlas
+            )
+        else:
+            if glm_mode:
+                mq_data = Y
+            elif test_type == "two-sample" and group2 is not None:
+                mq_data = np.concatenate([group1, group2], axis=0)
+            else:
+                mq_data = group1
+            motion_qc_diag = _motion_qc_single_diagnostics(
+                motion_qc_spec, mq_data, kind, atlas
+            )
+        flags.append(_motion_qc_flag(motion_qc_diag))
     # Already-transformed input: nothing is applied here. The upstream
     # transform is the caller's history when supplied, else explicitly
     # unknown — never an invented policy or zero-count clip. (The
@@ -1362,12 +1518,15 @@ def analyze(
             res.resolved_strategy = backend_resolved_strategy
             res.design_diagnostics = design_diag
             res.flags = list(res_flags)
+            if motion_qc_diag is not None:
+                res.motion_qc = motion_qc_diag
             out[nm] = AnalyzeResult(
                 inference=res,
                 combat_diagnostics=combat_diag,
                 design_diagnostics=design_diag,
                 flags=res_flags,
                 resolved_strategy=backend_resolved_strategy,
+                motion_qc=motion_qc_diag,
             )
         return out
 
@@ -1572,6 +1731,8 @@ def analyze(
     result.resolved_strategy = backend_resolved_strategy
     result.design_diagnostics = design_diag
     result.flags = list(flags)
+    if motion_qc_diag is not None:
+        result.motion_qc = motion_qc_diag
 
     return AnalyzeResult(
         inference=result,
@@ -1579,6 +1740,7 @@ def analyze(
         design_diagnostics=design_diag,
         flags=flags,
         resolved_strategy=backend_resolved_strategy,
+        motion_qc=motion_qc_diag,
     )
 
 

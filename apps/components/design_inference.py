@@ -553,6 +553,287 @@ def _estimate_runtime_range(
     return f"{_format_runtime(lower)} - {_format_runtime(upper)}"
 
 
+MOTION_QC_WIDGET = "design:motion_qc_sidecar"
+MOTION_QC_FD_WIDGET = "design:motion_qc_fd_column"
+
+
+def _motion_qc_fd_candidates(pheno_df):
+    """Numeric phenotype columns that can carry mean framewise displacement."""
+    from conninfpy.interpret.motion_qc import FD_COLUMN_CANDIDATES
+
+    out = []
+    columns = getattr(pheno_df, "columns", None)
+    for col in ([] if columns is None else list(columns)):
+        if not pd.api.types.is_numeric_dtype(pheno_df[col]):
+            continue
+        name = str(col)
+        if name in FD_COLUMN_CANDIDATES or any(tok in name.lower() for tok in ("motion", "fd", "framewise")):
+            out.append(name)
+    return out
+
+
+def _motion_qc_fd_values(pheno_df, column):
+    """One FD value per phenotype row, NaN where the column is not numeric."""
+    return pd.to_numeric(pheno_df[column], errors="coerce").to_numpy(dtype=np.float64)
+
+
+def _motion_qc_subject_ids(pheno_df, explicit=None):
+    """Subject IDs in row order, only from an explicitly named/recognised column."""
+    if pheno_df is None:
+        return None
+    column = explicit
+    if column is None:
+        column = next(
+            (c for c in ("subject_id", "subject", "sub_id", "participant_id") if c in pheno_df.columns),
+            None,
+        )
+    if column is None or column not in pheno_df.columns:
+        return None
+    return list(pheno_df[column].to_numpy(dtype=object))
+
+
+def _motion_qc_preview(spec, test_type, Y, group1, group2, *, atlas=None, scale=None):
+    """Compute the descriptive side-car BEFORE the inference thread starts."""
+    from conninfpy.interpret.motion_qc import motion_qc_fc, motion_qc_fc_paired
+
+    common = dict(
+        pheno=spec.get("pheno"),
+        fd_units=spec.get("fd_units", "mm"),
+        fd_source_name=spec.get("fd_source_name"),
+        scale=scale,
+        scale_source="loaded data kind (native scale)",
+        atlas=atlas,
+        input_stage="native input before inference (pre-launch preview)",
+    )
+    if test_type == "paired" and group1 is not None and group2 is not None:
+        return motion_qc_fc_paired(
+            group1, group2,
+            fd_group1=spec.get("fd_group1"),
+            fd_group2=spec.get("fd_group2"),
+            subject_ids=spec.get("subject_ids"),
+            pool=spec.get("pool", True),
+            condition_a=spec.get("condition_a", "A"),
+            condition_b=spec.get("condition_b", "B"),
+            **common,
+        )
+    if test_type == "two-sample" and group2 is not None:
+        data = np.concatenate([group1, group2], axis=0)
+    else:
+        data = Y if Y is not None else group1
+    return motion_qc_fc(
+        data,
+        fd=spec.get("fd"),
+        subject_ids=spec.get("subject_ids"),
+        condition_labels=spec.get("condition_labels"),
+        condition=spec.get("condition"),
+        index_values=spec.get("index_values"),
+        **common,
+    )
+
+
+def _build_design_arrays(
+    Y,
+    pheno_df,
+    *,
+    test_type,
+    question_choice,
+    group_col=None,
+    ref_group=None,
+    target_group=None,
+    interest_var=None,
+    confound_vars=None,
+    site_col=None,
+    condition_col=None,
+    subject_col=None,
+    baseline_val=None,
+    target_val=None,
+):
+    """Slice connectivity + phenotype exactly as the launch does (no widgets).
+
+    Shared by the launch handler and the pre-launch diagnostic preview so the
+    side-car always describes the arrays that will actually be analysed: the
+    same NaN filtering, the same group/level selection, condition A/B rows in
+    condition A's order and ``group1`` followed by ``group2`` for the
+    two-sample path. It does not run or alter any inference.
+    """
+    confound_vars = list(confound_vars or [])
+    index_before_filter = list(pheno_df.index)
+    req_cols = []
+    if test_type == "glm":
+        if question_choice == "Group Difference":
+            req_cols = [group_col] + confound_vars
+        else:
+            req_cols = [interest_var] + confound_vars
+    elif test_type == "paired":
+        req_cols = [condition_col, subject_col]
+    elif test_type == "two-sample":
+        req_cols = [group_col]
+    if site_col:
+        req_cols.append(site_col)
+    req_cols = [c for c in req_cols if c in pheno_df.columns]
+
+    n_dropped = 0
+    if req_cols:
+        valid_mask = pheno_df[req_cols].notna().all(axis=1)
+        n_dropped = int(len(pheno_df) - valid_mask.sum())
+        visible_index = [index_before_filter[k] for k, ok in enumerate(valid_mask.to_numpy()) if ok]
+        Y = Y[valid_mask.to_numpy()]
+        pheno_df = pheno_df.loc[valid_mask].reset_index(drop=True)
+    else:
+        visible_index = list(pheno_df.index)
+
+    interest = None
+    confounds = None
+    group1 = None
+    group2 = None
+    sites = list(pheno_df[site_col].values) if site_col else None
+    analysis_df = None
+    index_values = None
+    idx_baseline = None
+    idx_target = None
+    paired_subjects = None
+
+    if test_type == "glm":
+        if question_choice == "Group Difference":
+            group_mask = pheno_df[group_col].isin([ref_group, target_group])
+            Y = Y[group_mask.to_numpy()]
+            pheno_df_filtered = pheno_df.loc[group_mask].reset_index(drop=True)
+            if site_col:
+                sites = list(pheno_df_filtered[site_col].values)
+            interest = (pheno_df_filtered[group_col] == target_group).values.astype(np.float64)
+            if confound_vars:
+                confounds = pheno_df_filtered[confound_vars].values.astype(np.float64)
+            analysis_df = pheno_df_filtered
+            index_values = [
+                visible_index[k] for k, keep in enumerate(group_mask.to_numpy()) if keep
+            ]
+        else:
+            interest = pheno_df[interest_var].values.astype(np.float64)
+            if confound_vars:
+                confounds = pheno_df[confound_vars].values.astype(np.float64)
+            analysis_df = pheno_df
+            index_values = visible_index
+
+    elif test_type == "paired":
+        df_baseline = pheno_df[pheno_df[condition_col] == baseline_val]
+        df_target = pheno_df[pheno_df[condition_col] == target_val]
+        common_subjects = sorted(
+            list(set(df_baseline[subject_col]).intersection(set(df_target[subject_col])))
+        )
+        idx_baseline = [df_baseline[df_baseline[subject_col] == s].index[0] for s in common_subjects]
+        idx_target = [df_target[df_target[subject_col] == s].index[0] for s in common_subjects]
+        group1 = Y[idx_baseline]
+        group2 = Y[idx_target]
+        paired_subjects = common_subjects
+        if site_col:
+            baseline_sites = pheno_df.loc[idx_baseline, site_col].astype(str).tolist()
+            target_sites = pheno_df.loc[idx_target, site_col].astype(str).tolist()
+            mismatched_sites = [
+                subject
+                for subject, baseline_site, target_site in zip(
+                    common_subjects, baseline_sites, target_sites
+                )
+                if baseline_site != target_site
+            ]
+            if mismatched_sites:
+                raise ValueError(
+                    "Paired site handling requires one stable site per subject. "
+                    "Site labels differ between conditions for: "
+                    + ", ".join(map(str, mismatched_sites[:5]))
+                    + ("..." if len(mismatched_sites) > 5 else "")
+                )
+            # One site label per paired subject, in the same order as group1/group2.
+            sites = baseline_sites
+
+    elif test_type == "two-sample":
+        g1_mask = pheno_df[group_col] == ref_group
+        g2_mask = pheno_df[group_col] == target_group
+        group1 = Y[g1_mask.to_numpy()]
+        group2 = Y[g2_mask.to_numpy()]
+        analysis_df = pd.concat([pheno_df.loc[g1_mask], pheno_df.loc[g2_mask]]).reset_index(drop=True)
+        index_values = (
+            [visible_index[k] for k, keep in enumerate(g1_mask.to_numpy()) if keep]
+            + [visible_index[k] for k, keep in enumerate(g2_mask.to_numpy()) if keep]
+        )
+        if site_col:
+            sites = (
+                list(pheno_df.loc[g1_mask, site_col].values)
+                + list(pheno_df.loc[g2_mask, site_col].values)
+            )
+
+    return {
+        "Y": Y,
+        "pheno_filtered": pheno_df,
+        "interest": interest,
+        "confounds": confounds,
+        "group1": group1,
+        "group2": group2,
+        "sites": sites,
+        "analysis_df": analysis_df,
+        "index_values": index_values,
+        "n_dropped": n_dropped,
+        "idx_baseline": idx_baseline,
+        "idx_target": idx_target,
+        "paired_subjects": paired_subjects,
+    }
+
+
+def _motion_qc_spec_from_arrays(
+    arrays,
+    *,
+    test_type,
+    question_choice,
+    fd_col,
+    subject_col,
+    group_col=None,
+    ref_group=None,
+    target_group=None,
+    baseline_val=None,
+    target_val=None,
+):
+    """The descriptive side-car spec for the exact arrays the analysis uses."""
+    pheno_filtered = arrays["pheno_filtered"]
+    spec = {
+        "pheno": pheno_filtered,
+        "fd_units": "mm",
+        "pool": True,
+        "fd_source_name": fd_col,
+    }
+    if test_type == "paired":
+        if fd_col is not None:
+            fd_all = _motion_qc_fd_values(pheno_filtered, fd_col)
+            spec["fd_group1"] = fd_all[np.asarray(arrays["idx_baseline"], dtype=int)]
+            spec["fd_group2"] = fd_all[np.asarray(arrays["idx_target"], dtype=int)]
+        spec["subject_ids"] = list(arrays["paired_subjects"])
+        spec["condition_a"] = str(baseline_val)
+        spec["condition_b"] = str(target_val)
+        return spec
+
+    frame = arrays["analysis_df"]
+    if fd_col is not None:
+        spec["fd"] = _motion_qc_fd_values(frame, fd_col)
+    ids = _motion_qc_subject_ids(frame, subject_col)
+    if ids is not None:
+        spec["subject_ids"] = ids
+    if arrays["index_values"] is not None:
+        spec["index_values"] = list(arrays["index_values"])
+    if test_type == "two-sample" and group_col is not None:
+        # group1 rows then group2 rows, exactly the concatenation order of the
+        # analysed arrays; the labels are not inferred from the FD vector.
+        spec["condition_labels"] = (
+            [str(ref_group)] * int(arrays["group1"].shape[0])
+            + [str(target_group)] * int(arrays["group2"].shape[0])
+        )
+    elif test_type == "glm" and question_choice == "Group Difference" and group_col in frame.columns:
+        spec["condition_labels"] = [str(v) for v in frame[group_col].to_numpy()]
+    return spec
+
+
+def _motion_qc_preview_key(*parts):
+    """Stable, comparable signature for the cached pre-launch preview."""
+    return tuple("" if p is None else str(p) for p in parts)
+
+
 def _run_inference_background(
     task,
     Y, interest, confounds, group1, group2, test_type, sites, harmonization_choice,
@@ -562,7 +843,7 @@ def _run_inference_background(
     effective_recipe_choice, group_col, ref_group, target_group, interest_var,
     subject_col, condition_col, baseline_val, target_val, confound_vars, site_col,
     active_atlas_signature, data_kind, tested_tail=None, var_equal=None,
-    preprocessing=None, fisher_history=None, roi_indices=None
+    preprocessing=None, fisher_history=None, roi_indices=None, motion_qc=None
 ):
     """Worker thread body: run the inference and record status.
 
@@ -668,6 +949,7 @@ def _run_inference_background(
             acceleration=effective_acceleration,
             preprocessing=preprocessing,
             fisher_history=fisher_history if input_kind == "z" else None,
+            motion_qc=motion_qc,
             **variance_kwargs,
             **primary_run_kwargs
         )
@@ -756,6 +1038,9 @@ def _run_inference_background(
             # The scale the inference ran on: the loaded one, never converted here.
             "analysis_scale": {"r": "correlation", "z": "fisher_z"}.get(input_kind),
             "preprocessing": preprocessing,
+            # NETSTAT-28: descriptive side-car opted in before this run (the
+            # computed diagnostic itself rides on the result, not here).
+            "motion_qc_enabled": motion_qc is not None,
             # Upstream Fisher transforms captured at load/button time (the
             # full record — applied here + upstream — lives on the result and
             # its provenance/exports).
@@ -1457,6 +1742,138 @@ def render_design_inference_view(base_atlas, tabs_list):
                     roi_indices=st.session_state.get("roi_indices"),
                 )
                 _render_prelaunch_design_qc_summary(prelaunch_summary)
+
+                from conninfpy.interpret.motion_qc import (
+                    FD_COLUMN_CANDIDATES,
+                    detect_fd_column,
+                )
+
+                motion_qc_enabled = st.checkbox(
+                    "Add descriptive motion / QC–FC side-car (computed before inference)",
+                    value=False,
+                    key=persistent_key(MOTION_QC_WIDGET, scope='design'),
+                    help=(
+                        "Opt-in, descriptive only: Spearman associations of edge values with "
+                        "mean framewise displacement (per edge and per subject), NaN/negative "
+                        "edge shares with denominators, and (with known atlas coordinates) a "
+                        "distance association. No p-values, no subjects/edges excluded, and the "
+                        "inference result is bit-identical with it on or off."
+                    ),
+                )
+                motion_qc_fd_col = None
+                if motion_qc_enabled:
+                    auto_label = "auto-detect (" + " / ".join(FD_COLUMN_CANDIDATES) + ")"
+                    fd_options = [auto_label] + _motion_qc_fd_candidates(pheno_df)
+                    fd_choice = st.selectbox(
+                        "FD column (mean framewise displacement, mm)",
+                        fd_options,
+                        index=0,
+                        key=persistent_key(MOTION_QC_FD_WIDGET, scope='design', options=fd_options),
+                    )
+                    motion_qc_fd_col = None if fd_choice == auto_label else fd_choice
+                    if detect_fd_column(pheno_df) is None and motion_qc_fd_col is None:
+                        st.caption(
+                            "No Motion_FD / func_mean_fd column found: the diagnostic will be "
+                            "saved with an explicit `fd_unavailable` reason and no FD is invented."
+                        )
+                    else:
+                        st.caption(
+                            "FD is taken from the phenotype column in millimetres; the Power vs "
+                            "Jenkinson convention is not guessed and no FD is recomputed from ROI "
+                            "time series."
+                        )
+
+                if motion_qc_enabled:
+                    preview_key = _motion_qc_preview_key(
+                        test_type, question_choice, motion_qc_fd_col,
+                        group_col, ref_group, target_group, interest_var,
+                        condition_col, baseline_val, target_val, subject_col,
+                        st.session_state.get("loaded_settings_hash"),
+                        tuple(st.session_state.get("roi_indices") or ()),
+                    )
+                    preview_col1, preview_col2 = st.columns([1, 1])
+                    compute_preview = preview_col1.button(
+                        "Compute motion / QC–FC preview (no inference)",
+                        key="motion_qc_preview_btn",
+                        width="stretch",
+                    )
+                    if compute_preview:
+                        try:
+                            from conninfpy.interpret.report import motion_qc_markdown
+
+                            Y_prev = st.session_state.connectivity_data.copy()
+                            atlas_prev = active_analysis_atlas(base_atlas)
+                            if st.session_state.get("roi_indices") is not None:
+                                roi_prev = st.session_state.roi_indices
+                                Y_prev = Y_prev[:, roi_prev][:, :, roi_prev]
+                                atlas_prev = st.session_state.sub_atlas
+                            prev_arrays = _build_design_arrays(
+                                Y_prev, st.session_state.pheno_df,
+                                test_type=test_type,
+                                question_choice=question_choice,
+                                group_col=group_col,
+                                ref_group=ref_group,
+                                target_group=target_group,
+                                interest_var=interest_var,
+                                confound_vars=confound_vars,
+                                site_col=site_col,
+                                condition_col=condition_col,
+                                subject_col=subject_col,
+                                baseline_val=baseline_val,
+                                target_val=target_val,
+                            )
+                            if prev_arrays["n_dropped"] > 0:
+                                st.warning(
+                                    f"⚠️ **Missing Data Excluded:** {prev_arrays['n_dropped']} "
+                                    "subject(s) would be dropped for the selected model variables."
+                                )
+                            prev_fd_col = motion_qc_fd_col or detect_fd_column(prev_arrays["pheno_filtered"])
+                            prev_spec = _motion_qc_spec_from_arrays(
+                                prev_arrays,
+                                test_type=test_type,
+                                question_choice=question_choice,
+                                fd_col=prev_fd_col,
+                                subject_col=subject_col,
+                                group_col=group_col,
+                                ref_group=ref_group,
+                                target_group=target_group,
+                                baseline_val=baseline_val,
+                                target_val=target_val,
+                            )
+                            prev_scale = {"correlation": "r", "fisher_z": "z"}.get(
+                                st.session_state.get("connectivity_data_kind")
+                            )
+                            prev_preview = _motion_qc_preview(
+                                prev_spec, test_type,
+                                prev_arrays["Y"] if test_type != "two-sample" else None,
+                                prev_arrays["group1"], prev_arrays["group2"],
+                                atlas=atlas_prev, scale=prev_scale,
+                            )
+                            st.session_state["motion_qc_preview"] = prev_preview
+                            st.session_state["motion_qc_preview_key"] = preview_key
+                        except Exception as exc:
+                            st.warning(f"Motion / QC–FC preview could not be computed: {exc}")
+
+                    cached_preview = st.session_state.get("motion_qc_preview")
+                    cached_key = st.session_state.get("motion_qc_preview_key")
+                    if cached_preview is not None and cached_key == preview_key:
+                        from conninfpy.interpret.report import motion_qc_markdown
+
+                        with st.expander(
+                            "Motion / QC–FC preview (descriptive; computed before any inference)",
+                            expanded=True,
+                        ):
+                            st.caption(
+                                "Computed from the rows this design would analyse, without "
+                                "running inference; the same diagnostic is saved with the result."
+                            )
+                            st.markdown(motion_qc_markdown(cached_preview))
+                    elif cached_preview is not None:
+                        st.caption(
+                            "A stored motion/QC–FC preview belongs to a different design; "
+                            "compute it again to see the current one."
+                        )
+
                 st.markdown("**Structured Run Plan:**")
                 method_parameters = _format_method_plan_parameters(operator_choice, op_kwargs)
                 plan_md = f"""
@@ -1556,99 +1973,32 @@ def render_design_inference_view(base_atlas, tabs_list):
                                 atlas = st.session_state.sub_atlas
                                 
                             pheno_df = st.session_state.pheno_df
-                            
-                            # --- NaN Handling ---
-                            req_cols = []
-                            if test_type == "glm":
-                                if question_choice == "Group Difference":
-                                    req_cols = [group_col]
-                                    if confound_vars: req_cols.extend(confound_vars)
-                                else:
-                                    req_cols = [interest_var]
-                                    if confound_vars: req_cols.extend(confound_vars)
-                            elif test_type == "paired":
-                                req_cols = [condition_col, subject_col]
-                            elif test_type == "two-sample":
-                                req_cols = [group_col]
-                            
-                            if site_col:
-                                req_cols.append(site_col)
-                                
-                            req_cols = [c for c in req_cols if c in pheno_df.columns]
-                            
-                            if req_cols:
-                                valid_mask = pheno_df[req_cols].notna().all(axis=1)
-                                num_dropped = len(pheno_df) - valid_mask.sum()
-                                if num_dropped > 0:
-                                    st.warning(f"⚠️ **Missing Data Excluded:** Automatically dropped {num_dropped} subject(s) due to missing (`NaN`) values in selected model variables.")
-                                Y = Y[valid_mask.to_numpy()]
-                                pheno_df = pheno_df.loc[valid_mask].reset_index(drop=True)
-                            
-                            interest = None
-                            confounds = None
-                            group1 = None
-                            group2 = None
-                            sites = None
-                            
-                            if site_col:
-                                sites = list(pheno_df[site_col].values)
-                                
-                            if test_type == "glm":
-                                if question_choice == "Group Difference":
-                                    group_mask = pheno_df[group_col].isin([ref_group, target_group])
-                                    Y = Y[group_mask.to_numpy()]
-                                    pheno_df_filtered = pheno_df.loc[group_mask].reset_index(drop=True)
-                                    if site_col:
-                                        sites = list(pheno_df_filtered[site_col].values)
-                                    interest = (pheno_df_filtered[group_col] == target_group).values.astype(np.float64)
-                                    if confound_vars:
-                                        confounds = pheno_df_filtered[confound_vars].values.astype(np.float64)
-                                else:
-                                    interest = pheno_df[interest_var].values.astype(np.float64)
-                                    if confound_vars:
-                                        confounds = pheno_df[confound_vars].values.astype(np.float64)
-                                        
-                            elif test_type == "paired":
-                                df_baseline = pheno_df[pheno_df[condition_col] == baseline_val]
-                                df_target = pheno_df[pheno_df[condition_col] == target_val]
-                                common_subjects = sorted(list(set(df_baseline[subject_col]).intersection(set(df_target[subject_col]))))
-                                
-                                idx_baseline = [df_baseline[df_baseline[subject_col] == s].index[0] for s in common_subjects]
-                                idx_target = [df_target[df_target[subject_col] == s].index[0] for s in common_subjects]
-                                
-                                group1 = Y[idx_baseline]
-                                group2 = Y[idx_target]
 
-                                if site_col:
-                                    baseline_sites = pheno_df.loc[idx_baseline, site_col].astype(str).tolist()
-                                    target_sites = pheno_df.loc[idx_target, site_col].astype(str).tolist()
-                                    mismatched_sites = [
-                                        subject for subject, baseline_site, target_site in zip(
-                                            common_subjects, baseline_sites, target_sites
-                                        )
-                                        if baseline_site != target_site
-                                    ]
-                                    if mismatched_sites:
-                                        raise ValueError(
-                                            "Paired site handling requires one stable site per subject. "
-                                            "Site labels differ between conditions for: "
-                                            + ", ".join(map(str, mismatched_sites[:5]))
-                                            + ("..." if len(mismatched_sites) > 5 else "")
-                                        )
-                                    # One site label per paired subject, in the same order as group1/group2.
-                                    sites = baseline_sites
-                                
-                            elif test_type == "two-sample":
-                                g1_mask = (pheno_df[group_col] == ref_group)
-                                g2_mask = (pheno_df[group_col] == target_group)
-                                group1 = Y[g1_mask.to_numpy()]
-                                group2 = Y[g2_mask.to_numpy()]
-                                if site_col:
-                                    sites = (
-                                        list(pheno_df.loc[g1_mask, site_col].values)
-                                        + list(pheno_df.loc[g2_mask, site_col].values)
-                                    )
-                                
+                            arrays = _build_design_arrays(
+                                Y, pheno_df,
+                                test_type=test_type,
+                                question_choice=question_choice,
+                                group_col=group_col,
+                                ref_group=ref_group,
+                                target_group=target_group,
+                                interest_var=interest_var,
+                                confound_vars=confound_vars,
+                                site_col=site_col,
+                                condition_col=condition_col,
+                                subject_col=subject_col,
+                                baseline_val=baseline_val,
+                                target_val=target_val,
+                            )
+                            if arrays["n_dropped"] > 0:
+                                st.warning(f"⚠️ **Missing Data Excluded:** Automatically dropped {arrays['n_dropped']} subject(s) due to missing (`NaN`) values in selected model variables.")
+                            Y = arrays["Y"]
+                            pheno_df = arrays["pheno_filtered"]
+                            interest = arrays["interest"]
+                            confounds = arrays["confounds"]
+                            group1 = arrays["group1"]
+                            group2 = arrays["group2"]
+                            sites = arrays["sites"]
+
                             if operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs"):
                                 if use_sc_prior:
                                     op_kwargs["net_labels"] = sc_net_labels
@@ -1656,7 +2006,45 @@ def render_design_inference_view(base_atlas, tabs_list):
                                     op_kwargs["net_labels"] = atlas.network_index()
 
                             annotation_atlas = atlas_for_annotation(atlas, Y.shape[1])
-                            
+
+                            # ---- NETSTAT-28: descriptive side-car, computed BEFORE inference ----
+                            motion_qc_spec = None
+                            if motion_qc_enabled:
+                                try:
+                                    fd_col = motion_qc_fd_col or detect_fd_column(pheno_df)
+                                    spec = _motion_qc_spec_from_arrays(
+                                        arrays,
+                                        test_type=test_type,
+                                        question_choice=question_choice,
+                                        fd_col=fd_col,
+                                        subject_col=subject_col,
+                                        group_col=group_col,
+                                        ref_group=ref_group,
+                                        target_group=target_group,
+                                        baseline_val=baseline_val,
+                                        target_val=target_val,
+                                    )
+                                    native_scale = {"correlation": "r", "fisher_z": "z"}.get(
+                                        st.session_state.get("connectivity_data_kind")
+                                    )
+                                    preview = _motion_qc_preview(
+                                        spec, test_type, Y if test_type != "two-sample" else None,
+                                        group1, group2, atlas=atlas, scale=native_scale,
+                                    )
+                                    motion_qc_spec = spec
+                                    st.session_state["motion_qc_preview"] = preview
+                                    # Same signature as the preview control, so the cached
+                                    # expander shows this run's diagnostic (not a stale one).
+                                    st.session_state["motion_qc_preview_key"] = preview_key
+                                except Exception as exc:
+                                    st.warning(
+                                        "Motion / QC–FC side-car could not be computed; the analysis "
+                                        f"will run without it: {exc}"
+                                    )
+                                    motion_qc_spec = None
+                                    st.session_state.pop("motion_qc_preview", None)
+                                    st.session_state.pop("motion_qc_preview_key", None)
+
                             task.status = "running"
                             task.progress_message = "Starting background inference thread..."
                             task.result = None
@@ -1700,6 +2088,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                                     preprocessing=st.session_state.get("dataset_preprocessing"),
                                     fisher_history=st.session_state.get("dataset_fisher_history"),
                                     roi_indices=st.session_state.get("roi_indices"),
+                                    motion_qc=motion_qc_spec,
                                 )
                             )
                             t.daemon = True
