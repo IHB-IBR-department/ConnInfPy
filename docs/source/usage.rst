@@ -350,7 +350,15 @@ by ``C β = 0`` — so general contrasts such as ``β_x − β_z`` keep their
 common effect in the null (Winkler et al. 2014). Residuals are permuted
 across subjects (within ``strata``), or sign-flipped when the tested effect
 involves the mean (``scheme='auto'``; override with ``scheme='permutation'``
-or ``'sign-flip'``). Freedman–Lane is approximately, not exactly, valid.
+or ``'sign-flip'``). A ``strata`` code permutes residuals **within** its
+block only — never whole blocks — so it is not a mixed-model facility:
+stacked repeated sessions require subject fixed effects in **both** the full
+and the reduced model and are covered only by the narrow repeated-sessions
+recipe (:ref:`wf-repeated-sessions`). In that recipe the residual permutation
+reduces, in exact arithmetic, to permuting the data rows within each subject
+block; its premise is joint invariance of the whole error array under
+independent within-subject permutations (see the recipe). In general,
+Freedman–Lane is approximately, not exactly, valid.
 
 Convenience API (recommended):
 

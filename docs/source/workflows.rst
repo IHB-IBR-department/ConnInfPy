@@ -58,6 +58,9 @@ Selecting a workflow
    * - Custom contrast / interaction / omnibus F-test
      - drop to :func:`conninfpy.compute_p_val_glm`
      - :ref:`wf-custom`
+   * - Three or more repeated sessions (within-subject omnibus F)
+     - drop to :func:`conninfpy.compute_p_val_glm` (advanced API)
+     - :ref:`wf-repeated-sessions`
 
 All paths share the same output contract: a dict-like
 :class:`~conninfpy.InferenceResult` with canonical keys ``'positive'`` and
@@ -417,6 +420,149 @@ the design matrix and contrast explicitly and call
 :doc:`usage` page for the advanced API, including ``stat_type='fstat'`` for
 multi-row contrasts (≥3-condition designs or jointly testing several
 predictors), which returns a single ``'omnibus'`` p-map.
+
+
+.. _wf-repeated-sessions:
+
+Three or more repeated sessions (within-subject omnibus F)
+----------------------------------------------------------
+
+Question: *does connectivity differ between any of three or more sessions,
+tested jointly and averaged over subjects, when every subject contributes
+the same set of sessions?*
+
+``analyze()`` has no path for three or more sessions; call
+:func:`conninfpy.compute_p_val_glm` with a hand-built design. The only
+verified recipe (design **D1**) is one balanced, complete within-subject
+session factor with ``k >= 3`` sessions and ``n >= 2`` subjects, stacked
+subject-major: row ``r = s*k + j`` holds subject ``s``, session ``j``, so
+``Y`` has shape ``(n*k, N, N)`` on the Fisher-z scale, symmetric with a zero
+diagonal. Everything else in this section is explicitly not covered.
+
+.. code-block:: python
+
+   import numpy as np
+   from conninfpy import compute_p_val_glm
+
+   k = 3                              # sessions per subject (k >= 3)
+   n = Y.shape[0] // k                # subjects, from the stacked rows
+   subj = np.repeat(np.arange(n), k)  # subject code per stacked row
+   sess = np.tile(np.arange(k), n)    # session index per stacked row
+
+   S = np.eye(n)[subj]                                   # subject dummies
+   T = np.column_stack(                                  # session j vs 0
+       [(sess == j).astype(float) for j in range(1, k)]
+   )
+   X = np.column_stack([S, T])        # full design, rank n + k - 1
+   C = np.column_stack(               # jointly test the k-1 session columns
+       [np.zeros((k - 1, n)), np.eye(k - 1)]
+   )
+
+   out = compute_p_val_glm(
+       Y,                             # (n*k, N, N), Fisher-z, balanced complete
+       design_matrix=X,
+       contrast=C,
+       stat_type='fstat',             # single 'omnibus' p-map
+       method='tstat',
+       n_permutations=2000,
+       acceleration=None,             # keep the empirical p (no GPD/gamma)
+       strata=subj,                   # permute within subject blocks only
+       missing='raise',               # balanced complete data required
+       use_mp=False,                  # serial route, as verified; copy-paste safe
+       rng=42,
+   )
+
+   p_omnibus = out['omnibus']         # (N, N), joint session-effect p-values
+
+**Estimand and degrees of freedom.** ``C = [0 | I_{k-1}]`` tests the joint
+equality of the session means, i.e. all differences ``μ_j − μ_0`` averaged
+over subjects; because the design is balanced the subject effects cancel.
+Numerator df is ``k-1``, residual df is ``(n-1)(k-1)``. Subject fixed
+effects must be in **both** the full and the reduced model: the reduced
+design ``X null(C)`` is exactly the span of the subject dummies, so its
+projector is the within-subject averaging operator and the reduced
+residuals sum to zero within each subject.
+
+**Permutation assumptions.** ``strata`` carries the subject code per row
+(length ``n*k``); the residuals are permuted **within each subject block
+only**, never as whole blocks, so there is no between-subject exchange
+anywhere in the engine. ``scheme='auto'`` resolves to ``'permutation'``
+here because the reduced model spans the constant; sign flipping is not the
+scheme of this design.
+
+The premise is invariance of the **joint distribution of the entire error
+array — all subjects and all edges — under the product of independent
+within-subject session permutations**: each permuted row moves its whole
+edge vector together, and the subject blocks are permuted independently.
+A sufficient case is independent subjects whose session-indexed **edge
+vectors** are exchangeable within each subject (for example, i.i.d. across
+sessions within each independent subject); the laws of different subjects
+may differ. Exchangeability of a single edge within a subject, taken
+separately, is not enough for the max-F null across edges: with a common
+session shock shared by all subjects (one edge's error ``U_j + V_sj``,
+``U_j`` common across subjects), every subject's errors are i.i.d. across
+sessions, yet permuting one subject's sessions changes which subjects
+share ``U_j`` and changes the joint law. Compound symmetry of the
+covariance is a second-moment property only and is *not* sufficient
+without further distributional assumptions.
+
+**Null reference: enumeration vs sampling.** In this design the
+Freedman–Lane reconstruction is mathematically the within-block row
+permutation of the data itself: the reduced fit is the within-subject
+mean, constant inside each block, so ``Y* = H0 Y + P (I - H0) Y = P Y``
+in exact arithmetic. Under the joint-invariance premise, exhaustive
+enumeration of the ``(k!)^n`` within-block assignments is a finite-sample
+randomization test for the joint null; discreteness and included ties
+keep its level conservative. The number of assignments is ``(k!)^n``;
+the number of distinct null values can be smaller — a session relabelling
+applied to every subject at once leaves every omnibus F unchanged, so
+``k!`` assignments tie with the observed statistic in exact arithmetic
+for any data. The API does not enumerate: it samples ``B`` assignments
+with replacement and reports ``p = (count + 1) / (B + 1)``, ``count`` the
+number of sampled null max-F values at least as large as the observed
+edge F (ties included); the +1 rule belongs to Monte Carlo sampling,
+while the exhaustive-enumeration reference is ``count / (k!)^n``.
+The equivalence ``Y* = P Y`` is specific to D1's reduced design; in
+general, Freedman–Lane is approximate. The floating-point implementation
+reconstructs ``Yhat0 + R0[perm]`` instead of permuting rows of ``Y``, so
+machine values can differ from the exact row permutation by rounding.
+
+**Near-tie sensitivity.** The count rule ``null >= observed`` is
+discontinuous at equality. Besides the structural ``k!`` ties above,
+data-dependent near-ties occur, and two algebraically equivalent F
+formulas (nested RSS differences vs the engine's quadratic form over
+sigma2) differ by ~1e-14 in floating point, enough to land on opposite
+sides of a tie and move a count by one per affected draw. There is no
+universal bound on the resulting p difference; it depends on the design
+and the data. The regression test therefore checks the permutation
+mechanism with the engine's own operation order (exact count/p equality)
+and the independent algebra with a tolerance.
+
+**Not covered by this recipe** (use another path, or do not report under
+this heading):
+
+- **Pairwise or single-session t contrasts on the stacked design.** They are
+  outside the verified recipe — the reduced-model nuisance can break null
+  invariance. A separately pre-specified two-condition A/B comparison stays
+  the NETSTAT-16/31 contract: without condition-varying confounds use
+  ``analyze(..., test_type='paired')`` (:ref:`wf-paired`); with
+  condition-varying confounds use
+  :func:`conninfpy.compute_p_val_paired_glm` (:ref:`wf-repeated-glm`).
+- **Between-subject effects** (e.g. a group variable) on stacked repeated
+  rows. Within-block permutation never exchanges subjects, and the subject
+  dummies absorb any between-subject factor.
+- **Group × session interaction** on the stack — not verified here.
+- **Longitudinal designs with temporally autocorrelated or otherwise
+  structured within-subject errors.**
+- **Mixed / random-effects / random-slope models.** ``strata=subject`` is
+  not a multilevel promise.
+- **Unbalanced designs and missing sessions.** ``missing='available_case'``
+  is not verified for D1; the recipe requires balanced complete data
+  (``missing='raise'``, the default).
+
+The recipe is documented for the design above only: it makes no claim of
+FWER or power calibration, of validity outside the exchangeability premise,
+or of post-hoc inference.
 
 
 .. _wf-eh-stability:
