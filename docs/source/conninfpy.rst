@@ -27,6 +27,7 @@ Advanced inference (custom designs, F-contrasts, null distributions):
    :maxdepth: 1
 
    conninfpy.stats
+   conninfpy.influence
    conninfpy.pairwise_stats
    conninfpy.glm_stats
 
