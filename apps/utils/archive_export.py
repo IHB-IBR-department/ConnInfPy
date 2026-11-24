@@ -361,6 +361,8 @@ def build_replay_config(
     *,
     project_root: Optional[Path] = None,
     result: Any = None,
+    edge_mask_bundled: Optional[bool] = None,
+    edge_mask_bundle_problem: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the CLI replay config and its honest status.
 
@@ -710,26 +712,50 @@ def build_replay_config(
                      "descriptive sensitivity analysis"),
         }
 
-    # Tested-family mask (edge family): the exact array is bundled with the
-    # archive, so a replay can reproduce the tested family instead of silently
-    # testing all edges.
+    # Tested-family mask (edge family): the replay text must match the actual
+    # bundle decision. Only a verified sha+shape match is "bundled"; otherwise
+    # the mask is NOT in the archive and the user must supply the exact
+    # tested-family mask as external input (never a silent full-family replay).
     edge_mask_fact = run_plan.get("edge_mask")
     if isinstance(edge_mask_fact, Mapping):
         mask_path = "arrays/edge_family_mask.npy"
-        prereqs.append({
-            "kind": "edge-family-mask",
-            "path": mask_path,
-            "detail": ("the tested edge family of the finished run is the boolean "
-                       f"{edge_mask_fact.get('shape')} mask bundled as {mask_path} "
-                       f"({edge_mask_fact.get('eligible_edges')} eligible edges, sha256 "
-                       f"{edge_mask_fact.get('sha256')}, source "
-                       f"{edge_mask_fact.get('source_filename') or 'not recorded'}); "
-                       "pass it as the method's edge_mask. It is not an ROI subset "
-                       "and not an SC community label vector"),
-        })
-        reasons.append("the run restricted the tested edge family with an edge mask; "
-                       "apply the bundled arrays/edge_family_mask.npy as edge_mask "
-                       "before replaying")
+        if edge_mask_bundled:
+            prereqs.append({
+                "kind": "edge-family-mask",
+                "path": mask_path,
+                "detail": ("the tested edge family of the finished run is the boolean "
+                           f"{edge_mask_fact.get('shape')} mask bundled as {mask_path} "
+                           f"({edge_mask_fact.get('eligible_edges')} eligible edges, sha256 "
+                           f"{edge_mask_fact.get('sha256')}, source "
+                           f"{edge_mask_fact.get('source_filename') or 'not recorded'}); "
+                           "pass it as the method's edge_mask. It is not an ROI subset "
+                           "and not an SC community label vector"),
+            })
+            reasons.append("the run restricted the tested edge family with an edge mask; "
+                           "apply the bundled arrays/edge_family_mask.npy as edge_mask "
+                           "before replaying")
+        else:
+            problem = edge_mask_bundle_problem or (
+                "the mask array is not available to this replay config, so it cannot "
+                "be verified as the one that was tested"
+            )
+            prereqs.append({
+                "kind": "edge-family-mask",
+                "path": mask_path,
+                "detail": ("the tested edge family of the finished run is the boolean "
+                           f"{edge_mask_fact.get('shape')} mask "
+                           f"({edge_mask_fact.get('eligible_edges')} eligible edges, sha256 "
+                           f"{edge_mask_fact.get('sha256')}, source "
+                           f"{edge_mask_fact.get('source_filename') or 'not recorded'}), "
+                           f"but it is NOT bundled in this archive: {problem}. "
+                           f"{mask_path} is absent; supply the exact tested-family mask "
+                           "as external input and pass it as the method's edge_mask. "
+                           "It is not an ROI subset and not an SC community label vector"),
+            })
+            reasons.append("the run restricted the tested edge family with an edge mask; "
+                           "the mask is NOT bundled in this archive — supply the exact "
+                           "tested-family mask as external input and apply it as edge_mask "
+                           "before replaying")
 
     roi_indices = run_plan.get("roi_indices")
     if roi_indices:
@@ -799,6 +825,7 @@ def build_methods_markdown(
     effect_mask_available: bool,
     bundle_available: bool = True,
     bundle_omitted_reason: Optional[str] = None,
+    edge_mask_bundled: Optional[bool] = None,
 ) -> str:
     """Deterministic methods text built only from captured facts."""
     inner = _inner(result)
@@ -1023,12 +1050,23 @@ def build_methods_markdown(
                 "conclusion for a cell chosen after seeing the data.")
     edge_mask = plan.get("edge_mask")
     if isinstance(edge_mask, Mapping):
+        if edge_mask_bundled:
+            mask_archive_text = (
+                "The exact mask is bundled in this archive as "
+                "arrays/edge_family_mask.npy."
+            )
+        else:
+            mask_archive_text = (
+                "The exact mask is NOT bundled in this archive (it could not be "
+                "verified as the one that was tested); a replay needs the exact "
+                "tested-family mask as external input."
+            )
         add(f"- Tested edge family: the run analysed a boolean "
             f"{edge_mask.get('shape')} mask ({edge_mask.get('eligible_edges')} eligible "
             f"edges, sha256 {edge_mask.get('sha256')}, source "
             f"{edge_mask.get('source_filename') or 'not recorded'}). The mask restricts "
             "which edges enter the tested family; it is not an ROI exclusion subset and "
-            "not an SC community label vector.")
+            f"not an SC community label vector. {mask_archive_text}")
     net_labels = plan.get("net_labels") if isinstance(plan.get("net_labels"), Mapping) else None
     if net_labels:
         source = net_labels.get("source")
@@ -1251,6 +1289,41 @@ def _shape_matches_recorded(recorded: Any, actual_shape: Sequence[int]) -> bool:
     return recorded_shape == tuple(int(s) for s in actual_shape)
 
 
+def _edge_mask_bundle_verdict(
+    edge_mask_fact: Mapping[str, Any], edge_family_mask: Optional[np.ndarray]
+) -> Tuple[bool, Optional[str]]:
+    """Decide once whether the mask of the finished run can be bundled.
+
+    Returns ``(bundled, problem)``. Bundle ONLY the mask of the finished run:
+    a non-empty recorded sha256 is required, the bytes must hash to it, and
+    the recorded shape must equal the array's shape (a reshape shares the
+    bool bytes but is a different ROI x ROI family). The same verdict drives
+    the archive member, the notes, the replay manifest and methods.md, so no
+    export text can claim a member that is not actually in the ZIP.
+    """
+    if edge_family_mask is None:
+        return False, ("the run recorded a tested-family edge mask but the mask "
+                       "array is not available here")
+    mask_array = np.asarray(edge_family_mask, dtype=bool)
+    recorded_sha = edge_mask_fact.get("sha256")
+    recorded_shape = edge_mask_fact.get("shape")
+    if not isinstance(recorded_sha, str) or not recorded_sha.strip():
+        return False, ("the finished run did not record a sha256 for its edge mask, so "
+                       "the available mask cannot be verified as the one that was "
+                       "tested")
+    if np.asarray(edge_family_mask).ndim != 2:
+        return False, ("the available edge mask is not a 2-D ROI x ROI array "
+                       f"(shape {tuple(int(s) for s in np.asarray(edge_family_mask).shape)})")
+    if _sha256(np.ascontiguousarray(mask_array).tobytes()) != recorded_sha:
+        return False, ("the available edge mask does not match the sha256 recorded "
+                       "for the finished run (it was changed after the run)")
+    if not _shape_matches_recorded(recorded_shape, mask_array.shape):
+        return False, (f"the available edge mask has shape {list(mask_array.shape)} but "
+                       f"the finished run recorded {recorded_shape!r}; a reshaped mask "
+                       "is not the tested family")
+    return True, None
+
+
 def build_analysis_archive(
     result: Any,
     run_plan: Mapping[str, Any],
@@ -1318,7 +1391,17 @@ def build_analysis_archive(
     scale_meta = describe_result_scale_and_stat(result, plan)
     fisher_summary = _fisher_summary(plan.get("fisher"))
     dfiles = _dataset_files(info, project_root)
-    replay = build_replay_config(plan, info, project_root=project_root, result=result)
+    # One bundle verdict drives the archive member, the notes, the replay
+    # manifest and methods.md (no export text may claim an absent member).
+    edge_mask_fact = plan.get("edge_mask")
+    mask_bundled, mask_problem = False, None
+    if isinstance(edge_mask_fact, Mapping):
+        mask_bundled, mask_problem = _edge_mask_bundle_verdict(edge_mask_fact, edge_family_mask)
+    replay = build_replay_config(
+        plan, info, project_root=project_root, result=result,
+        edge_mask_bundled=mask_bundled if isinstance(edge_mask_fact, Mapping) else None,
+        edge_mask_bundle_problem=mask_problem,
+    )
 
     # ---- captured records ----
     files["run_plan.json"] = _dumps_json(plan)
@@ -1363,42 +1446,17 @@ def build_analysis_archive(
 
     edge_mask_fact = plan.get("edge_mask")
     if isinstance(edge_mask_fact, Mapping):
-        if edge_family_mask is None:
-            notes.append("the run recorded a tested-family edge mask but the mask array is "
-                         "not available here; arrays/edge_family_mask.npy is omitted and "
-                         "the replay cannot reproduce the tested family")
+        if mask_bundled:
+            files["arrays/edge_family_mask.npy"] = _npy_bytes(
+                np.asarray(edge_family_mask, dtype=bool)
+            )
+            notes.append("edge_family_mask.npy is the tested-edge-family mask of the "
+                         "finished run (boolean ROI x ROI, eligible edges only), bundled so "
+                         "the tested family can be reproduced; it is not an ROI subset and "
+                         "not a community label vector.")
         else:
-            mask_array = np.asarray(edge_family_mask, dtype=bool)
-            recorded_sha = edge_mask_fact.get("sha256")
-            recorded_shape = edge_mask_fact.get("shape")
-            # Bundle ONLY the mask of the finished run: a recorded sha256 is
-            # required, the bytes must hash to it, and the recorded shape must
-            # equal the array's shape (a reshape shares the bool bytes but is a
-            # different ROI x ROI family).
-            mismatch = None
-            if not isinstance(recorded_sha, str) or not recorded_sha.strip():
-                mismatch = ("the finished run did not record a sha256 for its edge mask, so "
-                            "the available mask cannot be verified as the one that was "
-                            "tested")
-            elif np.asarray(edge_family_mask).ndim != 2:
-                mismatch = ("the available edge mask is not a 2-D ROI x ROI array "
-                            f"(shape {tuple(int(s) for s in np.asarray(edge_family_mask).shape)})")
-            elif _sha256(np.ascontiguousarray(mask_array).tobytes()) != recorded_sha:
-                mismatch = ("the available edge mask does not match the sha256 recorded "
-                            "for the finished run (it was changed after the run)")
-            elif not _shape_matches_recorded(recorded_shape, mask_array.shape):
-                mismatch = (f"the available edge mask has shape {list(mask_array.shape)} but "
-                            f"the finished run recorded {recorded_shape!r}; a reshaped mask "
-                            "is not the tested family")
-            if mismatch is not None:
-                notes.append(f"{mismatch}; arrays/edge_family_mask.npy is omitted and the "
-                             "replay cannot reproduce the tested family")
-            else:
-                files["arrays/edge_family_mask.npy"] = _npy_bytes(mask_array)
-                notes.append("edge_family_mask.npy is the tested-edge-family mask of the "
-                             "finished run (boolean ROI x ROI, eligible edges only), bundled so "
-                             "the tested family can be reproduced; it is not an ROI subset and "
-                             "not a community label vector.")
+            notes.append(f"{mask_problem}; arrays/edge_family_mask.npy is omitted and the "
+                         "replay cannot reproduce the tested family")
 
     # ---- tables (α-dependent; skipped honestly when the run α is unknown) ----
     if alpha is not None:
@@ -1433,6 +1491,7 @@ def build_analysis_archive(
         effect_mask_available=effect_mask_available,
         bundle_available="bundle.pkl" in files,
         bundle_omitted_reason=_PICKLE_FREE_METHODS_REASON if not include_bundle else None,
+        edge_mask_bundled=mask_bundled if isinstance(edge_mask_fact, Mapping) else None,
     )
     files["methods.md"] = methods.encode("utf-8")
 

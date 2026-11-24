@@ -1339,3 +1339,79 @@ def test_comparative_view_validates_the_declared_primary_against_its_grid():
     assert "does not match this result's (E, H) grid" in "\n".join(
         w.value for w in out_of_range.warning
     )
+
+
+def test_replay_manifest_and_methods_match_the_actual_bundle_decision(tmp_path: Path):
+    """Round-2 parent review: no export text may claim an absent archive member.
+
+    The replay reasons/prerequisites and methods.md must follow the actual
+    bundle verdict (sha+shape verified), not merely the presence of mask
+    metadata in the run plan. Uses a full valid paired plan + manifest dataset
+    (the parent's repro path), so the mask prerequisite yields requires-input.
+    """
+    import io
+    import zipfile
+
+    from apps.utils.archive_export import build_analysis_archive
+
+    res, _minimal_plan, _minimal_info = _tstat_result_and_plan()
+    plan = _plan_with_new_facts()
+    plan["method"] = "tstat"
+    plan["operator_kwargs"] = {}
+    plan["method_parameters"] = {}
+    plan["primary_cell"] = None
+    plan.pop("sensitivity_grid", None)
+    info = _replay_dataset_info(tmp_path)
+    mask = np.zeros((4, 4), dtype=bool)
+    mask[0, 1] = mask[1, 0] = True
+
+    def _export(p, m):
+        zip_bytes, manifest = build_analysis_archive(
+            res, p, info, edge_family_mask=m, include_bundle=False,
+        )
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            member = "arrays/edge_family_mask.npy" in zf.namelist()
+            methods = zf.read("methods.md").decode("utf-8")
+        replay = manifest["replay"]
+        text = json.dumps(replay, ensure_ascii=False)
+        return member, replay, text, methods
+
+    # Valid sha+shape match: bundled, and the replay may name the member.
+    member, replay, text, methods = _export(plan, mask)
+    assert member
+    assert replay["status"] == "requires-input"
+    assert "bundled as arrays/edge_family_mask.npy" in text
+    assert "NOT bundled" not in text
+    assert "bundled in this archive as arrays/edge_family_mask.npy" in methods
+
+    # Omission cases: the member is absent, so no export text may claim it.
+    no_sha = dict(plan)
+    no_sha["edge_mask"] = {k: v for k, v in plan["edge_mask"].items() if k != "sha256"}
+    cases = [
+        ("no recorded sha", no_sha, mask),
+        ("same-byte reshape", plan, mask.reshape(2, 8)),
+        ("changed bytes", plan, np.logical_not(mask)),
+        ("mask unavailable", plan, None),
+    ]
+    for label, p, m in cases:
+        member, replay, text, methods = _export(p, m)
+        assert not member, label
+        assert replay["status"] == "requires-input", label
+        assert "NOT bundled" in text, label
+        assert "bundled as arrays/edge_family_mask.npy" not in text, label
+        assert "apply the bundled" not in text, label
+        assert "external input" in text, label
+        assert "NOT bundled in this archive" in methods, label
+        assert "bundled in this archive as" not in methods, label
+        # The prerequisite still names the exact recorded family facts.
+        prereq = next(q for q in replay["prerequisites"] if q["kind"] == "edge-family-mask")
+        assert "edge-family-mask" == prereq["kind"]
+        assert "[4, 4]" in prereq["detail"], label
+
+    # A standalone replay config (no archive, no array) is honest too.
+    from apps.utils.archive_export import build_replay_config
+
+    cfg = build_replay_config(plan, info, project_root=tmp_path)
+    text = json.dumps(cfg, ensure_ascii=False)
+    assert "NOT bundled" in text
+    assert "apply the bundled" not in text
