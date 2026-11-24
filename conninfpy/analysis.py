@@ -15,7 +15,7 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -521,6 +521,9 @@ def analyze(
     rng: RngLike = None,
     verbose: bool = False,
     use_mp: bool = True,
+    n_processes: Optional[int] = None,
+    progress: Optional[Any] = None,
+    cancel: Optional[Callable[[], bool]] = None,
     missing: str = "raise",
     min_coverage: float = 0.8,
     atlas: Optional[Any] = None,
@@ -754,6 +757,26 @@ def analyze(
         Show a progress bar during permutation.
     use_mp : bool, default ``True``
         Use multiprocessing for the permutation loop.
+    n_processes : int, optional
+        Worker processes for the permutation loop (capped at the number of
+        planned permutations). ``None`` uses the available logical CPUs.
+        Each worker runs with one BLAS/OpenMP thread. The run plan records
+        the requested value; the effective pool size is resolved inside the
+        engine and may be smaller.
+    progress : callable or ProgressSession, optional
+        Parent-side progress reporting. A callable receives
+        ``(done, total)`` at permutation chunk boundaries for permutations
+        that were actually folded; ``total`` is the number of permutation
+        executions planned for the call (see
+        :class:`conninfpy.stats._workers.ProgressSession`). Nothing is sent
+        to the workers and no numerical result changes.
+    cancel : callable, optional
+        Zero-argument predicate evaluated in the parent process at chunk
+        boundaries. When it returns true the permutation loop stops at that
+        boundary, the pool is terminated and joined, private task files are
+        removed and :class:`~conninfpy.InferenceCancelled` is raised — no
+        partial p-values and no ``InferenceResult`` are returned. A
+        ``threading.Event`` is therefore never pickled into a worker.
     missing : {'raise', 'available_case'}, default ``'raise'``
         Missing connectivity values (NaN), e.g. a region without signal in
         one subject. ``'raise'`` stops with a report of the affected
@@ -836,6 +859,16 @@ def analyze(
         predictor name to its own :class:`AnalyzeResult`; the shared
         ComBat diagnostics and flags are attached to every entry.
     """
+    if method_kwargs:
+        # The same controls can arrive through **method_kwargs (e.g. from a
+        # wrapper that forwards the compute-function signature); keep one
+        # explicit value instead of failing on a duplicate keyword.
+        if n_processes is None:
+            n_processes = method_kwargs.pop("n_processes", None)
+        if progress is None:
+            progress = method_kwargs.pop("progress", None)
+        if cancel is None:
+            cancel = method_kwargs.pop("cancel", None)
     flags: list = []
     combat_diag: Optional[Dict[str, Any]] = None
     # Opt-in, additive motion / QC-FC side-car (NETSTAT-28). ``None`` means the
@@ -1464,6 +1497,7 @@ def analyze(
             two_tailed=effective_two_tailed,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
+            progress=progress, cancel=cancel, n_processes=n_processes,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
             atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,
             **method_kwargs,
@@ -1541,6 +1575,7 @@ def analyze(
             two_tailed=effective_two_tailed,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
+            progress=progress, cancel=cancel, n_processes=n_processes,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
             atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,
             **method_kwargs,
@@ -1576,6 +1611,7 @@ def analyze(
             two_tailed=effective_two_tailed,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
+            progress=progress, cancel=cancel, n_processes=n_processes,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
             atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,
             **method_kwargs,
@@ -1615,6 +1651,7 @@ def analyze(
             two_tailed=effective_two_tailed,
             acceleration=acceleration,
             e=e, h=h, n=n, rng=rng, verbose=verbose, use_mp=use_mp,
+            progress=progress, cancel=cancel, n_processes=n_processes,
             strata=auto_strata, missing=missing, min_coverage=min_coverage,
             var_equal=var_equal,
             atlas=atlas, roi_ids=roi_ids, groupings=groupings, units=units,

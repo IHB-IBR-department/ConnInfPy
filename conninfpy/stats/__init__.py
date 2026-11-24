@@ -14,6 +14,7 @@ from conninfpy.stats.glm import (
     compute_p_val_glm_multi,
     compute_p_val_paired_glm,
 )
+from conninfpy.stats._workers import InferenceCancelled, ProgressSession
 from conninfpy.stats.pairwise import (
     compute_null_dist,
     compute_p_val,
@@ -37,4 +38,7 @@ __all__ = [
     "StatMethod",
     "TestType",
     "GLMStatType",
+    # progress / cooperative cancellation
+    "InferenceCancelled",
+    "ProgressSession",
 ]

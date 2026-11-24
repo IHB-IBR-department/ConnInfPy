@@ -82,7 +82,11 @@ from conninfpy.stats._types import (
     _grid_from_kwargs,
     enhancement_provenance,
 )
-from conninfpy.stats._workers import run_permutations, run_permutations_reduce
+from conninfpy.stats._workers import (
+    prepare_run,
+    run_permutations,
+    run_permutations_reduce,
+)
 from conninfpy.stats.acceleration import compute_p_values_accelerated
 
 __all__ = [
@@ -708,6 +712,8 @@ def compute_null_dist(
     verbose: bool = False,
     strata: Optional[npt.NDArray[Any]] = None,
     var_equal: bool = False,
+    progress: Optional[Callable[[int, int], None]] = None,
+    cancel: Optional[Callable[[], bool]] = None,
     **func_kwargs,
 ) -> Dict[str, npt.NDArray[np.float64]]:
     """
@@ -879,6 +885,7 @@ def compute_null_dist(
     seeds = seed_rng.randint(0, 2**32 - 1, size=n_permutations, dtype=np.int64)
 
 
+    run = prepare_run(progress, cancel, n_permutations, "null distribution")
     results = run_permutations(
         task_func,
         list(seeds),
@@ -886,7 +893,10 @@ def compute_null_dist(
         n_processes=n_processes,
         verbose=verbose,
         desc="compute_null_dist",
+        progress=run.update,
+        cancel=run.cancelled,
     )
+    run.finish()
 
     return _collect_results_to_arrays(results, n_permutations)
 
@@ -904,6 +914,8 @@ def _compute_enhanced_null_dist(
     verbose: bool = False,
     strata: Optional[npt.NDArray[Any]] = None,
     var_equal: bool = False,
+    progress: Optional[Callable[[int, int], None]] = None,
+    cancel: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, npt.NDArray[np.float64]]:
     """Null distribution for enhancement methods via pre-computed sums fast path.
 
@@ -1004,6 +1016,7 @@ def _compute_enhanced_null_dist(
     seeds = rng.randint(0, 2**32 - 1, size=n_permutations, dtype=np.int64)
 
 
+    run = prepare_run(progress, cancel, n_permutations, "enhanced null distribution")
     results = run_permutations(
         task_func,
         list(seeds),
@@ -1011,7 +1024,10 @@ def _compute_enhanced_null_dist(
         n_processes=n_processes,
         verbose=verbose,
         desc="enhanced_null",
+        progress=run.update,
+        cancel=run.cancelled,
     )
+    run.finish()
 
     return _collect_results_to_arrays(results, n_permutations)
 
@@ -1058,6 +1074,8 @@ def _compute_bh_fdr_perm_p_values(
     two_tailed: bool = False,
     var_equal: bool = False,
     return_counts: bool = False,
+    progress: Optional[Callable[[int, int], None]] = None,
+    cancel: Optional[Callable[[], bool]] = None,
 ) -> Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]]]:
     """
     Compute BH-FDR corrected p-values using permutation-based per-edge nulls.
@@ -1136,6 +1154,7 @@ def _compute_bh_fdr_perm_p_values(
 
     # Streaming reduction: workers return per-chunk partial counts (length E)
     # instead of the parent collecting B per-seed edge-vector pairs.
+    run = prepare_run(progress, cancel, n_permutations, "BH-FDR permutation counts")
     counts = run_permutations_reduce(
         task_func,
         list(seeds),
@@ -1149,7 +1168,10 @@ def _compute_bh_fdr_perm_p_values(
         n_processes=n_processes,
         verbose=verbose,
         desc="bh_fdr_perm",
+        progress=run.update,
+        cancel=run.cancelled,
     )
+    run.finish()
 
     # Compute per-edge p-values (with +1 correction — Phipson & Smyth 2010)
     # and apply BH-FDR correction
@@ -1512,6 +1534,8 @@ def compute_p_val(
     contrast_id: Optional[str] = None,
     ids_group1: Optional[Sequence[Any]] = None,
     ids_group2: Optional[Sequence[Any]] = None,
+    progress: Optional[Callable[[int, int], None]] = None,
+    cancel: Optional[Callable[[], bool]] = None,
 ) -> InferenceResult:
     """
     Compute p-values using permutation testing with various network-based methods.
@@ -1850,6 +1874,8 @@ def compute_p_val(
             use_mp=use_mp,
             n_processes=n_processes,
             verbose=verbose,
+            progress=progress,
+            cancel=cancel,
             strata=strata,
             acceleration=acceleration if mode == "max" else None,
             min_coverage=min_coverage,
@@ -1920,6 +1946,8 @@ def compute_p_val(
             use_mp=use_mp,
             n_processes=n_processes,
             verbose=verbose,
+            progress=progress,
+            cancel=cancel,
             strata=strata,
             two_tailed=two_tailed,
             var_equal=var_equal,
@@ -1987,6 +2015,8 @@ def compute_p_val(
             rng=random_state,
             n_processes=n_processes,
             verbose=verbose,
+            progress=progress,
+            cancel=cancel,
             strata=strata,
             var_equal=var_equal,
         )
@@ -2002,6 +2032,8 @@ def compute_p_val(
             use_mp=use_mp,
             n_processes=n_processes,
             verbose=verbose,
+            progress=progress,
+            cancel=cancel,
             strata=strata,
             var_equal=var_equal,
         )

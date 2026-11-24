@@ -93,7 +93,7 @@ from conninfpy.stats._types import (
     enhancement_provenance,
     resolve_f_threshold,
 )
-from conninfpy.stats._workers import run_permutations
+from conninfpy.stats._workers import prepare_run, run_permutations
 from conninfpy.stats.acceleration import compute_p_values_accelerated
 from conninfpy.stats.pairwise import compute_p_val
 
@@ -559,6 +559,8 @@ def compute_p_val_glm(
     groupings: Optional[Dict[str, Sequence[Any]]] = None,
     units: Optional[str] = None,
     contrast_id: Optional[str] = None,
+    progress: Optional[Callable[[int, int], None]] = None,
+    cancel: Optional[Callable[[], bool]] = None,
 ) -> Union[InferenceResult, OmnibusInferenceResult]:
     """
     Compute p-values for connectivity data using GLM with Freedman-Lane permutation.
@@ -824,6 +826,8 @@ def compute_p_val_glm(
             use_mp=use_mp,
             n_processes=n_processes,
             verbose=verbose,
+            progress=progress,
+            cancel=cancel,
             strata=strata,
             acceleration=acceleration,
             two_tailed=two_tailed,
@@ -1007,6 +1011,7 @@ def compute_p_val_glm(
 
     # ---- Run permutations ----
 
+    run = prepare_run(progress, cancel, n_permutations, "GLM null distribution")
     results = run_permutations(
         task_func,
         list(seeds),
@@ -1014,7 +1019,10 @@ def compute_p_val_glm(
         n_processes=n_processes,
         verbose=verbose,
         desc="glm_perm",
+        progress=run.update,
+        cancel=run.cancelled,
     )
+    run.finish()
 
     max_null_dict = _collect_results_to_arrays(results, n_permutations)
 
@@ -1234,6 +1242,8 @@ def compute_p_val_glm_multi(
     roi_ids: Optional[Sequence[Any]] = None,
     groupings: Optional[Dict[str, Sequence[Any]]] = None,
     units: Optional[str] = None,
+    progress: Optional[Callable[[int, int], None]] = None,
+    cancel: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, InferenceResult]:
     """Run several contrasts of one design in a single permutation pass.
 
@@ -1324,6 +1334,8 @@ def compute_p_val_glm_multi(
                 rng=random_state,
                 n_processes=n_processes,
                 verbose=verbose,
+                progress=progress,
+                cancel=cancel,
                 net_labels=net_labels,
                 threshold=threshold,
                 nbs_stat=nbs_stat,
@@ -1556,6 +1568,7 @@ def compute_p_val_glm_multi(
     rng_local = np.random.RandomState(random_state)
     seeds = rng_local.randint(0, 2**32 - 1, size=n_permutations, dtype=np.int64)
 
+    run = prepare_run(progress, cancel, n_permutations, "multi-contrast GLM null distribution")
     perm_results = run_permutations(
         task_func,
         list(seeds),
@@ -1563,7 +1576,10 @@ def compute_p_val_glm_multi(
         n_processes=n_processes,
         verbose=verbose,
         desc="glm_multi",
+        progress=run.update,
+        cancel=run.cancelled,
     )
+    run.finish()
 
     # ---- Re-shape into per-contrast null arrays ----
     null_max_per_contrast: Dict[str, Dict[str, npt.NDArray[np.float64]]] = {}

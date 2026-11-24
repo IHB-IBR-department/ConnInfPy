@@ -20,6 +20,14 @@ contribution is a 0/1 indicator summed as float64 (exact below 2**53)
 and chunks fold in seed order, the totals are bitwise identical to a
 serial fold over the same seeds.
 
+Progress and cancellation (NETSTAT-27) are parent-side only: the parent
+reports ``(done, total)`` at chunk boundaries for permutations that were
+actually folded, and checks a parent-side cancel callable before handing
+out the next chunk. Nothing but ordinary per-seed / per-chunk results
+crosses back from the workers, and no callback, event or UI object is ever
+serialized into a worker (see :class:`ProgressSession` and
+:func:`prepare_run`).
+
 The data-bearing task is serialized once into a private temporary file and
 each worker loads it from there when it starts. Pool initializer arguments
 travel through each worker's start-up channel one worker at a time (spawn /
@@ -32,6 +40,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import logging
 import multiprocessing
 import multiprocessing.reduction
 import operator
@@ -46,6 +55,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Type
 from conninfpy.stats._engine import _is_worker_process, get_available_cores
 
 T = TypeVar("T")
+_logger = logging.getLogger(__name__)
 _main_script_lock = threading.RLock()
 _worker_task: Optional[Callable[[int], Any]] = None
 _worker_thread_limiter: Any = None
@@ -216,6 +226,271 @@ class _ReductionStats:
             }
 
 
+class InferenceCancelled(RuntimeError):
+    """A permutation pipeline was cancelled cooperatively by its caller.
+
+    Raised by the engine at a permutation chunk boundary (never from inside
+    a worker), so no partial reduction, no valid
+    :class:`~conninfpy.results.InferenceResult` and no p-values are produced
+    from an incomplete null distribution.
+    """
+
+
+ProgressCallback = Callable[[int, int], None]
+CancelCallback = Callable[[], bool]
+
+
+class ProgressSession:
+    """Parent-side progress/cancel aggregator for one analysis call.
+
+    A session is created by the caller (``analyze()`` or a UI job) and
+    passed down through the pipelines as ``progress=session`` and
+    ``cancel=<callable>``. Each permutation loop announces itself to the
+    session before it runs (see :func:`prepare_run`), so the ``total`` the
+    session reports is the number of permutation executions planned so far
+    across every loop/stage of the call — never an invented figure.
+
+    Contract
+    --------
+    ``callback(done, total)`` is called in the parent process only, at chunk
+    boundaries for permutations that were actually folded:
+
+    * ``done`` is monotonic and never exceeds ``total``;
+    * ``total`` is monotonic non-decreasing and equals the sum of the
+      permutation executions announced so far. For every current pipeline
+      a single permutation loop of ``n_permutations`` seeds is run per
+      ``analyze()`` call, and that loop is announced before its first seed,
+      so ``total`` is exact from the first callback. Pipelines that run
+      several loops (e.g. the available-case multi-contrast route, which
+      runs one loop per contrast) grow ``total`` as each loop starts;
+      ``done == total`` is only reported when all planned work has been
+      redeemed and fully reduced;
+    * the last callback of a successful call has ``done == total``.
+
+    Cancellation is a parent-side decision: ``cancel`` is a zero-argument
+    callable evaluated in the parent process at chunk boundaries. A
+    :class:`threading.Event` (or any UI callback) is therefore never
+    pickled into a worker task payload. When it returns true the engine
+    stops issuing chunks, terminates and joins the pool, removes its
+    private task file and raises :class:`InferenceCancelled`; the last
+    ``done`` is not forced to ``total``.
+    """
+
+    def __init__(
+        self,
+        callback: Optional[ProgressCallback] = None,
+        cancel: Optional[CancelCallback] = None,
+    ) -> None:
+        self._callback = callback
+        self._cancel = cancel
+        self._lock = threading.RLock()
+        self._total = 0
+        self._done = 0
+        self._stage: Optional[str] = None
+        self._run_offset = 0
+        self._run_size = 0
+        self._pending: List[tuple[int, Optional[str]]] = []
+        self.cancelled_early = False
+        self.unused_plan = 0
+        self.last: tuple[int, int] = (0, 0)
+
+    # -- planning ------------------------------------------------------
+    def expect(self, n: int, label: Optional[str] = None) -> None:
+        """Announce an upcoming loop of ``n`` executions before it starts.
+
+        Used by callers that know a later stage will run (a sensitivity
+        companion) so the reported ``total`` is exact from the first
+        callback instead of growing when that stage starts. The next
+        :func:`prepare_run` of the same size redeems the announcement
+        instead of adding it twice.
+        """
+        n = int(n)
+        if n <= 0:
+            return
+        with self._lock:
+            self._total += n
+            self._pending.append((n, label))
+            done, total = self._done, self._total
+        self._emit(done, total)
+
+    def _plan(self, n: int, label: Optional[str] = None) -> None:
+        """Start a loop of ``n`` executions, redeeming an announcement if any."""
+        n = int(n)
+        with self._lock:
+            announced: Optional[str] = None
+            for i, (size, lab) in enumerate(self._pending):
+                if size == n:
+                    _, announced = self._pending.pop(i)
+                    break
+            else:
+                self._total += n
+            self._run_offset = self._done
+            self._run_size = n
+            stage = label or announced
+            if stage:
+                self._stage = stage
+            done, total = self._done, self._total
+        self._emit(done, total)
+
+    def _advance(self, done_local: int) -> None:
+        with self._lock:
+            done = self._run_offset + max(0, min(int(done_local), self._run_size))
+            # Persist the high-water mark so a later finalize() (e.g. on
+            # cancellation) reports the actually folded count, not a stale 0.
+            self._done = max(self._done, done)
+            total = self._total
+        self._emit(done, total)
+
+    def _finish_run(self) -> None:
+        with self._lock:
+            self._done = self._run_offset + self._run_size
+            done, total = self._done, self._total
+        self._emit(done, total)
+
+    def finalize(self) -> None:
+        """Drop announcements that were never redeemed, then report.
+
+        Honest final state: an announced stage that did not run is removed
+        from ``total`` (recorded in ``unused_plan``) rather than being left
+        as a permanent shortfall.
+        """
+        with self._lock:
+            if self._pending:
+                dropped = sum(size for size, _ in self._pending)
+                self._pending.clear()
+                self.unused_plan += dropped
+                self._total = max(self._done, self._total - dropped)
+            done, total = self._done, self._total
+        self._emit(done, total)
+
+    # -- state ----------------------------------------------------------
+    @property
+    def done(self) -> int:
+        with self._lock:
+            return self._done
+
+    @property
+    def total(self) -> int:
+        with self._lock:
+            return self._total
+
+    @property
+    def stage(self) -> Optional[str]:
+        with self._lock:
+            return self._stage
+
+    def snapshot(self) -> Dict[str, Any]:
+        """Plain-data view for run plans and tests (no callables)."""
+        with self._lock:
+            return {
+                "done": self._done,
+                "total": self._total,
+                "stage": self._stage,
+                "unused_plan": self.unused_plan,
+            }
+
+    # -- cancellation ---------------------------------------------------
+    def cancelled(self) -> bool:
+        """True if the caller asked to cancel (parent-side check)."""
+        if self._cancel is None:
+            return False
+        return bool(self._cancel())
+
+    def check_cancel(self) -> None:
+        """Raise :class:`InferenceCancelled` if cancellation was requested."""
+        if self.cancelled():
+            raise InferenceCancelled(
+                "inference cancelled by the caller at a permutation chunk boundary"
+            )
+
+    def _emit(self, done: int, total: int) -> None:
+        self.last = (done, total)
+        if self._callback is None:
+            return
+        # Never call user code (Streamlit, tqdm, ...) while holding our lock.
+        self._callback(done, total)
+
+
+class RunProgress:
+    """Per-run progress/cancel channel handed to the permutation leaves."""
+
+    def __init__(
+        self,
+        session: Optional[ProgressSession],
+        callback: Optional[ProgressCallback],
+        cancel: Optional[CancelCallback],
+        total: int,
+    ) -> None:
+        self._session = session
+        self._callback = callback
+        self._cancel = cancel
+        self.total = int(total)
+        self.done = 0
+
+    def update(self, done: int, total: Optional[int] = None) -> None:
+        self.done = int(done)
+        if self._session is not None:
+            self._session._advance(done)
+        elif self._callback is not None:
+            self._callback(int(done), self.total if total is None else int(total))
+
+    def cancelled(self) -> bool:
+        return bool(self._cancel()) if self._cancel is not None else False
+
+    def check_cancel(self) -> None:
+        if self.cancelled():
+            raise InferenceCancelled(
+                "inference cancelled by the caller at a permutation chunk boundary"
+            )
+
+    def finish(self) -> None:
+        """Mark this loop fully reduced (only called after a clean return)."""
+        if self._session is not None:
+            self._session._finish_run()
+        elif self._callback is not None:
+            self._callback(self.total, self.total)
+
+
+def prepare_run(
+    progress: Any,
+    cancel: Optional[CancelCallback],
+    total: int,
+    label: Optional[str] = None,
+) -> RunProgress:
+    """Build the per-run progress/cancel channel used by the permutation leaves.
+
+    ``progress`` may be a :class:`ProgressSession` (aggregated over all
+    loops of one call), a plain ``(done, total)`` callable (reported per
+    loop), or ``None``. ``cancel`` is only consulted in the parent process;
+    it is never serialized.
+    """
+    total = int(total)
+    session = progress if isinstance(progress, ProgressSession) else None
+    callback = None
+    if session is not None:
+        if total > 0:
+            session._plan(total, label)
+        cancel_fn: Optional[CancelCallback] = session.cancelled
+    else:
+        callback = progress if callable(progress) else None
+        cancel_fn = (lambda: bool(cancel())) if cancel is not None else None
+    if cancel is not None and session is not None:
+        cancel_fn = session.cancelled
+    return RunProgress(session, callback, cancel_fn, total)
+
+
+def _shutdown_pool(pool: Any) -> None:
+    """Terminate and join a pool; cleanup failures are logged, never hidden."""
+    try:
+        pool.terminate()
+    except Exception as exc:  # pragma: no cover - defensive
+        _logger.warning("pool terminate failed during cleanup: %s", exc)
+    try:
+        pool.join()
+    except Exception as exc:  # pragma: no cover - defensive
+        _logger.warning("pool join failed during cleanup: %s", exc)
+
+
 def _worker_count(n_processes: Optional[int], n_jobs: int) -> int:
     """Resolve pool size once for every inference path."""
     if n_processes is None:
@@ -227,6 +502,58 @@ def _worker_count(n_processes: Optional[int], n_jobs: int) -> int:
     if isinstance(n_processes, bool) or count < 1:
         raise ValueError("n_processes must be a positive integer or None.")
     return min(count, n_jobs)
+
+
+def describe_worker_policy(
+    *,
+    use_mp: bool = True,
+    n_processes: Optional[int] = None,
+    n_permutations: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Requested vs resolved worker/thread facts, with honest unknowns.
+
+    Single source of truth for the run plan and ``conninfpy info``. The
+    requested values are what the caller asked for; the effective worker
+    count is what the engine would resolve for ``n_permutations`` jobs
+    (``None`` when the number of jobs is unknown, so the cap cannot be
+    applied). Which BLAS/OpenMP library and how many native threads the
+    parent process actually runs are *not* measured here and are reported
+    as ``unknown/not measured`` rather than guessed.
+    """
+    available = get_available_cores()
+    workers: Optional[int]
+    error: Optional[str] = None
+    if not use_mp:
+        workers = 1
+    elif n_permutations is None:
+        workers = None
+    else:
+        try:
+            workers = _worker_count(n_processes, max(1, int(n_permutations)))
+        except (TypeError, ValueError) as exc:
+            workers = None
+            error = str(exc)
+    try:
+        start_method = multiprocessing.get_context("forkserver").get_start_method()
+    except ValueError:  # pragma: no cover (platform-specific)
+        start_method = multiprocessing.get_context("spawn").get_start_method()
+    return {
+        "use_mp_requested": bool(use_mp),
+        "n_processes_requested": n_processes,
+        "n_permutations": None if n_permutations is None else int(n_permutations),
+        "workers_effective": workers,
+        "workers_default_budget": available,
+        "worker_start_method": start_method,
+        "blas_threads_per_worker": 1 if (workers is None or workers > 1) else "parent default (unchanged)",
+        "thread_limiter": (
+            "threadpoolctl limits=1 in each worker"
+            if (workers is None or workers > 1)
+            else "not applied (no pool)"
+        ),
+        "blas_library": "unknown/not measured",
+        "enhancement_backend": "unknown/not measured",
+        "request_error": error,
+    }
 
 
 def _references_main(obj: Any, _depth: int = 0) -> bool:
@@ -293,6 +620,8 @@ def run_permutations(
     verbose: bool = False,
     desc: str = "perm",
     log_every: int = 50,
+    progress: Optional[ProgressCallback] = None,
+    cancel: Optional[CancelCallback] = None,
 ) -> List[T]:
     """Apply ``task_func`` to each seed; optionally show a progress bar.
 
@@ -316,23 +645,46 @@ def run_permutations(
         Progress-bar prefix.
     log_every : int
         Plain-text fallback log frequency (only used when tqdm absent).
+    progress : callable, optional
+        Parent-side ``progress(done, total)`` callback, invoked in the parent
+        process only, at chunk boundaries, for permutations already
+        completed. ``total`` is this run's ``len(seeds)``; pass a
+        :class:`ProgressSession` through :func:`prepare_run` to aggregate
+        several loops. Nothing is sent to or called inside the workers.
+    cancel : callable, optional
+        Zero-argument parent-side predicate. Evaluated before each chunk is
+        handed out; when it returns true the engine stops issuing chunks,
+        joins the pool and raises :class:`InferenceCancelled`. Cancellation
+        is cooperative: at most one in-flight chunk per worker is allowed to
+        finish before the pool is terminated.
     """
     n = len(seeds)
     if not n:
         return []
+
+    def _check_cancel() -> None:
+        if cancel is not None and cancel():
+            raise InferenceCancelled(
+                "inference cancelled by the caller at a permutation chunk boundary"
+            )
+
+    _check_cancel()
     use_mp = use_mp and not _is_worker_process()
     workers = _worker_count(n_processes, n) if use_mp else 1
+    bar = _make_chunk_progress(n, verbose, desc, log_every)
+
+    def _emit(done: int) -> None:
+        bar(done)
+        if progress is not None:
+            progress(done, n)
 
     if workers == 1:
-        if not verbose:
-            return [task_func(s) for s in seeds]
-        if _HAS_TQDM:
-            return [task_func(s) for s in tqdm(seeds, total=n, desc=desc, leave=False)]
         out: List[T] = []
         for i, s in enumerate(seeds, start=1):
+            _check_cancel()
             out.append(task_func(s))
-            if i % log_every == 0 or i == n:
-                _print_progress(i, n, desc)
+            if verbose or progress is not None:
+                _emit(i)
         return out
 
     # Multiprocessing path. Use forkserver (spawn on platforms without it)
@@ -355,27 +707,26 @@ def run_permutations(
                 initializer=_initialize_worker_task,
                 initargs=(task_path,),
             )
-        with pool as p:
-            if not verbose:
-                return list(p.map(_run_worker_seed, seeds, chunksize=chunksize))
-            if _HAS_TQDM:
-                out2: List[T] = []
-                for r in tqdm(
-                    p.imap(_run_worker_seed, seeds, chunksize=chunksize),
-                    total=n,
-                    desc=desc,
-                    leave=False,
-                ):
-                    out2.append(r)
-                return out2
-            out3: List[T] = []
-            for i, r in enumerate(
-                p.imap(_run_worker_seed, seeds, chunksize=chunksize), start=1
-            ):
-                out3.append(r)
-                if i % log_every == 0 or i == n:
-                    _print_progress(i, n, desc)
-            return out3
+        out2: List[T] = []
+        try:
+            iterator = pool.imap(_run_worker_seed, seeds, chunksize=chunksize)
+            done = 0
+            while True:
+                _check_cancel()  # before blocking on the next completed chunk
+                try:
+                    result = next(iterator)
+                except StopIteration:
+                    break
+                out2.append(result)
+                done += 1
+                if done % chunksize == 0 or done == n:
+                    _emit(done)
+        finally:
+            # Always terminate + join, on success, error and cancellation:
+            # no worker process or result-handler thread is left behind.
+            _shutdown_pool(pool)
+        return out2
+
 
 
 def _make_chunk_progress(
@@ -415,6 +766,8 @@ def run_permutations_reduce(
     desc: str = "perm",
     log_every: int = 50,
     stats_out: Optional[Dict[str, Any]] = None,
+    progress: Optional[ProgressCallback] = None,
+    cancel: Optional[CancelCallback] = None,
 ):
     """Map ``task_func`` over seeds with worker-side chunk reduction.
 
@@ -449,6 +802,13 @@ def run_permutations_reduce(
         ``max_arrived_outstanding`` / ``max_arrived_outstanding_bytes``
         (peak parent-held unreduced results and their bytes), chunking
         details. Intended for tests and memory audits.
+    progress, cancel
+        Parent-side ``progress(done, total)`` callback at folded-chunk
+        boundaries and a zero-argument cancel predicate, exactly as in
+        :func:`run_permutations`. Cancellation stops issuing chunks, drops
+        the in-flight partials (no partial reduction is returned or
+        published), terminates and joins the pool and raises
+        :class:`InferenceCancelled`.
 
     Returns
     -------
@@ -459,25 +819,39 @@ def run_permutations_reduce(
     n = len(seeds)
     if not n:
         return None
+
+    def _check_cancel() -> None:
+        if cancel is not None and cancel():
+            raise InferenceCancelled(
+                "inference cancelled by the caller at a permutation chunk boundary"
+            )
+
+    _check_cancel()
     use_mp = use_mp and not _is_worker_process()
     workers = _worker_count(n_processes, n) if use_mp else 1
     # Same chunk shape as run_permutations' balanced pool chunks.
     chunk_size = max(1, (n + 4 * workers - 1) // (4 * workers))
     chunks = [list(seeds[i : i + chunk_size]) for i in range(0, n, chunk_size)]
-    progress = _make_chunk_progress(n, verbose, desc, log_every)
+    bar = _make_chunk_progress(n, verbose, desc, log_every)
     total: Any = None
+
+    def _emit(done: int) -> None:
+        bar(done)
+        if progress is not None:
+            progress(done, n)
 
     if workers == 1:
         stats = _ReductionStats(limit=1)
         done = 0
         for chunk in chunks:
+            _check_cancel()
             stats.on_issue()
             partial = _fold_seeds_in_batches(task_func, list(chunk), reduce_func)
             stats.on_arrival(_result_nbytes(partial))
             total = partial if total is None else total + partial
             stats.on_fold(_result_nbytes(partial))
             done += len(chunk)
-            progress(done)
+            _emit(done)
         if stats_out is not None:
             stats_out.update(stats.snapshot("serial", 1, chunk_size, len(chunks)))
         return total
@@ -501,14 +875,14 @@ def run_permutations_reduce(
                 initializer=_initialize_worker_task,
                 initargs=(task_path,),
             )
-        with pool as p:
+        try:
             next_chunk = 0
             done = 0
 
             def _issue() -> None:
                 nonlocal next_chunk
                 stats.on_issue()
-                result = p.apply_async(
+                result = pool.apply_async(
                     _run_worker_chunk_reduce,
                     (chunks[next_chunk], reduce_func),
                     callback=lambda partial: stats.on_arrival(_result_nbytes(partial)),
@@ -517,13 +891,17 @@ def run_permutations_reduce(
                 pending.append(result)
 
             for _ in range(len(chunks)):
+                _check_cancel()
                 while next_chunk < len(chunks) and len(pending) < chunk_limit:
                     _issue()
+                _check_cancel()
                 partial = pending.popleft().get()  # propagates worker errors
                 stats.on_fold(_result_nbytes(partial))
                 total = partial if total is None else total + partial
                 done += len(chunks[stats.chunks_folded - 1])
-                progress(done)
+                _emit(done)
+        finally:
+            _shutdown_pool(pool)
 
     if stats_out is not None:
         stats_out.update(stats.snapshot("mp", workers, chunk_size, len(chunks)))
@@ -538,4 +916,12 @@ def _print_progress(i: int, n: int, desc: str) -> None:
         sys.stdout.write("\n")
 
 
-__all__ = ["run_permutations", "run_permutations_reduce"]
+__all__ = [
+    "run_permutations",
+    "run_permutations_reduce",
+    "InferenceCancelled",
+    "ProgressSession",
+    "RunProgress",
+    "prepare_run",
+    "describe_worker_policy",
+]

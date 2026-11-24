@@ -47,7 +47,11 @@ from conninfpy.stats._engine import (
     _twosample_se2,
     get_available_cores,
 )
-from conninfpy.stats._workers import run_permutations, run_permutations_reduce
+from conninfpy.stats._workers import (
+    prepare_run,
+    run_permutations,
+    run_permutations_reduce,
+)
 from conninfpy.stats.pairwise import _reduce_bh_fdr_edge_counts
 
 DEFAULT_MIN_COVERAGE = 0.8
@@ -330,6 +334,8 @@ def available_case_p_val(
     two_tailed: bool = False,
     var_equal: bool = False,
     return_counts: bool = False,
+    progress: Optional[Callable[[int, int], None]] = None,
+    cancel: Optional[Callable[[], bool]] = None,
 ):
     """p-values, raw t maps and the coverage report for one available-case run.
 
@@ -399,6 +405,7 @@ def available_case_p_val(
         # B per-seed edge vectors collected in the parent. Untested edges
         # carry 0 in both the observed statistics and the permutations, so
         # their comparisons stay False and only tested entries are used.
+        run = prepare_run(progress, cancel, n_permutations, "available-case BH-FDR counts")
         counts = run_permutations_reduce(
             partial(_task_edges, d),
             list(seeds),
@@ -412,7 +419,10 @@ def available_case_p_val(
             n_processes=n_processes,
             verbose=verbose,
             desc="available_case",
+            progress=run.update,
+            cancel=run.cancelled,
         )
+        run.finish()
         p_values = {}
         for row, (key, t) in enumerate((("positive", t_pos), ("negative", t_neg))):
             per_edge = (
@@ -456,6 +466,7 @@ def available_case_p_val(
     if block_inference is not None or enhance_func is apply_ni_tfnbs:
         enhance_kwargs = {**enhance_kwargs, "edge_mask": tested_mat}
     emp = raw_t if enhance_func is None else enhance_func(raw_t, **enhance_kwargs)
+    run = prepare_run(progress, cancel, n_permutations, "available-case null distribution")
     results = run_permutations(
         partial(_task_max, d, enhance_func, enhance_kwargs),
         list(seeds),
@@ -463,7 +474,10 @@ def available_case_p_val(
         n_processes=n_processes,
         verbose=verbose,
         desc="available_case",
+        progress=run.update,
+        cancel=run.cancelled,
     )
+    run.finish()
     null = _collect_results_to_arrays(results, n_permutations)
     if two_tailed and block_inference is None:
         joint = np.maximum(null["positive"], null["negative"])

@@ -141,6 +141,7 @@ from conninfpy.stats.pairwise import (
     compute_t_stat,
     compute_t_stat_diff,
 )
+from conninfpy.stats._workers import InferenceCancelled, ProgressSession
 
 # The recommended public surface. Everything imported above stays
 # importable from ``conninfpy`` for backward compatibility, but new code

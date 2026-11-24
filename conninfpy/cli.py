@@ -780,21 +780,46 @@ def run(
 
 
 def info() -> None:
-    """Print versions, the TFNBS backend and the CPU / BLAS setup."""
+    """Print versions, the compute backend, resources and cache visibility.
+
+    Every line reports only what this process can actually observe. In
+    particular: numba/JIT availability is not evidence that a JIT kernel
+    ran, and the presence of numba cache files is not a cache hit. Both
+    stay explicitly ``unknown/not measured`` unless a real record exists.
+    Read-only: no cache directory is created, no environment is changed.
+    """
     from conninfpy import __version__
+    from conninfpy.stats._workers import describe_worker_policy
 
     lines = [f"conninfpy  {__version__}", f"python     {platform.python_version()}",
              f"numpy      {np.__version__}"]
+    numba_mod = None
     try:
-        import numba
-        lines.append(f"numba      {numba.__version__} (JIT TFNBS backend)")
-    except ImportError:
-        lines.append("numba      not installed (Python/NumPy/SciPy fallback)")
+        import numba as numba_mod  # noqa: F401
+        lines.append(f"numba      {numba_mod.__version__} (JIT kernels available)")
+    except Exception as exc:  # absent or broken install: both are facts
+        lines.append(f"numba      not available ({type(exc).__name__}); Python/NumPy/SciPy fallback")
+        numba_mod = None
+    lines.append(
+        "backend    enhancement kernels: "
+        + ("numba importable, which kernel actually executed is unknown/not measured "
+           "(no runtime dispatcher record)" if numba_mod is not None
+           else "Python/NumPy/SciPy only (numba not importable)")
+    )
     lines.append(f"cpu cores  {os.cpu_count()}")
     from conninfpy.stats._engine import get_available_cores
 
     lines.append(f"cpu usable {get_available_cores()} (default worker budget)")
-    lines.append("workers    1 BLAS/OpenMP thread per process; parent settings below")
+    policy = describe_worker_policy(use_mp=True, n_processes=None, n_permutations=None)
+    lines.append(
+        "workers    requested: use_mp=auto, n_processes=engine default "
+        f"(cap at the run's permutation count); start method {policy['worker_start_method']}"
+    )
+    lines.append(
+        "workers    effective here: parent process (no pool started by 'info'); "
+        "each pool worker runs 1 BLAS/OpenMP thread via threadpoolctl, parent unchanged"
+    )
+    lines.append("threads    BLAS/OpenMP library: unknown/not measured; parent settings below")
     try:
         from threadpoolctl import threadpool_info
         for pool in threadpool_info():
@@ -802,7 +827,53 @@ def info() -> None:
                          f"({pool.get('num_threads')} threads)")
     except ImportError:
         pass
+    except Exception as exc:  # pragma: no cover - defensive
+        lines.append(f"blas       threadpool_info failed: {type(exc).__name__}: {exc}")
+    lines.append(f"numba cache {_numba_cache_line(numba_mod)}")
     print("\n".join(lines))
+
+
+def _numba_cache_line(numba_mod: Any) -> str:
+    """Describe the numba cache directory from the filesystem, read-only.
+
+    Presence of files is reported as a fact and explicitly *not* as evidence
+    of a cache hit: numba exposes no per-kernel hit/miss counter here, so
+    hits stay ``unknown/not measured``.
+    """
+    if numba_mod is None:
+        return "not applicable (numba not importable)"
+    cache_dir = None
+    for attr in ("CACHEDIR", "CACHE_DIR"):
+        value = getattr(numba_mod.config, attr, None)
+        if value:
+            cache_dir = os.fspath(value)
+            break
+    if not cache_dir:
+        cache_dir = os.environ.get("NUMBA_CACHE_DIR")
+    disabled = None
+    try:
+        disabled = bool(getattr(numba_mod.config, "DISABLE_JIT", False))
+    except Exception:  # pragma: no cover - version-specific
+        disabled = None
+    if not cache_dir:
+        return (
+            "dir not configured (empty numba CACHE_DIR: numba falls back to "
+            "per-module __pycache__ directories, which are not enumerated here); "
+            f"cache hits unknown/not measured; NUMBA_DISABLE_JIT={disabled}"
+        )
+    if not os.path.isdir(cache_dir):
+        return (f"dir {cache_dir} (absent: no cache written); cache hits "
+                "unknown/not measured")
+    count = 0
+    try:
+        for root, _dirs, files in os.walk(cache_dir):
+            count += sum(1 for f in files if f.endswith((".nbi", ".nbc")))
+    except OSError as exc:  # pragma: no cover - permission-dependent
+        return f"dir {cache_dir} (unreadable: {exc}); cache hits unknown/not measured"
+    return (
+        f"dir {cache_dir}; {count} numba cache file(s) present (presence is not a hit); "
+        f"cache hits unknown/not measured; NUMBA_DISABLE_JIT={disabled}"
+    )
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

@@ -45,7 +45,7 @@ from conninfpy.stats._engine import (
     get_available_cores,
 )
 from conninfpy.stats._glm_fast import _tails_from_edge_stats, score_tails
-from conninfpy.stats._workers import run_permutations
+from conninfpy.stats._workers import prepare_run, run_permutations
 
 DEFAULT_MIN_COVERAGE = 0.8
 MIN_DF = 2
@@ -239,6 +239,8 @@ def available_case_glm(
     scheme: str = "permutation",
     block_inference: Optional[Dict[str, Any]] = None,
     return_counts: bool = False,
+    progress: Optional[Callable[[int, int], None]] = None,
+    cancel: Optional[Callable[[], bool]] = None,
 ):
     """p-values, raw statistic maps and the coverage report (GLM, missing values).
 
@@ -391,6 +393,7 @@ def available_case_glm(
         enhance_func,
         enhance_kwargs,
     )
+    run = prepare_run(progress, cancel, n_permutations, "available-case GLM null distribution")
     results = run_permutations(
         task,
         list(seeds),
@@ -398,7 +401,10 @@ def available_case_glm(
         n_processes=n_processes,
         verbose=verbose,
         desc="available_case_glm",
+        progress=run.update,
+        cancel=run.cancelled,
     )
+    run.finish()
     null = _collect_results_to_arrays(results, n_permutations)
     if two_tailed and stat_type != "fstat":
         joint = np.maximum(null["positive"], null["negative"])

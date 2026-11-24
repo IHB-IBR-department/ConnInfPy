@@ -212,14 +212,22 @@ def render_analysis_context():
 def render_progress(tabs):
     state = st.session_state
     task = state.get("inference_task")
-    running = task is not None and getattr(task, "status", "") == "running"
+    task_status = getattr(task, "status", "") if task is not None else ""
+    running = task_status == "running"
+    # NETSTAT-27: a cancelled or invalidated job is neither running nor
+    # completed — it left no result behind.
+    cancelled = task_status in ("cancelled", "invalidated")
     loaded = state.get("connectivity_data") is not None
     complete = state.get("inference_result") is not None
     edges = state.get("edges_df")
     annotation = state.get("annotation")
     statuses = [
         "Loaded" if loaded else ("Results-only (no data)" if complete else "No data"),
-        "Running" if running else "Completed" if complete else "Ready" if loaded else "Needs data",
+        "Running" if running else (
+            "Cancelled (no result)"
+            if cancelled and not complete
+            else "Completed" if complete else "Ready" if loaded else "Needs data"
+        ),
         (f"{len(edges)} detected connections" if edges is not None and not edges.empty else "No detections") if complete else "Needs analysis",
         ("Completed · no detections" if annotation is not None and annotation["detected"].empty else "Completed") if annotation is not None else "Ready" if complete else "Needs results",
     ]

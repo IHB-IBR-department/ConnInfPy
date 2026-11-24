@@ -71,3 +71,22 @@ def nested_reduction(seed):
     return os.getpid(), run_permutations_reduce(
         partial(pow, seed), [1, 2], reduce_func=sum_squares_chunk, n_processes=2
     )
+
+
+# -- NETSTAT-27: cancellation fixtures -------------------------------------
+def slow_square_logging_pid(log_path, seed):
+    """Sleep per seed and log the worker PID (terminate/join assertions).
+
+    The log path is bound with ``functools.partial``, so it travels in the
+    picklable task payload itself: forkserver workers reuse a long-lived
+    server process whose environment predates the test, so environment
+    variables are not a reliable channel. No parent callback or event is ever
+    part of the payload.
+    """
+    try:
+        with open(log_path, "a") as stream:
+            stream.write(f"{os.getpid()}\n")
+    except OSError:
+        pass
+    time.sleep(0.05)
+    return seed * seed

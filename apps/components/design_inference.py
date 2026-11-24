@@ -9,7 +9,7 @@ from apps.utils.workspace import DATA_TAB, go_to_step
 import threading
 import traceback
 from conninfpy.atlas import AtlasInfo
-from conninfpy import analyze
+from conninfpy import InferenceCancelled, ProgressSession, analyze
 from conninfpy.harmonize.diagnostics import analyze_design_diagnostics
 from conninfpy.defaults import (
     DEFAULT_ACCELERATION,
@@ -34,10 +34,19 @@ from apps.utils.helpers import (
 )
 
 class InferenceTask:
-    """Background inference job with progress reporting."""
+    """Background inference job with progress reporting.
+
+    NETSTAT-27: ``status`` also takes ``cancelled`` (a cooperative cancel at
+    a permutation chunk boundary, or a job superseded by a newer run). A
+    cancelled task never carries a result: ``result``/``edges``/``run_plan``
+    stay ``None`` so nothing can be published or exported from an
+    incomplete null distribution.
+    """
+
     def __init__(self):
         """Initialize an idle task with empty result slots."""
-        self.status = "idle"  # idle, running, success, failed
+        # idle, running, success, failed, cancelled
+        self.status = "idle"
         self.progress_message = ""
         self.result = None
         self.edges = None
@@ -45,6 +54,78 @@ class InferenceTask:
         self.comp_edges = None
         self.run_plan = None
         self.error = None
+        # Parent-side progress / cooperative cancellation (NETSTAT-27).
+        self.cancel_event = threading.Event()
+        self.cancel_reason = None
+        self.generation = 0
+        self.progress_done = 0
+        self.progress_total = 0
+        self.progress_stage = None
+        self.launch_signature = None
+        self.finished_generation = None
+
+    # -- progress / cancel (called from the background thread) -----------
+    def _on_progress(self, done, total):
+        """Record parent-side ``(done, total)`` permutation progress."""
+        try:
+            self.progress_done = int(done)
+            self.progress_total = int(total)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            pass
+
+    def request_cancel(self, reason=None):
+        """Ask the running pipeline to stop at the next chunk boundary."""
+        if reason:
+            self.cancel_reason = reason
+        self.cancel_event.set()
+
+
+class _StaleJob(Exception):
+    """This background job was superseded; its payload must never publish."""
+
+
+def _worker_plan(use_mp, n_processes, n_permutations):
+    """Requested vs effective worker facts for the run plan (honest unknowns)."""
+    from conninfpy.stats._workers import describe_worker_policy
+
+    try:
+        return describe_worker_policy(
+            use_mp=bool(use_mp),
+            n_processes=n_processes,
+            n_permutations=n_permutations,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        return {"request_error": f"{type(exc).__name__}: {exc}"}
+
+
+def _run_signature(**facts):
+    """Comparable, plain-data signature of what a run was launched on."""
+    signature = {}
+    for key, value in facts.items():
+        if isinstance(value, (list, tuple)):
+            signature[key] = tuple("" if v is None else str(v) for v in value)
+        elif value is None:
+            signature[key] = None
+        else:
+            signature[key] = str(value)
+    return signature
+
+
+def _task_cancel_requested(task):
+    """True when this task has a parent-side cancel token that was set."""
+    event = getattr(task, "cancel_event", None)
+    return event is not None and bool(event.is_set())
+
+
+def _invalidate_superseded_task(task, signature):
+    """Cancel a running job whose loaded data/design no longer matches."""
+    if getattr(task, "status", "") != "running":
+        return
+    launch = getattr(task, "launch_signature", None)
+    if launch and launch != signature:
+        task.request_cancel(
+            "the loaded data or design changed while this run was active"
+        )
 
 
 ABIDE_DEFAULT_CONFOUNDS = ("Age", "Sex", "Motion_FD")
@@ -1117,7 +1198,7 @@ def _run_inference_background(
     preprocessing=None, fisher_history=None, roi_indices=None, motion_qc=None,
     ids_group1=None, ids_group2=None, confounds_group1=None, confounds_group2=None,
     missing_policy="raise", min_coverage=0.8, edge_mask_plan=None,
-    primary_cell=None, design_facts=None,
+    primary_cell=None, design_facts=None, n_processes=None,
 ):
     """Worker thread body: run the inference and record status.
 
@@ -1157,6 +1238,56 @@ def _run_inference_background(
     min_coverage = 0.8 if min_coverage is None else float(min_coverage)
 
     started_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # Local import so the worker is self-contained when loaded through the
+    # AST helper used by the app tests (module-level names are not visible).
+    from conninfpy import InferenceCancelled, ProgressSession
+
+    class _StaleJob(Exception):
+        """This job was superseded; its payload must never be published."""
+
+    generation = getattr(task, "generation", 0)
+    # Parent-side only: the callback records progress on the task object and
+    # the cancel predicate is evaluated here, never pickled into a worker.
+    # Both are looked up defensively so a bare task-like object (tests, older
+    # restored state) still runs without progress or cancellation.
+    _progress_cb = getattr(task, "_on_progress", None)
+    _cancel_event = getattr(task, "cancel_event", None)
+
+    def _cancel_requested():
+        return _cancel_event is not None and _cancel_event.is_set()
+
+    def _resource_plan_facts(use_mp_flag, workers_requested, n_planned):
+        """Requested vs engine-resolved worker facts (honest unknowns)."""
+        try:
+            from conninfpy.stats._workers import describe_worker_policy
+
+            return describe_worker_policy(
+                use_mp=bool(use_mp_flag),
+                n_processes=workers_requested,
+                n_permutations=n_planned,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            return {"request_error": f"{type(exc).__name__}: {exc}"}
+
+    def _record_progress(done, total):
+        if _progress_cb is not None:
+            _progress_cb(done, total)
+        stage = session.stage
+        if stage is not None:
+            task.progress_stage = stage
+
+    session = ProgressSession(
+        callback=_record_progress if _progress_cb is not None else None,
+        cancel=_cancel_requested,
+    )
+
+    def _ensure_current():
+        """Stop before publishing anything if this job was cancelled/superseded."""
+        if _cancel_requested():
+            raise InferenceCancelled("cancelled at a permutation chunk boundary")
+        if getattr(task, "generation", generation) != generation:
+            raise _StaleJob("superseded by a newer inference run")
+
     try:
         input_kind = {"correlation": "r", "fisher_z": "z"}.get(data_kind)
         # Only the two-sample t-test has the choice; analyze() rejects it elsewhere.
@@ -1183,6 +1314,13 @@ def _run_inference_background(
             DEFAULT_START_THRESHOLD,
         )
         effective_n_perms = DEFAULT_N_PERMUTATIONS if n_perms is None else n_perms
+        if run_sensitivity and comp_method and effective_n_perms:
+            # Announce the second permutation loop before the first one runs,
+            # so the reported total is exact from the first callback.
+            session.expect(
+                int(effective_n_perms),
+                f"Sensitivity companion ({str(comp_method).upper()}) planned",
+            )
         effective_acceleration = (
             DEFAULT_ACCELERATION
             if acceleration_choice in (None, "none")
@@ -1243,9 +1381,13 @@ def _run_inference_background(
             confounds_group2=confounds_group2,
             missing=missing_policy,
             min_coverage=min_coverage,
+            progress=session,
+            cancel=_cancel_requested,
+            n_processes=n_processes,
             **variance_kwargs,
             **primary_run_kwargs
         )
+        _ensure_current()
         # ``analyze`` returns an AnalyzeResult wrapper; the grid facts and the
         # p-value maps live on the wrapped inference result.
         primary_inner = getattr(res, "inference", res)
@@ -1311,9 +1453,13 @@ def _run_inference_background(
                 acceleration=effective_acceleration,
                 preprocessing=preprocessing,
                 fisher_history=fisher_history if input_kind == "z" else None,
+                progress=session,
+                cancel=_cancel_requested,
+                n_processes=n_processes,
                 **variance_kwargs,
                 **comp_run_kwargs
             )
+            _ensure_current()
             comp_edges = comp_res.significant_edges(
                 atlas=annotation_atlas,
                 alpha=alpha,
@@ -1322,6 +1468,8 @@ def _run_inference_background(
                    else {}),
             )
             
+        session.finalize()
+        _ensure_current()
         task.result = res
         task.edges = edges
         task.comp_result = comp_res
@@ -1378,6 +1526,13 @@ def _run_inference_background(
             "started_at": started_at_utc,
             "wall_time_s": getattr(getattr(res, "inference", res), "wall_time_s", None),
             "use_mp": bool(use_mp),
+            # NETSTAT-27 resource facts: requested vs engine-resolved workers.
+            # The BLAS library and which enhancement backend ran are not
+            # measured, so they stay explicitly unknown.
+            "n_processes_requested": n_processes,
+            "resource_plan": _resource_plan_facts(use_mp, n_processes, effective_n_perms),
+            "progress_final": session.snapshot(),
+            "generation": generation,
             "acceleration": effective_acceleration,
             "var_equal": var_equal,
             # The executed missing-connectivity policy and its coverage floor;
@@ -1423,8 +1578,30 @@ def _run_inference_background(
             )
         if primary_record is not None:
             task.run_plan["primary_cell"] = primary_record
+        task.finished_generation = generation
         task.status = "success"
         task.progress_message = "✅ Completed!"
+    except (InferenceCancelled, _StaleJob) as exc:
+        # Nothing computed from an incomplete null distribution may survive.
+        session.finalize()
+        task.result = None
+        task.edges = None
+        task.comp_result = None
+        task.comp_edges = None
+        task.run_plan = None
+        task.error = None
+        task.finished_generation = generation
+        task.status = "cancelled"
+        if not getattr(task, "cancel_reason", None):
+            task.cancel_reason = (
+                "superseded by a newer run"
+                if isinstance(exc, _StaleJob)
+                else "cancelled by the user"
+            )
+        task.progress_message = (
+            "⏹ Cancelled at a permutation chunk boundary — no p-values, "
+            "no result and no export were produced."
+        )
     except Exception as e:
         task.error = f"{e}\n{traceback.format_exc()}"
         task.status = "failed"
@@ -1506,6 +1683,7 @@ def render_design_inference_view(base_atlas, tabs_list):
         n_perms = DEFAULT_N_PERMUTATIONS
         seed_val = 42
         use_mp = True
+        n_processes = None
         acceleration_choice = "none" if DEFAULT_ACCELERATION is None else DEFAULT_ACCELERATION
         op_kwargs = {}
         comp_kwargs = {}
@@ -2204,6 +2382,27 @@ def render_design_inference_view(base_atlas, tabs_list):
             with st.expander("Execution Options", expanded=False):
                 acceleration_choice = st.selectbox("Tail Acceleration", accel_options, index=accel_options.index(default_accel), key=persistent_key('design:tail_acceleration', scope='design', options=accel_options))
                 use_mp = st.checkbox("Parallel Execution (Multiprocessing)", value=True, key=persistent_key('design:parallel_execution_multiprocessing', scope='design'))
+                worker_options = ["auto", "1", "2", "4", "8"]
+                workers_choice = st.selectbox(
+                    "Worker Processes",
+                    worker_options,
+                    index=0,
+                    key=persistent_key('design:worker_processes', scope='design', options=worker_options),
+                    help=(
+                        "auto = available CPUs, capped at the number of planned "
+                        "permutations. Each pool worker uses one BLAS/OpenMP "
+                        "thread. The run plan records the requested value and the "
+                        "engine-resolved worker count."
+                    ),
+                )
+                n_processes = None if workers_choice == "auto" else int(workers_choice)
+                st.caption(
+                    "Resource measurements come only from the small bounded local "
+                    "benchmark recorded in the NETSTAT-27 evidence note "
+                    "(<=24 observations, <=64 permutations, <=2 workers); they are "
+                    "not universal limits. For large runs use the CLI "
+                    "(`conninfpy run`) and set n_processes explicitly."
+                )
                 seed_val = st.number_input("Random Seed", 1, 10000, 42, key=persistent_key('design:random_seed', scope='design'))
                 
         with col_right:
@@ -2471,6 +2670,7 @@ def render_design_inference_view(base_atlas, tabs_list):
 | **E/H Grid** | {(f"{len(grid_e_values)} cells, declared primary E={primary_cell_decl['e']:g}, H={primary_cell_decl['h']:g} (cell {primary_cell_decl['param_idx']})" if primary_cell_decl else "single scalar (E, H)")} |
 | **Condition Confounds** | {(', '.join(paired_confound_cols) + ' (B - A computed by the engine)' if paired_confound_cols else "none")} |
 | **Permutations** | {n_perms} |
+| **Parallel** | {("engine-resolved workers (auto, capped at permutations)" if use_mp and n_processes is None else (f"{n_processes} workers (requested)" if use_mp else "single process (requested)"))} |
 | **Rough Runtime** | `{est_str}` |
 | **P-value Resolution** | ~{resolution:.4f} |
 """
@@ -2624,7 +2824,37 @@ def render_design_inference_view(base_atlas, tabs_list):
                     st.session_state.inference_task = InferenceTask()
                     
                 task = st.session_state.inference_task
-                
+                # NETSTAT-27: a running job belongs to the data/design it was
+                # launched on. Comparing the recorded signature on every
+                # rerun cancels a superseded thread cooperatively instead of
+                # letting it publish into a session that has moved on.
+                job_signature = _run_signature(
+                    loaded_settings_hash=st.session_state.get("loaded_settings_hash"),
+                    atlas_signature=st.session_state.get(
+                        "loaded_atlas_signature",
+                        st.session_state.get("active_atlas_signature"),
+                    ),
+                    data_id=id(st.session_state.get("connectivity_data")),
+                    data_shape=getattr(st.session_state.get("connectivity_data"), "shape", None),
+                    test_type=test_type,
+                    question_choice=question_choice,
+                    method=operator_choice,
+                    n_permutations=n_perms,
+                    seed=seed_val,
+                    use_mp=bool(use_mp),
+                    tested_tail=tested_tail,
+                    var_equal=var_equal,
+                    missing_policy=missing_policy,
+                    min_coverage=min_coverage,
+                    site_recipe=recipe_choice,
+                    interest_var=interest_var,
+                    group_col=group_col,
+                    baseline=baseline_val,
+                    target=target_val,
+                    confounds=tuple(confound_vars or ()),
+                )
+                _invalidate_superseded_task(task, job_signature)
+
                 # Check status and draw corresponding elements
                 if task.status == "idle":
                     if not run_enabled:
@@ -2758,7 +2988,23 @@ def render_design_inference_view(base_atlas, tabs_list):
                             task.edges = None
                             task.comp_result = None
                             task.comp_edges = None
+                            task.run_plan = None
                             task.error = None
+                            # NETSTAT-27: new generation + fresh parent-side
+                            # cancel token for every launch. The previous
+                            # thread (if any) keeps its own token and can
+                            # never publish into this generation.
+                            st.session_state["inference_generation"] = (
+                                int(st.session_state.get("inference_generation", 0)) + 1
+                            )
+                            task.generation = int(st.session_state["inference_generation"])
+                            task.cancel_event = threading.Event()
+                            task.cancel_reason = None
+                            task.progress_done = 0
+                            task.progress_total = 0
+                            task.progress_stage = None
+                            task.finished_generation = None
+                            task.launch_signature = job_signature
                             
                             # Reset in-session results and downstream views/widgets
                             st.session_state.inference_result = None
@@ -2805,6 +3051,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                                     edge_mask_plan=edge_mask_plan,
                                     primary_cell=primary_cell_decl,
                                     design_facts=design_facts,
+                                    n_processes=n_processes,
                                 )
                             )
                             t.daemon = True
@@ -2815,7 +3062,21 @@ def render_design_inference_view(base_atlas, tabs_list):
                             st.exception(e)
                             
                 elif task.status == "running":
-                    run_action.button("⏳ Inference running…", disabled=True, key="run_inference_running", width="stretch")
+                    run_action.button(
+                        "⏳ Inference running…",
+                        disabled=True,
+                        key="run_inference_running",
+                        width="stretch",
+                    )
+                    if run_action.button(
+                        "⏹ Cancel run",
+                        key="cancel_inference_btn",
+                        width="stretch",
+                        help="Stop at the next permutation chunk boundary. No partial result is produced.",
+                    ):
+                        task.request_cancel("cancelled by the user")
+                        st.rerun()
+
                     def render_running_status():
                         """Poll the thread state without restarting its inference work."""
                         current_task = st.session_state.inference_task
@@ -2827,10 +3088,31 @@ def render_design_inference_view(base_atlas, tabs_list):
                             st.rerun()
 
                         st.info(f"⏳ **Status:** {current_task.progress_message}")
+                        done = int(getattr(current_task, "progress_done", 0) or 0)
+                        total = int(getattr(current_task, "progress_total", 0) or 0)
+                        stage = getattr(current_task, "progress_stage", None)
+                        if total > 0:
+                            # Exact parent-side count of folded permutations.
+                            st.progress(
+                                min(1.0, done / total),
+                                text=(
+                                    f"Completed permutations: {done} of {total}"
+                                    + (f" — stage: {stage}" if stage else "")
+                                ),
+                            )
+                        elif _task_cancel_requested(current_task):
+                            st.warning("Cancelling at the next permutation chunk boundary…")
+                        else:
+                            st.caption(
+                                "Completed permutations: 0 — no permutation loop has "
+                                "started yet (preparing data/design)."
+                            )
                         st.markdown(f"""
                         **Estimated remaining time:** `{est_str}`
 
-                        *   Permutations are running in the background.
+                        *   Permutations are running in the background; the count above
+                            advances at chunk boundaries, so it is a lower bound
+                            between updates.
                         *   You can switch to other tabs (such as Workspace Documentation) or browse around the workspace.
                         *   This status checks automatically every 2 seconds.
                         """)
@@ -2839,6 +3121,24 @@ def render_design_inference_view(base_atlas, tabs_list):
                     # they do not re-create the background worker thread.
                     with status_area:
                         st.fragment(run_every=2.0)(render_running_status)()
+                elif task.status in ("cancelled", "invalidated"):
+                    status_area.warning(
+                        "⏹ **Inference cancelled.** "
+                        f"Reason: {task.cancel_reason or 'cancelled by the user'}. "
+                        "The run stopped at a permutation chunk boundary: no p-values, "
+                        "no edges and no analysis result were produced from the "
+                        "incomplete null distribution, so nothing can be saved or "
+                        "exported for this run. The previous completed result (if any) "
+                        "was cleared when this run started and is not restored."
+                    )
+                    if run_action.button(
+                        "🚀 Configure & Run New Inference",
+                        key="run_inf_new_button",
+                        width="stretch",
+                    ):
+                        task.status = "idle"
+                        task.cancel_reason = None
+                        st.rerun()
                 else:
                     # success or failed
                     status_area.info(f"Inference run complete. Current status: **{task.status.upper()}**")
@@ -2848,12 +3148,29 @@ def render_design_inference_view(base_atlas, tabs_list):
                         
                 # Handle finished background task results
                 if task.status == "success":
-                    if st.session_state.inference_result is None:
+                    # Publish only the task that is still current and whose
+                    # payload was finished for its own generation: a stale or
+                    # cancelled thread can never overwrite newer session state.
+                    current = st.session_state.get("inference_task") is task
+                    task_generation = int(getattr(task, "generation", 0))
+                    same_generation = (
+                        int(getattr(task, "finished_generation", task_generation))
+                        == task_generation
+                        and int(st.session_state.get("inference_generation", task_generation))
+                        == task_generation
+                    )
+                    if (
+                        current
+                        and same_generation
+                        and not _task_cancel_requested(task)
+                        and st.session_state.inference_result is None
+                        and getattr(task, "result", None) is not None
+                    ):
                         st.session_state.inference_result = task.result
                         st.session_state.edges_df = task.edges
                         st.session_state.companion_inference_result = task.comp_result
                         st.session_state.companion_edges_df = task.comp_edges
-                        st.session_state.companion_method = task.run_plan.get("companion_method")
+                        st.session_state.companion_method = (task.run_plan or {}).get("companion_method")
                         st.session_state.run_plan = task.run_plan
                         st.success("🎉 Connectivity inference completed successfully!")
                         st.session_state.next_tab = tabs_list[2] # Redirect to Inference Results
