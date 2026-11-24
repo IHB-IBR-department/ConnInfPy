@@ -45,6 +45,12 @@ _CIRCUITS = {
     frozenset({"cortex", "basal_ganglia"}): "cortico-basal ganglia",
     frozenset({"cortex", "amygdala"}): "amygdalo-cortical",
     frozenset({"cortex", "hippocampus"}): "hippocampo-cortical",
+    frozenset({"cerebellum"}): "intra-cerebellar",
+    frozenset({"cortex", "cerebellum"}): "cerebello-cortical",
+    frozenset({"thalamus", "cerebellum"}): "cerebello-thalamic",
+    frozenset({"basal_ganglia", "cerebellum"}): "cerebello-basal ganglia",
+    frozenset({"amygdala", "cerebellum"}): "cerebello-limbic",
+    frozenset({"hippocampus", "cerebellum"}): "cerebello-limbic",
 }
 
 
@@ -137,7 +143,10 @@ class RoiAnnotation:
         for r, (_, roi) in enumerate(self.table.iterrows()):
             for k in np.flatnonzero(np.nan_to_num(w[r]) >= mw):
                 rid = int(k) + 1
-                for term, lr in ref.profile(kind, rid).items():
+                prof = ref.profile(kind, rid)
+                if not prof:
+                    continue
+                for term, lr in prof.items():
                     rows.append({"roi": roi["roi"], "roi_index": r, "region": ref.regions.at[rid, "name"],
                                  "region_weight": float(w[r, k]), "term": term,
                                  "domain": ref.domain(term) if kind == "BD" else None,
@@ -257,9 +266,10 @@ def annotate_rois(
     radii = (np.broadcast_to(np.asarray(radius_mm, float), (n,)) if support == "sphere"
              else np.zeros(n))
 
-    weights = np.zeros((n, N_REGIONS))
+    n_ref = ref.n_regions
+    weights = np.zeros((n, n_ref))
     has_pm = ref._membership_matrix() is not None
-    membership = np.zeros((n, N_REGIONS)) if has_pm else None
+    membership = np.zeros((n, n_ref)) if has_pm else None
     nearest_note: Dict[int, float] = {}
     for r, world in enumerate(supports):
         if support == "point" and nearest_mm is not None and len(world) and ref.labels_at(world)[0] == 0:
@@ -268,8 +278,8 @@ def annotate_rois(
                 world, nearest_note[r] = hit[0][None, :], hit[1]
         if len(world):
             lab = ref.labels_at(world)
-            counts = np.bincount(lab, minlength=N_REGIONS + 1)
-            weights[r] = counts[1:] / len(world)
+            counts = np.bincount(lab, minlength=n_ref + 1)
+            weights[r] = counts[1 : n_ref + 1] / len(world)
             if has_pm:
                 membership[r] = ref.membership(world)
 
@@ -439,7 +449,6 @@ def _shares(w_lab, keys):
 
 def _describe(r, name, centre, world, w, m, regions, ref, support, radius, space,
               purity, min_coverage, min_weight, nearest):
-    ids = np.arange(1, N_REGIONS + 1)
     coverage = float(w.sum())
     flags: List[str] = []
     if space in _APPROX_SPACES:
@@ -475,16 +484,25 @@ def _describe(r, name, centre, world, w, m, regions, ref, support, radius, space
     row["regions"] = "; ".join(f"{regions.at[int(k) + 1, 'name']} {w[k]:.2f}" for k in top[:4] if w[k] >= 0.05)
     dom = int(top[0]) + 1
     sub_p = float(w_lab[dom - 1])
-    hemi_l = float(w_lab[(ids % 2) == 1].sum())
-    hemi = "L" if hemi_l >= 0.8 else ("R" if hemi_l <= 0.2 else "bilateral")
-    if hemi == "bilateral":
+    hemi_arr = np.asarray(regions["hemisphere"], dtype=object)
+    hemi_l = float(w_lab[hemi_arr == "L"].sum())
+    hemi_r = float(w_lab[hemi_arr == "R"].sum())
+    hemi_m = float(w_lab[hemi_arr == "M"].sum())
+    if hemi_m >= 0.8:
+        hemi = "M"
+    elif hemi_l >= 0.8:
+        hemi = "L"
+    elif hemi_r >= 0.8:
+        hemi = "R"
+    else:
+        hemi = "bilateral"
         flags.append(f"bilateral support (left {hemi_l:.0%})")
     gy_key, gy_p = _shares(w_lab, [f"{g}_{h}" for g, h in zip(regions.gyrus, regions.hemisphere)])
     lo_key, lo_p = _shares(w_lab, [f"{lb}_{h}" for lb, h in zip(regions.lobe, regions.hemisphere)])
     st_key, st_p = _shares(w_lab, list(regions.structure))
-    yeo_keys = [y if s == "cortex" else "not applicable" for y, s in zip(regions.yeo7, regions.structure)]
+    yeo_keys = [y if s in ("cortex", "cerebellum") else "not applicable" for y, s in zip(regions.yeo7, regions.structure)]
     y_key, y_p = _shares(w_lab, yeo_keys)
-    y17_key, y17_p = _shares(w_lab, [y if s == "cortex" else "not applicable"
+    y17_key, y17_p = _shares(w_lab, [y if s in ("cortex", "cerebellum") else "not applicable"
                                      for y, s in zip(regions.yeo17, regions.structure)])
 
     if sub_p >= purity:
@@ -507,9 +525,13 @@ def _describe(r, name, centre, world, w, m, regions, ref, support, radius, space
     })
     if ref.profiles is not None:
         contrib = [int(k) + 1 for k in np.flatnonzero(w_lab >= min_weight)]
-        terms = set().union(*(ref.profile("BD", c).keys() for c in contrib)) if contrib else set()
-        row["domains"] = "; ".join(d for d in BD_DOMAINS if d in {ref.domain(t) for t in terms})
-        row["profile_status"] = "terms" if terms else "no published terms (BrainMap coverage, not absence of function)"
+        bna_contrib = [c for c in contrib if ref.profile("BD", c) is not None]
+        if contrib and not bna_contrib:
+            row["profile_status"] = "not available for companion atlas (BrainMap profiles cover BNA-246 only)"
+        else:
+            terms = set().union(*(ref.profile("BD", c).keys() for c in bna_contrib)) if bna_contrib else set()
+            row["domains"] = "; ".join(d for d in BD_DOMAINS if d in {ref.domain(t) for t in terms})
+            row["profile_status"] = "terms" if terms else "no published terms (BrainMap coverage, not absence of function)"
     else:
         row["profile_status"] = "profiles unavailable"
     row["flags"] = "; ".join(flags)
@@ -591,12 +613,15 @@ def annotate_edges(edges: Any, rois: RoiAnnotation, *, smoothing_fwhm_mm: Option
         df["sc"] = np.nan
     else:
         w = np.nan_to_num(rois.labelled_weights())
-        S = np.nan_to_num(sc, nan=0.0)
+        w_bna = w[:, :N_REGIONS]
+        S = np.nan_to_num(sc[:N_REGIONS, :N_REGIONS], nan=0.0)
         off = 1.0 - np.eye(N_REGIONS)
-        num = np.einsum("ea,ab,eb->e", w[i], S, w[j])
-        den = np.einsum("ea,ab,eb->e", w[i], off, w[j])
+        num = np.einsum("ea,ab,eb->e", w_bna[i], S, w_bna[j])
+        den = np.einsum("ea,ab,eb->e", w_bna[i], off, w_bna[j])
+        has_cb = (w[:, N_REGIONS:].sum(axis=1) > 0) if w.shape[1] > N_REGIONS else np.zeros(len(w), dtype=bool)
+        cb_edge = has_cb[i] | has_cb[j]
         with np.errstate(invalid="ignore", divide="ignore"):
-            df["sc"] = np.where(den > 0, num / den, np.nan)
+            df["sc"] = np.where((den > 0) & (~cb_edge), num / den, np.nan)
     return df
 
 
@@ -604,15 +629,28 @@ def _hemispheric(ra, rb, regions) -> str:
     ha, hb = ra["hemisphere"], rb["hemisphere"]
     if ha not in ("L", "R") or hb not in ("L", "R"):
         return "bilateral or midline endpoint"
+    if {ra["structure"], rb["structure"]} == {"cortex", "cerebellum"}:
+        return "crossed cerebello-cortical" if ha != hb else "ipsilateral cerebello-cortical"
     if ha == hb:
         return "left intrahemispheric" if ha == "L" else "right intrahemispheric"
     if ra["level"] == rb["level"] == "subregion":
         ia = int(regions.index[regions.name == ra["region"]][0])
-        if int(regions.at[ia, "homolog_id"]) == int(regions.index[regions.name == rb["region"]][0]):
-            return "homotopic"
+        hom = regions.at[ia, "homolog_id"]
+        if hom is not None and not (isinstance(hom, float) and np.isnan(hom)):
+            if int(hom) == int(regions.index[regions.name == rb["region"]][0]):
+                return "homotopic"
     if ra["gyrus"] and ra["gyrus"] == rb["gyrus"]:
         return "homotopic gyrus"
     return "heterotopic"
+
+
+def _strip_side(name: str) -> str:
+    if name.endswith(("_L", "_R")):
+        return name[:-2]
+    for pre in ("Left_", "Right_", "Vermis_"):
+        if name.startswith(pre):
+            return name[len(pre):]
+    return name
 
 
 def _anatomical(ra, rb) -> str:
@@ -621,7 +659,7 @@ def _anatomical(ra, rb) -> str:
         return "unassigned"
     if "mixed" in (la, lb):
         return "mixed"
-    if la == lb == "subregion" and ra["region"][:-2] == rb["region"][:-2]:
+    if la == lb == "subregion" and _strip_side(ra["region"]) == _strip_side(rb["region"]):
         return "same subregion"
     if ra["gyrus"] and ra["gyrus"] == rb["gyrus"]:
         return "same gyrus"
@@ -829,13 +867,14 @@ def _unit_weights(rois: RoiAnnotation, level: str, assign: str, placed_only: boo
     if placed_only:
         w[np.asarray(rois.table["level"] == "unassigned")] = 0.0
     regions = rois.reference.regions
+    n_reg = rois.reference.n_regions
     if level == "subregion":
         units = list(regions["name"])
     else:
         keys = [f"{g}_{h}" for g, h in zip(regions["gyrus" if level == "gyrus" else "lobe"], regions["hemisphere"])]
         units = list(dict.fromkeys(keys))
-        P = np.zeros((N_REGIONS, len(units)))
-        P[np.arange(N_REGIONS), [units.index(k) for k in keys]] = 1.0
+        P = np.zeros((n_reg, len(units)))
+        P[np.arange(n_reg), [units.index(k) for k in keys]] = 1.0
         w = w @ P
     if assign == "dominant":
         top = np.zeros_like(w)

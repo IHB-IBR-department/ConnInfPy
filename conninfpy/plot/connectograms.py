@@ -47,6 +47,7 @@ _LOBES = {
     "Parietal": ("PAR", "#AFC8E2"),
     "Occipital": ("OCC", "#D7C9EA"),
     "Subcortical": ("SUB", "#D6D6D6"),
+    "Cerebellum": ("CBM", "#E2D2B5"),
 }
 
 
@@ -66,6 +67,8 @@ def _connectogram_layout(
     rank = {lobe: k for k, lobe in enumerate(_LOBES)}
     right = regions[regions["hemisphere"] == "R"]
     order = sorted(right.index, key=lambda r: (rank[right.at[r, "lobe"]], r))
+    midline = regions[regions["hemisphere"] == "M"]
+    mid_order = sorted(midline.index, key=lambda r: (rank[midline.at[r, "lobe"]], r))
     s, prev, slots = hemi_gap / 2, None, {}
     for rid in order:
         lobe = right.at[rid, "lobe"]
@@ -73,11 +76,21 @@ def _connectogram_layout(
             s += lobe_gap
         slots[rid] = s
         s, prev = s + 1, lobe
-    deg = 180.0 / (s + hemi_gap / 2)
+    if mid_order:
+        deg = 180.0 / (s + lobe_gap + len(mid_order) / 2.0)
+        mid_start = s + lobe_gap
+        for k, rid in enumerate(mid_order):
+            slots[rid] = mid_start + k
+    else:
+        deg = 180.0 / (s + hemi_gap / 2)
     out = regions[["name", "gyrus", "lobe", "hemisphere"]].copy()
     for rid in order:
         out.loc[rid, "s0"] = slots[rid] * deg
-        out.loc[int(regions.at[rid, "homolog_id"]), "s0"] = slots[rid] * deg
+        hom = regions.at[rid, "homolog_id"]
+        if hom is not None and not (isinstance(hom, float) and np.isnan(hom)):
+            out.loc[int(hom), "s0"] = slots[rid] * deg
+    for rid in mid_order:
+        out.loc[rid, "s0"] = slots[rid] * deg
     out["s1"] = out["s0"] + deg
     return out
 
@@ -306,14 +319,15 @@ def plot_connectogram(
     # labels
     def radial(text, s, h, r, size, **kw):
         a = _side_angle(s, h)
+        on_right = (h == "R") or (h == "M" and a > 270.0)
         ax.text(
             r * np.cos(np.deg2rad(a)),
             r * np.sin(np.deg2rad(a)),
             text,
             fontsize=size,
-            rotation=a if h == "R" else a - 180,
+            rotation=a if on_right else a - 180,
             rotation_mode="anchor",
-            ha="left" if h == "R" else "right",
+            ha="left" if on_right else "right",
             va="center",
             **kw,
         )
@@ -321,9 +335,9 @@ def plot_connectogram(
     r_gyrus = 1.015
     if labels == "subregion":
         for _, r in lay.iterrows():
-            radial(
-                r["name"].rsplit("_", 1)[0], (r.s0 + r.s1) / 2, r.hemisphere, 1.015, 3.2
-            )
+            nm = r["name"]
+            sub_lbl = nm[:-2] if nm.endswith(("_L", "_R")) else nm
+            radial(sub_lbl, (r.s0 + r.s1) / 2, r.hemisphere, 1.015, 3.2)
         r_gyrus = 1.16
     if labels != "none":
         for (g, h), r in gyri.iterrows():
@@ -402,9 +416,14 @@ def plot_connectogram(
     n_placed = coverage.get("n_placed", n_rois)
     n_out = len(coverage.get("unplaced_no_support", []))
     n_low = len(coverage.get("unplaced_low_coverage", []))
+    atlas_label = (
+        "Brainnetome + SUIT"
+        if rois.reference.provenance.get("cerebellum_atlas")
+        else "Brainnetome"
+    )
     place = (
         f"{n_placed} of {n_rois} ROIs placed ({n_out} outside the atlas, "
-        f"{n_low} below min_coverage), each {how} (Brainnetome {level})"
+        f"{n_low} below min_coverage), each {how} ({atlas_label} {level})"
     )
     n_det = coverage.get("detected_total", 0)
     unit = coverage.get("inference_unit", "edge")
