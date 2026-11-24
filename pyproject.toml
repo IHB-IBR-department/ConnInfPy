@@ -108,7 +108,7 @@ notebooks = [
 include = ["conninfpy*"]
 
 [tool.setuptools.package-data]
-conninfpy = ["atlas_data/*.csv", "atlas_data/*.nii.gz", "atlas_data/*.txt", "atlas_data/*.json"]
+conninfpy = ["atlas_data/*.csv", "atlas_data/*.nii.gz", "atlas_data/*.txt", "atlas_data/*.json", "atlas_data/*.tsv", "atlas_data/*.lut"]
 
 [tool.pytest.ini_options]
 filterwarnings = [

@@ -1,0 +1,609 @@
+{
+ "schema_version": 1,
+ "generated_by": "NETSTAT-48 writer (data package + spike); no public API in this change",
+ "generated_with": {
+  "python": "3.12.14",
+  "nibabel": "5.4.2",
+  "numpy": "1.26.4"
+ },
+ "atlas_set": {
+  "repository": "https://github.com/DiedrichsenLab/cerebellar_atlases",
+  "tag": "v1.2",
+  "commit": "6857dfa732de6dd60c94da2f84d0b15ccf316618",
+  "release_url": "https://github.com/DiedrichsenLab/cerebellar_atlases/releases/tag/v1.2",
+  "release_published": "2026-09-12",
+  "license_declared_upstream": "CC-BY (release notes v1.2 and README 'Reference and Licence'); atlas_description.json files say 'See LICENSE file'",
+  "citation": "Diedrichsen J, Zhi D, Nettekoven C. A collection of Atlasses for the human cerebellum, v1.2 (CITATION.cff)",
+  "template_space_space-MNI": {
+   "declared": "MNI152NLin6AsymC (cerebellar-only crop of the FSL MNI152NLin6Asym template), README at the pinned commit",
+   "verification": "header/grid geometry only; template-image identity NOT independently verified in NETSTAT-48"
+  },
+  "files": {
+   "atl-Anatom_space-MNI_dseg.nii.gz": {
+    "packaged_path": "conninfpy/atlas_data/atl-Anatom_space-MNI_dseg.nii.gz",
+    "upstream_path": "Diedrichsen_2009/atl-Anatom_space-MNI_dseg.nii",
+    "upstream_url": "https://raw.githubusercontent.com/DiedrichsenLab/cerebellar_atlases/6857dfa732de6dd60c94da2f84d0b15ccf316618/Diedrichsen_2009/atl-Anatom_space-MNI_dseg.nii",
+    "git_blob_sha1": "3b53404f70f0d271e4b2a82e3460741ae61caa3d",
+    "git_blob_sha1_matches_tree_at_commit": true,
+    "upstream_bytes": 1324108,
+    "upstream_sha256": "434471d89ff329e6e14cdecb66998018fe0dcadbbe47781429148d0017598b72",
+    "packaged_bytes": 24275,
+    "packaged_sha256": "1154ad0b889e0ab4054b1b21f0e0f7549d71b2e89437e21244493deeeb488156",
+    "packaging": {
+     "method": "deterministic gzip of the upstream .nii bytes (level 9, MTIME=0, no FNAME); decompressed bytes identical to upstream .nii",
+     "gzip_header": {
+      "FLG": 0,
+      "FNAME_set": false,
+      "MTIME": 0,
+      "XFL": 2,
+      "OS": 255
+     },
+     "decompressed_equals_upstream_bytes": true,
+     "deterministic_recompress_identical": true,
+     "nibabel_source_vs_packaged": {
+      "array_equal": true,
+      "dtype_equal": true,
+      "affine_equal": true,
+      "header_bytes_equal": true,
+      "n_nonzero": 164802
+     },
+     "labels_in_image": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34
+     ],
+     "n_nonzero_voxels": 164802
+    },
+    "nifti": {
+     "shape": [
+      153,
+      103,
+      84
+     ],
+     "dtype": "uint8",
+     "zooms": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "qform_code": 2,
+     "sform_code": 2,
+     "affine": [
+      [
+       -1.0,
+       0.0,
+       0.0,
+       76.0
+      ],
+      [
+       0.0,
+       1.0,
+       0.0,
+       -108.0
+      ],
+      [
+       0.0,
+       0.0,
+       1.0,
+       -72.0
+      ],
+      [
+       0.0,
+       0.0,
+       0.0,
+       1.0
+      ]
+     ],
+     "axcodes": "LAS",
+     "descrip": "label"
+    },
+    "xyzt_units_code": 10,
+    "upstream_atlas_description": {
+     "Identifier": "Anatom",
+     "Name": "Probabilistic atlas of cerebellar lobules",
+     "ShortDesc": "Probabilistic atlas for cerebellar lobules and nuclei: Diedrichsen (2009)",
+     "LongDesc": "The anatomical definitions are based on the fMRI atlas of an individual cerebellum by Schmahmann et al. (2000). We manually identified the main lobules on MRI scans of 20 healthy young participants (ROIs 1-28). Using a different set of 23 participants, we also identified the deep cerebellar nuclei (ROIs 29-34).",
+     "License": "See LICENSE file",
+     "BIDSVersion": "1.1.0",
+     "ReferencesAndLinks": [
+      "Diedrichsen, J., Balsters, J. H., Flavell, J., Cussans, E., & Ramnani, N. (2009). A probabilistic atlas of the human cerebellum. Neuroimage.",
+      "Diedrichsen, J., Maderwald, S., Kuper, M., Thurling, M., Rabe, K., Gizewski, E. R., et al. (2011). Imaging the deep cerebellar nuclei: A probabilistic atlas and normalization procedure. Neuroimage.",
+      "http://www.diedrichsenlab.org/imaging/propatlas.htm"
+     ],
+     "Spaces": [
+      "MNI",
+      "SUIT",
+      "MNISym"
+     ]
+    }
+   },
+   "atl-Anatom.tsv": {
+    "packaged_path": "conninfpy/atlas_data/atl-Anatom.tsv",
+    "upstream_path": "Diedrichsen_2009/atl-Anatom.tsv",
+    "upstream_url": "https://raw.githubusercontent.com/DiedrichsenLab/cerebellar_atlases/6857dfa732de6dd60c94da2f84d0b15ccf316618/Diedrichsen_2009/atl-Anatom.tsv",
+    "git_blob_sha1": "2dc2ba1d85805342470fdb46574e0890f32f3ac8",
+    "git_blob_sha1_matches_tree_at_commit": true,
+    "upstream_bytes": 767,
+    "upstream_sha256": "dc682c847972bd37badaa979526cf22a25bc79cdf50f4f49c107391c517fe7ad",
+    "packaged_bytes": 767,
+    "packaged_sha256": "dc682c847972bd37badaa979526cf22a25bc79cdf50f4f49c107391c517fe7ad",
+    "packaging": {
+     "method": "verbatim copy",
+     "verbatim_copy": true
+    }
+   },
+   "atl-Buckner7_space-MNI_dseg.nii.gz": {
+    "packaged_path": "conninfpy/atlas_data/atl-Buckner7_space-MNI_dseg.nii.gz",
+    "upstream_path": "Buckner_2011/atl-Buckner7_space-MNI_dseg.nii",
+    "upstream_url": "https://raw.githubusercontent.com/DiedrichsenLab/cerebellar_atlases/6857dfa732de6dd60c94da2f84d0b15ccf316618/Buckner_2011/atl-Buckner7_space-MNI_dseg.nii",
+    "git_blob_sha1": "782ea70f642829f14fb0b0065d3c18f66f46fffd",
+    "git_blob_sha1_matches_tree_at_commit": true,
+    "upstream_bytes": 1165717,
+    "upstream_sha256": "30103f765a72ef4ffcc58b0d7df4762e674ac8715900fe1578e59a18dced9416",
+    "packaged_bytes": 25176,
+    "packaged_sha256": "a6dbc238bf6ccfc5eb4f7d5c0aa81867dde9470d7972f9e7615556eb36980815",
+    "packaging": {
+     "method": "deterministic gzip of the upstream .nii bytes (level 9, MTIME=0, no FNAME); decompressed bytes identical to upstream .nii",
+     "gzip_header": {
+      "FLG": 0,
+      "FNAME_set": false,
+      "MTIME": 0,
+      "XFL": 2,
+      "OS": 255
+     },
+     "decompressed_equals_upstream_bytes": true,
+     "deterministic_recompress_identical": true,
+     "nibabel_source_vs_packaged": {
+      "array_equal": true,
+      "dtype_equal": true,
+      "affine_equal": true,
+      "header_bytes_equal": true,
+      "n_nonzero": 185545
+     },
+     "labels_in_image": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+     ],
+     "n_nonzero_voxels": 185545
+    },
+    "nifti": {
+     "shape": [
+      141,
+      95,
+      87
+     ],
+     "dtype": "int8",
+     "zooms": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "qform_code": 0,
+     "sform_code": 2,
+     "affine": [
+      [
+       1.0,
+       0.0,
+       0.0,
+       -70.0
+      ],
+      [
+       0.0,
+       1.0,
+       0.0,
+       -100.0
+      ],
+      [
+       0.0,
+       0.0,
+       1.0,
+       -75.0
+      ],
+      [
+       0.0,
+       0.0,
+       0.0,
+       1.0
+      ]
+     ],
+     "axcodes": "RAS",
+     "descrip": ""
+    },
+    "xyzt_units_code": 0,
+    "upstream_atlas_description": {
+     "Identifier": "Buckner",
+     "Name": "Resting state network parcellation",
+     "ShortDesc": "Resting state network parcellation: Buckner et al. (2011)",
+     "LongDesc": "Buckner et al. (2011) presented the first comprehensive functional atlas of the human cerebellum, based on the correlation of each cerebellar voxel and with the 7 or 17 cortical resting state networks, described in Yeo et al. Parcellation is based on the data from 1000 subjects. ",
+     "License": "See LICENSE file",
+     "BIDSVersion": "1.1.0",
+     "ReferencesAndLinks": [
+      "Buckner, R. L., Krienen, F. M., Castellanos, A., Diaz, J. C. & Yeo, B. T. (2011). The organization of the human cerebellum estimated by intrinsic functional connectivity. J Neurophysiol 106, 2322\u20132345."
+     ],
+     "Spaces": [
+      "MNI",
+      "SUIT"
+     ]
+    }
+   },
+   "atl-Buckner7.tsv": {
+    "packaged_path": "conninfpy/atlas_data/atl-Buckner7.tsv",
+    "upstream_path": "Buckner_2011/atl-Buckner7.tsv",
+    "upstream_url": "https://raw.githubusercontent.com/DiedrichsenLab/cerebellar_atlases/6857dfa732de6dd60c94da2f84d0b15ccf316618/Buckner_2011/atl-Buckner7.tsv",
+    "git_blob_sha1": "1cf2653241a3b158692ea8bb7cf29a73f03f65a0",
+    "git_blob_sha1_matches_tree_at_commit": true,
+    "upstream_bytes": 150,
+    "upstream_sha256": "51afccd0fbda343ec78e0d5d89b5b9adcbdb09f48ed352b97bf769d083d9194a",
+    "packaged_bytes": 150,
+    "packaged_sha256": "51afccd0fbda343ec78e0d5d89b5b9adcbdb09f48ed352b97bf769d083d9194a",
+    "packaging": {
+     "method": "verbatim copy",
+     "verbatim_copy": true
+    }
+   },
+   "atl-Buckner17_space-MNI_dseg.nii.gz": {
+    "packaged_path": "conninfpy/atlas_data/atl-Buckner17_space-MNI_dseg.nii.gz",
+    "upstream_path": "Buckner_2011/atl-Buckner17_space-MNI_dseg.nii",
+    "upstream_url": "https://raw.githubusercontent.com/DiedrichsenLab/cerebellar_atlases/6857dfa732de6dd60c94da2f84d0b15ccf316618/Buckner_2011/atl-Buckner17_space-MNI_dseg.nii",
+    "git_blob_sha1": "7f3e2f53b225dd81c7ec79f96f6147834298f900",
+    "git_blob_sha1_matches_tree_at_commit": true,
+    "upstream_bytes": 1165717,
+    "upstream_sha256": "31d0bae8bee73c119ed940f3959fb08e603ed8ebfbf44a51f42b322be77a13ae",
+    "packaged_bytes": 30880,
+    "packaged_sha256": "7cbab1fa3fa53b7978be4d71187814e11e94ff2f94a36b25c9b12c3eda52296e",
+    "packaging": {
+     "method": "deterministic gzip of the upstream .nii bytes (level 9, MTIME=0, no FNAME); decompressed bytes identical to upstream .nii",
+     "gzip_header": {
+      "FLG": 0,
+      "FNAME_set": false,
+      "MTIME": 0,
+      "XFL": 2,
+      "OS": 255
+     },
+     "decompressed_equals_upstream_bytes": true,
+     "deterministic_recompress_identical": true,
+     "nibabel_source_vs_packaged": {
+      "array_equal": true,
+      "dtype_equal": true,
+      "affine_equal": true,
+      "header_bytes_equal": true,
+      "n_nonzero": 180674
+     },
+     "labels_in_image": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17
+     ],
+     "n_nonzero_voxels": 180674
+    },
+    "nifti": {
+     "shape": [
+      141,
+      95,
+      87
+     ],
+     "dtype": "int8",
+     "zooms": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "qform_code": 0,
+     "sform_code": 2,
+     "affine": [
+      [
+       1.0,
+       0.0,
+       0.0,
+       -70.0
+      ],
+      [
+       0.0,
+       1.0,
+       0.0,
+       -100.0
+      ],
+      [
+       0.0,
+       0.0,
+       1.0,
+       -75.0
+      ],
+      [
+       0.0,
+       0.0,
+       0.0,
+       1.0
+      ]
+     ],
+     "axcodes": "RAS",
+     "descrip": ""
+    },
+    "xyzt_units_code": 0,
+    "upstream_atlas_description": {
+     "Identifier": "Buckner",
+     "Name": "Resting state network parcellation",
+     "ShortDesc": "Resting state network parcellation: Buckner et al. (2011)",
+     "LongDesc": "Buckner et al. (2011) presented the first comprehensive functional atlas of the human cerebellum, based on the correlation of each cerebellar voxel and with the 7 or 17 cortical resting state networks, described in Yeo et al. Parcellation is based on the data from 1000 subjects. ",
+     "License": "See LICENSE file",
+     "BIDSVersion": "1.1.0",
+     "ReferencesAndLinks": [
+      "Buckner, R. L., Krienen, F. M., Castellanos, A., Diaz, J. C. & Yeo, B. T. (2011). The organization of the human cerebellum estimated by intrinsic functional connectivity. J Neurophysiol 106, 2322\u20132345."
+     ],
+     "Spaces": [
+      "MNI",
+      "SUIT"
+     ]
+    }
+   },
+   "atl-Buckner17.tsv": {
+    "packaged_path": "conninfpy/atlas_data/atl-Buckner17.tsv",
+    "upstream_path": "Buckner_2011/atl-Buckner17.tsv",
+    "upstream_url": "https://raw.githubusercontent.com/DiedrichsenLab/cerebellar_atlases/6857dfa732de6dd60c94da2f84d0b15ccf316618/Buckner_2011/atl-Buckner17.tsv",
+    "git_blob_sha1": "60733891bee95c0d5ed5de1cc848d8ed2005d935",
+    "git_blob_sha1_matches_tree_at_commit": true,
+    "upstream_bytes": 375,
+    "upstream_sha256": "7a517d0fa0c947673087ddf3d04af7a85ef01d5e8336923448e95db19a0538d2",
+    "packaged_bytes": 375,
+    "packaged_sha256": "7a517d0fa0c947673087ddf3d04af7a85ef01d5e8336923448e95db19a0538d2",
+    "packaging": {
+     "method": "verbatim copy",
+     "verbatim_copy": true
+    }
+   },
+   "atl-NettekovenSym32_space-MNI_dseg.nii.gz": {
+    "packaged_path": "conninfpy/atlas_data/atl-NettekovenSym32_space-MNI_dseg.nii.gz",
+    "upstream_path": "Nettekoven_2024/atl-NettekovenSym32_space-MNI_dseg.nii",
+    "upstream_url": "https://raw.githubusercontent.com/DiedrichsenLab/cerebellar_atlases/6857dfa732de6dd60c94da2f84d0b15ccf316618/Nettekoven_2024/atl-NettekovenSym32_space-MNI_dseg.nii",
+    "git_blob_sha1": "726a714fcac0b3d5a9a6c765c241bf906bd28bbc",
+    "git_blob_sha1_matches_tree_at_commit": true,
+    "upstream_bytes": 1324108,
+    "upstream_sha256": "e386e18fa619ed979b89ad4d2193e699e141f0da9e14e75706b3e42be0a51743",
+    "packaged_bytes": 34399,
+    "packaged_sha256": "a8f4f54033bb85e6c09f5821e3d3d2afeb96683597f51acd668531912a0137b2",
+    "packaging": {
+     "method": "deterministic gzip of the upstream .nii bytes (level 9, MTIME=0, no FNAME); decompressed bytes identical to upstream .nii",
+     "gzip_header": {
+      "FLG": 0,
+      "FNAME_set": false,
+      "MTIME": 0,
+      "XFL": 2,
+      "OS": 255
+     },
+     "decompressed_equals_upstream_bytes": true,
+     "deterministic_recompress_identical": true,
+     "nibabel_source_vs_packaged": {
+      "array_equal": true,
+      "dtype_equal": true,
+      "affine_equal": true,
+      "header_bytes_equal": true,
+      "n_nonzero": 146596
+     },
+     "labels_in_image": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32
+     ],
+     "n_nonzero_voxels": 146596
+    },
+    "nifti": {
+     "shape": [
+      153,
+      103,
+      84
+     ],
+     "dtype": "uint8",
+     "zooms": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "qform_code": 0,
+     "sform_code": 2,
+     "affine": [
+      [
+       -1.0,
+       0.0,
+       0.0,
+       76.0
+      ],
+      [
+       0.0,
+       1.0,
+       0.0,
+       -108.0
+      ],
+      [
+       0.0,
+       0.0,
+       1.0,
+       -72.0
+      ],
+      [
+       0.0,
+       0.0,
+       0.0,
+       1.0
+      ]
+     ],
+     "axcodes": "LAS",
+     "descrip": ""
+    },
+    "xyzt_units_code": 0,
+    "upstream_atlas_description": {
+     "Identifier": "Nettekoven2024",
+     "Name": null,
+     "ShortDesc": "Hierarchical functional cerebellar atlas from fusion across task-based datasets",
+     "LongDesc": "Functional parcellation into 4 domains, 32 regions or 68 functional subregions (symmetric or asymmetric). Domains, regions, and subregions are a nested hierarchy. An additional version with 128 regions that subdivides the 32 regions spatially into 4 regions (s: superior, i: inferior, t: tertiary, v: vermal) is available. The maps are based on the probabilistic integration of 7 task-based datasets. The color scheme reflects the functional similarity of different regions. The parcellations are organized to have corresponding left and right hemispheric regions. For the symmetric version, the boundaries are force to be identical across hemispheres.",
+     "License": "see LICENSE file",
+     "BIDSVersion": "1.2.0",
+     "ReferencesAndLinks": [
+      "Nettekoven, C. et al. A hierarchical atlas of the human cerebellum for functional precision mapping. Nature Communications (2024)."
+     ],
+     "Spaces": [
+      "MNI",
+      "SUIT",
+      "MNISym"
+     ]
+    }
+   },
+   "atl-NettekovenSym32.lut": {
+    "packaged_path": "conninfpy/atlas_data/atl-NettekovenSym32.lut",
+    "upstream_path": "Nettekoven_2024/atl-NettekovenSym32.lut",
+    "upstream_url": "https://raw.githubusercontent.com/DiedrichsenLab/cerebellar_atlases/6857dfa732de6dd60c94da2f84d0b15ccf316618/Nettekoven_2024/atl-NettekovenSym32.lut",
+    "git_blob_sha1": "db5215c2b4594a58de8b972c8f72d99e999f9399",
+    "git_blob_sha1_matches_tree_at_commit": true,
+    "upstream_bytes": 839,
+    "upstream_sha256": "33a723b32cb861623a8459865454c9efb142bdb3ce2390ea5f29a586cfab0e24",
+    "packaged_bytes": 839,
+    "packaged_sha256": "33a723b32cb861623a8459865454c9efb142bdb3ce2390ea5f29a586cfab0e24",
+    "packaging": {
+     "method": "verbatim copy",
+     "verbatim_copy": true
+    }
+   }
+  }
+ },
+ "relationship_to_bna1mm": {
+  "bna_file": "conninfpy/atlas_data/BN_Atlas_246_1mm.nii.gz",
+  "bna_grid": "182x218x182, 1 mm, LAS, affine diag(-1,1,1) origin (90,-126,-72) = FSL MNI152NLin6Asym 1 mm grid geometry",
+  "bna_template_provenance": "BNA provider declares MNI152; variant inferred from grid geometry only (not verified against a template image)",
+  "grid_compatibility": "exact integer-lattice coincidence for all four cerebellar maps (max |deviation| = 0.0 vox; signed-permutation rotation + integer translation); no resampling needed or performed",
+  "voxel_translation_into_bna1mm": {
+   "anatom->bna1mm": [
+    14.0,
+    18.0,
+    0.0
+   ],
+   "buckner7->bna1mm": [
+    160.0,
+    26.0,
+    -3.0
+   ],
+   "nettekoven32->bna1mm": [
+    14.0,
+    18.0,
+    0.0
+   ]
+  },
+  "overlap_with_bna1mm_anatom_all_34": {
+   "bna_only": 1123192,
+   "cerebellum_only": 163769,
+   "overlap_clipped": 1033,
+   "unassigned_both_zero": 5933038
+  },
+  "overlap_with_bna1mm_anatom_lobules_1_28": {
+   "cerebellum_only": 159377,
+   "overlap_clipped": 1033
+  },
+  "overlap_with_bna1mm_anatom_nuclei_29_34": {
+   "cerebellum_only": 4392,
+   "overlap_clipped": 0
+  },
+  "rule_for_any_future_composite": "BNA has priority: composite = BNA if BNA>0 else offset+CB if CB>0 else 0; cerebellar IDs must carry an explicit offset/namespace; no ID collisions"
+ },
+ "known_upstream_label_issues_kept_verbatim": {
+  "atl-Buckner7.tsv": [
+   "index 6 'Netowrk6' (typo of Network6)"
+  ],
+  "atl-Buckner17.tsv": [
+   "indices 8, 9 'Networks_8'/'Networks_9' (plural, inconsistent with 'Network_N')"
+  ],
+  "atl-Anatom.tsv": [
+   "no Vermis labels for I_IV and V (SUIT convention)",
+   "Left/Right colours differ for I_IV, V (cosmetic)"
+  ],
+  "atl-NettekovenSym32.lut": [
+   "A2L colour has 3 decimals (cosmetic)"
+  ],
+  "yeo_network_names": "Buckner .tsv files ship Network indices only; no Yeo canonical names in the source"
+ },
+ "notes": [
+  "Buckner maps are int8 (labels fit in int8), qform_code=0 with sform_code=2; qform and sform agree; xyzt_units code 0 (zooms 1.0 read as mm by convention).",
+  "NettekovenSym32 shares the Diedrichsen grid (153x103x84, LAS); Buckner grid is 141x95x87, RAS.",
+  "This file records data provenance and spike facts only; the optional composite layer and its ID offset are NOT decided here (owner review pending)."
+ ]
+}
