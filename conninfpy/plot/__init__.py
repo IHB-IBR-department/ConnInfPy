@@ -19,6 +19,10 @@ Per-panel helpers and a one-call publication figure:
 - :func:`plot_connectogram` — Brainnetome-style circular connectogram of
   the detected connections, aggregated to BNA subregions or gyri, with
   chords coloured by the endpoints' functional networks.
+- :func:`plot_coupling_classes` — categorical heatmap of how coupling
+  changes between two profiles (descriptive classes from
+  :meth:`InferenceResult.coupling`), optionally marking BNA homotopy
+  pairs and overlaying the edges of the result's detected units.
 
 Each per-panel helper accepts an optional ``ax=`` argument (creating a
 fresh figure if omitted) and returns the
@@ -31,6 +35,7 @@ helpers are intentionally not imported at the top level of
 them, so headless environments (CI, batch jobs) don't pull matplotlib."""
 
 from conninfpy.plot.connectograms import plot_connectogram
+from conninfpy.plot.coupling import plot_coupling_classes
 from conninfpy.plot.matrices import (
     plot_effect_matrix,
     plot_null_max_distribution,
@@ -52,13 +57,14 @@ __all__ = [
     "summary_figure",
     "plot_connectome_graph",
     "plot_connectogram",
+    "plot_coupling_classes",
 ]
 
 
 def __getattr__(name):
-    from conninfpy.plot import connectograms, matrices, networks, summary
+    from conninfpy.plot import connectograms, coupling, matrices, networks, summary
 
-    for module in (matrices, networks, connectograms, summary):
+    for module in (matrices, networks, connectograms, summary, coupling):
         if hasattr(module, name):
             return getattr(module, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
