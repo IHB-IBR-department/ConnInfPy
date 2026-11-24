@@ -36,12 +36,20 @@ Permutation inference and the GLM
 - Anderson, M. J., & Legendre, P. (1999). An empirical comparison of
   permutation methods for tests of partial regression coefficients in a linear
   model. *Journal of Statistical Computation and Simulation*, 62(3), 271–303.
+- Anderson, M. J., & Robinson, J. (2001). Permutation tests for linear models.
+  *Australian & New Zealand Journal of Statistics*, 43(1), 75–88.
+  doi:10.1111/1467-842X.00156. (Permutation tests under unequal variances and
+  unbalanced groups: the exchangeability caveat of the two-sample design.)
 - Winkler, A. M., Ridgway, G. R., Webster, M. A., Smith, S. M., & Nichols, T. E.
   (2014). Permutation inference for the general linear model. *NeuroImage*, 92,
   381–397.
 - Winkler, A. M., Ridgway, G. R., Douaud, G., Nichols, T. E., & Smith, S. M.
   (2016). Faster permutation inference in brain imaging. *NeuroImage*, 141,
   502–516. (GPD tail acceleration.)
+- Knijnenburg, T. A., Wessels, L. F. A., Reinders, M. J. T., & Shmulevich, I.
+  (2009). Fewer permutations, more accurate *P*-values. *Bioinformatics*,
+  25(12), i161–i168. doi:10.1093/bioinformatics/btp211. (Tail replacement by a
+  fitted GPD; the empirical-versus-fitted resolution policy.)
 - Phipson, B., & Smyth, G. K. (2010). Permutation P-values should never be
   zero: calculating exact P-values when permutations are randomly drawn.
   *Statistical Applications in Genetics and Molecular Biology*, 9(1).

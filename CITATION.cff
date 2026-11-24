@@ -1,17 +1,17 @@
 cff-version: 1.2.0
 title: "ConnInfPy: A Unified Python Framework for Statistical Inference on Brain Connectivity Networks"
-message: "If you use this software, please cite it using the metadata below."
 type: software
 authors:
   - family-names: Knyazeva
     given-names: Irina
     email: knyazeva@ihb.spb.ru
     affiliation: "N.P. Bechtereva Institute of the Human Brain, Russian Academy of Sciences"
+message: "If you use this software, please cite it using the metadata below."
 version: "2.0.0"
-date-released: "2026-05-03"
 license: MIT
 repository-code: "https://github.com/IHB-IBR-department/ConnInfPy"
 url: "https://ihb-ibr-department.github.io/ConnInfPy/"
+abstract: "Unified Python framework for permutation-based statistical inference on brain connectivity networks (fMRI): network-based statistics (NBS, TFNBS, cNBS, NI-TFNBS, FBC-TFNBS), edge-wise GLM with Freedman-Lane permutation, multi-site ComBat harmonization and Brainnetome-based anatomical description of the results."
 keywords:
   - neuroimaging
   - connectivity
@@ -23,14 +23,3 @@ keywords:
   - fwer
   - false-discovery-rate
   - combat
-preferred-citation:
-  type: article
-  authors:
-    - family-names: Knyazeva
-      given-names: Irina
-      email: knyazeva@ihb.spb.ru
-      affiliation: "N.P. Bechtereva Institute of the Human Brain, Russian Academy of Sciences"
-  title: "ConnInfPy: A Unified Python Framework for Statistical Inference on Brain Connectivity Networks"
-  journal: "Network Neuroscience"
-  year: 2026
-  doi: "TBD"

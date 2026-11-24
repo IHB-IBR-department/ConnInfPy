@@ -55,7 +55,13 @@ Selecting a workflow
    * - Paired / repeated conditions + condition-varying confound
      - ``... + confounds_group1=``, ``confounds_group2=``
      - :ref:`wf-repeated-glm`
-   * - Custom contrast / interaction / omnibus F-test
+   * - Between-subject predictor on a within-subject change (Group × Condition)
+     - ``group1=``, ``group2=``, ``test_type='paired'``, ``interest=``
+     - :ref:`wf-paired-interest`
+   * - Interaction between predictors (e.g. group × age)
+     - ``interest={...}``, ``interactions=[...]``
+     - :ref:`wf-interactions`
+   * - Custom contrast or multi-row omnibus F-test
      - drop to :func:`conninfpy.compute_p_val_glm`
      - :ref:`wf-custom`
    * - Three or more repeated sessions (within-subject omnibus F)
@@ -103,7 +109,7 @@ The simplest design — two groups of subjects, no covariates.
        group2=patients_corr,        # (n2, N, N)
        test_type='two-sample',
        method='tfnbs',
-       e=0.4, h=3.0, n=10,          # example legacy grid
+       e=0.4, h=3.0, n=None,         # exact integration (the default)
        n_permutations=1000,
        acceleration=None,           # exact empirical reference
        rng=42,
@@ -112,6 +118,17 @@ The simplest design — two groups of subjects, no covariates.
    p_patients_higher = out.inference['positive']   # patients > controls
    p_controls_higher = out.inference['negative']   # controls > patients
    print(out.inference.n_significant(alpha=0.05))
+
+.. note::
+
+   ``n`` is the TFNBS integration setting. ``n=None`` (the default) integrates
+   the piecewise support exactly, independently for each tail. An explicit
+   positive integer such as ``n=10`` selects the **legacy right-endpoint
+   threshold grid** (levels ``start_thres + i * (max - start_thres) / n``), kept
+   only to reproduce historical grid-based results; legacy grid scores and the
+   exact integral need not be equal, so record ``E``, ``H``, ``n`` and
+   ``start_thres`` explicitly when reproducing such results. Every recipe on
+   this page uses the exact default.
 
 .. note::
 
@@ -147,7 +164,7 @@ passing ``Y=`` and ``interest=``.
        interest=age,                 # continuous predictor
        confounds=confounds,          # nuisance regressors
        method='tfnbs',
-       e=0.4, h=3.0, n=10,
+       e=0.4, h=3.0, n=None,
        rng=42,
    )
 
@@ -189,8 +206,8 @@ the most significant one afterwards needs an extra correction.
        confounds=motion,          # extra nuisance, shared by all predictors
        sites=site,                # ComBat + site-stratified permutation
        harmonize='combat_site_dummies_glm',
-       method='tfnbs', e=0.4, h=3.0, n=10,
-       n_permutations=5000, acceleration='gpd', rng=42,
+       method='tfnbs', e=0.4, h=3.0, n=None,
+       n_permutations=5000, acceleration=None, rng=42,
    )
 
    out['age'].inference['positive']        # edges where age ↑ → connectivity ↑
@@ -240,9 +257,9 @@ permutation (PALM ``-eb`` semantics, auto-set via ``strata=sites``).
        sites=site,                   # per-subject scanner / site label
        harmonize='combat_site_dummies_glm',  # primary paper recipe
        method='tfnbs',
-       e=0.4, h=3.0, n=10,
-       n_permutations=200,
-       acceleration='gpd',           # fast exploratory inference
+       e=0.4, h=3.0, n=None,
+       n_permutations=5000,
+       acceleration=None,           # exact p-values for a reported result
        rng=42,
    )
 
@@ -311,7 +328,7 @@ sensitivity arms, depending on the question.
 
    # Primary + sensitivity arms.
    common = dict(Y=Y, interest=diagnosis, confounds=confounds, sites=site,
-                 method='tfnbs', e=0.4, h=3.0, n=10, rng=42)
+                 method='tfnbs', e=0.4, h=3.0, n=None, rng=42)
    out_combat = analyze(**common, harmonize='combat_only')
    out_primary = analyze(**common, harmonize='combat_site_dummies_glm')
    out_site = analyze(**common, harmonize='site_dummies_glm')
@@ -334,7 +351,11 @@ Question: *does connectivity change between condition A and condition B in
 the same subjects?* Pass both conditions as ``group1`` / ``group2`` (row
 aligned: ``group1[s]`` and ``group2[s]`` are the same subject) with
 ``test_type='paired'``. With no condition-varying confounds this uses the
-**sign-flip** permutation null — the exact non-asymptotic test.
+**sign-flip** permutation null — exact under its premise (within-subject
+differences symmetric under the null, independent subjects; see :doc:`approach`),
+and only approximate when, for example, the two conditions differ in variance.
+A between-subject predictor of the change (Group × Condition) is a different
+design: :ref:`wf-paired-interest`.
 
 .. code-block:: python
 
@@ -345,7 +366,7 @@ aligned: ``group1[s]`` and ``group2[s]`` are the same subject) with
        group2=task_corr,             # condition B, same subjects
        test_type='paired',
        method='tfnbs',
-       e=0.4, h=3.0, n=10,
+       e=0.4, h=3.0, n=None,
        rng=42,
    )
 
@@ -377,7 +398,7 @@ permutation (via :func:`conninfpy.compute_p_val_paired_glm`).
        confounds_group1=fd_rest,     # motion during condition A
        confounds_group2=fd_task,     # motion during condition B
        method='tfnbs',
-       e=0.4, h=3.0, n=10,
+       e=0.4, h=3.0, n=None,
        n_permutations=1000,
        acceleration=None,
        rng=42,
@@ -409,17 +430,127 @@ Notes:
   present, the plain paired path (:ref:`wf-paired`) is preferable.
 
 
+.. _wf-paired-interest:
+
+Between-subject predictor on a within-subject change (Group × Condition)
+--------------------------------------------------------------------------
+
+Question: *does the change between two conditions depend on a between-subject
+variable — patient group, age, genotype?* This is the Group × Condition
+term of a mixed design, estimated as a between-subject predictor of the
+within-subject difference. Pass both conditions as ``group1`` / ``group2``
+with ``test_type='paired'`` **and** a named ``interest`` predictor;
+``analyze()`` then routes to the paired-interest path.
+
+.. code-block:: python
+
+   from conninfpy import analyze
+
+   out = analyze(
+       group1=rest_corr,                 # condition A, (n, N, N) raw correlations
+       group2=task_corr,                 # condition B, same subject order as A
+       test_type='paired',
+       interest=group_code,              # 0/1 (or numeric) between-subject variable
+       confounds=age,                    # optional subject-level covariates, constant per subject
+       method='tfnbs',                   # n=None: exact integration
+       n_permutations=1000, acceleration=None, rng=42,
+   )
+
+   out.inference['positive']   # group ↑ → larger B − A: a larger change in group 1
+   out.inference['negative']   # group ↑ → smaller (or reversed) B − A
+
+Several predictors go in a dict (``interest={'group': ..., 'age': ...}``),
+and the result is then a dict keyed by name, as in :ref:`wf-multi-interest`.
+
+What the call does:
+
+- Each condition is transformed to Fisher z separately (``input='r'``); the
+  response is the per-subject difference ``Δ = B − A`` in Fisher-z units and
+  the ``interest`` predictors are regressed on ``Δ`` across subjects with a
+  Freedman–Lane permutation at the subject level (the design diagnostics
+  record ``unit_of_observation = 'subject_pair_difference'``). The effect map
+  is the native contrast estimate on that scale. This is the GLM route, not
+  the exact sign-flip of :ref:`wf-paired`: its p-values are approximate in
+  the Freedman–Lane sense.
+- **Orientation is the paired one:** ``positive = group2 > group1``, i.e. the
+  predictor goes with a larger B − A. A group *main effect* present in both
+  conditions cancels in ``Δ`` and is not tested here; the condition main
+  effect is :ref:`wf-paired`.
+- **Subject-constant nuisances cancel** in ``Δ`` — sex, site, the group itself
+  — so they need not be supplied; ``sites=`` skips ComBat and only stratifies
+  the permutation. Condition-*varying* confounds go in
+  ``confounds_group1`` / ``confounds_group2`` and enter as B − A, alongside
+  subject-level ``confounds``.
+- **Pairing by ID.** With ``ids_group1`` / ``ids_group2`` the conditions are
+  matched by subject ID and reordered once, before the transform and the
+  difference (as in :ref:`wf-repeated-glm`); without IDs the rows must already
+  be aligned.
+- ``r_to_z=False`` is rejected on this path (the difference of correlations
+  is not the scale the model is written for), and so is any ``harmonize=``
+  other than ``'auto'`` / ``None``: condition differences are not harmonized
+  automatically.
+
+The same path accepts several named predictors and ``interactions=``
+(:ref:`wf-interactions`), e.g. a group × age term on the difference. The CLI
+form is ``design: type: paired`` with ``interest``, ``interactions`` and
+``subject_confounds`` (:doc:`usage`, "Paired condition differences and
+interactions").
+
+
+.. _wf-interactions:
+
+Interactions between predictors
+-------------------------------
+
+Question: *does the age effect on connectivity differ between patients and
+controls?* Pass the predictors as a **dict** and name the product terms with
+``interactions=``:
+
+.. code-block:: python
+
+   from conninfpy import analyze
+
+   out = analyze(
+       Y,
+       interest={'group': group_code, 'age': age},   # numeric; encode categories as 0/1 yourself
+       interactions=[('group', 'age')],
+       confounds=motion,
+       method='tfnbs', n_permutations=1000, acceleration=None, rng=42,
+   )
+
+   out['group:age'].inference['positive']   # product term, adjusted for both main effects
+   out['age'].inference                      # age effect adjusted for group and the product
+
+Rules:
+
+- Every named predictor is mean-centred by its sample mean; an interaction
+  is the product of the centred columns, keyed ``"a:b"`` in the returned dict.
+  Each effect — main effects and products alike — is tested with **all other
+  columns, including the other main effects, as nuisance**, against its own
+  Freedman–Lane null with the permutations shared across effects; each effect
+  is its own correction family, as in :ref:`wf-multi-interest`.
+- Predictors must be finite 1-D numeric vectors; categories are encoded
+  explicitly (e.g. 0/1). Through the CLI, text predictors must have exactly
+  two levels, the sorted first level being the reference.
+- The path composes with ``sites=`` / ``harmonize=`` (ComBat preserves only
+  ``confounds`` and excludes every tested column) and with the ``(E, H)``
+  sweep. On the paired-interest path (:ref:`wf-paired-interest`) the response
+  is the within-subject difference and the product terms are between-subject
+  predictors of it.
+
+
 .. _wf-custom:
 
-Custom contrasts, interactions, and omnibus F-tests
----------------------------------------------------
+Custom contrasts and omnibus F-tests
+------------------------------------
 
-For interactions, custom categorical coding, or joint (omnibus) tests, build
-the design matrix and contrast explicitly and call
+For a custom contrast matrix, custom categorical coding, or a joint (omnibus)
+test, build the design matrix and contrast explicitly and call
 :func:`conninfpy.compute_p_val_glm` directly — see the
 :doc:`usage` page for the advanced API, including ``stat_type='fstat'`` for
 multi-row contrasts (≥3-condition designs or jointly testing several
-predictors), which returns a single ``'omnibus'`` p-map.
+predictors), which returns a single ``'omnibus'`` p-map. Interactions between
+named predictors do not need this: see :ref:`wf-interactions`.
 
 
 .. _wf-repeated-sessions:
@@ -595,7 +726,7 @@ without running separate permutation pipelines.
    out = analyze(
        Y, interest=diagnosis, confounds=confounds, sites=site,
        harmonize='combat_site_dummies_glm',
-       method='tfnbs', e=e_grid, h=h_grid, n=10,
+       method='tfnbs', e=e_grid, h=h_grid, n=None,
        n_permutations=5000, acceleration=None, rng=42,
    )
 
@@ -693,7 +824,8 @@ acceleration; for a final result use a larger empirical reference:
 
 .. code-block:: python
 
-   # Exploration (≈25× faster, GPD tail approximation with empirical fallback)
+   # Exploration: few permutations with the opt-in GPD tail replacement.
+   # Model-based tail estimates with known limits (see approach, Acceleration).
    analyze(Y, interest=age, confounds=confounds, n_permutations=200,
            acceleration='gpd', rng=42)
 

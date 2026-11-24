@@ -99,15 +99,18 @@ Fixed threshold — ``nbs``
 Classical Network-Based Statistics. Fix a single threshold, identify the
 connected components above it, and score each edge by the size of its component
 (extent) or by the summed excess of the statistic over the threshold,
-:math:`\sum (t - \tau)`, within it (intensity, as in the MATLAB NBS toolbox). It is most powerful
-when the effect forms a large connected component above the chosen threshold.
+:math:`\sum (t - \tau)`, within it (intensity — only the excess above
+:math:`\tau` counts, so an edge just above the threshold adds almost nothing
+and a small cluster of strong edges can outrank a large cluster of weak ones).
+It is most powerful when the effect forms a large connected component above
+the chosen threshold.
 The threshold is arbitrary, however, and results can vary substantially with it
 (Vinokur et al. 2023 report up to 75-fold variation in detected edges across
 reasonable thresholds); report results at several thresholds when using it.
 
 The inference unit is the component. Its statistic is compared with the
 permutation distribution of the *largest* component statistic (family-wise
-error control): with ``two_tailed=True`` (the ``analyze()`` default) the two
+error control over components; see Step 4): with ``two_tailed=True`` (the ``analyze()`` default) the two
 tails share one null, the larger of the two tails' maxima in every
 permutation; with separate one-sided families (the low-level pipelines'
 default, ``two_tailed=False``) each tail has its own null of maxima. Every
@@ -264,6 +267,19 @@ so each subject's difference matrix is randomly negated. Because every sign
 pattern is equally likely under the null, this yields an exact, distribution-
 free null.
 
+The premise is a **symmetric** null: under :math:`H_0` each subject's
+difference — on the analysis scale, Fisher z of A minus Fisher z of B — must
+be distributed like its own negation, and subjects must be independent.
+Within-subject exchangeability of the two conditions gives this. A difference
+in *variance* between the conditions, or anything else that makes the
+within-subject differences asymmetric, does not: the sign patterns are then
+no longer equiprobable, the sign-flip null is no longer exact, and the test's
+Type-I error is not controlled by the permutation (a condition-varying
+covariate does not repair this; the Freedman–Lane route below is itself an
+approximation). The test is about the **mean** difference: a significant edge
+means that the average within-subject change differs from zero, not that every
+subject changes.
+
 Predictor with confounds — Freedman–Lane
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -342,12 +358,18 @@ Step 4 — comparison of observed to null
 ---------------------------------------
 
 For each relabelled null score-map, a single value is retained: the maximum
-enhanced score over all edges. Across permutations these maxima form the null
-distribution of the largest score attributable to noise alone.
+enhanced score over all edges (for ``nbs`` and ``cnbs`` the enhancement has
+already copied each component's or block's statistic onto its edges, so this
+is the largest component or block statistic). Across permutations these
+maxima form the null distribution of the largest score attributable to noise
+alone.
 
-An observed edge is significant if its score exceeds this null-maximum
-distribution. Its p-value is the proportion of permutation maxima that match or
-exceed it:
+An observed unit is significant if its statistic reaches this null-maximum
+distribution, and its p-value is written onto every edge of the unit. The
+unit is ``result.inference_unit``: ``'edge'`` for ``tstat``, the TFNBS family
+and the BH-FDR variants, ``'component'`` for ``nbs``, ``'block'`` for
+``cnbs``. The p-value of a unit is the proportion of permutation maxima that
+match or exceed its statistic:
 
 .. math::
 
@@ -356,11 +378,22 @@ exceed it:
 
 Two design choices are embedded in this formula:
 
-- **Why the maximum?** Comparing every edge to the distribution of the
-  *largest* null score controls the probability of **any** false positive
-  across the connectome — strong family-wise error control — without requiring
-  knowledge of the inter-edge covariance, which is already reflected in the
-  permutations.
+- **Why the maximum?** Comparing every unit to the distribution of the
+  *largest* null score keeps the probability of **any** false positive at the
+  inference unit at most α **under the global null** (no effect anywhere) —
+  weak family-wise error control — without requiring knowledge of the
+  inter-edge covariance, which is already reflected in the permutations.
+  **Strong** control (the same bound under any mix of true and false nulls)
+  additionally requires that the null distribution of a true-null unit's
+  statistic not depend on which other units are non-null. That holds for
+  per-edge statistics (``tstat``; the BH-FDR variants control their own error
+  rate), but it is not what ``nbs`` and ``cnbs`` deliver — their unit is the
+  component or the block, so a significant component or block is a claim about
+  the set and never about each of its edges — and for the TFNBS family an
+  edge's enhanced score depends on its neighbours' statistics, so strong
+  edge-level control is not established in general. Read detections at
+  ``result.inference_unit``; ``component_report`` / ``component_table`` and
+  ``node_summary`` keep that unit.
 - **Why the** ``+1``\ **?** The observed data is itself one valid relabelling
   and is included in the count (Phipson & Smyth 2010). This makes the p-value
   exact and strictly positive, so a finite permutation set cannot return
@@ -382,20 +415,37 @@ so that the harmonization never incorporates the labels the permutation will
 later shuffle (which would otherwise inflate false positives). The site
 strategies and their trade-offs are described in :ref:`wf-glm-sites`.
 
-**Acceleration (GPD).** With J permutations a p-value rests on the number of
-null maxima that reach the observed statistic; when fewer than 10 do, that
-count is too coarse. ``acceleration='gpd'`` fits a generalized Pareto
-distribution to the upper quartile of the null-maximum distribution and uses
-it for those statistics only — every other p-value stays the exact
-permutation p-value (Winkler et al., 2016; Knijnenburg et al., 2009). Fitted
-p-values can be smaller than 1/J: these are model-based tail estimates, not
-exact permutation counts. Replacement requires an observation at or above
-the fitted threshold, an acceptable fit, and compatible fitted support. A
-fit with a finite endpoint below an observation is rejected; unsuccessful
-fits retain the tie-inclusive (b+1)/(J+1) permutation p-value. Float64's
-smallest positive normal value only guards numerical underflow. Gamma
-approximation uses the same resolution policy. Extreme-tail accuracy depends
-on the model and is not established by the number of permutations alone.
+**Acceleration (GPD / gamma tail, opt-in).** With J permutations the empirical
+p-value of a unit rests on how many null maxima reach its statistic, and its
+resolution is 1/(J+1). ``acceleration='gpd'`` (default ``None``) fits a
+generalized Pareto distribution to the exceedances over a sequence of
+thresholds, starting at the upper quartile of the null maxima and moving
+upwards until a method-of-moments fit passes an Anderson–Darling check
+(Winkler et al., 2016; Knijnenburg et al., 2009); ``acceleration='gamma'``
+fits a gamma distribution to all null maxima by their moments. Either replaces
+the p-value **only of units that fewer than 10 null maxima reach**; every other
+p-value stays the exact permutation p-value, a failed fit leaves the empirical
+p in place, and no binomial interval is reported for an accelerated result.
+The replaced values are model-based tail estimates that can be smaller than
+1/(J+1); their accuracy is not established by the number of permutations, and
+the option exists for exploration with a few hundred permutations — reported
+results use the exact default. Known limits of the 2.0.0 implementation
+(NETSTAT-47): the replaced p-value is capped at (min_exceedances + 1)/(J + 1),
+which can be *larger* than the empirical p-value of the same unit — the
+replacement can raise a p, for GPD and gamma alike; the gamma branch has no
+goodness-of-fit check and no eligibility filter, and a statistic below its
+fitted support would receive p = 1 (reproduced in a minimal J = 10 example,
+not observed at J = 200/1000 in a limited check); with a bounded (ξ < 0) GPD
+fit, one unit beyond the fitted endpoint cancels the fit for the whole matrix
+at that threshold, and when no threshold is accepted the empirical p-values
+are returned unchanged; in the GLM and missing-data paths the acceleration is
+applied to every statistic type without a mode check, unlike the pairwise
+max-statistic path; and with ``method='cnbs'`` it is not applied (a
+warning is logged). The
+Anderson–Darling threshold 2.5 is a lenient heuristic filter that has not been
+calibrated for the method-of-moments fit, and the moment conditions on the
+shape parameter are not checked. No FWER, power or anti-conservativeness claim
+is made for accelerated p-values.
 
 **Directional families.** ``two_tailed=True`` declares one two-sided family
 for pairwise and GLM inference. Max-statistic methods pool positive/negative

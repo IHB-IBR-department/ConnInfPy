@@ -25,16 +25,29 @@ harmonization, and permutation inference with any of nine methods.
   confounds, directional (positive/negative) FWER.
 - **Multi-site data** — parametric empirical-Bayes ComBat (Johnson 2007;
   Fortin 2017/2018) in NumPy, site dummies, and site-blocked permutation.
-- **GPD/gamma tail acceleration** for exploratory runs with few permutations:
-  where fewer than 10 permutations reach the observed statistic, the p-value
-  comes from a fitted tail; every other p-value stays the exact permutation
-  p-value. With 200 permutations, decisions at α = 0.05 matched 5,000 exact
-  permutations on 99.99% of edges in the examples below (≈25× faster). Use
-  exact p-values (the default) for reported results.
+- **GPD/gamma tail acceleration (opt-in, off by default)** — for
+  exploratory runs with a few hundred permutations, `acceleration="gpd"` (or
+  `"gamma"`) replaces the p-values that fewer than 10 permutations reach with a
+  fitted-tail estimate; every other p-value stays the exact permutation
+  p-value. The replaced values are model-based and data-dependent: no binomial
+  interval is reported for them, they can be *larger* than the empirical
+  p-value they replace, the gamma branch has no goodness-of-fit check, and no
+  FWER or power calibration is claimed for them. Reported results use the
+  exact default; the known limits are listed on the
+  [approach page](https://IHB-IBR-department.github.io/ConnInfPy/approach.html).
 - **JIT-compiled TFNBS and NBS** via `numba`; both scoring paths also run
   without it (see [Installation](#installation)).
 - **20-scenario topology library** of planted effects (hub, rich club, chain,
   gradient, …) for method benchmarking.
+- **Diagnostics that add no test** — descriptive motion / QC–FC side-car
+  statistics (`analyze(..., motion_qc=...)`: Spearman rank agreement of edge
+  values with framewise displacement and edge length, without p-values,
+  computed on the native input before inference), leave-one-out subject
+  influence on caller-chosen edges (`conninfpy.influence.subject_influence`:
+  how much each subject moves the native effect and statistic, nothing is
+  re-tested), connectivity estimation from time series with shrinkage
+  diagnostics (`conninfpy.compute_connectivity`), and result tables that keep
+  the inference unit (`component_table`, `node_summary`, `network_summary`).
 - **Anatomical interpretation with the Brainnetome atlas (BNA-246)** — each
   ROI is described by the Brainnetome tissue its sphere or parcel covers
   (subregion → gyrus → lobe, `mixed` below the purity threshold), each
@@ -103,8 +116,8 @@ Simulate two groups with a planted difference, run TFNBS, and check the result
 against the ground truth. `conninfpy.sim` builds modular networks with 20
 effect topologies (hub, chain, rich club, …); here group 2 has stronger
 connectivity inside one module. Needs only the core install; takes a few
-seconds (the first run in a new environment adds ~30 s while numba compiles
-and caches its kernels):
+seconds (the first run in a new environment adds some time while numba
+compiles and caches its kernels):
 
 <!-- readme-quickstart -->
 ```python
@@ -117,7 +130,7 @@ ds = gen.generate("within_module_dense", effect_size=0.3, n_samples=30, time_poi
 
 out = conninfpy.analyze(
     group1=ds.group1, group2=ds.group2, input="r", test_type="two-sample",
-    method="tfnbs", n_permutations=200, acceleration="gpd", rng=0,
+    method="tfnbs", n_permutations=1000, rng=0,   # exact TFNBS, exact empirical p-values (the defaults)
 )
 print(out)
 
@@ -129,7 +142,7 @@ print(f"false positives:     {(found & ~planted).sum() // 2}")
 ```
 
 ```text
-AnalyzeResult(inference=InferenceResult(method='tfnbs', n_perms=200, accel=gpd, sig@α=0.05: pos=45, neg=0, wall_time=2.77s))
+AnalyzeResult(inference=InferenceResult(method='tfnbs', n_perms=1000, accel=empirical, sig@α=0.05: pos=45, neg=0, wall_time=5.50s))
 planted edges found: 45 of 45
 false positives:     0
 ```
@@ -146,7 +159,7 @@ table — see [Results](#results).
 From a clone of the repository, the bundled ABIDE-mini dataset (204 subjects,
 Schaefer-100, 5 sites; one subject with a region without signal is dropped on
 loading, as its manifest specifies) runs an age analysis with multi-site
-harmonization in a few seconds:
+harmonization and 1,000 exact permutations:
 
 <!-- readme-real-data -->
 ```python
@@ -159,7 +172,7 @@ out = conninfpy.analyze(
     interest=pheno["Age"].to_numpy(float),
     confounds=pheno[["Sex", "Motion_FD"]].to_numpy(float),
     sites=pheno["site"].to_numpy(),                # ComBat + site dummies + site-blocked permutation
-    method="tfnbs", n_permutations=200, acceleration="gpd", rng=0,
+    method="tfnbs", n_permutations=1000, rng=0,
 )
 print(out)
 print(out.significant_edges(conninfpy.AtlasInfo.schaefer_100_yeo7()))
@@ -237,7 +250,9 @@ TFNBS integration (`n=None`) with `e=0.4`, `h=3.0`, `start_thres=1.65`
 FBC-TFNBS `min_cluster_size=3`). `analyze()` uses a single two-sided family
 (`two_tailed=True`) by default, while the low-level `compute_p_val*`
 functions retain `two_tailed=False` for backwards compatibility.
-For fast exploratory runs use `n_permutations=200, acceleration="gpd"`.
+For exploratory runs, `n_permutations=200, acceleration="gpd"` opts into the
+fitted-tail replacement described above; it is not a setting for reported
+results.
 
 ## Results
 
@@ -251,12 +266,21 @@ out.combat_diagnostics             # set when ComBat ran
 
 out.significant_edges(atlas)       # sorted, atlas-annotated edge table (DataFrame)
 out.network_summary(atlas)         # one row per network pair: counts, proportions, -log10 p mass
+out.component_table(atlas)         # nbs: one row per observed component with its FWER p-value
+out.node_summary(atlas)            # one row per ROI: which ROIs gather the detections (descriptive)
 out.to_csv("edges.csv", atlas=atlas)
 out.inference.n_significant(0.05)  # {'positive': ..., 'negative': ...}
 
 from conninfpy.plot import summary_figure
 summary_figure(out.inference, atlas=atlas).savefig("summary.pdf")
 ```
+
+**Inference unit.** The corrected p-values belong to a unit, recorded as
+`out.inference.inference_unit`: the edge for `tstat`, the TFNBS family and the
+BH-FDR variants, the component for `nbs`, the block for `cnbs`. Every edge of
+a significant component or block carries its p-value; that is a claim about
+the set, not about each edge. `component_table` and `node_summary` keep that
+unit and add no test.
 
 **Network-level summaries.** Specific edges often replicate poorly across
 cohorts while network-pair patterns are much more stable, so report both.
@@ -336,7 +360,10 @@ code only.
 | `conninfpy.stats` | The permutation pipelines: `compute_p_val` (t-test designs), `compute_p_val_glm` (custom design matrix, t/β/F contrasts), `compute_p_val_glm_multi`, `compute_p_val_paired_glm`, `compute_null_dist`. Inputs on the analysis scale (e.g. Fisher z). |
 | `conninfpy.enhance` | Enhancement without permutation: `apply_tfnbs`, `apply_nbs`, …, the raw `get_*_score` functions, and the BCT-style `nbs_bct` reference |
 | `conninfpy.harmonize` | `combat_harmonize`, `combat_fit` / `combat_apply` (for train/test transfer), `design_diagnostics`, `compute_vif` |
-| `conninfpy.acceleration` | GPD / gamma tail fits |
+| `conninfpy.acceleration` | GPD / gamma tail fits (opt-in; see the approach page for their limits) |
+| `conninfpy.connectivity` | `compute_connectivity`: correlation / partial correlation from time series, with shrinkage and valid-frame diagnostics |
+| `conninfpy.influence` | `subject_influence`: descriptive leave-one-out influence of each subject on caller-chosen edges of a finished result |
+| `conninfpy.interpret` | Brainnetome annotation (`annotate_rois`, `interpret_result`) and the descriptive motion / QC–FC diagnostics (`motion_qc_fc`, `motion_qc_fc_paired`) |
 | `conninfpy.loaders` | Manifest-based loading (`load`, `ManifestLoader`) and the bundled loaders |
 | `conninfpy.sim` | Synthetic connectivity with planted effects and the 20 topology scenarios |
 | `conninfpy.plot` | Figures |
@@ -397,10 +424,9 @@ plotting packages, including legacy import compatibility and atlas-data access.
 
 ## Citing the toolbox
 
-To cite the toolbox: [doi]() and refer to the paper [paper_doi]()
-
-```
-[doi]
-```
+Cite the package with the metadata in [`CITATION.cff`](CITATION.cff) (version
+2.0.0, MIT licence). No DOI has been registered for the package yet and the
+software paper is in preparation; this section will be updated when a DOI is
+assigned — until then please cite the repository and the version.
 
 For further discussions or to report bugs, please contact [knyazeva@ihb.spb.ru](mailto:knyazeva@ihb.spb.ru) or open an issue at https://github.com/IHB-IBR-department/ConnInfPy/issues.
