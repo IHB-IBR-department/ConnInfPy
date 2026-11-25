@@ -8,9 +8,8 @@
 #   bash paper/reproduce_figures.sh abide collect   # selected stages
 # Stages: abide | openclose | mltransfer | simulation | sensitivity | benchmarks | collect | all
 #
-# Results go to examples/*/results/; `collect` copies the figures into
-# paper/figures/ under the manuscript's file names (without the `_alt`
-# restyle suffix).
+# Results go to examples/*/results/; `collect` builds the 2.0.0 300 dpi
+# manuscript figures into paper/figures/ (and copies simulation tables).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
@@ -70,17 +69,20 @@ mltransfer() {
 
 simulation() {
   local SV=examples/simulations
-  step "Simulation: FWER calibration, ${FPR_N_NULL} nulls x n in {${FPR_SAMPLE_SIZES}} x 11 methods, 1000 permutations"
+  step "Simulation: FWER calibration (baseline + exact TFNBS family), ${FPR_N_NULL} nulls x n in {${FPR_SAMPLE_SIZES}}, 1000 permutations"
   $PY $SV/fpr/fpr_calibration.py --config $SV/configs/fpr_config_1000.yaml \
       --n-null "$FPR_N_NULL" --sample-sizes $FPR_SAMPLE_SIZES --resume
-  step "Simulation: power, 10 topologies x Delta r {0.075, 0.125, 0.25} x 100 repeats, 1000 permutations"
+  $PY $SV/fpr/fpr_calibration.py --config $SV/configs/fpr_config_ni_fbc_exact.yaml \
+      --n-null "$FPR_N_NULL" --sample-sizes $FPR_SAMPLE_SIZES --resume
+  step "Simulation: Freedman-Lane GLM 2.0 null calibration"
+  $PY $SV/glm/glm_validation.py --config $SV/configs/glm_config_2_0_1000.yaml --resume
+  step "Simulation: power (10 topologies x Delta r {0.075, 0.125, 0.25} x 100 repeats, 1000 permutations, exact TFNBS)"
+  $PY $SV/power/power_analysis.py --config $SV/configs/sweep_config_tfnbs_exact_04_30.yaml \
+      --mode effect-size --resume
+  $PY $SV/power/power_analysis.py --config $SV/configs/sweep_config_ni_fbc_exact_04_30.yaml \
+      --mode effect-size --resume
   $PY $SV/power/power_analysis.py --config $SV/configs/sweep_config_power_1000.yaml \
       --mode effect-size --resume
-  step "Simulation: TFNBS (E,H) summaries"
-  $PY $SV/power/tfnbs_eh_sweep.py \
-      --results-dir $SV/results/power/power_analysis_1000_30 --effect-size 0.125 --sample-size 30
-  step "Simulation: figures and power tables"
-  $PY $SV/regenerate_paper_figures.py
 }
 
 sensitivity() {
@@ -113,8 +115,6 @@ sensitivity() {
   step "Sensitivity: permutation BH-FDR"
   $PY $P --config $C/sweep_config_bh_fdr_perm.yaml --mode effect-size --resume \
       --output-dir $R/bh_fdr_perm
-  step "Sensitivity: figures"
-  $PY $SV/regenerate_paper_figures.py
 }
 
 benchmarks() {
@@ -129,27 +129,12 @@ copy() {  # copy SRC DEST_DIR [NEW_NAME]
 }
 
 collect() {
-  step "Collect figures into paper/figures (manuscript names)"
-  local A=examples/abide/results/plots O=examples/open_close/results/plots
-  local S=examples/simulations/results/plots F=paper/figures
-  mkdir -p "$F"/{abide,openclose,simulation,figures}
-  # Manuscript plot1a/plot1b are two panels of this one figure (split not scripted)
-  copy "$A/plot1_combat_site_variance.png"   "$F/abide"
-  copy "$A/plot3_network_block_mass.png"     "$F/abide"
-  copy "$A/plot5_tfnbs_grid_sensitivity.png" "$F/abide"
-  copy "$A/plot6_diagnosis_methodology.png"  "$F/abide"
-  copy "$O/plot2_block_mass_convergence.png" "$F/openclose"
-  copy "$O/plot5_retest_specificity.png"     "$F/openclose"
-  copy "$S/fig1_fwer_calibration.png"        "$F/simulation"
-  # Manuscript fig2a (TPR) / fig2b (FDR) are two panels of this figure
-  copy "$S/fig2_power_heatmap_dr0.125.png"     "$F/simulation"
-  copy "$S/fig4_tfnbs_eh_tpr_fdr.png"          "$F/simulation"
-  copy "$S/topologies_gallery_dr0.125_n30.png" "$F/simulation"
-  copy "$S/fig5_prior_misspecification.png"    "$F/simulation"
-  copy "$S/mmin_sensitivity.png"               "$F/simulation"
-  mkdir -p "$F/tables"
+  step "Build 2.0.0 manuscript figures (300 dpi) into paper/figures"
+  local F=paper/figures
+  mkdir -p "$F"/{abide,openclose,simulation,figures,tables}
+  $PY paper/build_fig1_pipeline.py
+  $PY paper/build_manuscript_figures.py --group all
   for t in examples/simulations/results/tables/*.csv; do copy "$t" "$F/tables"; done
-  copy examples/benchmarks/res_benchmarks/timing_benchmark.png "$F/figures"
 }
 
 for stage in "${@:-all}"; do

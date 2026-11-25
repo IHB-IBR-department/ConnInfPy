@@ -219,10 +219,16 @@ def _score(p_upper: np.ndarray, alpha: float, planted: np.ndarray, leak: np.ndar
 # BATCHED WORKER — generates data once, computes all (e,h) variants at once
 # =============================================================================
 
-TFNBS_METHODS = {"tfnbs", "ni_tfnbs", "fbc_tfnbs", "tfnbs_exact"}
-# ``tfnbs_exact`` is the ConnInfPy 2.0.0 exact-integration variant (n=None) of the
-# ``tfnbs`` cell; the legacy ``tfnbs`` entry keeps its configured grid.
-_COMPUTE_METHOD = {"tfnbs_exact": "tfnbs"}
+TFNBS_METHODS = {
+    "tfnbs", "ni_tfnbs", "fbc_tfnbs",
+    "tfnbs_exact", "ni_tfnbs_exact", "fbc_tfnbs_exact",
+}
+# Exact-integration variants (n=None) of the corresponding TFNBS methods.
+_COMPUTE_METHOD = {
+    "tfnbs_exact": "tfnbs",
+    "ni_tfnbs_exact": "ni_tfnbs",
+    "fbc_tfnbs_exact": "fbc_tfnbs",
+}
 
 
 def run_single_power_test_batched(
@@ -305,7 +311,7 @@ def run_single_power_test_batched(
         # Non-e/h params should be consistent across variants
         base_kw = {k: v for k, v in all_method_params[0][1].items()
                    if k not in ("e", "h")}
-        if method in ("cnbs", "ni_tfnbs", "fbc_tfnbs"):
+        if method_key in ("cnbs", "ni_tfnbs", "fbc_tfnbs"):
             base_kw["net_labels"] = net_labels
 
         p_vals = compute_p_val(
@@ -339,7 +345,7 @@ def run_single_power_test_batched(
             kw = dict(kwargs)
             if method.startswith("nbs_"):
                 kw["nbs_stat"] = method.split("_")[1]
-            if method in ("cnbs", "ni_tfnbs", "fbc_tfnbs"):
+            if method_key in ("cnbs", "ni_tfnbs", "fbc_tfnbs"):
                 kw["net_labels"] = net_labels
 
             p_vals = compute_p_val(
@@ -403,7 +409,9 @@ _TASK_SECS = {
     "tfnbs": 0.40,          # one (e,h) cell; add _TFNBS_SECS_PER_EH per extra cell
     "tfnbs_exact": 0.40,    # exact integration, same (e,h) cell as tfnbs
     "ni_tfnbs": 0.63,
+    "ni_tfnbs_exact": 0.55,
     "fbc_tfnbs": 0.64,
+    "fbc_tfnbs_exact": 0.55,
     "nbs_extent": 0.58,     # per threshold variant
     "nbs_intensity": 0.57,
     "cnbs": 0.45,
@@ -571,9 +579,9 @@ def load_checkpoint(checkpoint_path: Path) -> Tuple[List[PowerResult], set]:
 def _format_method_params(method: str, method_kwargs: dict) -> str:
     if not method_kwargs:
         return ""
-    if method in {"tfnbs", "ni_tfnbs", "tfnbs_exact"}:
+    if method in {"tfnbs", "ni_tfnbs", "tfnbs_exact", "ni_tfnbs_exact"}:
         keys = ("e", "h", "n", "start_thres")
-    elif method == "fbc_tfnbs":
+    elif method in {"fbc_tfnbs", "fbc_tfnbs_exact"}:
         keys = ("e", "h", "n", "start_thres", "min_cluster_size")
     elif method in {"nbs_extent", "nbs_intensity"}:
         keys = ("threshold",)
@@ -614,10 +622,12 @@ def get_method_configs(
     return {
         "tstat": {},
         "tfnbs": tfnbs_configs,
-        # 2.0.0 exact integration in the same (e, h) cells; overrides of ``n`` are ignored here.
+        # 2.0 exact integration in the same (e, h) cells; overrides of ``n`` are ignored here.
         "tfnbs_exact": [dict(cfg, n=None) for cfg in tfnbs_configs],
         "ni_tfnbs": tfnbs_configs,
+        "ni_tfnbs_exact": [dict(cfg, n=None) for cfg in tfnbs_configs],
         "fbc_tfnbs": fbc_configs,
+        "fbc_tfnbs_exact": [dict(cfg, n=None) for cfg in fbc_configs],
         "nbs_extent": nbs_configs,
         "nbs_intensity": nbs_configs,
         "cnbs": {},

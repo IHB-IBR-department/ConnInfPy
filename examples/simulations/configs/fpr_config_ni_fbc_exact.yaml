@@ -1,0 +1,36 @@
+# Exact-integration (n=None) NI-TFNBS and FBC-TFNBS Two-Sample FWER Calibration
+#
+# Companion to fpr_config_1000.yaml in the exact (E=0.4, H=3.0, start_thres=1.65)
+# cell using ConnInfPy 2.0 exact piecewise integration (n=None).
+
+methods:
+  - ni_tfnbs_exact
+  - fbc_tfnbs_exact
+
+n_null: 1000
+n_permutations: 1000
+alpha: 0.05
+
+n_nodes: 60
+n_modules: 4
+n_samples: 30
+sample_sizes: [10, 30, 50, 100]
+
+intra_corr: 0.3
+inter_corr: 0.05
+noise_level: 0.05
+time_points: 30
+
+tfnbs_e: 0.4
+tfnbs_h: 3.0
+tfnbs_n: 10
+tfnbs_start_thres: 1.65
+nbs_threshold: 2.0
+fbc_min_cluster: 3
+
+seed: 42
+use_mp: false
+n_jobs: -1
+checkpoint_every: 20
+
+output_dir: ../results/fpr_calibration_ni_fbc_exact

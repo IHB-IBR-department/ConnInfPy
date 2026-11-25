@@ -58,9 +58,7 @@ OUT_PAPER = (
     / "ConnInfPy__connectome_inference"
     / "figs"
 )
-VAULT_EVIDENCE = Path(
-    "/Users/irina/Work/Obsidian/MainVault/Projects/NetworkStatistics/_wiki/evidence"
-)
+PAPER_DATA = REPO_ROOT / "paper" / "data"
 
 
 def _save_both(fig: plt.Figure, rel_path: str, dpi: int = 300) -> None:
@@ -91,10 +89,9 @@ SIM_METHOD_ORDER = [
     "nbs_extent_3.0",
     "nbs_intensity_3.0",
     "cnbs",
-    "tfnbs",
     "tfnbs_exact",
-    "ni_tfnbs",
-    "fbc_tfnbs",
+    "ni_tfnbs_exact",
+    "fbc_tfnbs_exact",
 ]
 
 SIM_METHOD_LABELS = {
@@ -106,10 +103,9 @@ SIM_METHOD_LABELS = {
     "nbs_extent_3.0": r"NBS Ext ($\tau=3$)",
     "nbs_intensity_3.0": r"NBS Int ($\tau=3$, $\Sigma(t-\tau)$)",
     "cnbs": "cNBS",
-    "tfnbs": r"TFNBS ($n=10$)",
-    "tfnbs_exact": r"TFNBS Exact ($n=\mathrm{None}$)",
-    "ni_tfnbs": r"NI-TFNBS ($n=10$)",
-    "fbc_tfnbs": r"FBC-TFNBS ($n=10$)",
+    "tfnbs_exact": "TFNBS",
+    "ni_tfnbs_exact": "NI-TFNBS",
+    "fbc_tfnbs_exact": "FBC-TFNBS",
 }
 
 GLM_METHOD_ORDER = [
@@ -131,9 +127,9 @@ GLM_METHOD_LABELS = {
     "nbs_extent_3.0": r"NBS Ext ($\tau=3$)",
     "nbs_intensity_3.0": r"NBS Int ($\tau=3$)",
     "cnbs": "cNBS",
-    "tfnbs": r"TFNBS Exact ($n=\mathrm{None}$)",
-    "ni_tfnbs": "NI-TFNBS Exact",
-    "fbc_tfnbs": "FBC-TFNBS Exact",
+    "tfnbs": "TFNBS",
+    "ni_tfnbs": "NI-TFNBS",
+    "fbc_tfnbs": "FBC-TFNBS",
 }
 
 TOPOLOGY_ORDER = [
@@ -168,10 +164,13 @@ def build_fig2_fwer_calibration() -> None:
     df_arch = pd.read_csv(
         sim_res / "_archive" / "pre_nbs_intensity_fix_2026-11-24" / "fpr_calibration" / "fpr_results.csv"
     )
-    df_arch = df_arch[~df_arch["method"].isin(["nbs_intensity_2.0", "nbs_intensity_3.0"])].copy()
+    df_arch = df_arch[
+        ~df_arch["method"].isin(["nbs_intensity_2.0", "nbs_intensity_3.0", "tfnbs", "ni_tfnbs", "fbc_tfnbs"])
+    ].copy()
     df_nbs = pd.read_csv(sim_res / "fpr_calibration_nbs_int_v2" / "fpr_results.csv")
     df_exact = pd.read_csv(sim_res / "fpr_calibration_tfnbs_exact" / "fpr_results.csv")
-    df_pw = pd.concat([df_arch, df_nbs, df_exact], ignore_index=True)
+    df_ni_fbc_exact = pd.read_csv(sim_res / "fpr_calibration_ni_fbc_exact" / "fpr_results.csv")
+    df_pw = pd.concat([df_arch, df_nbs, df_exact, df_ni_fbc_exact], ignore_index=True)
 
     # Compute per-method, per-n max-tail FWER + simultaneous 95% CI via 97.5% per-tail CP
     pw_rows = []
@@ -226,7 +225,7 @@ def build_fig2_fwer_calibration() -> None:
     axA.invert_yaxis()
     axA.set_xlim(0.0, 0.10)
     axA.set_xlabel("Empirical Max-Tail FWER (simultaneous 95% CI via 97.5% per-tail CP)")
-    axA.set_title("A. Two-Sample Null Calibration (n_null = 1,000)", fontweight="bold", loc="left")
+    axA.set_title("A. Two-Sample Null Calibration (n_null = 1,000, Exact n=None)", fontweight="bold", loc="left")
     axA.grid(axis="x", ls=":", alpha=0.4)
     axA.legend(loc="upper center", bbox_to_anchor=(0.5, -0.13), frameon=True, fontsize=6.8, ncol=3)
 
@@ -290,21 +289,16 @@ def build_fig3_power_heatmap() -> None:
         sim_res / "_archive" / "pre_nbs_intensity_fix_2026-11-24"
         / "power_analysis_1000_30" / "power_vs_effect_size_summary.csv"
     )
-    # Filter TFNBS family to E=0.4, H=3.0 and exclude stale nbs_intensity
-    eh = df_arch["method_params"].map(_parse_eh)
-    df_arch["e"] = [x[0] for x in eh]
-    df_arch["h"] = [x[1] for x in eh]
-    is_tfnbs = df_arch["method"].isin(["tfnbs", "ni_tfnbs", "fbc_tfnbs"])
-    keep_arch = (~df_arch["method"].isin(["nbs_intensity_2.0", "nbs_intensity_3.0"])) & (
-        (~is_tfnbs) | (np.isclose(df_arch["e"], 0.4) & np.isclose(df_arch["h"], 3.0))
-    )
+    # Exclude stale nbs_intensity and legacy n=10 TFNBS family runs
+    keep_arch = ~df_arch["method"].isin(["nbs_intensity_2.0", "nbs_intensity_3.0", "tfnbs", "ni_tfnbs", "fbc_tfnbs"])
     df_arch = df_arch[keep_arch].copy()
 
     df_nbs = pd.read_csv(sim_res / "power" / "power_analysis_1000_30_nbs_int_v2" / "power_vs_effect_size_summary.csv")
     df_ex = pd.read_csv(sim_res / "power" / "power_tfnbs_exact_04_30" / "power_vs_effect_size_summary.csv")
     df_ex = df_ex[df_ex["method"] == "tfnbs_exact"].copy()
+    df_ni_fbc_ex = pd.read_csv(sim_res / "power" / "power_ni_fbc_exact_04_30" / "power_vs_effect_size_summary.csv")
 
-    df = pd.concat([df_arch, df_nbs, df_ex], ignore_index=True)
+    df = pd.concat([df_arch, df_nbs, df_ex, df_ni_fbc_ex], ignore_index=True)
     df = df[np.isclose(df["effect_size"], 0.125) & df["scenario"].isin(TOPOLOGY_ORDER)].copy()
 
     tpr_piv = df.pivot(index="method", columns="scenario", values="TPR_mean").reindex(
@@ -394,7 +388,7 @@ def build_figS5_tfnbs_eh_sweep_and_paired_diff() -> None:
     tpr_grid = df_tf.groupby(["h", "e"])["TPR_mean"].mean().unstack("e").sort_index(ascending=False)
     fdp_grid = df_tf.groupby(["h", "e"])["FDR_mean"].mean().unstack("e").sort_index(ascending=False)
 
-    df_paired = pd.read_csv(VAULT_EVIDENCE / "netstat50_review_exact_grid_paired_2026-11-25.csv")
+    df_paired = pd.read_csv(PAPER_DATA / "exact_grid_paired_comparison.csv")
 
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(14.5, 4.8), gridspec_kw={"width_ratios": [1.1, 1.1, 1.0]})
 
@@ -864,7 +858,7 @@ def build_fig6_openclose_bna242_showcase() -> None:
     names = ds.get_label_names()
     K = len(names)
 
-    agr = pd.read_csv(VAULT_EVIDENCE / "netstat50_review_openclose_agreement_2026-11-25.csv")
+    agr = pd.read_csv(PAPER_DATA / "openclose_agreement_summary.csv")
     agr_v2 = agr[(agr["source"] == "v2") & (agr["comparison"] == "IHB vs China run0")].set_index("tail")
 
     # Native BNA-242 result + annotation
@@ -1135,7 +1129,7 @@ def build_figS3_openclose_retest_orthogonality() -> None:
     state_n = [_nsig(maps_dir / f"pmap_china_{m}.npz") for m in methods]
     retest_n = [_nsig(maps_dir / f"pmap_china_retest_{m}.npz") for m in methods]
 
-    agr = pd.read_csv(VAULT_EVIDENCE / "netstat50_review_openclose_agreement_2026-11-25.csv")
+    agr = pd.read_csv(PAPER_DATA / "openclose_agreement_summary.csv")
     ret = agr[(agr["source"] == "v2") & (agr["comparison"] == "China run0 paired vs China retest")].set_index("tail")
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.5, 5.2), gridspec_kw={"width_ratios": [1.35, 1.0]})

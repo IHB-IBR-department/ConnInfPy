@@ -183,10 +183,17 @@ class FPRConfig:
             return nbs_kwargs
 
         if method == "tfnbs_exact":
-            # ConnInfPy 2.0.0 exact-integration TFNBS in the same (e, h, start_thres)
+            # ConnInfPy 2.0 exact-integration TFNBS in the same (e, h, start_thres)
             # cell as ``tfnbs``; the legacy ``tfnbs`` entry keeps its ``tfnbs_n`` grid.
             return {"e": self.tfnbs_e, "h": self.tfnbs_h, "n": None,
                     "start_thres": self.tfnbs_start_thres}
+        if method == "ni_tfnbs_exact":
+            return {"e": self.tfnbs_e, "h": self.tfnbs_h, "n": None,
+                    "start_thres": self.tfnbs_start_thres}
+        if method == "fbc_tfnbs_exact":
+            return {"e": self.tfnbs_e, "h": self.tfnbs_h, "n": None,
+                    "start_thres": self.tfnbs_start_thres,
+                    "min_cluster_size": self.fbc_min_cluster}
 
         configs = {
             "tstat": {},
@@ -217,8 +224,13 @@ class FPRConfig:
 
     def get_compute_method(self, method: str) -> str:
         """Map display method name to compute_p_val method name."""
-        if method == "tfnbs_exact":
-            return "tfnbs"
+        exact_map = {
+            "tfnbs_exact": "tfnbs",
+            "ni_tfnbs_exact": "ni_tfnbs",
+            "fbc_tfnbs_exact": "fbc_tfnbs",
+        }
+        if method in exact_map:
+            return exact_map[method]
         if self._parse_nbs_method(method) is not None:
             return "nbs"
         return method
