@@ -343,7 +343,7 @@ def init_config(
     lines.append(f"data: {data_ref}")
     if dataset.data_kind == "timeseries":
         lines.append("connectivity:")
-        lines.append("  kind: correlation  # or partial_correlation / ledoit_wolf_correlation / ledoit_wolf_partial")
+        lines.append("  kind: correlation  # or partial_correlation (with optional shrinkage: ledoit_wolf / oas)")
         lines.append("  fisher:")
         lines.append("    policy: clip_r")
         lines.append("    clip_r: 0.9999")
