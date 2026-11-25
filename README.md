@@ -9,16 +9,23 @@
 
 **A unified Python framework for permutation-based statistical inference on brain connectivity networks (fMRI).**
 
-Give ConnInfPy one connectivity matrix per subject and a design (two groups,
-paired conditions, or a continuous predictor with confounds); it returns
-corrected p-values for every edge, split by direction — empirical permutation
+Give ConnInfPy one connectivity matrix per subject (or BOLD time series via
+`compute_connectivity()`) and a design (two groups, paired conditions,
+Group × Condition, or continuous/categorical predictors with confounds and
+interactions): **one design → multiple network inference operators → honest
+inference unit → anatomical interpretation without adding new statistical tests.**
+It returns corrected p-values split by direction — empirical permutation
 p-values for the max-statistic methods (`tfnbs`, `ni_tfnbs`, `fbc_tfnbs`, `nbs`,
 `tstat`: FWER under the premises on the [approach page](https://IHB-IBR-department.github.io/ConnInfPy/approach.html)),
 `cnbs` (FWER across blocks or FDR, by its correction mode), `bh_fdr_perm` (FDR),
 and parametric p-values for `bonferroni` (FWER) and `bh_fdr` (FDR) — each read
-at its inference unit (edge, component or block). One call to
-`conninfpy.analyze()` covers input preparation, optional multi-site
-harmonization, and inference with any of nine methods.
+at its inference unit (edge, component or block). `ni_tfnbs` and `fbc_tfnbs`
+are prespecified options when an *a priori* network partition is justified, not
+post-hoc replacements for `tfnbs`. One call to `conninfpy.analyze()` covers
+input preparation, optional multi-site harmonization, and inference with any of
+nine methods, alongside three reviewer-ready diagnostic layers (pre-inference
+QC–FC motion check, leave-one-out subject influence, and `network_summary` /
+`node_summary` / `component_table` alongside edges).
 
 - **Six topology-aware enhancement methods** — NBS-extent, NBS-intensity,
   TFNBS, cNBS, **NI-TFNBS** (network-informed soft block-density prior) and
@@ -81,8 +88,26 @@ data-dependent: no binomial
 
 ## Installation
 
-Python **3.12, 3.13 or 3.14**. Until the first PyPI release, install from a
-clone:
+Python **3.12, 3.13 or 3.14**.
+
+### Recommended: `uv` (fast, zero-conflict setup)
+
+[`uv`](https://docs.astral.sh/uv/) manages Python 3.12–3.14 and resolves dependencies directly without `conda` + `pip` conflicts:
+
+```bash
+# Editable install from a local clone
+git clone https://github.com/IHB-IBR-department/ConnInfPy.git
+cd ConnInfPy
+uv venv --python 3.13
+uv pip install -e .
+
+# Or install a built wheel directly / run the CLI + Streamlit app isolated
+uv pip install conninfpy-2.0-py3-none-any.whl
+uv tool install "conninfpy[app]"
+uvx conninfpy info
+```
+
+### Standard `conda` / `pip`
 
 ```bash
 git clone https://github.com/IHB-IBR-department/ConnInfPy.git
@@ -92,17 +117,17 @@ conda activate conninfpy
 python -m pip install -e .
 ```
 
-After the release this becomes `python -m pip install conninfpy`. Optional
-extras: `[app]` (Streamlit interface), `[notebooks]` (Jupyter tutorials),
-`[dev]` (tests and docs).
+After PyPI publication this becomes `uv pip install conninfpy` or
+`python -m pip install conninfpy`. Optional extras: `[app]` (Streamlit
+interface), `[notebooks]` (Jupyter tutorials), `[dev]` (tests and docs).
 
 A built artifact installs the same way and is self-contained once installed:
-`python -m build` writes `dist/conninfpy-2.0.0-py3-none-any.whl` and
-`dist/conninfpy-2.0.0.tar.gz`, and
-`python -m pip install dist/conninfpy-2.0.0-py3-none-any.whl` (or the
-`.tar.gz`) resolves the dependencies, installs the bundled Brainnetome atlas
-data and puts the `conninfpy` command on the path of that environment — no
-checkout needed afterwards.
+`python -m build` writes `dist/conninfpy-2.0-py3-none-any.whl` and
+`dist/conninfpy-2.0.tar.gz`, and
+`python -m pip install dist/conninfpy-2.0-py3-none-any.whl` (or the
+`.tar.gz`) resolves the dependencies, installs the bundled Brainnetome + SUIT
+atlas data, packages the Streamlit app, and puts the `conninfpy` command on
+the path of that environment — no checkout needed afterwards.
 
 Without `numba`, install the other dependencies yourself. Which code runs then
 depends on the method and scoring path: exact TFNBS (`n=None`) executes its
@@ -206,18 +231,24 @@ fMRIPrep derivatives and ABIDE.
 
 ### Command line
 
-The same analysis without writing Python: an analysis file names the data
-manifest, the design (phenotype columns) and the inference settings.
+The full workflow without writing Python — generate a config from a manifest,
+run pre-inference design & motion QC, execute permutation inference, and export
+tables/annotations/figures:
 
 ```bash
-conninfpy run examples/abide/configs/abide_mini_age.yaml   # writes edges.csv, pvals.npz, provenance.json
-conninfpy info                                       # versions, TFNBS backend, cores
+conninfpy init --manifest datasets/abide_mini.yaml --out analysis.yaml
+conninfpy qc analysis.yaml --motion-qc                # alias: conninfpy check
+conninfpy run examples/abide/configs/abide_mini_age.yaml   # writes edges.csv, pvals.npz, bundle.pkl, provenance.json
+conninfpy interpret conninfpy_results --cerebellum anatom  # node/network summaries, BNA+SUIT annotation, plots
+conninfpy app                                         # launch Streamlit workspace (requires [app])
+conninfpy info                                        # versions, TFNBS backend, cores
 ```
 
 See [`examples/abide/configs/abide_mini_age.yaml`](examples/abide/configs/abide_mini_age.yaml)
-for every option; designs are `glm`, `two-sample`, `paired` and `one-sample`.
-`provenance.json` records the package version, the analysis file, the data
-used and any warnings, so a result can be traced back to how it was made.
+for every option; designs are `glm`, `two-sample`, `paired` (including `Group × Condition`
+and `interactions`) and `one-sample`. `provenance.json` records the package version,
+the analysis file, the data used and any warnings, so a result can be traced back
+to how it was made.
 
 ---
 
@@ -373,11 +404,18 @@ resources: label tables and NIfTI maps for `atl-Anatom` (Diedrichsen 2009),
 `atl-Buckner7` / `atl-Buckner17` (Buckner 2011) and `atl-NettekovenSym32`
 (Nettekoven 2024). Their voxel grids lie on the same 1 mm lattice as the
 Brainnetome map (integer-lattice coincidence, no resampling), and the upstream
-release notes declare the collection CC-BY. Sources, SHA256 hashes, per-file
-licence notes and the measured overlap with the Brainnetome map are recorded in
+release notes declare the collection CC-BY. Opt-in runtime integration is
+available in `conninfpy.interpret` and `conninfpy.plot.plot_connectogram()` via
+`BrainnetomeReference.load(..., resolution_mm=1, cerebellum="anatom")` (or
+`"buckner7"`, `"buckner17"`, `"nettekoven"`, or `conninfpy interpret --cerebellum anatom`),
+which resolves ROIs outside BNA-246 into cerebellar parcels, assigns
+`cerebello-*` circuit classes and crossed/ipsilateral lateralization, and adds
+cerebellar sectors to connectograms. Sources, SHA256 hashes, per-file licence
+notes and measured overlap facts are recorded in
 `conninfpy/atlas_data/cerebellar_atlases_provenance.json` (template identity
-itself was not independently verified). No atlas-combining layer is implemented
-in this release: `analyze()` and `AtlasInfo` do not use these files yet.
+itself was not independently verified). `AtlasInfo` and `analyze()` do not
+auto-attach cerebellar atlases yet, and structural connectivity / BrainMap
+profiles remain cortex/subcortex BNA-246 only.
 
 ## Advanced API
 
@@ -408,8 +446,8 @@ setup, background inference, directional result plots, atlas-aware edge
 exports and Brainnetome annotation:
 
 ```bash
-python -m pip install -r requirements/gui.txt
-streamlit run apps/streamlit_app.py
+uv pip install "conninfpy[app]"   # or: python -m pip install -r requirements/gui.txt
+conninfpy app                     # or from a clone: streamlit run apps/streamlit_app.py
 ```
 
 The repository-root `requirements.txt` is the public Streamlit Cloud profile
@@ -431,11 +469,23 @@ similarly; GLM-TFNBS is slower because each permutation refits the edge-wise
 model. Treat these as relative numbers: CPU, BLAS backend, multiprocessing,
 acceleration and the permutation count all change absolute runtimes.
 
+## Out of scope and custom atlases
+
+ConnInfPy focuses on group-level statistical inference and anatomical reporting
+on fMRI functional connectivity matrices. The following sit intentionally
+outside the package scope:
+
+- **fMRI preprocessing** (slice timing, motion correction, registration, denoising): use [fMRIPrep](https://fmriprep.org/) + `conninfpy.loaders.FmriprepDerivativesLoader` + `conninfpy.compute_connectivity()`.
+- **Graph-theory metrics** (degree, global/local efficiency, modularity, clustering) and their group comparisons: use [`bctpy`](https://github.com/aestrivex/bctpy) alongside ConnInfPy.
+- **Dynamic, effective, or directed connectivity**, and **task-fMRI gPPI / beta-series connectivity**: for task-modulated connectivity, see [TMFC](https://github.com/IHB-IBR-department/TMFC_denoise) / TMFCpy.
+- **Unbalanced or mixed $\ge 3$-timepoint longitudinal models** (`Group × Time` across 3+ waves): currently only balanced within-subject omnibus F-contrasts (`D1`) are supported.
+- **Third-party parcellations** (e.g., Seitzman-300, Power-264, AAL3, Glasser MMP): load any ROI table or 3D/4D label volume with `AtlasInfo.from_csv(path)` or `AtlasInfo.from_nifti(nii_path, labels=...)`.
+
 ## Tutorials and examples
 
 | Path | What |
 |---|---|
-| [examples/notebooks/](examples/notebooks/) | Tutorial series: quickstart, enhancement methods, GLM, acceleration, parameter sweeps, topology gallery, results export, and ABIDE |
+| [examples/notebooks/](examples/notebooks/) | Tutorial series (01–12): quickstart, enhancement methods, GLM, acceleration, parameter sweeps, topology gallery, results export, ABIDE, and v2.0 feature walkthrough |
 | [examples/benchmarks/](examples/benchmarks/) | Timing / GLM / acceleration benchmarks and external validation (PALM, scipy, statsmodels, nilearn) |
 | [examples/simulations/](examples/simulations/) | Simulation validation (FPR + power) backing the validation paper |
 | [examples/abide/](examples/abide/) | Real-data validation on ABIDE (age, diagnosis, motion, within-site replication), CLI analysis files (`configs/`) and the Brainnetome interpretation |
@@ -453,7 +503,7 @@ plotting packages, including legacy import compatibility and atlas-data access.
 ## Citing the toolbox
 
 Cite the package with the metadata in [`CITATION.cff`](CITATION.cff) (version
-2.0.0, MIT licence). No DOI has been registered for the package yet and the
+2.0, MIT licence). No DOI has been registered for the package yet and the
 software paper is in preparation; this section will be updated when a DOI is
 assigned — until then please cite the repository and the version.
 
