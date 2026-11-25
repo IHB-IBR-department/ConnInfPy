@@ -202,4 +202,5 @@ def test_paper_shared_selector_parameters_are_explicit():
     from examples.open_close._shared.inference import SELECTORS
     for method in ("tfnbs", "ni_tfnbs", "fbc_tfnbs"):
         config = SELECTORS[method]
-        assert (config["e"], config["h"], config["n"], config["start_thres"]) == (.4, 3., 10, 1.65)
+        assert "n" in config
+        assert (config["e"], config["h"], config["n"], config["start_thres"]) == (.4, 3., None, 1.65)
