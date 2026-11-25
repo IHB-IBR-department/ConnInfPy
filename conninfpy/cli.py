@@ -1,4 +1,4 @@
-"""Command line: ``conninfpy run analysis.yaml`` and ``conninfpy info``.
+"""Command line: ``conninfpy {run,qc,init,interpret,app,info}``.
 
 An analysis file names a data manifest, the design (which phenotype
 columns hold the predictor, confounds, sites or groups) and the inference
@@ -63,7 +63,7 @@ from conninfpy._shared.alignment import IdAlignmentError, paired_id_permutation
 
 DESIGNS = ("glm", "two-sample", "paired", "one-sample")
 _TOP_LEVEL_KEYS = {"data", "input", "design", "inference", "atlas", "alpha", "output", "connectivity",
-                    "diagnostics"}
+                    "diagnostics", "interpret"}
 _KIND_TO_INPUT = {"correlation": "r", "fisher_z": "z"}
 _BUILTIN_ATLASES = ("schaefer_100_yeo7", "schaefer_200_yeo7", "schaefer_400_yeo7", "bna_246")
 
@@ -768,6 +768,22 @@ def run(
     prov_path.write_text(json.dumps(provenance, indent=2, default=_jsonable), encoding="utf-8")
     written["provenance"] = prov_path
 
+    interp_cfg = cfg.get("interpret")
+    if interp_cfg:
+        from conninfpy._cli_tools import interpret_outputs
+
+        opts = interp_cfg if isinstance(interp_cfg, Mapping) else {}
+        interp_written = interpret_outputs(
+            out,
+            atlas_spec=opts.get("atlas"),
+            cerebellum=opts.get("cerebellum"),
+            alpha=float(opts.get("alpha", alpha)),
+            out_dir=out / opts["out"] if opts.get("out") else out / "interpretation",
+            no_plots=bool(opts.get("no_plots", False)),
+        )
+        for k, v in interp_written.items():
+            written[f"interpret_{k}"] = v
+
     print(f"conninfpy {__version__} — {summary['design']} on {summary['n_subjects_used']} "
           f"subjects × {summary['n_regions']} regions ({wall:.1f} s)")
     for name, info in per_result.items():
@@ -899,15 +915,93 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
              "or an auto-detected Motion_FD/func_mean_fd phenotype column)",
     )
     sub.add_parser("info", help="show versions and the compute backend")
-    args = parser.parse_args(argv)
+
+    p_qc = sub.add_parser(
+        "qc",
+        aliases=["check"],
+        help="check dataset manifest, design matrix conditioning, and motion/QC-FC before inference",
+    )
+    p_qc.add_argument("config", help="analysis file (YAML)")
+    p_qc.add_argument("--motion-qc", action="store_true", help="include motion/QC-FC check")
+    p_qc.add_argument("--json", action="store_true", help="print report as JSON")
+    p_qc.add_argument("--out", help="optional path to save JSON QC report")
+
+    p_init = sub.add_parser("init", help="generate an analysis.yaml template from a data manifest")
+    p_init.add_argument("--manifest", required=True, help="dataset manifest YAML")
+    p_init.add_argument("--out", help="output analysis.yaml path (prints to stdout if omitted)")
+    p_init.add_argument("--design", choices=DESIGNS, help="design type to prefill")
+    p_init.add_argument("--force", action="store_true", help="overwrite --out if it exists")
+
+    p_interp = sub.add_parser(
+        "interpret",
+        help="export node/network summaries, Brainnetome annotations, and figures from run outputs",
+    )
+    p_interp.add_argument("target", help="conninfpy run output directory or bundle*.pkl file")
+    p_interp.add_argument("--atlas", help="override atlas (builtin name or CSV path)")
+    p_interp.add_argument(
+        "--cerebellum",
+        choices=("none", "anatom", "buckner7", "buckner17", "nettekoven"),
+        default="none",
+        help="optional SUIT cerebellar companion atlas on top of BNA-246",
+    )
+    p_interp.add_argument("--alpha", type=float, help="override significance threshold")
+    p_interp.add_argument("--out", help="output directory (default: <target>/interpretation)")
+    p_interp.add_argument("--no-plots", action="store_true", help="skip PNG figure generation")
+
+    p_app = sub.add_parser("app", help="launch the interactive Streamlit workspace")
+    p_app.add_argument("streamlit_args", nargs=argparse.REMAINDER, help="extra arguments forwarded to streamlit run")
+
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    if raw_argv[:1] == ["app"] and raw_argv[1:] not in (["--help"], ["-h"]):
+        from conninfpy._cli_tools import launch_app
+
+        return launch_app(raw_argv[1:])
+
+    args = parser.parse_args(raw_argv)
 
     if args.command == "info":
         info()
         return 0
+    if args.command == "app":
+        from conninfpy._cli_tools import launch_app
+
+        return launch_app(args.streamlit_args)
     try:
+        if args.command in ("qc", "check"):
+            from conninfpy._cli_tools import run_qc
+
+            code, _ = run_qc(
+                args.config,
+                motion_qc=args.motion_qc,
+                as_json=args.json,
+                out_path=args.out,
+            )
+            return code
+        if args.command == "init":
+            from conninfpy._cli_tools import init_config
+
+            init_config(
+                args.manifest,
+                out_path=args.out,
+                design_type=args.design,
+                force=args.force,
+            )
+            return 0
+        if args.command == "interpret":
+            from conninfpy._cli_tools import interpret_outputs
+
+            interpret_outputs(
+                args.target,
+                atlas_spec=args.atlas,
+                cerebellum=args.cerebellum,
+                alpha=args.alpha,
+                out_dir=args.out,
+                no_plots=args.no_plots,
+            )
+            return 0
         run(args.config, args.out, n_permutations=args.n_permutations,
             use_mp=False if args.no_mp else None, motion_qc=args.motion_qc)
-    except (ConfigError, FileNotFoundError, ValueError) as exc:
+    except (ConfigError, FileNotFoundError, FileExistsError, ValueError) as exc:
         print(f"conninfpy: error: {exc}", file=sys.stderr)
         return 1
     return 0

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conninfpy"
-version = "2.0.0"
+version = "2.0"
 description = "Unified Python framework for permutation-based statistical inference on brain connectivity networks"
 readme = "README.md"
 license = "MIT"
@@ -105,10 +105,11 @@ notebooks = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["conninfpy*"]
+include = ["conninfpy*", "apps*"]
 
 [tool.setuptools.package-data]
 conninfpy = ["atlas_data/*.csv", "atlas_data/*.nii.gz", "atlas_data/*.txt", "atlas_data/*.json", "atlas_data/*.tsv", "atlas_data/*.lut"]
+apps = ["assets/*.png"]
 
 [tool.pytest.ini_options]
 filterwarnings = [

@@ -35,7 +35,7 @@ Names imported directly from ``conninfpy`` in earlier versions remain
 importable; ``__all__`` lists the recommended surface.
 """
 
-__version__ = "2.0.0"
+__version__ = "2.0"
 
 from conninfpy import (
     defaults,
