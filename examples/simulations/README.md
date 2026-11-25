@@ -8,7 +8,7 @@
 | `sensitivity/` | Parameter, normalization and prior-misspecification comparisons |
 | `sc_prior/` | ENIGMA SC extraction and structural-prior feasibility |
 | `_shared/` | Shared binomial calibration summaries |
-| `topology_gallery.py`, `regenerate_paper_figures.py` | Figures/tables from simulated graphs and saved outputs |
+| `topology_gallery.py` | Planted effect topology gallery figure |
 
 Select a configuration explicitly:
 
