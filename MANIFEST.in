@@ -1,0 +1,4 @@
+prune datasets
+prune backlog
+prune apps
+global-exclude __pycache__ *.py[cod]

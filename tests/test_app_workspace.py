@@ -11,9 +11,9 @@ import pytest
 pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest
 
-from apps.utils import helpers
+from conninfpy.app.utils import helpers
 
-APP = Path(__file__).resolve().parents[1] / "apps" / "streamlit_app.py"
+APP = Path(__file__).resolve().parents[1] / "conninfpy" / "app" / "streamlit_app.py"
 
 
 def app_with_demo():
@@ -216,7 +216,7 @@ def test_synthetic_seed_reproduces_and_replaces_data_only_on_success():
     assert app.session_state.dataset_info["seed"] == 43
     saved_data = app.session_state.connectivity_data
     saved_analysis(app)
-    with patch("apps.components.data_ingestion.TopologyDatasetGenerator", side_effect=RuntimeError("generation failed")):
+    with patch("conninfpy.app.components.data_ingestion.TopologyDatasetGenerator", side_effect=RuntimeError("generation failed")):
         app.button(key="generate_dataset_btn").click().run()
     assert app.exception
     assert app.session_state.connectivity_data is saved_data
@@ -224,7 +224,7 @@ def test_synthetic_seed_reproduces_and_replaces_data_only_on_success():
 
 
 def test_synthetic_added_variance_is_independent_and_centered():
-    from apps.components.data_ingestion import _add_group_variance
+    from conninfpy.app.components.data_ingestion import _add_group_variance
 
     data = np.zeros((20000, 3, 3))
     result = _add_group_variance(data, 100, np.random.default_rng(123))
@@ -307,7 +307,7 @@ def test_result_graph_direction_selection_and_one_sided_policy(tested_tail):
     app.session_state.edges_df = result.significant_edges(atlas=atlas)
     app.session_state.run_plan = {"method": "tstat", "loaded_settings_hash": "fixture data", "active_atlas_signature": "fixture atlas", "question_type": "Group Difference", "ref_group": 0, "target_group": 1}
     app.session_state.active_tab = "3. Inference Results"
-    with patch("apps.components.inference_results.plot_connectome_graph", side_effect=lambda **kwargs: plt.figure()):
+    with patch("conninfpy.app.components.inference_results.plot_connectome_graph", side_effect=lambda **kwargs: plt.figure()):
         app.run()
         assert not app.exception
         direction = next(r for r in app.radio if r.label == "Effect direction")

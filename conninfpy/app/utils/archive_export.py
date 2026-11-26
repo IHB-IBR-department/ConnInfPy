@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from apps.utils.result_views import (
+from conninfpy.app.utils.result_views import (
     build_cnbs_block_figure,
     build_connectivity_maps_figure,
     build_network_summary_figure,
@@ -911,7 +911,7 @@ def build_methods_markdown(
     add("")
     preprocessing = plan.get("preprocessing")
     if isinstance(preprocessing, Mapping) and preprocessing:
-        from apps.utils.helpers import describe_per_site_facts, describe_preprocessing_facts
+        from conninfpy.app.utils.helpers import describe_per_site_facts, describe_preprocessing_facts
 
         for label, value, source in describe_preprocessing_facts(preprocessing):
             add(f"- {label}: {value} — {source}")
@@ -1570,7 +1570,7 @@ def build_analysis_archive(
         "notes": notes,
     }
     if workspace_state is not None:
-        from apps.utils.workspace_io import build_workspace_layer_files
+        from conninfpy.app.utils.workspace_io import build_workspace_layer_files
 
         ws_files, ws_manifest = build_workspace_layer_files(
             workspace_state,
@@ -1611,7 +1611,7 @@ def archive_zip_bytes(files: Mapping[str, bytes]) -> bytes:
 
 def archive_filename(contrast_name: str, method: str, started_at: Any = None) -> str:
     """Stable download filename for the archive."""
-    from apps.utils.helpers import safe_filename_part
+    from conninfpy.app.utils.helpers import safe_filename_part
 
     stamp = ""
     if isinstance(started_at, str) and started_at:

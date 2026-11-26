@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conninfpy"
-version = "2.0"
+dynamic = ["version"]
 description = "Unified Python framework for permutation-based statistical inference on brain connectivity networks"
 readme = "README.md"
 license = "MIT"
@@ -45,7 +45,9 @@ dependencies = [
     "statsmodels",
     "pandas",
     "matplotlib",
-    "numba",
+    # 0.63 is the first release supporting Python 3.14; numba selects its
+    # compatible llvmlite dependency. CI exercises the supported platforms.
+    "numba>=0.63",
     # conninfpy.sim (generate_fc_matrices, generate_multisite_glm_dataset)
     # and the ML-transfer examples; also pulled in by nilearn for the app.
     "scikit-learn",
@@ -105,11 +107,13 @@ notebooks = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["conninfpy*", "apps*"]
+include = ["conninfpy*"]
 
 [tool.setuptools.package-data]
-conninfpy = ["atlas_data/*.csv", "atlas_data/*.txt", "atlas_data/*.json"]
-apps = ["assets/*.png"]
+conninfpy = ["atlas_data/*.csv", "atlas_data/*.txt", "atlas_data/*.json", "app/assets/*.png"]
+
+[tool.setuptools.dynamic]
+version = {attr = "conninfpy._version.__version__"}
 
 [tool.pytest.ini_options]
 filterwarnings = [

@@ -446,11 +446,11 @@ def test_ac4_bundle_cli_roundtrip_and_zero_numerical_drift(tmp_path: Path):
 
 
 def test_ac2_ui_prelaunch_and_postlaunch_helpers():
-    from apps.components.design_inference import (
+    from conninfpy.app.components.design_inference import (
         _build_prelaunch_design_qc_summary,
         _render_prelaunch_design_qc_summary,
     )
-    from apps.components.inference_results import (
+    from conninfpy.app.components.inference_results import (
         _extract_result_diagnostics_summary,
         _render_analyze_decisions_and_diagnostics,
     )
@@ -560,8 +560,8 @@ def test_ac2_ui_prelaunch_and_postlaunch_helpers():
     assert extracted_legacy["flags"] == []
 
     # Smoke-render both UI blocks against a lightweight Streamlit mock
-    import apps.components.design_inference as di_mod
-    import apps.components.inference_results as ir_mod
+    import conninfpy.app.components.design_inference as di_mod
+    import conninfpy.app.components.inference_results as ir_mod
 
     class _DummyCtx:
         def __enter__(self):
@@ -629,7 +629,7 @@ def test_ac2_ui_prelaunch_and_postlaunch_helpers():
 
 def test_welch_vs_student_and_available_case_df_distinction_with_manual_oracle():
     """Welch two-sample and available_case must never falsely claim shared n-rank inference df."""
-    from apps.components.inference_results import (
+    from conninfpy.app.components.inference_results import (
         _format_inference_df_display,
         _render_analyze_decisions_and_diagnostics,
     )
@@ -760,7 +760,7 @@ def test_welch_vs_student_and_available_case_df_distinction_with_manual_oracle()
     assert _format_inference_df_display(dd_ac_g) != "14"
 
     # UI rendering check for Welch vs Design df
-    import apps.components.inference_results as ir_mod
+    import conninfpy.app.components.inference_results as ir_mod
 
     class _DummyCtx:
         def __enter__(self):
@@ -818,7 +818,7 @@ def test_welch_vs_student_and_available_case_df_distinction_with_manual_oracle()
 
 def test_resolved_strategy_vs_requested_harmonize_across_backend_bundle_cli_and_ui(tmp_path):
     """Resolved strategy comes from backend truth, never guessed from requested run_plan."""
-    from apps.components.inference_results import _extract_result_diagnostics_summary
+    from conninfpy.app.components.inference_results import _extract_result_diagnostics_summary
     from conninfpy.cli import run as cli_run
     from conninfpy.post_analysis import ResultBundle
 

@@ -191,7 +191,7 @@ for result in (get_tfnbs_score(m, .4, 3),
 
 
 def test_ui_run_plan_exposes_effective_mode():
-    from apps.components.design_inference import _method_plan_parameters
+    from conninfpy.app.components.design_inference import _method_plan_parameters
     exact = _method_plan_parameters("tfnbs", {"e": .4, "h": 3., "n": None, "start_thres": 1.65})
     legacy = _method_plan_parameters("tfnbs", {"e": .4, "h": 3., "n": 10, "start_thres": 1.65})
     assert exact["integration"] == "exact" and exact["start threshold"] == 1.65

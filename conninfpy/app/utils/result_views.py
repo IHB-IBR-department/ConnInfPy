@@ -15,7 +15,7 @@ from matplotlib.colors import BoundaryNorm, ListedColormap
 import numpy as np
 import pandas as pd
 
-from apps.utils.helpers import atlas_has_networks
+from conninfpy.app.utils.helpers import atlas_has_networks
 from conninfpy.plot.matrices import _network_order, plot_null_max_distribution
 from conninfpy.plot.networks import plot_network_summary
 from conninfpy.results import InferenceResult, OmnibusInferenceResult

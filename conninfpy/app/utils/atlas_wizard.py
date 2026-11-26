@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from apps.utils.manifest_wizard import ChecklistItem
+from conninfpy.app.utils.manifest_wizard import ChecklistItem
 from conninfpy.atlas import AtlasInfo
 
 _CUSTOM_ATLAS_CSV_TEMPLATE = """id,name,network,x,y,z,hemisphere

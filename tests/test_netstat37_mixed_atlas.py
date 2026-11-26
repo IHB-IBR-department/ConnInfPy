@@ -248,7 +248,7 @@ class TestSpatialLimitIsHonest(unittest.TestCase):
 
     def test_app_help_promises_no_numeric_offset(self):
         try:
-            from apps.components.bna_annotation import _SPACE_HELP
+            from conninfpy.app.components.bna_annotation import _SPACE_HELP
         except ImportError as exc:                              # pragma: no cover - streamlit absent
             self.skipTest(f"app module not importable: {exc}")
         self.assertIn("unquantified", _SPACE_HELP)

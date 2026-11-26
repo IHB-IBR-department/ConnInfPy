@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from apps.utils.result_views import (
+from conninfpy.app.utils.result_views import (
     build_null_max_figure, check_companion_compatibility,
     describe_result_scale_and_stat, prepare_predicted_coupling_summary,
     recorded_native_detection_count,
@@ -170,7 +170,7 @@ def test_real_streamlit_headline_and_agreement_use_native_counts(result, unit):
     native = _native_result(result[0], unit)
     app = AppTest.from_string('''
 import streamlit as st
-from apps.components.inference_results import _render_summary_metrics, _render_comparative_view
+from conninfpy.app.components.inference_results import _render_summary_metrics, _render_comparative_view
 r = st.session_state['result']
 atlas = st.session_state['atlas']
 edges = r.significant_edges(atlas=atlas, alpha=.05)

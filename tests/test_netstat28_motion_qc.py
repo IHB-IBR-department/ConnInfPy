@@ -434,7 +434,7 @@ def test_analyze_sidecar_reaches_bundle_and_workspace(tmp_path: Path):
     reloaded = type(bundle).load(path)
     assert reloaded.metadata["motion_qc"]["n_observations"] == n
 
-    from apps.utils.workspace_io import build_workspace_archive, restore_workspace_archive
+    from conninfpy.app.utils.workspace_io import build_workspace_archive, restore_workspace_archive
 
     state = {
         "inference_result": result,
@@ -614,7 +614,7 @@ def test_cli_run_writes_the_sidecar_into_provenance(tmp_path: Path):
 # ----------------------------------------------------------------------
 # 10. GUI: the saved side-car renders on the results tab (AppTest)
 # ----------------------------------------------------------------------
-APP = Path(__file__).resolve().parents[1] / "apps" / "streamlit_app.py"
+APP = Path(__file__).resolve().parents[1] / "conninfpy" / "app" / "streamlit_app.py"
 
 
 def test_results_tab_renders_the_saved_sidecar():
@@ -718,7 +718,7 @@ def test_design_tab_offers_the_opt_in_and_the_fd_column():
 def test_prelaunch_preview_matches_the_saved_diagnostic():
     pytest.importorskip("pandas")
     pytest.importorskip("streamlit")
-    from apps.components.design_inference import _motion_qc_preview
+    from conninfpy.app.components.design_inference import _motion_qc_preview
     from conninfpy.atlas import AtlasInfo
 
     n, N = 14, 5
@@ -1037,7 +1037,7 @@ def test_root_public_surface_is_unchanged_and_names_live_in_interpret():
 
 def test_launch_helpers_align_fd_labels_and_rows_for_every_path():
     pytest.importorskip("streamlit")
-    from apps.components.design_inference import (
+    from conninfpy.app.components.design_inference import (
         _build_design_arrays,
         _motion_qc_preview,
         _motion_qc_spec_from_arrays,

@@ -12,7 +12,7 @@ from streamlit.testing.v1 import AppTest
 from conninfpy import compute_p_val
 from conninfpy.atlas import AtlasInfo
 
-APP = Path(__file__).resolve().parents[1] / "apps" / "streamlit_app.py"
+APP = Path(__file__).resolve().parents[1] / "conninfpy" / "app" / "streamlit_app.py"
 N = 8
 THRESHOLD = 3.5
 

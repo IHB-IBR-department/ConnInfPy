@@ -1,5 +1,5 @@
 import streamlit as st
-from apps.utils.helpers import render_help
+from conninfpy.app.utils.helpers import render_help
 
 def render_workspace_docs_view():
     """Render the workspace documentation viewer."""

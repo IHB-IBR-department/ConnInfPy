@@ -32,13 +32,19 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # Keep in sync with `requires-python` in pyproject.toml and with
         # the versions claimed in the README.
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.12", "3.13", "3.14"]
+        exclude:
+          - os: macos-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.14"
     steps:
       # Plain checkout of the ref under test — no special options needed
       # since the tests run against the working tree as-is.

@@ -3,7 +3,7 @@
 - Generic loaders ship registered with the package.
 - Projects add their own with ``register_loader``; a manifest may also
   name any class as ``"package.module:ClassName"``.
-- The lab-specific loaders live in ``apps/utils/lab_loaders.py`` and are
+- The lab-specific loaders live in ``conninfpy/app/utils/lab_loaders.py`` and are
   not part of the core package.
 """
 import subprocess
@@ -67,7 +67,7 @@ class TestLoaderRegistry(unittest.TestCase):
     def test_app_module_registers_lab_loaders(self):
         sys.path.insert(0, str(REPO))
         try:
-            import apps.utils.lab_loaders as lab
+            import conninfpy.app.utils.lab_loaders as lab
         finally:
             sys.path.remove(str(REPO))
         self.assertIs(get_loader("OpenCloseLoader"), lab.OpenCloseLoader)

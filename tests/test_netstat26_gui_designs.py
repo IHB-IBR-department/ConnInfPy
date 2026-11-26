@@ -30,7 +30,7 @@ from streamlit.testing.v1 import AppTest
 from conninfpy.stats.pairwise import _check_edge_mask
 
 REPO = Path(__file__).resolve().parents[1]
-APP = REPO / "apps" / "streamlit_app.py"
+APP = REPO / "conninfpy" / "app" / "streamlit_app.py"
 
 
 # ----------------------------------------------------------------------
@@ -59,7 +59,7 @@ def _paired_pheno(order=("s3", "s1", "s2")):
 
 
 def _build_paired_arrays(Y=None, pheno=None, **overrides):
-    from apps.components.design_inference import _build_design_arrays
+    from conninfpy.app.components.design_inference import _build_design_arrays
 
     pheno = _paired_pheno() if pheno is None else pheno
     Y = _corr_stack(len(pheno)) if Y is None else Y
@@ -79,14 +79,14 @@ def _build_paired_arrays(Y=None, pheno=None, **overrides):
 
 def _worker_namespace():
     """Load the worker exactly as the app does (module-level names available)."""
-    from apps.components import design_inference
+    from conninfpy.app.components import design_inference
 
     return design_inference
 
 
 def _run_worker(task, **overrides):
     """Call the real background worker with patched analyze() and capture calls."""
-    from apps.components.design_inference import _run_inference_background
+    from conninfpy.app.components.design_inference import _run_inference_background
 
     calls = []
     captured = {}
@@ -163,7 +163,7 @@ def test_paired_arrays_keep_condition_a_order_and_are_not_pre_differenced():
 
 
 def test_worker_passes_condition_arrays_ids_and_confounds_without_a_gui_delta():
-    from apps.components.design_inference import InferenceTask
+    from conninfpy.app.components.design_inference import InferenceTask
 
     pheno = _paired_pheno()
     Y = _corr_stack(len(pheno))
@@ -203,7 +203,7 @@ def test_worker_passes_condition_arrays_ids_and_confounds_without_a_gui_delta():
 
 
 def test_paired_design_rejections_name_the_offending_subjects():
-    from apps.components.design_inference import PairedDesignError
+    from conninfpy.app.components.design_inference import PairedDesignError
 
     pheno = _paired_pheno()
     Y = _corr_stack(len(pheno))
@@ -215,7 +215,7 @@ def test_paired_design_rejections_name_the_offending_subjects():
 
     # The empty ID names the affected condition directly (unit-level check:
     # the app's required-field filter would remove such a row first).
-    from apps.components.design_inference import _paired_design_violations
+    from conninfpy.app.components.design_inference import _paired_design_violations
 
     blank = pheno.copy()
     blank.loc[0, "subject_id"] = None
@@ -273,7 +273,7 @@ def test_missing_design_rows_are_excluded_before_the_run_and_counted():
 
 
 def test_available_case_policy_and_coverage_are_forwarded_and_recorded():
-    from apps.components.design_inference import InferenceTask
+    from conninfpy.app.components.design_inference import InferenceTask
 
     pheno = _paired_pheno()
     Y = _corr_stack(len(pheno))
@@ -330,7 +330,7 @@ def test_available_case_result_surfaces_coverage_reasons_and_unit():
 # 3. Edge family mask: passed through, recorded as metadata, not as an array
 # ----------------------------------------------------------------------
 def test_edge_mask_reaches_analyze_and_run_plan_records_metadata_only():
-    from apps.components.design_inference import InferenceTask, _edge_mask_metadata
+    from conninfpy.app.components.design_inference import InferenceTask, _edge_mask_metadata
 
     pheno = _paired_pheno()
     Y = _corr_stack(len(pheno))
@@ -381,7 +381,7 @@ def test_edge_mask_validation_reuses_engine_semantics():
 # 4. E/H sensitivity grid with a declared primary cell
 # ----------------------------------------------------------------------
 def test_grid_parsing_and_range_validation():
-    from apps.components.design_inference import _parse_float_list, _validate_eh_grid
+    from conninfpy.app.components.design_inference import _parse_float_list, _validate_eh_grid
 
     assert _parse_float_list("0.4, 0.5")[0] == [0.4, 0.5]
     assert _parse_float_list("")[1]
@@ -392,7 +392,7 @@ def test_grid_parsing_and_range_validation():
 
 
 def test_declared_primary_cell_is_the_completion_table():
-    from apps.components.design_inference import InferenceTask
+    from conninfpy.app.components.design_inference import InferenceTask
 
     task = InferenceTask()
     grid_result = SimpleNamespace(
@@ -405,7 +405,7 @@ def test_declared_primary_cell_is_the_completion_table():
         design={},
     )
     calls = []
-    from apps.components.design_inference import _run_inference_background
+    from conninfpy.app.components.design_inference import _run_inference_background
 
     args = {name: None for name in inspect.signature(_run_inference_background).parameters}
     args.update(
@@ -429,7 +429,7 @@ def test_declared_primary_cell_is_the_completion_table():
 
 
 def test_run_plan_is_stable_and_changes_only_with_the_parameters():
-    from apps.components.design_inference import InferenceTask
+    from conninfpy.app.components.design_inference import InferenceTask
 
     pheno = _paired_pheno()
     arrays = _build_paired_arrays(_corr_stack(len(pheno)), pheno)
@@ -455,7 +455,7 @@ def test_run_plan_is_stable_and_changes_only_with_the_parameters():
 def _plan_with_new_facts():
     mask = np.zeros((4, 4), dtype=bool)
     mask[0, 1] = mask[1, 0] = True
-    from apps.components.design_inference import _edge_mask_metadata
+    from conninfpy.app.components.design_inference import _edge_mask_metadata
 
     return {
         "method": "tfnbs",
@@ -500,7 +500,7 @@ def _replay_dataset_info(tmp_path: Path):
 
 
 def test_replay_config_captures_available_case_grid_and_mask(tmp_path: Path):
-    from apps.utils.archive_export import build_replay_config
+    from conninfpy.app.utils.archive_export import build_replay_config
 
     dataset_info = _replay_dataset_info(tmp_path)
     cfg = build_replay_config(_plan_with_new_facts(), dataset_info, project_root=tmp_path)
@@ -529,7 +529,7 @@ def test_replay_config_captures_available_case_grid_and_mask(tmp_path: Path):
 
 
 def test_legacy_plan_without_min_coverage_stays_not_replayable(tmp_path: Path):
-    from apps.utils.archive_export import build_replay_config
+    from conninfpy.app.utils.archive_export import build_replay_config
 
     plan = _plan_with_new_facts()
     plan.pop("min_coverage")
@@ -540,8 +540,8 @@ def test_legacy_plan_without_min_coverage_stays_not_replayable(tmp_path: Path):
 
 def test_archive_bundles_the_mask_and_the_workspace_round_trips_the_facts(tmp_path: Path):
     from conninfpy import analyze
-    from apps.utils.archive_export import build_analysis_archive
-    from apps.utils.workspace_io import (
+    from conninfpy.app.utils.archive_export import build_analysis_archive
+    from conninfpy.app.utils.workspace_io import (
         build_workspace_archive,
         inspect_workspace_archive,
         restore_workspace_archive,
@@ -718,7 +718,7 @@ def test_design_page_binds_condition_confounds_in_the_paired_branch():
 def test_results_page_badges_the_declared_primary_and_reports_coverage():
     from conninfpy import analyze
     from conninfpy.atlas import AtlasInfo
-    from apps.utils.result_views import get_2d_result
+    from conninfpy.app.utils.result_views import get_2d_result
 
     n, N = 10, 4
     Y = _corr_stack(n, N, seed=13)
@@ -900,7 +900,7 @@ def test_end_to_end_paired_run_declared_primary_then_workspace_reload(tmp_path: 
     assert getattr(app.session_state.inference_result.inference, "is_grid", False)
 
     # Save the finished workspace and reload it into a fresh session state.
-    from apps.utils.workspace_io import build_workspace_archive, restore_workspace_archive
+    from conninfpy.app.utils.workspace_io import build_workspace_archive, restore_workspace_archive
 
     session = app.session_state
     keys = {
@@ -948,7 +948,7 @@ def test_companion_agreement_selects_the_declared_primary_cell():
     import copy
 
     from conninfpy import analyze
-    from apps.utils import result_views
+    from conninfpy.app.utils import result_views
 
     n, N = 8, 4
     Y = _corr_stack(n, N, seed=21)
@@ -987,7 +987,7 @@ def test_archive_omits_a_mask_changed_after_the_run(tmp_path: Path):
     import zipfile
 
     from conninfpy import analyze
-    from apps.utils.archive_export import build_analysis_archive
+    from conninfpy.app.utils.archive_export import build_analysis_archive
 
     n, N = 8, 4
     Y = _corr_stack(n, N, seed=22)
@@ -1027,7 +1027,7 @@ def test_archive_omits_a_mask_changed_after_the_run(tmp_path: Path):
 # ----------------------------------------------------------------------
 def test_edge_mask_metadata_rejects_malformed_shapes():
     """A malformed mask is a validation error, never an IndexError in render."""
-    from apps.components.design_inference import _edge_mask_metadata
+    from conninfpy.app.components.design_inference import _edge_mask_metadata
 
     for malformed in (
         np.zeros(3, dtype=bool),          # 1-D
@@ -1091,7 +1091,7 @@ def _archive_member_and_notes(res, plan, info, mask):
     import io
     import zipfile
 
-    from apps.utils.archive_export import build_analysis_archive
+    from conninfpy.app.utils.archive_export import build_analysis_archive
 
     zip_bytes, manifest = build_analysis_archive(
         res, plan, info, edge_family_mask=mask, include_bundle=False,
@@ -1149,7 +1149,7 @@ def test_archive_omits_a_reshaped_mask_with_matching_bytes():
 
 def _run_worker_with_result(task, result, **overrides):
     """Run the real worker against a fake grid result and record edge calls."""
-    from apps.components.design_inference import _run_inference_background
+    from conninfpy.app.components.design_inference import _run_inference_background
 
     args = {name: None for name in inspect.signature(_run_inference_background).parameters}
     args.update(
@@ -1184,7 +1184,7 @@ def _grid_result(e_grid, h_grid, calls):
 
 
 def test_worker_rejects_a_declared_primary_cell_absent_from_the_grid():
-    from apps.components.design_inference import InferenceTask
+    from conninfpy.app.components.design_inference import InferenceTask
 
     calls = []
     task = InferenceTask()
@@ -1199,7 +1199,7 @@ def test_worker_rejects_a_declared_primary_cell_absent_from_the_grid():
 
 
 def test_worker_rejects_an_ambiguous_declared_primary_cell():
-    from apps.components.design_inference import InferenceTask
+    from conninfpy.app.components.design_inference import InferenceTask
 
     calls = []
     task = InferenceTask()
@@ -1214,7 +1214,7 @@ def test_worker_rejects_an_ambiguous_declared_primary_cell():
 
 
 def test_worker_rejects_an_index_contradicting_the_declared_coordinates():
-    from apps.components.design_inference import InferenceTask
+    from conninfpy.app.components.design_inference import InferenceTask
 
     calls = []
     task = InferenceTask()
@@ -1232,7 +1232,7 @@ def test_results_page_never_badges_a_mismatched_declared_primary():
     """A reloaded plan whose (E, H) is not in this grid must not claim the badge."""
     from conninfpy import analyze
     from conninfpy.atlas import AtlasInfo
-    from apps.utils.result_views import get_2d_result
+    from conninfpy.app.utils.result_views import get_2d_result
 
     n, N = 10, 4
     Y = _corr_stack(n, N, seed=29)
@@ -1279,7 +1279,7 @@ def test_comparative_view_validates_the_declared_primary_against_its_grid():
     """The comparison view and its detail tabs use only a validated declaration."""
     from conninfpy import analyze
     from conninfpy.atlas import AtlasInfo
-    from apps.utils.result_views import get_2d_result
+    from conninfpy.app.utils.result_views import get_2d_result
 
     n, N = 10, 4
     Y = _corr_stack(n, N, seed=33)
@@ -1352,7 +1352,7 @@ def test_replay_manifest_and_methods_match_the_actual_bundle_decision(tmp_path: 
     import io
     import zipfile
 
-    from apps.utils.archive_export import build_analysis_archive
+    from conninfpy.app.utils.archive_export import build_analysis_archive
 
     res, _minimal_plan, _minimal_info = _tstat_result_and_plan()
     plan = _plan_with_new_facts()
@@ -1409,7 +1409,7 @@ def test_replay_manifest_and_methods_match_the_actual_bundle_decision(tmp_path: 
         assert "[4, 4]" in prereq["detail"], label
 
     # A standalone replay config (no archive, no array) is honest too.
-    from apps.utils.archive_export import build_replay_config
+    from conninfpy.app.utils.archive_export import build_replay_config
 
     cfg = build_replay_config(plan, info, project_root=tmp_path)
     text = json.dumps(cfg, ensure_ascii=False)

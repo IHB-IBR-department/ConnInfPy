@@ -19,7 +19,7 @@ import pytest
 pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest
 
-from apps.components.design_inference import (
+from conninfpy.app.components.design_inference import (
     InferenceTask,
     _invalidate_superseded_task,
     _run_inference_background,
@@ -29,7 +29,7 @@ from conninfpy.atlas import AtlasInfo
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-APP = REPO / "apps" / "streamlit_app.py"
+APP = REPO / "conninfpy" / "app" / "streamlit_app.py"
 N = 5
 
 
@@ -287,7 +287,7 @@ def test_successful_run_result_and_workspace_round_trip():
     import io
     import zipfile
 
-    from apps.utils import workspace_io
+    from conninfpy.app.utils import workspace_io
 
     archive, _summary = workspace_io.build_workspace_archive(
         dict(app.session_state), include_data=False

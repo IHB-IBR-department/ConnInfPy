@@ -17,7 +17,7 @@ from conninfpy import analyze, compute_p_val
 from conninfpy.atlas import AtlasInfo
 from conninfpy.results import InferenceResult
 from conninfpy.stats.glm import compute_p_val_glm
-from apps.utils.result_views import (
+from conninfpy.app.utils.result_views import (
     build_cnbs_block_figure,
     build_companion_agreement_figure,
     build_connectivity_maps_figure,
@@ -35,7 +35,7 @@ from apps.utils.result_views import (
 )
 
 
-APP = Path(__file__).resolve().parents[1] / "apps" / "streamlit_app.py"
+APP = Path(__file__).resolve().parents[1] / "conninfpy" / "app" / "streamlit_app.py"
 
 
 def _sym_batch(rng: np.random.Generator, n_sub: int, n_nodes: int) -> np.ndarray:

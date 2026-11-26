@@ -14,7 +14,7 @@ try:
 except ImportError:  # the [app] extra is not installed
     AppTest = None
 
-APP = Path(__file__).resolve().parents[1] / "apps" / "streamlit_app.py"
+APP = Path(__file__).resolve().parents[1] / "conninfpy" / "app" / "streamlit_app.py"
 
 
 @unittest.skipIf(AppTest is None, "streamlit is not installed")

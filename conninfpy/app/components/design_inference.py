@@ -4,8 +4,8 @@ import io
 import numpy as np
 import pandas as pd
 import streamlit as st
-from apps.utils.ui_state import persistent_key, reset_widget_scopes
-from apps.utils.workspace import DATA_TAB, go_to_step
+from conninfpy.app.utils.ui_state import persistent_key, reset_widget_scopes
+from conninfpy.app.utils.workspace import DATA_TAB, go_to_step
 import threading
 import traceback
 from conninfpy.atlas import AtlasInfo
@@ -22,7 +22,7 @@ from conninfpy.defaults import (
     DEFAULT_N_THRESHOLDS_PERMUTATION,
     DEFAULT_START_THRESHOLD,
 )
-from apps.utils.helpers import (
+from conninfpy.app.utils.helpers import (
     active_analysis_atlas,
     atlas_for_annotation,
     atlas_has_networks,
@@ -1779,7 +1779,7 @@ def render_design_inference_view(base_atlas, tabs_list):
     
     if st.session_state.connectivity_data is None or st.session_state.pheno_df is None:
         if st.session_state.get("inference_result") is not None:
-            from apps.utils.workspace import render_restored_workspace_notice
+            from conninfpy.app.utils.workspace import render_restored_workspace_notice
 
             render_restored_workspace_notice()
             st.info(

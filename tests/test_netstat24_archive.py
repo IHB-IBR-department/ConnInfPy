@@ -28,7 +28,7 @@ from conninfpy import ResultBundle, analyze, fisher_r_to_z
 from conninfpy._prepare import make_fisher_entry
 from conninfpy.atlas import AtlasInfo
 
-from apps.utils.archive_export import (
+from conninfpy.app.utils.archive_export import (
     ARCHIVE_SCHEMA_VERSION,
     build_analysis_archive,
     build_replay_config,
@@ -848,7 +848,7 @@ class TestOwnerReplayContract:
         kernel methods stay unknown (nothing records which backend executed);
         numba presence is a separate installation fact.
         """
-        from apps.components.design_inference import InferenceTask, _run_inference_background
+        from conninfpy.app.components.design_inference import InferenceTask, _run_inference_background
 
         rng = np.random.default_rng(11)
         g1 = _batch(rng, 8)
@@ -944,7 +944,7 @@ def test_app_export_button_downloads_real_archive(monkeypatch, tmp_path):
     result = analyze(group1=g1, group2=g2, test_type="two-sample", input="r",
                      method="tstat", n_permutations=20, use_mp=False, rng=7,
                      atlas=ATLAS)
-    app = AppTest.from_file(str(REPO / "apps" / "streamlit_app.py"), default_timeout=180)
+    app = AppTest.from_file(str(REPO / "conninfpy" / "app" / "streamlit_app.py"), default_timeout=180)
     app.session_state.connectivity_data = np.concatenate([g1, g2], axis=0)
     app.session_state.pheno_df = pd.DataFrame({
         "subject_id": [f"s{i}" for i in range(20)],

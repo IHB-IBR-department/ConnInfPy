@@ -4,10 +4,10 @@ from io import BytesIO
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
-from apps.utils.ui_state import persistent_key
-from apps.utils.workspace import require_analysis_step, render_data_table
+from conninfpy.app.utils.ui_state import persistent_key
+from conninfpy.app.utils.workspace import require_analysis_step, render_data_table
 
-from apps.utils.helpers import (
+from conninfpy.app.utils.helpers import (
     active_analysis_atlas,
     atlas_has_coords,
     current_contrast_name,
@@ -15,7 +15,7 @@ from apps.utils.helpers import (
     result_is_stale,
     safe_filename_part,
 )
-from apps.utils.result_views import build_unit_annotation_context, get_2d_result, unwrap_result
+from conninfpy.app.utils.result_views import build_unit_annotation_context, get_2d_result, unwrap_result
 from conninfpy.interpret.annotate import (aggregate_connections, annotate_bna_regions, annotate_rois,
                                           bna_region_ids, summarize_annotation)
 from conninfpy.atlas.brainnetome import BrainnetomeReference
@@ -57,7 +57,7 @@ def render_bna_annotation_view(base_atlas):
         return
     if not require_analysis_step(key="annotation"):
         return
-    from apps.utils.workspace import render_restored_workspace_notice
+    from conninfpy.app.utils.workspace import render_restored_workspace_notice
     render_restored_workspace_notice()
     result = unwrap_result(st.session_state.inference_result)
     if hasattr(result, "keys") and "omnibus" in result and "positive" not in result:

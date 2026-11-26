@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
-from apps.utils.ui_state import persistent_key, persistent_file_uploader, reset_widget_scopes
-from apps.utils.workspace import atlas_display_name, remember_dataset, render_dataset_card
+from conninfpy.app.utils.ui_state import persistent_key, persistent_file_uploader, reset_widget_scopes
+from conninfpy.app.utils.workspace import atlas_display_name, remember_dataset, render_dataset_card
 
 from conninfpy.atlas import AtlasInfo, get_bna_246_nifti_path
 from conninfpy.loaders import (
@@ -17,7 +17,7 @@ from conninfpy.loaders import (
     AbideSchaeferLoader,
 )
 from conninfpy.loaders.manifest import drop_subjects_with_missing
-from apps.utils.lab_loaders import (
+from conninfpy.app.utils.lab_loaders import (
     ChinaCloseCloseLoader,
     MultiSiteOpenCloseLoader,
     OpenCloseLoader,
@@ -26,7 +26,7 @@ from apps.utils.lab_loaders import (
 )
 from conninfpy.topologies import TopologyDatasetGenerator, list_scenarios
 
-from apps.utils.helpers import (
+from conninfpy.app.utils.helpers import (
     LOADER_CLASSES,
     atlas_has_networks,
     clear_downstream_results,
@@ -831,7 +831,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
 
                 with st.expander("Build / inspect manifest from a data folder (fMRIPrep, connectivity, timeseries)", expanded=False):
                     from pathlib import Path as _WizPath
-                    from apps.utils.manifest_wizard import inspect_and_prepare_manifest
+                    from conninfpy.app.utils.manifest_wizard import inspect_and_prepare_manifest
 
                     wiz_data_dir = st.text_input(
                         "Data folder path",
@@ -1308,8 +1308,8 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                     cohort=cohort if ingest_mode == "Built-in data" and dataset_choice == "OpenClose" else None,
                                     manifest_file=str(manifest_file) if ingest_mode == "Dataset Manifest (data.yaml)" else None,
                                 )
-                                from apps.utils.helpers import PROJECT_ROOT
-                                from apps.utils.workspace_io import capture_source_hashes
+                                from conninfpy.app.utils.helpers import PROJECT_ROOT
+                                from conninfpy.app.utils.workspace_io import capture_source_hashes
 
                                 extra_source_paths = {}
                                 if st.session_state.get("atlas_mode") in ("Custom atlas", "Custom atlas CSV") and st.session_state.get("custom_atlas_path"):
@@ -1350,7 +1350,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
 
     # Display data summaries if populated
     if st.session_state.connectivity_data is None and st.session_state.get("inference_result") is not None:
-        from apps.utils.workspace import render_restored_workspace_notice
+        from conninfpy.app.utils.workspace import render_restored_workspace_notice
 
         render_restored_workspace_notice()
     if st.session_state.connectivity_data is not None:

@@ -9,12 +9,12 @@ import nibabel as nib
 import numpy as np
 import pytest
 
-from apps.utils.atlas_wizard import (
+from conninfpy.app.utils.atlas_wizard import (
     custom_atlas_csv_template,
     inspect_atlas_readiness,
     load_custom_atlas_nifti,
 )
-from apps.utils.helpers import load_custom_atlas_csv
+from conninfpy.app.utils.helpers import load_custom_atlas_csv
 from conninfpy.atlas import AtlasInfo
 
 

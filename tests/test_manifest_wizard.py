@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from apps.utils.manifest_wizard import inspect_and_prepare_manifest
+from conninfpy.app.utils.manifest_wizard import inspect_and_prepare_manifest
 from conninfpy.loaders.manifest import DatasetManifest, ManifestLoader
 
 

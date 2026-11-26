@@ -13,7 +13,7 @@ from conninfpy.loaders.builtins import NumpyLoader, NiftiDirectoryLoader
 from conninfpy.loaders.manifest import DatasetManifest
 from conninfpy.atlas import AtlasInfo
 from conninfpy.plot import plot_connectome_graph
-from apps.utils.helpers import align_atlas_coordinates
+from conninfpy.app.utils.helpers import align_atlas_coordinates
 import matplotlib
 
 class TestManifestLoader(unittest.TestCase):

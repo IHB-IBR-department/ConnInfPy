@@ -429,8 +429,8 @@ def _remove_mc_fields_from_state_doc(state_doc):
 def test_workspace_v2_round_trip_preserves_counts_rng_and_caption(tmp_path):
     import json
 
-    from apps.components.inference_results import _monte_carlo_caption
-    from apps.utils.workspace_io import (
+    from conninfpy.app.components.inference_results import _monte_carlo_caption
+    from conninfpy.app.utils.workspace_io import (
         WORKSPACE_STATE_PATH,
         WORKSPACE_SCHEMA_VERSION,
         build_workspace_archive,
@@ -483,7 +483,7 @@ def test_workspace_legacy_without_mc_fields_restores_as_unknown(
 ):
     import json
 
-    from apps.utils.workspace_io import (
+    from conninfpy.app.utils.workspace_io import (
         WORKSPACE_MANIFEST_PATH,
         WORKSPACE_SCHEMA_VERSION,
         WORKSPACE_STATE_PATH,

@@ -17,8 +17,8 @@ import yaml
 
 
 def _find_app_script() -> Optional[Path]:
-    """Locate ``apps/streamlit_app.py`` from the installed package or repo checkout."""
-    spec = importlib.util.find_spec("apps.streamlit_app")
+    """Locate the packaged Streamlit script, with a checkout fallback."""
+    spec = importlib.util.find_spec("conninfpy.app.streamlit_app")
     if spec is not None and spec.origin is not None:
         p = Path(spec.origin)
         if p.is_file():
@@ -41,7 +41,7 @@ def launch_app(extra_args: Optional[Sequence[str]] = None) -> int:
     app_script = _find_app_script()
     if app_script is None:
         print(
-            "conninfpy: could not locate apps/streamlit_app.py in the installed package or repository.",
+            "conninfpy: could not locate the ConnInfPy Streamlit application.",
             file=sys.stderr,
         )
         return 1

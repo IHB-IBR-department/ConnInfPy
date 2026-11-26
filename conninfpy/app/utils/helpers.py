@@ -20,7 +20,7 @@ from conninfpy.loaders import (
 )
 # Lab-specific loaders live with the app; importing them also registers
 # them for manifests (e.g. datasets/open_close.yaml).
-from apps.utils.lab_loaders import (
+from conninfpy.app.utils.lab_loaders import (
     ChinaCloseCloseLoader,
     CustomPreparedZerssenLoader,
     MultiSiteOpenCloseLoader,
@@ -30,7 +30,7 @@ from apps.utils.lab_loaders import (
 )
 
 APP_DIR = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = APP_DIR.parent
+PROJECT_ROOT = APP_DIR.parent.parent
 
 LOADER_CLASSES = {
     "AbideSchaeferLoader": AbideSchaeferLoader,

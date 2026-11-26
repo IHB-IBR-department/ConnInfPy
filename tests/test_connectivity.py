@@ -106,7 +106,7 @@ def test_manifest_variable_length_cli_and_rois(tmp_path):
 
 
 def test_open_close_loader_uses_shared_estimator(tmp_path):
-    from apps.utils.lab_loaders import OpenCloseLoader
+    from conninfpy.app.utils.lab_loaders import OpenCloseLoader
     rng = np.random.default_rng(1)
     a = rng.normal(size=(3, 30, 4)); b = rng.normal(size=(3, 35, 4)); b[1, 1, 0] = np.nan
     np.save(tmp_path / 'a.npy', a); np.save(tmp_path / 'b.npy', b)

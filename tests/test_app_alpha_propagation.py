@@ -16,7 +16,7 @@ from streamlit.testing.v1 import AppTest
 from conninfpy import compute_p_val
 from conninfpy.atlas import AtlasInfo
 
-APP = Path(__file__).resolve().parents[1] / "apps" / "streamlit_app.py"
+APP = Path(__file__).resolve().parents[1] / "conninfpy" / "app" / "streamlit_app.py"
 N = 8
 
 
@@ -171,7 +171,7 @@ def test_graph_cutoff_slider_resets_when_a_new_run_changes_alpha():
 
 def test_annotation_alpha_follows_new_run_alpha():
     """Tab 4 detection threshold defaults to the new run's alpha after a result update."""
-    from apps.utils.workspace import ANNOTATION_TAB
+    from conninfpy.app.utils.workspace import ANNOTATION_TAB
 
     res1 = _result_with_p(_p_map())
     app = AppTest.from_file(str(APP), default_timeout=120)

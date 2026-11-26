@@ -35,8 +35,8 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest
 
 import conninfpy
-from apps.components import design_inference as design
-from apps.components.design_inference import InferenceTask, _run_inference_background
+from conninfpy.app.components import design_inference as design
+from conninfpy.app.components.design_inference import InferenceTask, _run_inference_background
 from conninfpy import InferenceCancelled, ProgressSession, analyze
 from conninfpy.atlas import AtlasInfo
 from conninfpy.stats import _workers
@@ -44,7 +44,7 @@ from conninfpy.stats._workers import prepare_run, run_permutations, run_permutat
 from tests.mp_helpers import sum_squares_chunk
 
 REPO = Path(__file__).resolve().parents[1]
-APP = REPO / "apps" / "streamlit_app.py"
+APP = REPO / "conninfpy" / "app" / "streamlit_app.py"
 N = 5
 START_METHODS = [
     name for name in ("spawn", "forkserver")

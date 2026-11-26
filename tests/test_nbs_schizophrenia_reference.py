@@ -29,7 +29,7 @@ except ImportError:  # the [app] extra is not installed
     AppTest = None
 
 REPO = Path(__file__).resolve().parents[1]
-APP = REPO / "apps" / "streamlit_app.py"
+APP = REPO / "conninfpy" / "app" / "streamlit_app.py"
 MANIFEST = REPO / "datasets" / "nbs_schizophrenia.yaml"
 REFERENCE = REPO / "tests" / "data" / "nbs_schizophrenia_matlab_reference.json"
 N_NODES = 74

@@ -16,7 +16,7 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest
 
 REPO = Path(__file__).resolve().parents[1]
-APP = REPO / "apps" / "streamlit_app.py"
+APP = REPO / "conninfpy" / "app" / "streamlit_app.py"
 DESIGN_INFERENCE = REPO / "apps" / "components" / "design_inference.py"
 
 
@@ -186,7 +186,7 @@ def test_worker_fallback_dispatch_uses_shared_defaults(use_ast_loader):
     if use_ast_loader:
         worker = _load_ast_worker()
     else:
-        from apps.components.design_inference import _run_inference_background as worker
+        from conninfpy.app.components.design_inference import _run_inference_background as worker
 
     fake_result = SimpleNamespace(significant_edges=lambda **kw: [])
     atlas = SimpleNamespace(network_index=lambda: [0, 0, 1, 1])

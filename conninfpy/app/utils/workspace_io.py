@@ -8,7 +8,7 @@ integrity checksums and schema metadata live in ``workspace/manifest.json``.
 A workspace can be saved either as a standalone workspace archive
 (``workspace/*`` + root ``manifest.json``) or embedded as the additive
 ``workspace/`` layer inside a full analysis archive
-(:mod:`apps.utils.archive_export`). Inspection and restoration never import
+(:mod:`conninfpy.app.utils.archive_export`). Inspection and restoration never import
 ``pickle`` and never read ``bundle.pkl``.
 
 ``state.json`` carries the explicit contract sections ``source_refs``,
@@ -1310,7 +1310,7 @@ def build_workspace_archive(
     ``build_analysis_archive`` directly (``include_bundle=True``), so an
     operator can still request the trusted bundle deliberately.
     """
-    from apps.utils.archive_export import (
+    from conninfpy.app.utils.archive_export import (
         ARCHIVE_KIND,
         ARCHIVE_SCHEMA_VERSION,
         archive_zip_bytes,
@@ -1385,7 +1385,7 @@ def build_workspace_archive(
 
 def workspace_filename(state: Mapping[str, Any]) -> str:
     """Deterministic download filename for a workspace archive."""
-    from apps.utils.helpers import safe_filename_part
+    from conninfpy.app.utils.helpers import safe_filename_part
 
     info = state.get("dataset_info") or {}
     name = safe_filename_part(str(info.get("name") or "workspace"))

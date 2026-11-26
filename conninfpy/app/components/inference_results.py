@@ -1,13 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import streamlit as st
-from apps.utils.ui_state import persistent_key
-from apps.utils.workspace import require_analysis_step
+from conninfpy.app.utils.ui_state import persistent_key
+from conninfpy.app.utils.workspace import require_analysis_step
 import pandas as pd
 from io import BytesIO
 
 from conninfpy.plot import plot_connectome_graph
-from apps.utils.helpers import (
+from conninfpy.app.utils.helpers import (
     active_analysis_atlas,
     atlas_for_annotation,
     atlas_has_coords,
@@ -18,7 +18,7 @@ from apps.utils.helpers import (
     safe_filename_part,
     render_help,
 )
-from apps.utils.result_views import (
+from conninfpy.app.utils.result_views import (
     build_cnbs_block_figure,
     build_companion_agreement_figure,
     build_connectivity_maps_figure,
@@ -1440,8 +1440,8 @@ def _render_archive_export(base_atlas, effect_mask):
     or simulation is (re)run; current display widgets are never written back
     into the captured analysis facts.
     """
-    from apps.utils.archive_export import archive_filename, build_analysis_archive
-    from apps.utils.helpers import PROJECT_ROOT
+    from conninfpy.app.utils.archive_export import archive_filename, build_analysis_archive
+    from conninfpy.app.utils.helpers import PROJECT_ROOT
 
     run_plan = st.session_state.get("run_plan") or {}
     result = st.session_state.inference_result
@@ -1512,7 +1512,7 @@ def render_inference_results_view(base_atlas):
     if not require_analysis_step(key="results"):
         return
 
-    from apps.utils.workspace import render_restored_workspace_notice
+    from conninfpy.app.utils.workspace import render_restored_workspace_notice
     render_restored_workspace_notice()
 
     _render_archive_export(base_atlas, st.session_state.get("_synthetic_effect_mask"))

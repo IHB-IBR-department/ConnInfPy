@@ -230,7 +230,7 @@ def test_cnbs_metadata_reports_empirical_inference_even_if_acceleration_requeste
 
 
 def test_legacy_open_close_loader_keeps_undefined_correlations(tmp_path):
-    from apps.utils.lab_loaders import OpenCloseLoader
+    from conninfpy.app.utils.lab_loaders import OpenCloseLoader
     signals = np.random.default_rng(11).normal(size=(2, 8, 3))
     signals[:, :, 1] = 4
     path = tmp_path / "signals.npy"
@@ -280,7 +280,7 @@ def test_tail_invalid_values_fallback_and_numerical_zero_is_positive():
 @pytest.mark.parametrize("kind,expected", [("correlation", "r"), ("fisher_z", "z"), (None, None)])
 def test_app_primary_and_companion_dispatch_scale_and_tail(kind, expected):
     # Load the actual worker without importing/rendering the Streamlit UI.
-    source = Path(__file__).resolve().parents[1] / "apps/components/design_inference.py"
+    source = Path(__file__).resolve().parents[1] / "conninfpy/app/components/design_inference.py"
     tree = ast.parse(source.read_text())
     names = {"_run_inference_background", "_method_plan_parameters"}
     module = ast.Module(body=[n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names],

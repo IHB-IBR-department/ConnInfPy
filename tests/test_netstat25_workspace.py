@@ -15,11 +15,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from apps.utils import workspace_io
-from apps.utils.archive_export import build_analysis_archive
-from apps.utils.helpers import active_analysis_atlas, result_is_stale
-from apps.utils.workspace import ANNOTATION_TAB, RESULTS_TAB
-from apps.utils.workspace_io import (
+from conninfpy.app.utils import workspace_io
+from conninfpy.app.utils.archive_export import build_analysis_archive
+from conninfpy.app.utils.helpers import active_analysis_atlas, result_is_stale
+from conninfpy.app.utils.workspace import ANNOTATION_TAB, RESULTS_TAB
+from conninfpy.app.utils.workspace_io import (
     WORKSPACE_ARRAYS_PATH,
     WORKSPACE_MANIFEST_PATH,
     WORKSPACE_SCHEMA_VERSION,
@@ -671,7 +671,7 @@ def test_two_independent_apptest_sessions_save_and_restore(tmp_path: Path, monke
     monkeypatch.setattr(MediaFileManager, "add", _spy_add)
 
     # Session 1: Load synthetic-like small state via AppTest, run through real app rendering, save workspace ZIP
-    app_path = str(Path(__file__).resolve().parents[1] / "apps" / "streamlit_app.py")
+    app_path = str(Path(__file__).resolve().parents[1] / "conninfpy" / "app" / "streamlit_app.py")
     at1 = AppTest.from_file(app_path, default_timeout=60)
     src_state = _make_full_state(tmp_path)
     for k, v in src_state.items():

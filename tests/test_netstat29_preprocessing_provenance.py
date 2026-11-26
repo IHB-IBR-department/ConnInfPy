@@ -49,8 +49,8 @@ from conninfpy.preprocessing import (
 )
 
 pytest.importorskip("streamlit")  # the UI helpers below import streamlit
-from apps.utils.helpers import describe_preprocessing_facts, fisher_clip_note
-from apps.utils.result_views import describe_result_scale_and_stat
+from conninfpy.app.utils.helpers import describe_preprocessing_facts, fisher_clip_note
+from conninfpy.app.utils.result_views import describe_result_scale_and_stat
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -558,7 +558,7 @@ class TestScaleLabels:
     def test_coupling_note_mentions_gsr_context_without_causal_claims(self):
         res = _result_with_preprocessing({"gsr": fact(True, SOURCE_LOADER_DENOISING),
                                           "connectivity_method": fact("partial", SOURCE_COMPUTED)})
-        from apps.utils.result_views import prepare_predicted_coupling_summary
+        from conninfpy.app.utils.result_views import prepare_predicted_coupling_summary
         info = prepare_predicted_coupling_summary(res)
         if info["coupling_note"] is not None:
             note = info["coupling_note"]
@@ -867,7 +867,7 @@ def _site_config(tmp_path: Path, site: str, n_sub: int, token: str) -> dict:
 
 class TestMultisitePreprocessingAggregation:
     def test_heterogeneous_gsr_stays_unknown_globally_with_per_site_facts(self, tmp_path):
-        from apps.utils.lab_loaders import MultiSiteOpenCloseLoader
+        from conninfpy.app.utils.lab_loaders import MultiSiteOpenCloseLoader
         cfg = {"sitea": _site_config(tmp_path, "sitea", 2, "GSR"),
                "siteb": _site_config(tmp_path, "siteb", 2, "no_GSR")}
         ds = MultiSiteOpenCloseLoader(cfg).load()
@@ -882,7 +882,7 @@ class TestMultisitePreprocessingAggregation:
         assert record["standardize"] == {"value": True, "source": SOURCE_COMPUTED}
 
     def test_homogeneous_sites_keep_known_gsr(self, tmp_path):
-        from apps.utils.lab_loaders import MultiSiteOpenCloseLoader
+        from conninfpy.app.utils.lab_loaders import MultiSiteOpenCloseLoader
         gsr = MultiSiteOpenCloseLoader({"a": _site_config(tmp_path, "ha", 2, "GSR"),
                                         "b": _site_config(tmp_path, "hb", 2, "GSR")}).load()
         assert gsr.provenance["preprocessing"]["gsr"] == {
@@ -893,7 +893,7 @@ class TestMultisitePreprocessingAggregation:
             "value": False, "source": SOURCE_FILE_TOKEN}
 
     def test_known_plus_unknown_is_globally_unknown(self, tmp_path):
-        from apps.utils.lab_loaders import MultiSiteOpenCloseLoader
+        from conninfpy.app.utils.lab_loaders import MultiSiteOpenCloseLoader
         from conninfpy.preprocessing import aggregate_preprocessing_records
         # Site files with and without a GSR token: known+unknown → unknown.
         ds = MultiSiteOpenCloseLoader({"ka": _site_config(tmp_path, "ka", 2, "GSR"),
@@ -964,7 +964,7 @@ class TestPerSiteFactsThroughTheOrdinaryChain:
         assert cli_bundle.metadata["preprocessing"]["per_site"]["a"]["gsr"]["value"] is True
 
     def test_homogeneous_false_and_known_plus_unknown(self, tmp_path):
-        from apps.utils.lab_loaders import MultiSiteOpenCloseLoader
+        from conninfpy.app.utils.lab_loaders import MultiSiteOpenCloseLoader
         both = MultiSiteOpenCloseLoader({
             "a": _site_config(tmp_path, "fa", 2, "noGSR"),
             "b": _site_config(tmp_path, "fb", 2, "no-GSR")}).load()
@@ -1003,7 +1003,7 @@ class TestPerSiteFactsThroughTheOrdinaryChain:
         assert merged["gsr"]["value"] is True and set(merged["per_site"]) == {"a"}
 
     def test_gui_shows_per_site_context_without_common_claim(self):
-        from apps.utils.helpers import describe_per_site_facts
+        from conninfpy.app.utils.helpers import describe_per_site_facts
         record = normalize_preprocessing_record({
             "per_site": {"a": {"gsr": fact(True, SOURCE_FILE_TOKEN)},
                          "b": {"gsr": fact(False, SOURCE_FILE_TOKEN)}}})
@@ -1088,7 +1088,7 @@ class TestIncomingFisherHistoryGuards:
 class TestAppPaths:
     def test_apply_fisher_z_button_uses_shared_clip_r_policy(self):
         from streamlit.testing.v1 import AppTest
-        app = AppTest.from_file(str(REPO / "apps" / "streamlit_app.py"), default_timeout=180)
+        app = AppTest.from_file(str(REPO / "conninfpy" / "app" / "streamlit_app.py"), default_timeout=180)
         rng = np.random.default_rng(17)
         r = np.tanh(rng.normal(0, 0.3, (6, 5, 5)))
         r = (r + r.transpose(0, 2, 1)) / 2
@@ -1124,7 +1124,7 @@ class TestAppPaths:
 
     def test_apply_fisher_z_rejects_invalid_input_without_touching_state(self):
         from streamlit.testing.v1 import AppTest
-        app = AppTest.from_file(str(REPO / "apps" / "streamlit_app.py"), default_timeout=180)
+        app = AppTest.from_file(str(REPO / "conninfpy" / "app" / "streamlit_app.py"), default_timeout=180)
         rng = np.random.default_rng(18)
         r = np.tanh(rng.normal(0, 0.3, (6, 5, 5)))
         r = (r + r.transpose(0, 2, 1)) / 2
@@ -1149,7 +1149,7 @@ class TestAppPaths:
 
     def test_dataset_card_lists_known_and_unknown_facts(self):
         from streamlit.testing.v1 import AppTest
-        app = AppTest.from_file(str(REPO / "apps" / "streamlit_app.py"), default_timeout=180).run()
+        app = AppTest.from_file(str(REPO / "conninfpy" / "app" / "streamlit_app.py"), default_timeout=180).run()
         next(rd for rd in app.radio if rd.label == "Select Ingestion Method").set_value("Built-in data").run()
         next(b for b in app.button if b.label == "Load, Preprocess & Validate Data").click().run()
         assert not app.exception
@@ -1169,7 +1169,7 @@ class TestAppPaths:
         assert history[0]["policy"] == "clip_z"
 
     def test_worker_threads_record_into_run_plan_and_result(self):
-        from apps.components.design_inference import InferenceTask, _run_inference_background
+        from conninfpy.app.components.design_inference import InferenceTask, _run_inference_background
         g1, g2 = _two_groups(seed=21)
         pheno = pd.DataFrame({"subject_id": [f"s{i}" for i in range(12)],
                               "group": [0] * 6 + [1] * 6})

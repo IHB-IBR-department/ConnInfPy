@@ -33,8 +33,8 @@ import pytest
 pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest
 
-from apps.components import design_inference as design
-from apps.components.design_inference import (
+from conninfpy.app.components import design_inference as design
+from conninfpy.app.components.design_inference import (
     LAUNCH_FACT_COVERAGE,
     InferenceTask,
     _normalize_fact,
@@ -44,7 +44,7 @@ from apps.components.design_inference import (
 )
 
 REPO = Path(__file__).resolve().parents[1]
-APP = REPO / "apps" / "streamlit_app.py"
+APP = REPO / "conninfpy" / "app" / "streamlit_app.py"
 
 
 # ----------------------------------------------------------------------

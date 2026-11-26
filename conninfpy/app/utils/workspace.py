@@ -117,7 +117,7 @@ def dataset_summary():
     else:
         info.setdefault("observations", "—")
         if "n_rois" not in info and result is not None:
-            from apps.utils.result_views import unwrap_result
+            from conninfpy.app.utils.result_views import unwrap_result
             inner = unwrap_result(result)
             first_arr = next(iter(inner.values())) if hasattr(inner, "values") and len(inner) else None
             info["n_rois"] = int(first_arr.shape[0]) if first_arr is not None else "—"
@@ -147,7 +147,7 @@ def render_dataset_card():
         status_note = "Validated"
     st.caption(f"{info['source']} · {info['atlas']} · {status_note}")
     record = st.session_state.get("dataset_preprocessing")
-    from apps.utils.helpers import describe_per_site_facts, describe_preprocessing_facts
+    from conninfpy.app.utils.helpers import describe_per_site_facts, describe_preprocessing_facts
     with st.expander("Preprocessing facts (known / unknown)", expanded=False):
         for label, value, source in describe_preprocessing_facts(record):
             st.markdown(f"- **{label}:** {value} — *{source}*")
