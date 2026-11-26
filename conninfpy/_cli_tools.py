@@ -161,16 +161,29 @@ def run_qc(
     val_report = validate_loaded_dataset(dataset, check_inference_ready=False)
 
     kwargs, summary = build_analysis(dataset, cfg)
-    atlas = _atlas(cfg.get("atlas"), dataset, base, summary["n_regions"])
+    atlas = _atlas(
+        cfg.get("atlas"),
+        dataset,
+        base,
+        summary["n_regions"],
+        lut_spec=cfg.get("atlas_lut"),
+    )
 
     warnings_list: List[str] = list(val_report.warnings) + list(summary.get("loader_warnings") or [])
     errors_list: List[str] = list(val_report.errors)
 
-    n_dropped = int(summary["n_subjects_in_data"] - summary["n_subjects_used"])
-    if n_dropped > 0:
-        warnings_list.append(
-            f"{n_dropped} of {summary['n_subjects_in_data']} observation(s) dropped due to missing design values or level filtering."
-        )
+    if summary["design"] == "paired":
+        n_dropped = int(summary["n_dropped"])
+        if n_dropped > 0:
+            warnings_list.append(
+                f"{n_dropped} of {summary['n_scans_in_data']} scan(s) dropped due to missing design values or incomplete pairs."
+            )
+    else:
+        n_dropped = int(summary["n_subjects_in_data"] - summary["n_subjects_used"])
+        if n_dropped > 0:
+            warnings_list.append(
+                f"{n_dropped} of {summary['n_subjects_in_data']} observation(s) dropped due to missing design values or level filtering."
+            )
 
     pheno = dataset.pheno
     tr_summary = None
@@ -251,6 +264,11 @@ def run_qc(
         "warnings": warnings_list,
         "errors": errors_list,
     }
+    if summary["design"] == "paired":
+        report["n_scans_in_data"] = int(summary["n_scans_in_data"])
+        report["n_pairs_used"] = int(summary["n_pairs_used"])
+        report["n_scans_used"] = int(summary["n_scans_used"])
+        report["contrast_direction"] = summary["contrast_direction"]
 
     if out_path is not None:
         Path(out_path).write_text(json.dumps(report, indent=2, default=_jsonable), encoding="utf-8")
@@ -259,10 +277,18 @@ def run_qc(
         print(json.dumps(report, indent=2, default=_jsonable))
     else:
         status_txt = "PASS" if ok else "FAIL"
-        print(
-            f"conninfpy qc [{status_txt}] — {summary['design']} | "
-            f"{summary['n_subjects_used']}/{summary['n_subjects_in_data']} subjects × {summary['n_regions']} regions"
-        )
+        if summary["design"] == "paired":
+            print(
+                f"conninfpy qc [{status_txt}] — {summary['design']} | "
+                f"{summary['n_scans_in_data']} scans -> {summary['n_pairs_used']} complete pairs "
+                f"({n_dropped} dropped) × {summary['n_regions']} regions"
+            )
+            print(f"  contrast: {summary['contrast_direction']}")
+        else:
+            print(
+                f"conninfpy qc [{status_txt}] — {summary['design']} | "
+                f"{summary['n_subjects_used']}/{summary['n_subjects_in_data']} subjects × {summary['n_regions']} regions"
+            )
         if balance:
             print(f"  balance: {json.dumps(balance)}")
         if design_diag is not None:
@@ -665,28 +691,56 @@ def _resolve_atlas_for_interpret(
     atlas_spec: Optional[str],
     provenance_path: Optional[Path],
     n_regions: int,
+    atlas_lut: Optional[str] = None,
 ) -> Any:
     from conninfpy.atlas.metadata import AtlasInfo
+    from conninfpy.cli import _BUILTIN_ATLASES, _is_nifti_path
 
+    def _load_file_atlas(path: Path, lut: Optional[Path]) -> Any:
+        if _is_nifti_path(str(path)):
+            return AtlasInfo.from_nifti(str(path), lut=str(lut) if lut is not None else None)
+        return AtlasInfo.from_csv(str(path))
+
+    atlas = None
     if atlas_spec is not None:
-        if atlas_spec in ("schaefer_100_yeo7", "schaefer_200_yeo7", "schaefer_400_yeo7", "bna_246"):
-            return getattr(AtlasInfo, atlas_spec)()
-        return AtlasInfo.from_csv(atlas_spec)
+        if atlas_spec in _BUILTIN_ATLASES:
+            atlas = getattr(AtlasInfo, atlas_spec)()
+        else:
+            lut_path = Path(atlas_lut) if atlas_lut is not None else None
+            atlas = _load_file_atlas(Path(atlas_spec), lut_path)
+        if len(atlas) != n_regions:
+            raise ValueError(f"atlas has {len(atlas)} regions but the data has {n_regions}.")
+        return atlas
 
     if provenance_path is not None and provenance_path.is_file():
         try:
             prov = json.loads(provenance_path.read_text(encoding="utf-8"))
-            cfg_atlas = (prov.get("config") or {}).get("atlas")
+            cfg = prov.get("config") or {}
+            cfg_atlas = cfg.get("atlas")
+            cfg_lut = atlas_lut or cfg.get("atlas_lut")
             if isinstance(cfg_atlas, str):
-                if cfg_atlas in ("schaefer_100_yeo7", "schaefer_200_yeo7", "schaefer_400_yeo7", "bna_246"):
-                    return getattr(AtlasInfo, cfg_atlas)()
-                candidates = []
-                if prov.get("analysis_file"):
-                    candidates.append(Path(prov["analysis_file"]).parent / cfg_atlas)
-                candidates.append(Path(provenance_path).parent / cfg_atlas)
-                for cand in candidates:
-                    if cand.is_file():
-                        return AtlasInfo.from_csv(str(cand))
+                if cfg_atlas in _BUILTIN_ATLASES:
+                    atlas = getattr(AtlasInfo, cfg_atlas)()
+                else:
+                    base_candidates = []
+                    if prov.get("analysis_file"):
+                        base_candidates.append(Path(prov["analysis_file"]).parent)
+                    base_candidates.append(Path(provenance_path).parent)
+                    for base_dir in base_candidates:
+                        cand = base_dir / cfg_atlas
+                        if cand.is_file():
+                            lut_path = None
+                            if cfg_lut is not None:
+                                lut_cand = Path(cfg_lut)
+                                lut_path = lut_cand if lut_cand.is_absolute() else (base_dir / lut_cand)
+                            atlas = _load_file_atlas(cand, lut_path)
+                            break
+                if atlas is not None:
+                    if len(atlas) != n_regions:
+                        raise ValueError(f"atlas has {len(atlas)} regions but the data has {n_regions}.")
+                    return atlas
+        except ValueError:
+            raise
         except Exception:
             pass
 
@@ -753,6 +807,7 @@ def interpret_outputs(
     target: "str | os.PathLike[str]",
     *,
     atlas_spec: Optional[str] = None,
+    atlas_lut: Optional[str] = None,
     cerebellum: Optional[str] = None,
     alpha: Optional[float] = None,
     out_dir: "str | os.PathLike[str] | None" = None,
@@ -820,7 +875,12 @@ def interpret_outputs(
         suffix = stem[len("bundle"):]
         bundle = ResultBundle.load(bp)
         n_regions = len(bundle.roi_ids)
-        atlas = _resolve_atlas_for_interpret(atlas_spec, prov_path if prov_path.is_file() else None, n_regions)
+        atlas = _resolve_atlas_for_interpret(
+            atlas_spec,
+            prov_path if prov_path.is_file() else None,
+            n_regions,
+            atlas_lut=atlas_lut,
+        )
         pvals_path = base_dir / f"pvals{suffix}.npz"
         inf_res = _reconstruct_inference_result(bundle, pvals_path if pvals_path.is_file() else None)
         is_grid = getattr(inf_res, "is_grid", False)

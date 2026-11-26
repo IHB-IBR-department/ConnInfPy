@@ -463,7 +463,8 @@ Brainnetome map (integer-lattice coincidence, no resampling), and the upstream
 release notes declare the collection CC-BY. Opt-in runtime integration is
 available in `conninfpy.interpret` and `conninfpy.plot.plot_connectogram()` via
 `BrainnetomeReference.load(..., resolution_mm=1, cerebellum="anatom")` (or
-`"buckner7"`, `"buckner17"`, `"nettekoven"`, or `conninfpy interpret --cerebellum anatom`),
+`conninfpy interpret --cerebellum anatom`, which already attaches the Buckner 7/17
+and Nettekoven crosswalk columns),
 which resolves ROIs outside BNA-246 into cerebellar parcels, assigns
 `cerebello-*` circuit classes and crossed/ipsilateral lateralization, and adds
 cerebellar sectors to connectograms. Sources, SHA256 hashes, per-file licence

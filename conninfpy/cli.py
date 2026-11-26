@@ -62,7 +62,7 @@ import yaml
 from conninfpy._shared.alignment import IdAlignmentError, paired_id_permutation
 
 DESIGNS = ("glm", "two-sample", "paired", "one-sample")
-_TOP_LEVEL_KEYS = {"data", "input", "design", "inference", "atlas", "alpha", "output", "connectivity",
+_TOP_LEVEL_KEYS = {"data", "input", "design", "inference", "atlas", "atlas_lut", "alpha", "output", "connectivity",
                     "diagnostics", "interpret"}
 _KIND_TO_INPUT = {"correlation": "r", "fisher_z": "z"}
 _BUILTIN_ATLASES = ("schaefer_100_yeo7", "schaefer_200_yeo7", "schaefer_400_yeo7", "bna_246")
@@ -315,6 +315,16 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
             levels = design.get("levels")
             if not group_col or not levels or len(levels) != 2:
                 raise ConfigError("type 'two-sample' needs design.group and two design.levels.")
+            if confound_cols:
+                conf_yaml = ", ".join(confound_cols)
+                raise ConfigError(
+                    "type 'two-sample' does not support design.confounds; use type 'glm' instead.\n"
+                    "design:\n"
+                    "  type: glm\n"
+                    f"  interest: {group_col}\n"
+                    f"  interest_reference: {levels[0]}\n"
+                    f"  confounds: [{conf_yaml}]"
+                )
             used = [group_col] + _as_list(site_col)
             keep = _columns(pheno, used, "design").notna().all(axis=1).to_numpy()
             keep = keep & pheno[group_col].isin(levels).to_numpy()  # not in place: pandas 3 arrays can be read-only
@@ -328,6 +338,16 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
                 kwargs["sites"] = np.concatenate([pheno.loc[g1, site_col], pheno.loc[g2, site_col]])
             n_used = int(g1.sum() + g2.sum())
         else:
+            if confound_cols or site_col:
+                unsupported = []
+                if confound_cols:
+                    unsupported.append("design.confounds")
+                if site_col:
+                    unsupported.append("design.sites")
+                raise ConfigError(
+                    f"type 'one-sample' does not support {' or '.join(unsupported)}; "
+                    "one-sample tests the group mean against zero without covariates or site harmonization."
+                )
             kwargs.update(group1=Y, test_type="one-sample")
             n_used = Y.shape[0]
 
@@ -445,6 +465,12 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
         "connectivity_diagnostics": dataset.pheno[[c for c in ("n_valid_tr", "delta_s") if c in dataset.pheno]].to_dict(orient="list"),
         "loader_warnings": dataset.warnings,
     }
+    if kind == "paired":
+        summary["n_scans_in_data"] = int(Y.shape[0])
+        summary["n_pairs_used"] = int(n_used)
+        summary["n_scans_used"] = int(2 * n_used)
+        summary["n_dropped"] = int(Y.shape[0] - 2 * n_used)
+        summary["contrast_direction"] = f"positive: {levels[1]} > {levels[0]}"
     if fisher_entry is not None:
         summary["fisher_applied"] = {
             "policy": fisher_entry["policy"],
@@ -454,7 +480,18 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
     return kwargs, summary
 
 
-def _atlas(spec: Any, dataset: Any, base: Path, n_regions: int) -> Any:
+def _is_nifti_path(spec: str) -> bool:
+    lower = spec.lower()
+    return lower.endswith(".nii") or lower.endswith(".nii.gz")
+
+
+def _atlas(
+    spec: Any,
+    dataset: Any,
+    base: Path,
+    n_regions: int,
+    lut_spec: Any = None,
+) -> Any:
     from conninfpy.atlas.metadata import AtlasInfo
 
     if spec is None:
@@ -462,7 +499,12 @@ def _atlas(spec: Any, dataset: Any, base: Path, n_regions: int) -> Any:
     elif spec in _BUILTIN_ATLASES:
         atlas = getattr(AtlasInfo, spec)()
     else:
-        atlas = AtlasInfo.from_csv(str((base / spec).resolve()))
+        atlas_path = (base / str(spec)).resolve()
+        if _is_nifti_path(str(atlas_path)):
+            lut_path = str((base / str(lut_spec)).resolve()) if lut_spec else None
+            atlas = AtlasInfo.from_nifti(str(atlas_path), lut=lut_path)
+        else:
+            atlas = AtlasInfo.from_csv(str(atlas_path))
     if atlas is not None and len(atlas) != n_regions:
         raise ConfigError(f"atlas has {len(atlas)} regions but the data has {n_regions}.")
     return atlas
@@ -697,7 +739,13 @@ def run(
         inference["method"] = str(method)
     if seed is not None:
         inference["rng"] = int(seed)
-    atlas = _atlas(cfg.get("atlas"), dataset, base, summary["n_regions"])
+    atlas = _atlas(
+        cfg.get("atlas"),
+        dataset,
+        base,
+        summary["n_regions"],
+        lut_spec=cfg.get("atlas_lut"),
+    )
     alpha = float(cfg.get("alpha", 0.05))
     motion_qc_spec = _motion_qc_spec(dataset, cfg, kwargs=kwargs, enabled=motion_qc)
     if motion_qc_spec is not None:
@@ -734,7 +782,14 @@ def run(
         )
         print(f"conninfpy {__version__} — dry-run (no permutations run, no files written)")
         print(f"  design:        {summary['design']}")
-        print(f"  subjects:      {summary['n_subjects_used']} used ({n_dropped} dropped)")
+        if summary["design"] == "paired":
+            print(
+                f"  scans/pairs:   {summary['n_scans_in_data']} scans -> "
+                f"{summary['n_pairs_used']} complete pairs ({summary['n_dropped']} dropped)"
+            )
+            print(f"  contrast:      {summary['contrast_direction']}")
+        else:
+            print(f"  subjects:      {summary['n_subjects_used']} used ({n_dropped} dropped)")
         print(f"  regions:       {summary['n_regions']}")
         print(f"  atlas:         {atlas_label}")
         print(f"  method:        {inference.get('method', 'tfnbs')}")
@@ -848,6 +903,7 @@ def run(
         interp_written = interpret_outputs(
             out,
             atlas_spec=opts.get("atlas"),
+            atlas_lut=opts.get("atlas_lut") or cfg.get("atlas_lut"),
             cerebellum=opts.get("cerebellum"),
             alpha=float(opts.get("alpha", alpha)),
             out_dir=out / opts["out"] if opts.get("out") else out / "interpretation",
@@ -1054,12 +1110,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="export node/network summaries, Brainnetome annotations, and figures from run outputs",
     )
     p_interp.add_argument("target", help="conninfpy run output directory or bundle*.pkl file")
-    p_interp.add_argument("--atlas", help="override atlas (builtin name or CSV path)")
+    p_interp.add_argument("--atlas", help="override atlas (builtin name, CSV path, or 3D NIfTI .nii/.nii.gz path)")
+    p_interp.add_argument("--atlas-lut", help="optional LUT file (CSV/TSV/FreeSurfer txt) for NIfTI --atlas")
     p_interp.add_argument(
         "--cerebellum",
-        choices=("none", "anatom", "buckner7", "buckner17", "nettekoven"),
+        choices=("none", "anatom"),
         default="none",
-        help="optional SUIT cerebellar companion atlas on top of BNA-246",
+        help="optional SUIT cerebellar companion atlas (atl-Anatom with Buckner-7/17 & Nettekoven crosswalks) on top of BNA-246",
     )
     p_interp.add_argument("--alpha", type=float, help="override significance threshold")
     p_interp.add_argument("--out", help="output directory (default: <target>/interpretation)")
@@ -1183,6 +1240,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             interpret_outputs(
                 args.target,
                 atlas_spec=args.atlas,
+                atlas_lut=args.atlas_lut,
                 cerebellum=args.cerebellum,
                 alpha=args.alpha,
                 out_dir=args.out,
