@@ -1,0 +1,65 @@
+Third-Party Notices and Dataset / Atlas Licences
+==================================================
+
+The MIT licence in LICENSE applies to the ConnInfPy source code and
+documentation only. Bundled atlas resources and demonstration datasets are
+excluded from MIT and remain subject to their respective third-party licences
+and attribution terms:
+
+1. Brainnetome Atlas (BNA-246) & BrainMap profiles (conninfpy/atlas_data/)
+   Non-commercial research use, attribution, and share-alike.
+   See conninfpy/atlas_data/NOTICE_BRAINNETOME.txt.
+   Citations:
+     - Fan L, Li H, Zhuo J, et al. (2016). Cerebral Cortex 26(8):3508-3526.
+       doi:10.1093/cercor/bhw157
+     - Laird AR, Lancaster JL, Fox PT (2005). Neuroinformatics 3(1):65-78.
+       doi:10.1385/NI:3:1:065
+     - Laird AR, Eickhoff SB, Fox PM, et al. (2011). BMC Research Notes 4:349.
+       doi:10.1186/1756-0500-4-349
+
+2. DiedrichsenLab SUIT cerebellar atlases v1.2 (conninfpy/atlas_data/)
+   Creative Commons Attribution (CC BY).
+   See conninfpy/atlas_data/cerebellar_atlases_provenance.json.
+   Citations:
+     - Diedrichsen J, Balsters JH, Flavell J, Cussans E, Ramnani N (2009).
+       NeuroImage 46(1):39-46.
+     - Buckner RL, Krienen FM, Castellanos A, Diaz JC, Yeo BTT (2011).
+       Journal of Neurophysiology 106(5):2322-2345.
+     - Nettekoven C, Zhi D, Shahshahani L, Pinho AL, Saadon-Grosman N,
+       Buckner RL, Diedrichsen J (2024). Nature Neuroscience 27:2180-2190.
+
+3. NBS Schizophrenia example (datasets/demo/NBS_schizophrenia/)
+   GNU General Public License v3 or later (GPL-3.0-or-later).
+   See datasets/demo/NBS_schizophrenia/LICENSE-GPL-3.0.txt and
+   datasets/demo/NBS_schizophrenia/README.md.
+   Citation:
+     - Zalesky A, Fornito A, Bullmore ET (2010). NeuroImage 53(4):1197-1207.
+
+4. Open-Close China / Beijing EOEC derivatives
+   (datasets/demo/open_close/china_*, subject_order_china.txt)
+   Creative Commons Attribution-NonCommercial (CC BY-NC).
+   See datasets/demo/open_close/NOTICE_BEIJING_EOEC.txt.
+   Attribution and funding acknowledgements:
+     - Liu D, Dong Z, Zuo X, Wang J, Zang Y (2013). Neuroinformatics
+       11(4):469-476. doi:10.1007/s12021-013-9187-0
+     - FCP-INDI / NITRC Beijing EOEC
+       (https://fcon_1000.projects.nitrc.org/indi/retro/BeijingEOEC.html)
+     - NSFC grant 30770594 and National High Technology Program of China
+       (863 Program) grant 2008AA02Z405.
+     - Preprocessed derivatives: Medvedeva T, Knyazeva I, Masharipov R,
+       Korotkov A, Cherednichenko D, Kireev M (2026). Brain Informatics 13:18.
+       doi:10.1186/s40708-026-00305-1
+
+5. Open-Close IHB derivatives
+   (datasets/demo/open_close/ihb_*, subject_order_ihb.txt)
+   IHB RAS cohort derivatives published with:
+     - Medvedeva T, Knyazeva I, Masharipov R, Korotkov A, Cherednichenko D,
+       Kireev M (2026). Brain Informatics 13:18.
+       doi:10.1186/s40708-026-00305-1
+
+6. ABIDE-mini demonstration subset (datasets/demo/ABIDE_mini/)
+   Derived from ABIDE I (FCP-INDI), Creative Commons
+   Attribution-NonCommercial-ShareAlike 3.0 (CC BY-NC-SA 3.0).
+   Citation:
+     - Di Martino A, Yan CG, Li Q, et al. (2014). Molecular Psychiatry
+       19(6):659-667. doi:10.1038/mp.2013.78

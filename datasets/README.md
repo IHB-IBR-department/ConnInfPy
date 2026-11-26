@@ -41,7 +41,7 @@ Rebuild with `python scripts/build_nbs_schizophrenia_demo.py --nbs-dir <NBS1.2>`
 
 ## Open-Close Brainnetome series and Beijing EOEC phenotype (external / local only)
 
-These nine files are **not** stored in the repository; keep them in an external study directory (e.g., `$CONNINFPY_DATA/open_close/` or `../local_datasets/open_close/`) and pass `--data-dir` (or an external path) rather than placing them inside `datasets/`. Provenance recorded in the repository: BenchmarkingEOEC pre-processing pipeline ``strategy-4`` (Medvedeva et al. 2025, bioRxiv 10.1101/2025.10.20.683049), see the docstring of [examples/open_close/_shared/data.py](../examples/open_close/_shared/data.py); a download origin/URL is not recorded in the repository.
+These nine files are **not** stored in the repository; keep them in an external study directory (e.g., `$CONNINFPY_DATA/open_close/` or `../local_datasets/open_close/`) and pass `--data-dir` (or an external path) rather than placing them inside `datasets/`. Provenance recorded in the repository: BenchmarkingEOEC pre-processing pipeline ``strategy-4`` (Medvedeva et al. 2026, *Brain Informatics* 13:18, https://doi.org/10.1186/s40708-026-00305-1; preprocessed data archive: https://disk.yandex.ru/d/fNz33QPwJQj7HQ), see the docstring of [examples/open_close/_shared/data.py](../examples/open_close/_shared/data.py). For third-party licence and attribution terms of the bundled demo datasets (including the Beijing EOEC files), see [demo/open_close/NOTICE_BEIJING_EOEC.txt](demo/open_close/NOTICE_BEIJING_EOEC.txt) and the root [NOTICE](../NOTICE).
 
 Each ``{experiment}_{state}_Brainnetome_strategy-4_{GSR,noGSR}.npy`` file holds
 the same participants as the Schaefer-200 series (same subject order; IHB: 84

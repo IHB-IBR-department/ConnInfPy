@@ -555,4 +555,6 @@ Cite the package with the metadata in [`CITATION.cff`](CITATION.cff) (version
 software paper is in preparation; this section will be updated when a DOI is
 assigned — until then please cite the repository and the version.
 
+The MIT licence in [LICENSE](LICENSE) covers the ConnInfPy code and documentation only; bundled atlases and demo datasets carry their own licences and attribution terms listed in [NOTICE](NOTICE).
+
 For further discussions or to report bugs, please contact [knyazeva@ihb.spb.ru](mailto:knyazeva@ihb.spb.ru) or open an issue at https://github.com/IHB-IBR-department/ConnInfPy/issues.

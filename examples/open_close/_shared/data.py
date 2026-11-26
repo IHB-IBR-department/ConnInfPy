@@ -3,8 +3,8 @@ Open-Close data loader — Schaefer-200 with 182-ROI unified mask.
 
 This loader provides the IHB and China (Beijing) Eyes-Open / Eyes-Closed
 resting-state time series pre-processed via pipeline ``strategy-4_GSR``
-from the BenchmarkingEOEC project (Medvedeva et al. 2025,
-bioRxiv 10.1101/2025.10.20.683049).
+from the BenchmarkingEOEC project (Medvedeva et al. 2026,
+Brain Informatics 13:18, https://doi.org/10.1186/s40708-026-00305-1).
 
 Data layout on disk
 -------------------

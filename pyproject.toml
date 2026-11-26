@@ -8,7 +8,7 @@ version = "2.0"
 description = "Unified Python framework for permutation-based statistical inference on brain connectivity networks"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE"]
 authors = [
     { name = "Irina Knyazeva", email = "knyazeva@ihb.spb.ru" },
 ]

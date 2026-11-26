@@ -1,0 +1,34 @@
+Beijing EOEC (China) Open-Close derivatives in this directory
+==============================================================
+
+The following files are derived from the Beijing Eyes-Open / Eyes-Closed
+(Beijing EOEC) dataset and are NOT covered by ConnInfPy's MIT licence
+(which applies to the code and documentation only):
+
+  china_open_Schaefer200_strategy-4_GSR.npy    Schaefer-200 eyes-open time series
+  china_close_Schaefer200_strategy-4_GSR.npy   Schaefer-200 eyes-closed time series
+  subject_order_china.txt                      subject IDs aligned to row index
+
+Source: FCP-INDI / NITRC Beijing EOEC dataset
+https://fcon_1000.projects.nitrc.org/indi/retro/BeijingEOEC.html
+
+Terms stated by the upstream FCP-INDI / NITRC release:
+Creative Commons Attribution-NonCommercial (CC BY-NC).
+These derivatives are redistributed here under the same non-commercial terms.
+
+Mandatory attribution:
+  Liu D, Dong Z, Zuo X, Wang J, Zang Y (2013). Eyes-Open/Eyes-Closed Dataset
+  (Beijing EOEC). Neuroinformatics 11(4):469-476.
+  doi:10.1007/s12021-013-9187-0
+
+Funding acknowledgements required by FCP-INDI:
+  National Natural Science Foundation of China (NSFC, grant 30770594) and
+  National High Technology Program of China (863 Program, grant 2008AA02Z405).
+
+Preprocessed ROI time series provenance:
+  Medvedeva T, Knyazeva I, Masharipov R, Korotkov A, Cherednichenko D,
+  Kireev M (2026). Benchmarking resting state fMRI connectivity pipelines for
+  classification: robust accuracy despite processing variability in cross-site
+  eye state prediction. Brain Informatics 13:18.
+  https://doi.org/10.1186/s40708-026-00305-1
+  Preprocessed data archive: https://disk.yandex.ru/d/fNz33QPwJQj7HQ
