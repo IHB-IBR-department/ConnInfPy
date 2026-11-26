@@ -761,7 +761,41 @@ def build_fmriprep_confounds(img_path: str, strategy: int, n_compcor: int | None
         strategy_dict['strategy'] = list(strategy_dict['strategy']) + ['global_signal']
         strategy_dict['global_signal'] = 'full'
 
-    return load_confounds(img_path, **strategy_dict)
+    try:
+        return load_confounds(img_path, **strategy_dict)
+    except ValueError as exc:
+        if "missing" not in str(exc).lower():
+            raise
+        # Older fMRIPrep derivatives (e.g., nilearn development_fmri) only provide
+        # the 6 basic motion regressors and/or raw global_signal without derivatives/power2.
+        motion_fallbacks = {"full": ("derivatives", "basic"), "derivatives": ("basic",)}.get(
+            strategy_dict.get("motion"), ()
+        )
+        gsr_fallbacks = ("full", "basic") if use_GSR else (None,)
+        for motion_opt in (strategy_dict.get("motion"), *motion_fallbacks):
+            for gsr_opt in gsr_fallbacks:
+                candidate = strategy_dict.copy()
+                if motion_opt is not None:
+                    candidate["motion"] = motion_opt
+                if gsr_opt is not None:
+                    candidate["global_signal"] = gsr_opt
+                if candidate == strategy_dict:
+                    continue
+                try:
+                    res = load_confounds(img_path, **candidate)
+                    import warnings
+                    warnings.warn(
+                        f"fMRIPrep confounds for {os.path.basename(img_path)} lack expanded columns; "
+                        f"fell back to motion={candidate.get('motion')}"
+                        + (f", global_signal={candidate.get('global_signal')}" if use_GSR else "")
+                        + ".",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    return res
+                except ValueError:
+                    continue
+        raise
 
 
 class FmriprepDerivativesLoader(BaseDataLoader):
@@ -811,9 +845,11 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                 sub_id = m.group(1)
 
             parent_dir = os.path.dirname(bf)
-            confound_files = glob.glob(os.path.join(parent_dir, f"*confounds*.tsv"))
+            confound_files = sorted(glob.glob(os.path.join(parent_dir, f"sub-{sub_id}*confounds*.tsv")))
             if not confound_files:
-                confound_files = glob.glob(os.path.join(base_dir, "**", f"sub-{sub_id}*confounds*.tsv"), recursive=True)
+                confound_files = sorted(glob.glob(os.path.join(base_dir, "**", f"sub-{sub_id}*confounds*.tsv"), recursive=True))
+            if not confound_files:
+                confound_files = sorted(glob.glob(os.path.join(parent_dir, "*confounds*.tsv")))
 
             cf = confound_files[0] if confound_files else None
             results.append((bf, cf))
