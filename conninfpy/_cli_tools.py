@@ -383,6 +383,8 @@ def init_config(
 
     lines.append("")
     lines.append(f"data: {data_ref}")
+    lines.append("# atlas: bna_246        # or schaefer_100_yeo7, path/to/atlas.csv, path/to/atlas.nii.gz")
+    lines.append("# atlas_lut: null       # optional LUT file (CSV/TSV/FreeSurfer txt) for NIfTI atlas")
     if dataset.data_kind == "timeseries":
         lines.append("connectivity:")
         lines.append("  kind: correlation  # or partial_correlation (with optional shrinkage: ledoit_wolf / oas)")
@@ -406,6 +408,7 @@ def init_config(
     lines.append("")
     lines.append("design:")
     lines.append(f"  type: {design_type}")
+    lines.append("  # Note: for two-sample with confounds, use type: glm + interest_reference")
     if design_type == "glm":
         interest_guess = next((c for c in numeric_cols if c.lower() in ("age", "score", "symptom")), numeric_cols[0] if numeric_cols else "PREDICTOR_COL")
         lines.append(f"  interest: {interest_guess}")
@@ -431,13 +434,19 @@ def init_config(
     lines.extend([
         "",
         "inference:",
-        "  method: tfnbs          # tstat, nbs, tfnbs, cnbs, ni_tfnbs, fbc_tfnbs, bh_fdr_perm",
-        "  n_permutations: 1000",
+        "  method: tfnbs          # tstat, nbs, tfnbs, cnbs, ni_tfnbs, fbc_tfnbs, bonferroni, bh_fdr, bh_fdr_perm",
+        "  n_permutations: 1000   # 5000 recommended for publication",
         "  two_tailed: true",
+        "  # missing: available_case",
+        "  # net_labels: atlas    # for block methods (cnbs)",
         "  # acceleration: null   # empirical p-values by default",
         "",
         "alpha: 0.05",
         "output: conninfpy_results",
+        "",
+        "# interpret:",
+        "#   cerebellum: anatom",
+        "#   methods: true",
     ])
     if fd_col:
         lines.extend([
@@ -1129,7 +1138,111 @@ def interpret_outputs(
     return written
 
 
-def run_selftest(*, as_json: bool = False) -> tuple[int, Dict[str, Any]]:
+def collect_info() -> Dict[str, Any]:
+    """Collect read-only environment, dependency, backend, and resource info.
+
+    Import-conservative: deliberately does not import ``numba`` or optional
+    heavy packages (uses ``importlib.util.find_spec`` and distribution
+    metadata only).
+    """
+    import platform
+    from importlib import metadata, util
+
+    from conninfpy import __version__
+    from conninfpy.cli import _numba_cache_line
+    from conninfpy.stats._engine import get_available_cores
+    from conninfpy.stats._workers import describe_worker_policy
+
+    dep_names = ("numpy", "scipy", "pandas", "numba", "nibabel", "nilearn", "streamlit")
+    deps: Dict[str, Optional[str]] = {}
+    for pkg in dep_names:
+        try:
+            spec = util.find_spec(pkg)
+        except (ImportError, ValueError):
+            spec = None
+        if spec is None:
+            deps[pkg] = None
+        else:
+            try:
+                deps[pkg] = metadata.version(pkg)
+            except metadata.PackageNotFoundError:
+                deps[pkg] = "installed"
+
+    numba_installed = deps["numba"] is not None
+    policy = describe_worker_policy(use_mp=True, n_processes=None, n_permutations=None)
+
+    atlas_dir = Path(__file__).resolve().parent / "atlas_data"
+    bna_ok = (atlas_dir / "bna246.csv").is_file() and (atlas_dir / "BN_Atlas_246_1mm.nii.gz").is_file()
+    suit_ok = (atlas_dir / "atl-Anatom.tsv").is_file() and (
+        atlas_dir / "atl-Anatom_space-MNI_dseg.nii.gz"
+    ).is_file()
+
+    return {
+        "conninfpy_version": __version__,
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "os": platform.system(),
+        "dependencies": deps,
+        "numba": {
+            "installed": numba_installed,
+            "version": deps["numba"],
+            "imported": False,
+            "cache": _numba_cache_line(numba_installed),
+            "cache_dir": os.environ.get("NUMBA_CACHE_DIR"),
+            "disable_jit": os.environ.get("NUMBA_DISABLE_JIT"),
+        },
+        "cpu": {
+            "cores": os.cpu_count(),
+            "usable": get_available_cores(),
+            "worker_start_method": policy["worker_start_method"],
+        },
+        "resources": {
+            "bna_246": bna_ok,
+            "suit_cerebellum": suit_ok,
+        },
+    }
+
+
+def _find_nbs_schizophrenia_demo() -> Optional[Path]:
+    """Return the NBS schizophrenia manifest path if the demo dataset is present."""
+    repo_root = Path(__file__).resolve().parents[1]
+    manifest = repo_root / "datasets" / "nbs_schizophrenia.yaml"
+    demo_dir = repo_root / "datasets" / "demo" / "NBS_schizophrenia"
+    if (
+        manifest.is_file()
+        and (demo_dir / "nbs_schizophrenia.npy").is_file()
+        and (demo_dir / "pheno.csv").is_file()
+    ):
+        return manifest
+    return None
+
+
+def _run_synthetic_nbs_fallback() -> tuple[bool, str]:
+    """Run a deterministic synthetic NBS check when demo files are absent."""
+    from conninfpy import analyze
+    from conninfpy.sim import TopologyDatasetGenerator
+
+    gen = TopologyDatasetGenerator(n_nodes=20, n_modules=2, seed=42)
+    ds = gen.generate("chain", effect_size=0.5, n_samples=12, time_points=80)
+    res = analyze(
+        group1=ds.group1,
+        group2=ds.group2,
+        test_type="two-sample",
+        input="r",
+        method="nbs",
+        threshold=2.5,
+        n_permutations=200,
+        use_mp=False,
+        rng=42,
+    )
+    inf = res.inference
+    iu = np.triu_indices(20, 1)
+    n_sig = int(np.sum(np.asarray(inf["positive"])[iu] <= 0.05))
+    ok = n_sig > 0 and bool(np.isfinite(inf["positive"]).all())
+    return ok, f"synthetic NBS fallback n_sig_pos={n_sig}"
+
+
+def run_selftest(*, as_json: bool = False, reference: bool = False) -> tuple[int, Dict[str, Any]]:
     """Run a fast, zero-external-data functional check of TFNBS, MP, and bundled atlases."""
     t_start = time.perf_counter()
     checks: Dict[str, Dict[str, Any]] = {}
@@ -1232,7 +1345,127 @@ def run_selftest(*, as_json: bool = False) -> tuple[int, Dict[str, Any]]:
             "detail": f"{type(exc).__name__}: {exc}",
         }
 
-    all_pass = all(c["status"] == "PASS" for c in checks.values())
+    if reference:
+        # 4a. Reference NBS check (NBS_schizophrenia 40-edge component, or synthetic fallback skip)
+        t0 = time.perf_counter()
+        manifest_path = _find_nbs_schizophrenia_demo()
+        if manifest_path is not None:
+            try:
+                from conninfpy import compute_p_val_glm
+                from conninfpy.loaders.manifest import ManifestLoader
+
+                demo_ds = ManifestLoader(str(manifest_path)).load()
+                Y_demo = np.array(demo_ds.data, dtype=np.float64)
+                diag_idx = np.arange(Y_demo.shape[1])
+                Y_demo[:, diag_idx, diag_idx] = 0.0
+                hc = (demo_ds.pheno["group"] == "HC").to_numpy(dtype=np.float64)
+                nbs_res = compute_p_val_glm(
+                    Y_demo,
+                    interest=hc,
+                    method="nbs",
+                    threshold=3.1,
+                    nbs_stat="extent",
+                    n_permutations=500,
+                    acceleration=None,
+                    rng=1,
+                    use_mp=False,
+                    two_tailed=False,
+                )
+                iu_demo = np.triu_indices(Y_demo.shape[1], 1)
+                n_sig_edges = int(np.sum(nbs_res.positive[iu_demo] < 0.05))
+                comp_tbl = nbs_res.component_table()
+                ok_nbs = (
+                    n_sig_edges == 40
+                    and len(comp_tbl) == 1
+                    and int(comp_tbl.iloc[0]["n_edges"]) == 40
+                )
+                checks["reference_nbs_schizophrenia"] = {
+                    "status": "PASS" if ok_nbs else "FAIL",
+                    "wall_time_s": round(time.perf_counter() - t0, 3),
+                    "detail": f"n_sig_edges={n_sig_edges} (expected 40), components={len(comp_tbl)}",
+                }
+            except Exception as exc:
+                checks["reference_nbs_schizophrenia"] = {
+                    "status": "FAIL",
+                    "wall_time_s": round(time.perf_counter() - t0, 3),
+                    "detail": f"{type(exc).__name__}: {exc}",
+                }
+        else:
+            try:
+                ok_fb, fb_detail = _run_synthetic_nbs_fallback()
+                checks["reference_nbs_schizophrenia"] = {
+                    "status": "SKIP" if ok_fb else "FAIL",
+                    "wall_time_s": round(time.perf_counter() - t0, 3),
+                    "detail": f"datasets/demo/NBS_schizophrenia not found; {fb_detail}",
+                }
+            except Exception as exc:
+                checks["reference_nbs_schizophrenia"] = {
+                    "status": "FAIL",
+                    "wall_time_s": round(time.perf_counter() - t0, 3),
+                    "detail": f"datasets/demo/NBS_schizophrenia not found; fallback failed: {type(exc).__name__}: {exc}",
+                }
+
+        # 4b. Deterministic fixed-seed TFNBS reproducibility check
+        t0 = time.perf_counter()
+        try:
+            from conninfpy.analysis import analyze
+            from conninfpy.sim import TopologyDatasetGenerator
+
+            ref_gen = TopologyDatasetGenerator(n_nodes=20, n_modules=2, seed=42)
+            ref_ds = ref_gen.generate("chain", effect_size=0.4, n_samples=12, time_points=80)
+            r1 = analyze(
+                group1=ref_ds.group1,
+                group2=ref_ds.group2,
+                test_type="two-sample",
+                input="r",
+                method="tfnbs",
+                n_permutations=100,
+                use_mp=False,
+                rng=42,
+            )
+            r2 = analyze(
+                group1=ref_ds.group1,
+                group2=ref_ds.group2,
+                test_type="two-sample",
+                input="r",
+                method="tfnbs",
+                n_permutations=100,
+                use_mp=False,
+                rng=42,
+            )
+            iu_ref = np.triu_indices(20, 1)
+            p1_pos = np.asarray(r1.inference["positive"], dtype=float)
+            p2_pos = np.asarray(r2.inference["positive"], dtype=float)
+            p1_neg = np.asarray(r1.inference["negative"], dtype=float)
+            p2_neg = np.asarray(r2.inference["negative"], dtype=float)
+            n_sig_pos_1 = int(np.sum(p1_pos[iu_ref] <= 0.05))
+            n_sig_pos_2 = int(np.sum(p2_pos[iu_ref] <= 0.05))
+            n_sig_neg_1 = int(np.sum(p1_neg[iu_ref] <= 0.05))
+            n_sig_neg_2 = int(np.sum(p2_neg[iu_ref] <= 0.05))
+            reproducible = (
+                n_sig_pos_1 > 0
+                and n_sig_pos_1 == n_sig_pos_2
+                and n_sig_neg_1 == n_sig_neg_2
+                and bool(np.array_equal(p1_pos, p2_pos))
+                and bool(np.array_equal(p1_neg, p2_neg))
+            )
+            checks["reference_tfnbs_reproducibility"] = {
+                "status": "PASS" if reproducible else "FAIL",
+                "wall_time_s": round(time.perf_counter() - t0, 3),
+                "detail": (
+                    f"rng=42, n_sig_pos={n_sig_pos_1}/{n_sig_pos_2}, "
+                    f"n_sig_neg={n_sig_neg_1}/{n_sig_neg_2}, "
+                    f"exact_match={bool(np.array_equal(p1_pos, p2_pos) and np.array_equal(p1_neg, p2_neg))}"
+                ),
+            }
+        except Exception as exc:
+            checks["reference_tfnbs_reproducibility"] = {
+                "status": "FAIL",
+                "wall_time_s": round(time.perf_counter() - t0, 3),
+                "detail": f"{type(exc).__name__}: {exc}",
+            }
+
+    all_pass = all(c["status"] in ("PASS", "SKIP") for c in checks.values())
     total_wall = round(time.perf_counter() - t_start, 3)
     report: Dict[str, Any] = {
         "ok": all_pass,

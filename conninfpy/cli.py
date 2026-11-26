@@ -786,6 +786,9 @@ def run(
     n_processes: Optional[int] = None,
     method: Optional[str] = None,
     seed: Optional[int] = None,
+    alpha: Optional[float] = None,
+    atlas: Optional[str] = None,
+    force: bool = False,
     dry_run: bool = False,
     motion_qc: bool = False,
 ) -> Dict[str, Path]:
@@ -796,6 +799,13 @@ def run(
 
     config_path = Path(config_path).resolve()
     cfg = load_config(config_path)
+    if alpha is not None:
+        alpha_val = float(alpha)
+        if not 0 < alpha_val < 1:
+            raise ConfigError(f"--alpha must be in (0, 1); got {alpha}.")
+        cfg = {**cfg, "alpha": alpha_val}
+    if atlas is not None:
+        cfg = {**cfg, "atlas": str(atlas)}
     base = config_path.parent
     started = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -824,18 +834,18 @@ def run(
         inference["method"] = str(method)
     if seed is not None:
         inference["rng"] = int(seed)
-    atlas = _atlas(
+    atlas_obj = _atlas(
         cfg.get("atlas"),
         dataset,
         base,
         summary["n_regions"],
         lut_spec=cfg.get("atlas_lut"),
     )
-    alpha = float(cfg.get("alpha", 0.05))
+    resolved_alpha = float(cfg.get("alpha", 0.05))
     resolved_nl, _ = _resolve_cli_net_labels(
-        inference, atlas, cfg, base, int(summary["n_regions"])
+        inference, atlas_obj, cfg, base, int(summary["n_regions"])
     )
-    cnbs_warn = _cnbs_bonferroni_warning(inference, resolved_nl, alpha)
+    cnbs_warn = _cnbs_bonferroni_warning(inference, resolved_nl, resolved_alpha)
     motion_qc_spec = _motion_qc_spec(dataset, cfg, kwargs=kwargs, enabled=motion_qc)
     if motion_qc_spec is not None:
         kwargs = {**kwargs, "motion_qc": motion_qc_spec}
@@ -866,8 +876,8 @@ def run(
             tail_policy = "separate-one-sided"
         atlas_label = (
             cfg.get("atlas")
-            or getattr(atlas, "source", None)
-            or ("present" if atlas is not None else "none")
+            or getattr(atlas_obj, "source", None)
+            or ("present" if atlas_obj is not None else "none")
         )
         print(f"conninfpy {__version__} — dry-run (no permutations run, no files written)")
         print(f"  design:        {summary['design']}")
@@ -893,8 +903,15 @@ def run(
             print(f"  WARNING:       {cnbs_warn}")
         return {}
 
+    if not force and out.exists():
+        if out.is_file() or (out.is_dir() and any(out.iterdir())):
+            raise ConfigError(
+                f"Output directory '{out}' already exists and is not empty; "
+                "pass --force to overwrite."
+            )
+
     t0 = time.perf_counter()
-    result = analyze(**kwargs, **inference, atlas=atlas)
+    result = analyze(**kwargs, **inference, atlas=atlas_obj)
     wall = time.perf_counter() - t0
     out.mkdir(parents=True, exist_ok=True)
     results = result if isinstance(result, dict) else {"": result}
@@ -919,15 +936,15 @@ def run(
             e_arr = np.asarray(e_grid, dtype=np.float64).ravel() if e_grid is not None else None
             h_arr = np.asarray(h_grid, dtype=np.float64).ravel() if h_grid is not None else None
             iu, ju = np.triu_indices(inf["positive"].shape[0], k=1)
-            sig_pos0 = inf["positive"][iu, ju, 0] <= alpha
-            sig_neg0 = inf["negative"][iu, ju, 0] <= alpha
+            sig_pos0 = inf["positive"][iu, ju, 0] <= resolved_alpha
+            sig_neg0 = inf["negative"][iu, ju, 0] <= resolved_alpha
             grid_rows = []
             for idx in range(k_grid):
                 cell_path = out / f"edges{suffix}_cell{idx}.csv"
-                res.to_csv(cell_path, atlas=atlas, alpha=alpha, param_idx=idx)
+                res.to_csv(cell_path, atlas=atlas_obj, alpha=resolved_alpha, param_idx=idx)
                 written[f"edges{suffix}_cell{idx}"] = cell_path
-                sig_pos_i = inf["positive"][iu, ju, idx] <= alpha
-                sig_neg_i = inf["negative"][iu, ju, idx] <= alpha
+                sig_pos_i = inf["positive"][iu, ju, idx] <= resolved_alpha
+                sig_neg_i = inf["negative"][iu, ju, idx] <= resolved_alpha
                 u_pos = int(np.sum(sig_pos0 | sig_pos_i))
                 u_neg = int(np.sum(sig_neg0 | sig_neg_i))
                 j_pos = float(np.sum(sig_pos0 & sig_pos_i) / u_pos) if u_pos > 0 else float("nan")
@@ -946,7 +963,7 @@ def run(
             written[f"grid_summary{suffix}"] = grid_summary_path
         else:
             edges_path = out / f"edges{suffix}.csv"
-            res.to_csv(edges_path, atlas=atlas, alpha=alpha)
+            res.to_csv(edges_path, atlas=atlas_obj, alpha=resolved_alpha)
             written[f"edges{suffix}"] = edges_path
         pvals_path = out / f"pvals{suffix}.npz"
         arrays = {"positive": inf.positive, "negative": inf.negative}
@@ -985,7 +1002,7 @@ def run(
             else None
         )
         entry: Dict[str, Any] = {
-            "n_significant": inf.n_significant(alpha),
+            "n_significant": inf.n_significant(resolved_alpha),
             "is_grid": is_grid,
             "method": inf.method,
             "tail_policy": inf.tail_policy,
@@ -996,7 +1013,7 @@ def run(
             "n_permutations": inf.n_permutations,
             "acceleration": inf.acceleration,
             # Monte-Carlo precision and RNG provenance, described (not re-run).
-            "monte_carlo": _monte_carlo_summary(inf, alpha),
+            "monte_carlo": _monte_carlo_summary(inf, resolved_alpha),
             "flags": list(res.flags),
             "resolved_strategy": getattr(res, "resolved_strategy", None),
             "combat_diagnostics": res.combat_diagnostics,
@@ -1034,7 +1051,7 @@ def run(
         "analysis_file": str(config_path),
         "config": cfg,
         "data": {"manifest": str((base / cfg["data"]).resolve()), **summary},
-        "alpha": alpha,
+        "alpha": resolved_alpha,
         "results": per_result,
     }
     prov_path = out / "provenance.json"
@@ -1051,7 +1068,7 @@ def run(
             atlas_spec=opts.get("atlas"),
             atlas_lut=opts.get("atlas_lut") or cfg.get("atlas_lut"),
             cerebellum=opts.get("cerebellum"),
-            alpha=float(opts.get("alpha", alpha)),
+            alpha=float(opts.get("alpha", resolved_alpha)),
             out_dir=out / opts["out"] if opts.get("out") else out / "interpretation",
             no_plots=bool(opts.get("no_plots", False)),
             support=opts.get("support"),
@@ -1069,16 +1086,16 @@ def run(
 
     print(f"conninfpy {__version__} — {summary['design']} on {summary['n_subjects_used']} "
           f"subjects × {summary['n_regions']} regions ({wall:.1f} s)")
-    for name, info in per_result.items():
+    for name, info_entry in per_result.items():
         label = "" if name == "result" else f"[{name}] "
-        sig = info["n_significant"]
-        print(f"  {label}significant at α={alpha}: positive={sig['positive']}, "
+        sig = info_entry["n_significant"]
+        print(f"  {label}significant at α={resolved_alpha}: positive={sig['positive']}, "
               f"negative={sig['negative']}")
     print(f"  results written to {out}")
     return written
 
 
-def info() -> None:
+def info(*, as_json: bool = False) -> None:
     """Print versions, the compute backend, resources and cache visibility.
 
     Read-only and import-conservative: this command deliberately does **not**
@@ -1089,6 +1106,11 @@ def info() -> None:
     kernel actually executed stay explicitly ``unknown/not measured``. No
     cache directory is created and no environment or user setting changes.
     """
+    if as_json:
+        from conninfpy._cli_tools import collect_info
+
+        print(json.dumps(collect_info(), indent=2))
+        return
     from importlib import metadata, util
 
     from conninfpy import __version__
@@ -1200,6 +1222,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     p_run.add_argument("--method", help="override inference.method")
     p_run.add_argument("--seed", type=int, help="override inference.rng")
+    p_run.add_argument("--alpha", type=float, help="override alpha significance level")
+    p_run.add_argument("--atlas", help="override top-level atlas")
+    p_run.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite --out directory if it exists and is not empty",
+    )
     p_run.add_argument(
         "--dry-run",
         action="store_true",
@@ -1211,13 +1240,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="add the descriptive motion/QC-FC side-car (FD from diagnostics.motion_qc.fd "
              "or an auto-detected Motion_FD/func_mean_fd phenotype column)",
     )
-    sub.add_parser("info", help="show versions and the compute backend")
+    p_info = sub.add_parser("info", help="show versions and the compute backend")
+    p_info.add_argument("--json", action="store_true", help="print environment and backend info as JSON")
 
     p_selftest = sub.add_parser(
         "selftest",
         help="run a fast synthetic self-test verifying TFNBS, multiprocessing, and bundled atlases",
     )
     p_selftest.add_argument("--json", action="store_true", help="print self-test report as JSON")
+    p_selftest.add_argument(
+        "--reference",
+        action="store_true",
+        help="also run deterministic NBS schizophrenia reference and fixed-seed TFNBS reproducibility checks",
+    )
 
     p_qc = sub.add_parser(
         "qc",
@@ -1340,12 +1375,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(raw_argv)
 
     if args.command == "info":
-        info()
+        info(as_json=args.json)
         return 0
     if args.command == "selftest":
         from conninfpy._cli_tools import run_selftest
 
-        code, _ = run_selftest(as_json=args.json)
+        code, _ = run_selftest(as_json=args.json, reference=args.reference)
         return code
     if args.command == "app":
         from conninfpy._cli_tools import launch_app
@@ -1429,6 +1464,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             n_processes=args.n_processes,
             method=args.method,
             seed=args.seed,
+            alpha=args.alpha,
+            atlas=args.atlas,
+            force=args.force,
             dry_run=args.dry_run,
             motion_qc=args.motion_qc,
         )
