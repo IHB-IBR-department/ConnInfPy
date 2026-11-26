@@ -85,8 +85,11 @@ interface), `[notebooks]` (Jupyter tutorials), `[dev]` (tests and docs).
 
 `python -m build` creates `dist/conninfpy-2.0-py3-none-any.whl` and
 `dist/conninfpy-2.0.tar.gz`. Install either with `python -m pip install <path>`.
-Both include Brainnetome/SUIT atlas data, the Streamlit app and the `conninfpy`
-command. Dependencies are resolved on installation; a checkout is then optional.
+Both include the MIT-licensed package, Schaefer ROI tables, the Streamlit app
+(`conninfpy.app`), and the `conninfpy` command. Optional third-party Brainnetome
+BNA-246 and SUIT cerebellar atlases are downloaded on demand into the local cache
+(`scripts/download_atlases.py`), and repository demo datasets stay outside the
+PyPI wheel. Dependencies are resolved on installation; a checkout is then optional.
 
 <details>
 <summary>Running without Numba</summary>

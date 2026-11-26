@@ -1209,7 +1209,7 @@ def _build_design_arrays(
             mismatched_sites = [
                 subject
                 for subject, baseline_site, target_site in zip(
-                    common_subjects, baseline_sites, target_sites, strict=True
+                    paired_subjects, baseline_sites, target_sites, strict=True
                 )
                 if baseline_site != target_site
             ]
@@ -3289,8 +3289,11 @@ def render_design_inference_view(base_atlas, tabs_list):
                             t.start()
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Failed to start background thread: {e}")
-                            st.exception(e)
+                            if is_public_mode():
+                                st.error("Failed to start background analysis. Check your inputs and try again.")
+                            else:
+                                st.error(f"Failed to start background thread: {e}")
+                                st.exception(e)
                             
                 elif task.status == "running":
                     run_action.button(

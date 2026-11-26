@@ -129,14 +129,43 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
 
     st.caption("Settings apply when you load or generate a dataset. Your active dataset and results are kept while you edit.")
 
+    def _available_builtin_demos() -> list[str]:
+        demos: list[str] = []
+        if (PROJECT_ROOT / "datasets/demo/ABIDE_mini/abide_mini.npz").is_file():
+            demos.append("ABIDE-mini")
+        if (
+            (PROJECT_ROOT / "datasets/demo/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy").is_file()
+            and (PROJECT_ROOT / "datasets/demo/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy").is_file()
+        ):
+            demos.append("OpenClose")
+        return demos
+
+    available_demos = _available_builtin_demos()
+    if is_public_mode():
+        ingest_options = (
+            ["Generate Synthetic Dataset", "Built-in data", "Upload data"]
+            if available_demos
+            else ["Generate Synthetic Dataset", "Upload data"]
+        )
+    else:
+        ingest_options = (
+            ["Generate Synthetic Dataset", "Built-in data", "Dataset Manifest (data.yaml)"]
+            if available_demos
+            else ["Generate Synthetic Dataset", "Dataset Manifest (data.yaml)"]
+        )
+
     # Ingestion type selector - simplified options
     ingest_mode = st.radio(
         "Select Ingestion Method",
-        (["Generate Synthetic Dataset", "Built-in data", "Upload data"] if is_public_mode() else
-         ["Generate Synthetic Dataset", "Built-in data", "Dataset Manifest (data.yaml)"]),
+        ingest_options,
         horizontal=True,
-        key=persistent_key('data:select_ingestion_method', scope='data'),
+        key=persistent_key('data:select_ingestion_method', scope='data', options=ingest_options),
     )
+    if not available_demos:
+        st.caption(
+            "Built-in demo datasets are not bundled in the wheel; use synthetic data, "
+            "upload files, or load a local manifest/checkout."
+        )
     if is_public_mode():
         st.info("Manifest and server-path imports are disabled in public mode. Upload data files instead.")
     with st.container(key="data_actions"):
@@ -576,8 +605,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     render_help("built_in_demo")
                 
                 custom_ds = {} if is_public_mode() else load_custom_datasets()
-                builtin_templates = ["ABIDE-mini", "OpenClose"]
-                template_options = builtin_templates
+                template_options = available_demos or ["ABIDE-mini", "OpenClose"]
                 
                 dataset_choice = st.selectbox(
                     "Select Template Structure",
@@ -1423,9 +1451,12 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 st.rerun()
                                 
                     except Exception as e:
-                        detail = _redact_demo_paths(str(e)) if is_public_mode() else str(e)
-                        st.error(f"Loading failed: {detail}")
-                        st.exception(e)
+                        if is_public_mode():
+                            detail = _redact_demo_paths(str(e))
+                            st.error(f"Loading failed: {detail}")
+                        else:
+                            st.error(f"Loading failed: {e}")
+                            st.exception(e)
 
 
 

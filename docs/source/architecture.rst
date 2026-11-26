@@ -70,15 +70,36 @@ and supports ``--source-dir`` and ``--output`` for explicit rebuilds.
 ``interpret`` annotates the ROIs/edges of the supplied result. Anatomical
 summaries do not change its parcellation, p-values or inference unit.
 
-Compatibility
--------------
+Compatibility and v2.0 migration
+--------------------------------
 
-Existing top-level functions and public module paths remain importable.
-The former implementation modules, such as ``pairwise_stats``, ``glm_stats``,
-``tfnbs_score``, ``brainnetome`` and ``synth_datasets``, are small compatibility
-imports sharing their canonical module objects. Old saved class paths resolve
-through these aliases and the domain-package facades. New code should use the
-domain packages; edit the canonical implementations rather than the aliases.
+Top-level package entry points (``conninfpy.analyze``, ``compute_p_val``,
+``compute_p_val_glm``, ``InferenceResult``, ``ResultBundle``, etc.) remain
+importable directly from ``conninfpy``.
+
+In v2.0, the 18 legacy root compatibility shims were removed in favour of the
+canonical domain subpackages:
+
+- ``conninfpy.pairwise_stats`` -> ``conninfpy.stats.pairwise``
+- ``conninfpy.glm_stats`` -> ``conninfpy.stats.glm``
+- ``conninfpy.acceleration`` -> ``conninfpy.stats.acceleration``
+- ``conninfpy.tfnbs_score`` -> ``conninfpy.enhance.tfnbs``
+- ``conninfpy.nbs_score`` -> ``conninfpy.enhance.nbs``
+- ``conninfpy.brainnetome`` -> ``conninfpy.atlas.brainnetome``
+- ``conninfpy.annotate`` -> ``conninfpy.interpret.annotate``
+- ``conninfpy.synth_datasets`` / ``conninfpy.topologies`` -> ``conninfpy.sim.datasets`` / ``conninfpy.sim.topologies``
+- ``conninfpy.utils`` -> ``conninfpy._shared.utils`` / ``conninfpy.preprocessing``
+
+Serialization and security migration in v2.0:
+
+- ``ResultBundle.save()`` / ``ResultBundle.load()`` now use a deterministic,
+  pickle-free ZIP archive (JSON manifest + NPY arrays). Legacy ``.pkl`` bundles
+  are rejected by default instead of calling ``pickle.load``.
+- NumPy loaders and ``conninfpy init-manifest`` default to ``allow_pickle=False``
+  (pass ``trust_pickle=True`` / ``--trust-pickle`` only for trusted legacy files).
+- Third-party Brainnetome BNA-246 and SUIT cerebellar atlases are no longer
+  bundled in the MIT wheel; fetch them into ``CONNINFPY_ATLAS_DIR`` (default
+  ``~/.cache/conninfpy/atlases``) with ``scripts/download_atlases.py``.
 
 Private helpers extracted into shared modules should be patched at their
 canonical call site in development tests.

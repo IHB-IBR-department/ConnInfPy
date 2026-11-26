@@ -114,3 +114,91 @@ def test_public_openclose_ihb_loads(monkeypatch):
     assert not app.exception
     assert app.session_state.connectivity_data is not None
     assert str(helpers.PROJECT_ROOT) not in str(app.session_state.dataset_info)
+
+
+def test_paired_bijection_with_site_col_stable_and_mismatched():
+    import pandas as pd
+    from conninfpy.app.components.design_inference import _build_design_arrays
+
+    Y = np.broadcast_to(np.eye(3), (4, 3, 3)).copy()
+    stable_df = pd.DataFrame({
+        'subject': ['sub1', 'sub2', 'sub2', 'sub1'],
+        'cond': ['open', 'open', 'close', 'close'],
+        'site': ['S1', 'S2', 'S2', 'S1'],
+    })
+    out = _build_design_arrays(
+        Y, stable_df,
+        test_type='paired',
+        question_choice='Within-Subject Paired Contrast',
+        site_col='site',
+        condition_col='cond',
+        subject_col='subject',
+        baseline_val='open',
+        target_val='close',
+        require_paired_bijection=True,
+    )
+    assert out['sites'] == ['S1', 'S2']
+    assert out['ids_group1'] == ['sub1', 'sub2']
+
+    mismatched_df = stable_df.copy()
+    mismatched_df.loc[2, 'site'] = 'S3'
+    with pytest.raises(ValueError, match='sub2'):
+        _build_design_arrays(
+            Y, mismatched_df,
+            test_type='paired',
+            question_choice='Within-Subject Paired Contrast',
+            site_col='site',
+            condition_col='cond',
+            subject_col='subject',
+            baseline_val='open',
+            target_val='close',
+            require_paired_bijection=True,
+        )
+
+
+def test_wheel_mode_without_demo_files_hides_builtin_data(monkeypatch, tmp_path):
+    from conninfpy.app.components import data_ingestion
+
+    monkeypatch.setattr(data_ingestion, 'PROJECT_ROOT', tmp_path)
+    for public_val in ('0', '1'):
+        monkeypatch.setenv('CONNINFPY_PUBLIC_MODE', public_val)
+        app = AppTest.from_file(str(APP), default_timeout=120).run()
+        assert not app.exception
+        mode = next(x for x in app.radio if x.label == 'Select Ingestion Method')
+        assert 'Built-in data' not in mode.options
+
+
+def test_public_mode_suppresses_st_exception_on_load_error(monkeypatch):
+    from conninfpy.app.components import data_ingestion
+    from types import SimpleNamespace
+
+    raw = io.BytesIO()
+    matrices = np.tile(np.eye(4), (6, 1, 1))
+    matrices[:, 0, 1] = matrices[:, 1, 0] = 0.2
+    np.save(raw, matrices)
+    fake = SimpleNamespace(name='uploaded.npy', getvalue=lambda: raw.getvalue())
+    original = data_ingestion.persistent_file_uploader
+    monkeypatch.setattr(
+        data_ingestion,
+        'persistent_file_uploader',
+        lambda label, *, key, **kw: fake if key == 'data:upload_numpy' else (None if key == 'data:upload_pheno' else original(label, key=key, **kw)),
+    )
+    import inspect
+
+    orig_load = data_ingestion._UploadedNumpyLoader.load
+
+    def _flaky_load(self):
+        frame = inspect.currentframe()
+        caller = frame.f_back.f_code.co_name if frame and frame.f_back else ''
+        if caller != 'preview':
+            raise RuntimeError(f'boom at {helpers.PROJECT_ROOT}/secret.npy')
+        return orig_load(self)
+
+    monkeypatch.setattr(data_ingestion._UploadedNumpyLoader, 'load', _flaky_load)
+    monkeypatch.setenv('CONNINFPY_PUBLIC_MODE', '1')
+    app = AppTest.from_file(str(APP), default_timeout=120).run()
+    next(x for x in app.radio if x.label == 'Select Ingestion Method').set_value('Upload data').run()
+    app.button(key='load_dataset_btn').click().run()
+    assert len(app.error) >= 1
+    assert str(helpers.PROJECT_ROOT) not in app.error[0].value
+    assert not app.exception
