@@ -1016,6 +1016,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p_init.add_argument("--design", choices=DESIGNS, help="design type to prefill")
     p_init.add_argument("--force", action="store_true", help="overwrite --out if it exists")
 
+    p_init_m = sub.add_parser("init-manifest", help="generate a dataset manifest YAML from a data directory or file")
+    src_grp = p_init_m.add_mutually_exclusive_group(required=True)
+    src_grp.add_argument("--data-dir", help="directory of subject connectivity/timeseries files or fMRIPrep derivatives")
+    src_grp.add_argument("--data-file", help="3D .npy/.npz stack of connectivity matrices or timeseries")
+    p_init_m.add_argument("--pheno", help="phenotype table (.csv, .tsv, .xlsx)")
+    p_init_m.add_argument("--out", help="output manifest.yaml path (prints to stdout if omitted)")
+    p_init_m.add_argument(
+        "--kind",
+        choices=("auto", "correlation", "fisher_z", "timeseries"),
+        default="auto",
+        help="data kind (default: auto)",
+    )
+    p_init_m.add_argument("--atlas", help="optional atlas name (e.g. bna_246) or CSV path")
+    p_init_m.add_argument("--id-col", help="override subject ID column name in --pheno")
+    p_init_m.add_argument("--name", help="dataset name (defaults to directory/file stem)")
+    p_init_m.add_argument("--force", action="store_true", help="overwrite --out if it exists")
+
     p_interp = sub.add_parser(
         "interpret",
         help="export node/network summaries, Brainnetome annotations, and figures from run outputs",
@@ -1116,6 +1133,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.manifest,
                 out_path=args.out,
                 design_type=args.design,
+                force=args.force,
+            )
+            return 0
+        if args.command == "init-manifest":
+            from conninfpy._cli_tools import init_manifest
+
+            init_manifest(
+                data_dir=args.data_dir,
+                data_file=args.data_file,
+                pheno_path=args.pheno,
+                out_path=args.out,
+                kind=args.kind,
+                atlas=args.atlas,
+                id_col=args.id_col,
+                name=args.name,
                 force=args.force,
             )
             return 0

@@ -242,5 +242,127 @@ class TestInfluenceCLI(unittest.TestCase):
         self.assertEqual(rep2["n_edges"], 2)
 
 
+class TestInitManifestAndBidsPheno(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_bids_tsv_na_participant_id_end_to_end(self):
+        from conninfpy.loaders import load
+
+        data_dir = self.tmp / "fc_tsv"
+        data_dir.mkdir()
+        mats = _correlations(6, N=5, seed=11)
+        for i in range(6):
+            np.savetxt(data_dir / f"sub-{i+1:02d}_fc.tsv", mats[i], delimiter="\t", fmt="%.6f")
+
+        pheno_path = self.tmp / "participants.tsv"
+        pheno_path.write_text(
+            "participant_id\tage\tgroup\tnotes\n"
+            "sub-01\t25.0\thc\tok\n"
+            "sub-02\tn/a\tpt\tmissing_age\n"
+            "sub-03\t31.5\thc\tn/a\n"
+            "sub-04\t28.0\tpt\tok\n"
+            "sub-05\t35.0\thc\tok\n"
+            "sub-06\t40.0\tpt\tok\n",
+            encoding="utf-8",
+        )
+
+        manifest_path = self.tmp / "manifest.yaml"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = main([
+                "init-manifest",
+                "--data-dir", str(data_dir),
+                "--pheno", str(pheno_path),
+                "--out", str(manifest_path),
+            ])
+        self.assertEqual(rc, 0)
+        self.assertTrue(manifest_path.is_file())
+
+        ds = load(manifest_path)
+        self.assertEqual(ds.data.shape, (6, 5, 5))
+        self.assertEqual(ds.data_kind, "correlation")
+        self.assertTrue(pd.api.types.is_numeric_dtype(ds.pheno["age"]))
+        self.assertTrue(pd.isna(ds.pheno.loc[1, "age"]))
+        self.assertTrue(pd.isna(ds.pheno.loc[2, "notes"]))
+
+        analysis_path = self.tmp / "analysis.yaml"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc_init = main([
+                "init",
+                "--manifest", str(manifest_path),
+                "--out", str(analysis_path),
+            ])
+        self.assertEqual(rc_init, 0)
+        self.assertTrue(analysis_path.is_file())
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc_qc = main(["qc", str(analysis_path)])
+        self.assertEqual(rc_qc, 0)
+
+    def test_bids_sub_prefix_mismatch_with_unprefixed_npy(self):
+        from conninfpy.loaders import load
+
+        data_dir = self.tmp / "fc_npy"
+        data_dir.mkdir()
+        mats = _correlations(4, N=4, seed=5) * 0.5  # off-diag in (-0.5, 0.5), diag 0.5 -> fisher_z or corr
+        mats[:, np.arange(4), np.arange(4)] = 1.5  # >1 so auto-detects fisher_z
+        for i in range(4):
+            np.save(data_dir / f"{i+1:02d}.npy", mats[i])
+
+        pheno_path = self.tmp / "participants.tsv"
+        pheno_path.write_text(
+            "participant_id\tage\n"
+            "sub-01\t22\n"
+            "sub-02\tn/a\n"
+            "sub-03\t29\n"
+            "sub-04\t33\n",
+            encoding="utf-8",
+        )
+
+        manifest_path = self.tmp / "manifest_npy.yaml"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = main([
+                "init-manifest",
+                "--data-dir", str(data_dir),
+                "--pheno", str(pheno_path),
+                "--out", str(manifest_path),
+            ])
+        self.assertEqual(rc, 0)
+        ds = load(manifest_path)
+        self.assertEqual(ds.data_kind, "fisher_z")
+        self.assertEqual(ds.pheno["age"].dropna().tolist(), [22.0, 29.0, 33.0])
+
+    def test_init_manifest_3d_npy_and_timeseries_dir(self):
+        from conninfpy.loaders import load
+
+        npy_file = self.tmp / "stack.npy"
+        np.save(npy_file, _correlations(5, N=6, seed=3))
+        m_npy = self.tmp / "stack_manifest.yaml"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc1 = main(["init-manifest", "--data-file", str(npy_file), "--out", str(m_npy)])
+        self.assertEqual(rc1, 0)
+        ds1 = load(m_npy)
+        self.assertEqual(ds1.data.shape, (5, 6, 6))
+        self.assertEqual(ds1.data_kind, "correlation")
+
+        ts_dir = self.tmp / "ts"
+        ts_dir.mkdir()
+        rng = np.random.default_rng(9)
+        for i in range(3):
+            np.savetxt(ts_dir / f"sub-{i+1:02d}_ts.csv", rng.normal(0, 1, (30, 5)), delimiter=",")
+        m_ts = self.tmp / "ts_manifest.yaml"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc2 = main(["init-manifest", "--data-dir", str(ts_dir), "--out", str(m_ts)])
+        self.assertEqual(rc2, 0)
+        ds2 = load(m_ts)
+        self.assertEqual(ds2.data_kind, "timeseries")
+        self.assertEqual(ds2.data.shape, (3, 30, 5))
+
+
 if __name__ == "__main__":
     unittest.main()

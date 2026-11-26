@@ -62,6 +62,70 @@ def _pack_timeseries(series):
     return list(series)
 
 
+_BIDS_NA_VALUES = ["n/a", "N/A", "na", "NA", "NaN", "null", "NULL", ""]
+_SUBJECT_ID_CANDIDATES = ("subject_id", "participant_id", "subject", "sub_id", "id")
+
+
+def _read_pheno_table(path: str | os.PathLike[str]) -> pd.DataFrame:
+    """Read a phenotype table (.csv, .tsv, .xlsx/.xls) with BIDS n/a handling."""
+    p = Path(path)
+    suffix = p.suffix.lower()
+    if suffix in (".xlsx", ".xls"):
+        return pd.read_excel(p, na_values=_BIDS_NA_VALUES, keep_default_na=True)
+    if suffix == ".tsv":
+        return pd.read_csv(p, sep="\t", na_values=_BIDS_NA_VALUES, keep_default_na=True)
+    return pd.read_csv(p, na_values=_BIDS_NA_VALUES, keep_default_na=True)
+
+
+def _match_subject_id_column(df: pd.DataFrame) -> str | None:
+    """Return the first recognized subject ID column (case-insensitive), or None."""
+    return next(
+        (str(c) for c in df.columns if str(c).lower() in _SUBJECT_ID_CANDIDATES),
+        None,
+    )
+
+
+def _strip_sub_prefix(val: str) -> str:
+    return val[4:] if val.startswith("sub-") else val
+
+
+def _align_pheno_ids(pheno_ids: pd.Series, ext_ids: pd.Series) -> pd.Series:
+    """Map external phenotype IDs to ``pheno_ids``, falling back to ``sub-``-stripped matching."""
+    ext_str = ext_ids.astype(str)
+    pheno_str = pheno_ids.astype(str)
+    exact_set = set(pheno_str)
+    if exact_set.issubset(set(ext_str)):
+        return ext_str
+
+    stripped_to_pheno: dict[str, list[str]] = {}
+    for pid in pheno_str:
+        stripped_to_pheno.setdefault(_strip_sub_prefix(pid), []).append(pid)
+    unique_map = {k: v[0] for k, v in stripped_to_pheno.items() if len(set(v)) == 1}
+
+    def _map_id(eid: str) -> str:
+        if eid in exact_set:
+            return eid
+        return unique_map.get(_strip_sub_prefix(eid), eid)
+
+    return ext_str.map(_map_id)
+
+
+def _merge_external_pheno(pheno: pd.DataFrame, pheno_path: str | None) -> pd.DataFrame:
+    """Read and left-merge an external phenotype table onto ``pheno`` by subject_id."""
+    if not (pheno_path and os.path.exists(pheno_path)):
+        return pheno
+    ext_pheno = _read_pheno_table(pheno_path)
+    id_col = _match_subject_id_column(ext_pheno)
+    if id_col is None:
+        return pheno
+    if id_col != "subject_id":
+        ext_pheno = ext_pheno.rename(columns={id_col: "subject_id"})
+    pheno = pheno.copy()
+    pheno["subject_id"] = pheno["subject_id"].astype(str)
+    ext_pheno["subject_id"] = _align_pheno_ids(pheno["subject_id"], ext_pheno["subject_id"])
+    return pd.merge(pheno, ext_pheno, on="subject_id", how="left")
+
+
 class NumpyLoader(BaseDataLoader):
     """Loader for standard numpy files (.npy or .npz) containing 3D arrays."""
     name = "NumpyLoader"
@@ -130,7 +194,10 @@ class NumpyLoader(BaseDataLoader):
 
         # Load pheno or generate a default one
         if self.pheno_path and os.path.exists(self.pheno_path):
-            pheno = pd.read_csv(self.pheno_path)
+            pheno = _read_pheno_table(self.pheno_path)
+            id_col = _match_subject_id_column(pheno)
+            if id_col and id_col != "subject_id" and "subject_id" not in pheno.columns:
+                pheno = pheno.rename(columns={id_col: "subject_id"})
         else:
             pheno = pd.DataFrame({
                 "subject_id": [f"sub_{i:02d}" for i in range(n_obs)]
@@ -440,17 +507,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
                 "group": all_groups
             })
 
-            if self.pheno_path and os.path.exists(self.pheno_path):
-                if self.pheno_path.endswith(".xlsx"):
-                    ext_pheno = pd.read_excel(self.pheno_path)
-                else:
-                    ext_pheno = pd.read_csv(self.pheno_path)
-                id_col = next((c for c in ext_pheno.columns if c.lower() in ("subject_id", "subject", "sub_id", "id")), None)
-                if id_col:
-                    ext_pheno = ext_pheno.rename(columns={id_col: "subject_id"})
-                    ext_pheno["subject_id"] = ext_pheno["subject_id"].astype(str)
-                    pheno["subject_id"] = pheno["subject_id"].astype(str)
-                    pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
+            pheno = _merge_external_pheno(pheno, self.pheno_path)
 
             atlas = _load_atlas_if_present(self.atlas_metadata)
 
@@ -543,17 +600,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
         if groups:
             pheno["group"] = groups
 
-        if self.pheno_path and os.path.exists(self.pheno_path):
-            if self.pheno_path.endswith(".xlsx"):
-                ext_pheno = pd.read_excel(self.pheno_path)
-            else:
-                ext_pheno = pd.read_csv(self.pheno_path)
-            id_col = next((c for c in ext_pheno.columns if c.lower() in ("subject_id", "subject", "sub_id", "id")), None)
-            if id_col:
-                ext_pheno = ext_pheno.rename(columns={id_col: "subject_id"})
-                ext_pheno["subject_id"] = ext_pheno["subject_id"].astype(str)
-                pheno["subject_id"] = pheno["subject_id"].astype(str)
-                pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
+        pheno = _merge_external_pheno(pheno, self.pheno_path)
 
         atlas = _load_atlas_if_present(self.atlas_metadata)
 
@@ -898,17 +945,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
             "group": all_groups
         })
 
-        if self.pheno_path and os.path.exists(self.pheno_path):
-            if self.pheno_path.endswith(".xlsx"):
-                ext_pheno = pd.read_excel(self.pheno_path)
-            else:
-                ext_pheno = pd.read_csv(self.pheno_path)
-            id_col = next((c for c in ext_pheno.columns if c.lower() in ("subject_id", "subject", "sub_id", "id")), None)
-            if id_col:
-                ext_pheno = ext_pheno.rename(columns={id_col: "subject_id"})
-                ext_pheno["subject_id"] = ext_pheno["subject_id"].astype(str)
-                pheno["subject_id"] = pheno["subject_id"].astype(str)
-                pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
+        pheno = _merge_external_pheno(pheno, self.pheno_path)
 
         atlas = _load_atlas_if_present(self.atlas_metadata)
 
@@ -1069,17 +1106,7 @@ class TimeseriesDirectoryLoader(BaseDataLoader):
             "group": groups
         })
 
-        if self.pheno_path and os.path.exists(self.pheno_path):
-            if self.pheno_path.endswith(".xlsx"):
-                ext_pheno = pd.read_excel(self.pheno_path)
-            else:
-                ext_pheno = pd.read_csv(self.pheno_path)
-            id_col = next((c for c in ext_pheno.columns if c.lower() in ("subject_id", "subject", "sub_id", "id")), None)
-            if id_col:
-                ext_pheno = ext_pheno.rename(columns={id_col: "subject_id"})
-                ext_pheno["subject_id"] = ext_pheno["subject_id"].astype(str)
-                pheno["subject_id"] = pheno["subject_id"].astype(str)
-                pheno = pd.merge(pheno, ext_pheno, on="subject_id", how="left")
+        pheno = _merge_external_pheno(pheno, self.pheno_path)
 
         atlas = _load_atlas_if_present(self.atlas)
 
@@ -1231,7 +1258,7 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
 
 
 class ConnectivityMatrixLoader(BaseDataLoader):
-    """Loader for inference-ready connectivity matrices (.npy or .npz)."""
+    """Loader for inference-ready connectivity matrices (.npy/.npz or per-subject matrix files)."""
     name = "ConnectivityMatrixLoader"
 
     def __init__(
@@ -1240,16 +1267,93 @@ class ConnectivityMatrixLoader(BaseDataLoader):
         data_paths: dict[str, str] | None = None,
         pheno_path: str | None = None,
         atlas: str | None = None,
-        data_kind: Literal["correlation", "fisher_z"] = "fisher_z"
+        data_kind: Literal["correlation", "fisher_z"] = "fisher_z",
+        dir_path: str | None = None,
+        pattern: str = "*.npy",
+        sep: str = ",",
+        header: str | bool | None = None,
+        subject_regex: str = r"sub-([^_/.]+)",
     ):
         self.data_path = data_path
         self.data_paths = data_paths
         self.pheno_path = pheno_path
         self.atlas = atlas
         self.data_kind = data_kind
+        self.dir_path = dir_path
+        self.pattern = pattern
+        self.sep = sep
+        self.header = header
+        self.subject_regex = subject_regex
+
+    def _get_dir_files(self) -> list[str]:
+        if not self.dir_path or not os.path.exists(self.dir_path):
+            return []
+        files = glob.glob(os.path.join(self.dir_path, self.pattern))
+        if not files:
+            files = glob.glob(os.path.join(self.dir_path, "**", self.pattern), recursive=True)
+        pheno_abs = os.path.abspath(self.pheno_path) if self.pheno_path else None
+        out: list[str] = []
+        for f in sorted(files):
+            if pheno_abs and os.path.abspath(f) == pheno_abs:
+                continue
+            if os.path.basename(f).lower() in ("participants.tsv", "participants.csv"):
+                continue
+            out.append(f)
+        return out
+
+    def _extract_subject_id(self, filepath: str) -> str:
+        base = os.path.basename(filepath)
+        sub_id = base.split(".")[0]
+        if self.subject_regex:
+            m = re.search(self.subject_regex, base)
+            if m:
+                sub_id = m.group(1)
+        return sub_id
+
+    def _read_matrix_file(self, filepath: str) -> np.ndarray:
+        if filepath.endswith(".npy"):
+            arr = np.asarray(np.load(filepath), dtype=np.float64)
+        else:
+            sep = "\t" if (self.sep == "," and filepath.lower().endswith(".tsv")) else self.sep
+            hdr = 0 if self.header == "infer" or self.header is True else None
+            df = pd.read_csv(filepath, sep=sep, header=hdr)
+            try:
+                arr = df.apply(pd.to_numeric, errors="raise").to_numpy(dtype=np.float64)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Connectivity matrix file contains non-numeric values: {filepath}. "
+                    "Check the manifest 'header' and 'sep' settings."
+                ) from exc
+        if arr.ndim != 2 or arr.shape[0] != arr.shape[1]:
+            raise ValueError(f"Expected square 2D connectivity matrix in {filepath}; got shape {arr.shape}.")
+        return arr
 
     def preview(self) -> DatasetPreview:
         """Cheap preview of the dataset without a full load."""
+        if self.dir_path:
+            files = self._get_dir_files()
+            if not files:
+                return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["No files matched pattern."])
+            n_rois = None
+            try:
+                mat = self._read_matrix_file(files[0])
+                n_rois = int(mat.shape[0])
+            except Exception:
+                pass
+            sample_ids = [self._extract_subject_id(f) for f in files[:5]]
+            total_sizes = sum(os.path.getsize(f) for f in files) / (1024 * 1024)
+            return DatasetPreview(
+                n_subjects=len(files),
+                n_observations=len(files),
+                n_rois=n_rois,
+                n_timepoints=None,
+                data_kind_guess=self.data_kind,
+                atlas_guess=os.path.basename(self.atlas) if self.atlas else None,
+                conditions=None,
+                subject_ids_sample=sample_ids,
+                file_count=len(files),
+                file_sizes_mb=total_sizes,
+            )
         if self.data_paths:
             first_grp = list(self.data_paths.keys())[0]
             nl = NumpyLoader(data_path=self.data_paths[first_grp], pheno_path=self.pheno_path, data_kind=self.data_kind)
@@ -1280,6 +1384,29 @@ class ConnectivityMatrixLoader(BaseDataLoader):
 
     def load(self) -> LoadedDataset:
         """Load the dataset into a :class:`LoadedDataset`."""
+        if self.dir_path:
+            files = self._get_dir_files()
+            if not files:
+                raise FileNotFoundError(f"No files matched pattern: {self.pattern} in {self.dir_path}")
+            matrices = [self._read_matrix_file(f) for f in files]
+            data = np.stack(matrices, axis=0)
+            subject_ids = [self._extract_subject_id(f) for f in files]
+            pheno = pd.DataFrame({"subject_id": subject_ids})
+            pheno = _merge_external_pheno(pheno, self.pheno_path)
+            atlas = _load_atlas_if_present(self.atlas)
+            return LoadedDataset(
+                data=data,
+                pheno=pheno,
+                data_kind=self.data_kind,
+                subject_ids=subject_ids,
+                atlas=atlas,
+                roi_labels=list(atlas.labels) if atlas is not None else None,
+                provenance={
+                    "dir_path": self.dir_path,
+                    "pheno_path": self.pheno_path,
+                    "pattern": self.pattern,
+                },
+            )
         if self.data_paths:
             all_data = []
             all_groups = []

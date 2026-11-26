@@ -417,6 +417,250 @@ def init_config(
     return yaml_text
 
 
+def _rel_manifest_path(target: Path, base_dir: Optional[Path]) -> str:
+    if base_dir is None:
+        return str(target)
+    try:
+        return os.path.relpath(target, base_dir)
+    except ValueError:
+        return str(target)
+
+
+def _infer_matrix_kind(mat: np.ndarray) -> str:
+    finite = mat[np.isfinite(mat)]
+    is_unit_diag = bool(
+        mat.ndim == 2
+        and mat.shape[0] == mat.shape[1]
+        and np.allclose(np.diag(mat), 1.0, atol=1e-3, equal_nan=True)
+    )
+    in_unit_range = bool(
+        finite.size > 0
+        and float(np.min(finite)) >= -1.0 - 1e-6
+        and float(np.max(finite)) <= 1.0 + 1e-6
+    )
+    return "correlation" if (is_unit_diag or in_unit_range) else "fisher_z"
+
+
+def _inspect_tabular_sample(sample_file: Path, sep: str) -> tuple[np.ndarray, bool]:
+    """Read a sample .tsv/.csv matrix or timeseries file, detecting whether row 0 is a header."""
+    with open(sample_file, encoding="utf-8") as fh:
+        first_line = fh.readline().strip()
+    has_header = False
+    if first_line:
+        tokens = [t.strip() for t in first_line.split(sep)]
+        for tok in tokens:
+            if not tok:
+                continue
+            try:
+                float(tok)
+            except ValueError:
+                has_header = True
+                break
+    df = pd.read_csv(sample_file, sep=sep, header=0 if has_header else None)
+    arr = df.apply(pd.to_numeric, errors="raise").to_numpy(dtype=np.float64)
+    return arr, has_header
+
+
+def init_manifest(
+    *,
+    data_dir: "str | os.PathLike[str] | None" = None,
+    data_file: "str | os.PathLike[str] | None" = None,
+    pheno_path: "str | os.PathLike[str] | None" = None,
+    out_path: "str | os.PathLike[str] | None" = None,
+    kind: str = "auto",
+    atlas: Optional[str] = None,
+    id_col: Optional[str] = None,
+    name: Optional[str] = None,
+    force: bool = False,
+) -> str:
+    """Generate a v1 ``DatasetManifest`` YAML from a data directory or 3D NumPy file."""
+    from conninfpy.loaders.builtins import _match_subject_id_column, _read_pheno_table
+
+    if (data_dir is None) == (data_file is None):
+        raise ValueError("Provide exactly one of --data-dir or --data-file.")
+
+    out_p: Optional[Path] = None
+    base_dir: Optional[Path] = None
+    if out_path is not None:
+        out_p = Path(out_path).resolve()
+        if out_p.exists() and not force:
+            raise FileExistsError(f"{out_p} already exists; pass --force to overwrite.")
+        base_dir = out_p.parent
+
+    pheno_p: Optional[Path] = None
+    detected_id_col: Optional[str] = None
+    n_pheno_rows: Optional[int] = None
+    if pheno_path is not None:
+        pheno_p = Path(pheno_path).resolve()
+        if not pheno_p.is_file():
+            raise FileNotFoundError(f"Phenotype file not found: {pheno_p}")
+        pheno_df = _read_pheno_table(pheno_p)
+        n_pheno_rows = len(pheno_df)
+        if id_col is not None:
+            if id_col not in pheno_df.columns:
+                raise ValueError(
+                    f"--id-col {id_col!r} not found in {pheno_p.name}; "
+                    f"available: {list(pheno_df.columns)}."
+                )
+            detected_id_col = id_col
+        else:
+            detected_id_col = _match_subject_id_column(pheno_df)
+
+    atlas_ref: Optional[str] = None
+    if atlas is not None:
+        if atlas in ("bna_246", "bna246.csv"):
+            atlas_ref = "BUILTIN:bna246.csv"
+        elif Path(atlas).exists():
+            atlas_ref = _rel_manifest_path(Path(atlas).resolve(), base_dir)
+        else:
+            atlas_ref = atlas
+
+    paths: Dict[str, Any] = {}
+    params: Dict[str, Any] = {}
+    checks: Dict[str, Any] = {}
+    n_subjects_found: Optional[int] = None
+    n_rois_found: Optional[int] = None
+    dataset_name = name
+
+    if data_file is not None:
+        df_p = Path(data_file).resolve()
+        if not df_p.is_file():
+            raise FileNotFoundError(f"Data file not found: {df_p}")
+        dataset_name = dataset_name or df_p.stem
+        loader_name = "NumpyLoader"
+        loaded = np.load(df_p, allow_pickle=True)
+        if isinstance(loaded, np.lib.npyio.NpzFile):
+            first_key = loaded.files[0]
+            arr = np.asarray(loaded[first_key])
+        else:
+            arr = np.asarray(loaded)
+        if arr.ndim != 3:
+            raise ValueError(f"Expected a 3D array in {df_p}; got shape {arr.shape}.")
+        n_subjects_found = int(arr.shape[0])
+        n_rois_found = int(arr.shape[2])
+        if kind == "auto":
+            data_kind = "timeseries" if arr.shape[1] != arr.shape[2] else _infer_matrix_kind(arr[0])
+        else:
+            data_kind = kind
+        paths["data_path"] = _rel_manifest_path(df_p, base_dir)
+        if pheno_p is not None:
+            paths["pheno_path"] = _rel_manifest_path(pheno_p, base_dir)
+        if atlas_ref is not None:
+            paths["atlas_metadata"] = atlas_ref
+        params["data_kind"] = data_kind
+    else:
+        assert data_dir is not None
+        dd_p = Path(data_dir).resolve()
+        if not dd_p.is_dir():
+            raise NotADirectoryError(f"Data directory not found: {dd_p}")
+        dataset_name = dataset_name or dd_p.name
+
+        bold_files = sorted(dd_p.rglob("*desc-preproc_bold.nii.gz"))
+        if bold_files:
+            loader_name = "FmriprepDerivativesLoader"
+            n_subjects_found = len(bold_files)
+            paths["derivatives_dir"] = _rel_manifest_path(dd_p, base_dir)
+            if pheno_p is not None:
+                paths["pheno_path"] = _rel_manifest_path(pheno_p, base_dir)
+            if atlas_ref is not None:
+                paths["atlas_image_path"] = atlas_ref
+        else:
+            pheno_abs = pheno_p.resolve() if pheno_p is not None else None
+            chosen_ext: Optional[str] = None
+            matched_files: List[Path] = []
+            for ext in (".npy", ".tsv", ".csv"):
+                cands = sorted(dd_p.glob(f"*{ext}"))
+                if not cands:
+                    cands = sorted(dd_p.rglob(f"*{ext}"))
+                cands = [
+                    p for p in cands
+                    if (pheno_abs is None or p.resolve() != pheno_abs)
+                    and p.name.lower() not in ("participants.tsv", "participants.csv")
+                ]
+                if cands:
+                    chosen_ext = ext
+                    matched_files = cands
+                    break
+
+            if not matched_files or chosen_ext is None:
+                raise FileNotFoundError(
+                    f"No supported data files (.npy, .tsv, .csv, *desc-preproc_bold.nii.gz) found in {dd_p}."
+                )
+
+            n_subjects_found = len(matched_files)
+            sample = matched_files[0]
+            sep: Optional[str] = None
+            has_header: Optional[bool] = None
+            if chosen_ext == ".npy":
+                arr = np.asarray(np.load(sample), dtype=np.float64)
+            else:
+                sep = "\t" if chosen_ext == ".tsv" else ","
+                arr, has_header = _inspect_tabular_sample(sample, sep=sep)
+
+            if arr.ndim != 2:
+                raise ValueError(f"Expected 2D array in sample file {sample}; got shape {arr.shape}.")
+
+            n_rois_found = int(arr.shape[1])
+            is_square = arr.shape[0] == arr.shape[1]
+            is_sym = is_square and bool(np.allclose(arr, arr.T, atol=1e-4, equal_nan=True))
+
+            if kind == "timeseries" or (kind == "auto" and not (is_square and is_sym)):
+                loader_name = "TimeseriesDirectoryLoader"
+                paths["dir_path"] = _rel_manifest_path(dd_p, base_dir)
+                if pheno_p is not None:
+                    paths["pheno_path"] = _rel_manifest_path(pheno_p, base_dir)
+                if atlas_ref is not None:
+                    paths["atlas"] = atlas_ref
+                params["pattern"] = f"*{chosen_ext}"
+                if sep is not None:
+                    params["sep"] = sep
+                if has_header is not None:
+                    params["header"] = bool(has_header)
+            else:
+                loader_name = "ConnectivityMatrixLoader"
+                data_kind = _infer_matrix_kind(arr) if kind == "auto" else kind
+                paths["dir_path"] = _rel_manifest_path(dd_p, base_dir)
+                if pheno_p is not None:
+                    paths["pheno_path"] = _rel_manifest_path(pheno_p, base_dir)
+                if atlas_ref is not None:
+                    paths["atlas"] = atlas_ref
+                params["pattern"] = f"*{chosen_ext}"
+                params["data_kind"] = data_kind
+                if sep is not None:
+                    params["sep"] = sep
+                if has_header is not None:
+                    params["header"] = bool(has_header)
+
+    if n_rois_found is not None:
+        checks["expected_rois"] = n_rois_found
+
+    manifest_dict: Dict[str, Any] = {
+        "schema_version": 1,
+        "name": dataset_name,
+        "loader": loader_name,
+        "paths": paths,
+    }
+    if params:
+        manifest_dict["params"] = params
+    if checks:
+        manifest_dict["checks"] = checks
+
+    header_lines = [
+        f"# ConnInfPy dataset manifest (loader={loader_name})",
+        f"# Detected: subjects={n_subjects_found}, rois={n_rois_found}"
+        + (f", pheno_rows={n_pheno_rows}, id_col={detected_id_col}" if pheno_p is not None else ""),
+    ]
+    yaml_text = "\n".join(header_lines) + "\n" + yaml.safe_dump(manifest_dict, sort_keys=False)
+
+    if out_p is not None:
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        out_p.write_text(yaml_text, encoding="utf-8")
+        print(f"Wrote {out_p}")
+    else:
+        print(yaml_text, end="")
+    return yaml_text
+
+
 def _resolve_atlas_for_interpret(
     atlas_spec: Optional[str],
     provenance_path: Optional[Path],

@@ -240,6 +240,7 @@ influence diagnostics:
 
 ```bash
 conninfpy selftest                                    # quick check: TFNBS, MP, bundled atlases
+conninfpy init-manifest --data-dir data/ --pheno participants.tsv --out manifest.yaml
 conninfpy init --manifest datasets/abide_mini.yaml --out analysis.yaml
 conninfpy qc analysis.yaml --motion-qc                # alias: conninfpy check
 conninfpy run examples/abide/configs/abide_mini_age.yaml --dry-run
