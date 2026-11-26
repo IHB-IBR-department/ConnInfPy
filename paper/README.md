@@ -44,6 +44,10 @@ datasets.
 | Fig S4 | `simulation/figS4_topologies_gallery.png` | `paper/build_manuscript_figures.py --group sim` |
 | Fig S5 | `simulation/figS5_tfnbs_eh_sweep_and_paired_diff.png` | `paper/build_manuscript_figures.py --group sim` |
 
+3D BrainNet Viewer supplementary/companion renders (2400×1600, 200 DPI):
+`abide/abide_cc200_dx_strategy_d_tfnbs_top150_ch2cb.png` (`BrainMesh_Ch2withCerebellum.nv`, 6-view),
+`openclose/open_close_ihb_tfnbs_top150.png`, and `openclose/open_close_china_tfnbs_top150.png` (ICBM152, 4-view).
+
 ## Notes on simulation baselines
 
 - **Exact integration (`n=None`)**: All TFNBS-family bars/heatmaps in Fig 2 and

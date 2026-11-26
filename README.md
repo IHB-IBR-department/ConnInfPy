@@ -456,6 +456,18 @@ BrainMap profiles cover BNA cortex/subcortex only.
 
 </details>
 
+### Visualization and 3D BrainNet Viewer
+
+| ABIDE I (CC200) ASD > HC connectogram (BNA-246 + SUIT) | Open-Close IHB EC vs EO (ICBM152, top-150 \|t\|) | ABIDE I (CC200) ASD vs HC (Ch2withCerebellum, top-150 \|t\|) |
+|---|---|---|
+| ![ABIDE I CC200 ASD vs HC connectogram with BNA-246 and SUIT cerebellum](docs/images/connectogram_abide_asd_hc.png) | ![Open-Close IHB EC vs EO 3D BrainNet Viewer render on ICBM152](docs/images/brainnet_open_close_ihb.png) | ![ABIDE I CC200 ASD vs HC 3D BrainNet Viewer render on Ch2withCerebellum](docs/images/brainnet_abide_asd_hc.png) |
+
+```bash
+conninfpy interpret conninfpy_results --cerebellum anatom --export-brainnet --brainnet-render
+```
+
+See the [workflows guide](docs/source/workflows.rst) for Python API examples (`plot_connectogram`, `export_brainnet`, `render_brainnet`) and BrainNet color conventions.
+
 ## Advanced API
 
 `analyze()` is built from public modules you can use directly:

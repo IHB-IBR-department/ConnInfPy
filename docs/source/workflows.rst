@@ -826,6 +826,21 @@ For data parcellated with the Brainnetome atlas itself use
 See :ref:`usage-interpret` for the rules, and the ABIDE and Open-Close
 examples (``examples/abide/``, ``examples/open_close/``) for complete runs.
 
+.. image:: ../images/connectogram_abide_asd_hc.png
+   :alt: ABIDE I CC200 ASD vs HC connectogram with BNA-246 anatomical lobes and SUIT cerebellum
+   :align: center
+
+.. code-block:: python
+
+   from conninfpy.atlas.brainnetome import BrainnetomeReference
+   from conninfpy.interpret import annotate_rois
+   from conninfpy.plot import plot_connectogram
+
+   ref = BrainnetomeReference.load(resolution_mm=1, cerebellum='anatom')
+   rois = annotate_rois(coords, reference=ref, names=names,
+                        support='sphere', radius_mm=6, space='MNI152NLin2009cAsym')
+   plot_connectogram(out.inference, rois, tail='positive', level='gyrus', max_links=80)
+
 BrainNet Viewer export and headless rendering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -839,12 +854,26 @@ and ``.edge`` files together with a ``.scene.json`` scene manifest
 
    paths = export_brainnet(out.inference, atlas, 'results/brainnet', alpha=0.05, write_scene=True)
    # Optional headless PNG rendering if brainnet-render is installed in a separate environment:
-   # png = render_brainnet(paths['scene'], 'results/brainnet.png')
+   png = render_brainnet(paths['scene'], 'results/brainnet.png')
 
-From the CLI, ``conninfpy interpret --export-brainnet`` writes ``.node``,
+From the CLI, ``conninfpy interpret --cerebellum anatom --export-brainnet`` writes ``.node``,
 ``.edge``, and ``.scene.json``; adding ``--brainnet-render`` (and optionally
 ``--brainnet-bin <path>``) invokes ``brainnet-render`` when available and warns
 without failing if the renderer is not installed.
+
+.. image:: ../images/brainnet_open_close_ihb.png
+   :alt: Open-Close IHB EC vs EO 3D BrainNet Viewer render on ICBM152
+   :align: center
+
+.. image:: ../images/brainnet_abide_asd_hc.png
+   :alt: ABIDE I CC200 ASD vs HC 3D BrainNet Viewer render on Ch2withCerebellum
+   :align: center
+
+*Top: Open-Close IHB EC vs EO on ICBM152 (4-view). Bottom: ABIDE I CC200 ASD vs HC
+on BrainMesh_Ch2withCerebellum (6-view). Nodes are colored by BNA-246 anatomical
+lobes (Frontal, Insular, Limbic, Temporal, Parietal, Occipital, Subcortical,
+Cerebellum); edges are colored by effect sign (warm = positive, cool = negative)
+for the top 150 significant edges by |t|.*
 
 Speed vs. publication runs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
