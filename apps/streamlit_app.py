@@ -12,6 +12,11 @@ from apps.components.design_inference import render_design_inference_view
 from apps.components.inference_results import render_inference_results_view
 from apps.components.bna_annotation import render_bna_annotation_view
 from apps.components.workspace_docs import render_workspace_docs_view
+from apps.utils.atlas_wizard import (
+    custom_atlas_csv_template,
+    inspect_atlas_readiness,
+    load_custom_atlas_nifti,
+)
 from apps.utils.helpers import PROJECT_ROOT, atlas_has_coords, atlas_has_networks, load_custom_atlas_csv
 from apps.utils.ui_state import persistent_file_uploader, persistent_key, retain_widget_state
 from apps.utils.workspace import (
@@ -180,7 +185,9 @@ with st.sidebar.expander("Save & restore workspace", expanded=False):
             st.error(str(exc))
 st.sidebar.markdown("### Atlas metadata")
 st.sidebar.caption("Used for the next dataset load. The active analysis keeps its loaded atlas.")
-atlas_mode = st.sidebar.radio("Atlas Metadata", ["No atlas metadata", "Bundled atlas", "Custom atlas CSV"], index=1, key="atlas_mode")
+if st.session_state.get("atlas_mode") == "Custom atlas CSV":
+    st.session_state["atlas_mode"] = "Custom atlas"
+atlas_mode = st.sidebar.radio("Atlas Metadata", ["No atlas metadata", "Bundled atlas", "Custom atlas"], index=1, key="atlas_mode")
 base_atlas = None
 atlas_choice = atlas_mode
 palette = None
@@ -193,30 +200,80 @@ if atlas_mode == "Bundled atlas":
         "Schaefer-400 Yeo-7": "apps/assets/yeo7_schaefer400_sidebar_palette.png",
         "BNA-246": "apps/assets/bna246_sidebar_palette.png",
     }[atlas_choice]
-elif atlas_mode == "Custom atlas CSV":
+elif atlas_mode == "Custom atlas":
+    custom_format = st.sidebar.radio(
+        "Custom atlas format",
+        ["ROI Table (CSV)", "3D Label Mask (NIfTI + optional LUT)"],
+        key=persistent_key("custom_atlas_format", scope="atlas"),
+    )
     custom_source = st.sidebar.radio("Custom atlas source", ["Path", "Upload"], horizontal=True, key=persistent_key("custom_atlas_source", scope="atlas"))
     try:
-        if custom_source == "Path":
-            path = st.sidebar.text_input("Atlas CSV path", key=persistent_key("custom_atlas_path", scope="atlas"))
-            if path:
-                base_atlas = load_custom_atlas_csv(path, source=f"Custom atlas: {path}")
+        if custom_format == "ROI Table (CSV)":
+            if custom_source == "Path":
+                path = st.sidebar.text_input("Atlas CSV path", key=persistent_key("custom_atlas_path", scope="atlas"))
+                if path:
+                    base_atlas = load_custom_atlas_csv(path, source=f"Custom atlas: {path}")
+            else:
+                with st.sidebar:
+                    uploaded = persistent_file_uploader("Upload atlas CSV", type=["csv"], key="custom_atlas_upload")
+                if uploaded is not None:
+                    uploaded.seek(0)
+                    base_atlas = load_custom_atlas_csv(uploaded, source=f"Custom atlas: {uploaded.name}")
+            st.sidebar.download_button(
+                "Download CSV template",
+                data=custom_atlas_csv_template(),
+                file_name="custom_atlas_template.csv",
+                mime="text/csv",
+                key="custom_atlas_template_download",
+                width="stretch",
+            )
         else:
-            with st.sidebar:
-                uploaded = persistent_file_uploader("Upload atlas CSV", type=["csv"], key="custom_atlas_upload")
-            if uploaded is not None:
-                uploaded.seek(0)
-                base_atlas = load_custom_atlas_csv(uploaded, source=f"Custom atlas: {uploaded.name}")
+            if custom_source == "Path":
+                nifti_path = st.sidebar.text_input("3D label NIfTI path (.nii / .nii.gz)", key=persistent_key("custom_atlas_nifti_path", scope="atlas"))
+                lut_path = st.sidebar.text_input("Optional LUT path (.csv / .tsv / .txt)", key=persistent_key("custom_atlas_lut_path", scope="atlas"))
+                if nifti_path:
+                    base_atlas = load_custom_atlas_nifti(
+                        nifti_path,
+                        lut_path_or_buffer=lut_path or None,
+                        source=f"Custom NIfTI atlas: {nifti_path}",
+                    )
+            else:
+                with st.sidebar:
+                    nifti_upload = persistent_file_uploader("Upload 3D label NIfTI", type=["nii", "gz"], key="custom_atlas_nifti_upload")
+                    lut_upload = persistent_file_uploader("Upload optional LUT", type=["csv", "tsv", "txt", "lut"], key="custom_atlas_lut_upload")
+                if nifti_upload is not None:
+                    base_atlas = load_custom_atlas_nifti(
+                        nifti_upload,
+                        lut_path_or_buffer=lut_upload,
+                        source=f"Custom NIfTI atlas: {nifti_upload.name}",
+                    )
         if base_atlas is not None:
             atlas_choice = f"Custom atlas ({len(base_atlas)} ROIs)"
     except Exception as exc:
         st.sidebar.error(f"Could not load custom atlas: {exc}")
         base_atlas = None
+    with st.sidebar.expander("Custom atlas format guide"):
+        st.markdown(
+            "- **CSV table**: required `name`, `network`; optional `x, y, z` (MNI mm), `hemisphere`, `id`/`roi_id`. Row order must match matrix node order `0..N-1`.\n"
+            "- **3D NIfTI mask**: 3D integer labels (`0 = background`), ROI order = ascending label IDs (matching nilearn `NiftiLabelsMasker`), optional LUT (`id, name[, network]` or FreeSurfer LUT). 4D probabilistic maps are not label masks — convert to 3D integer labels or supply an MNI coordinate CSV.\n"
+            "- **What each provides**: `name` → edge tables; `network` → `network_summary` + `cNBS`/`NI-TFNBS`/`FBC-TFNBS`; `x, y, z` → Brainnetome `sphere` annotation; 3D NIfTI → exact Brainnetome + SUIT `parcel` annotation."
+        )
 
 if base_atlas is None:
     st.sidebar.caption("Atlas metadata is optional for statistics. Network-aware methods need network labels; annotation needs ROI coordinates or a parcellation image.")
 else:
     capabilities = [f"{len(base_atlas)} ROIs", "network labels" if atlas_has_networks(base_atlas) else "no network labels", "coordinates" if atlas_has_coords(base_atlas) else "no coordinates"]
     st.sidebar.caption(" · ".join(capabilities))
+    if atlas_mode == "Custom atlas":
+        conn_data = st.session_state.get("connectivity_data")
+        n_nodes = int(conn_data.shape[1]) if conn_data is not None and getattr(conn_data, "ndim", 0) >= 2 else None
+        readiness = inspect_atlas_readiness(base_atlas, n_nodes=n_nodes)
+        with st.sidebar.expander("Atlas readiness checklist", expanded=any(item.status == "error" for item in readiness)):
+            for item in readiness:
+                icon = {"ok": "✓", "warning": "!", "error": "✕"}[item.status]
+                st.markdown(f"**{icon} {item.label}** — {item.detail}")
+                if item.guidance and item.status != "ok":
+                    st.caption(item.guidance)
 if palette:
     with st.sidebar.expander("Preview atlas and network colours"):
         st.image(palette, width="stretch")

@@ -377,13 +377,23 @@ per direction, a signed proportion, and the summed / mean −log₁₀ p.
 table; `conninfpy.plot.plot_network_summary` draws the signed proportion.
 
 `conninfpy.AtlasInfo` ships Schaefer-100/200/400 (Yeo-7) and Brainnetome-246;
-`AtlasInfo.from_csv()` reads any other atlas. `AtlasInfo.bna_246()` groups its
-regions by the Brainnetome Yeo-7 division (`bna246_hierarchy.csv`; subcortical
-regions are `Subcortical`); pass `networks="yeo17"` or `networks="lobe"` for
-the other groupings. **Changed in October 2026:** it previously grouped by
-lobe, so network-pair summaries, the network columns of edge tables (including
-the CLI's `edges.csv` with `atlas: bna_246`) and network-ordered figures of
-BNA-246 data now follow Yeo-7; use `networks="lobe"` for the old grouping.
+`AtlasInfo.bna_246()` groups its regions by the Brainnetome Yeo-7 division
+(`bna246_hierarchy.csv`; subcortical regions are `Subcortical`); pass
+`networks="yeo17"` or `networks="lobe"` for the other groupings. **Changed in
+October 2026:** it previously grouped by lobe, so network-pair summaries, the
+network columns of edge tables (including the CLI's `edges.csv` with
+`atlas: bna_246`) and network-ordered figures of BNA-246 data now follow Yeo-7;
+use `networks="lobe"` for the old grouping.
+
+**Custom atlases.** Any user parcellation can be loaded into `AtlasInfo` via
+four constructors, depending on what metadata you have:
+
+| Format | Required structure | Python call | Capabilities unlocked |
+|---|---|---|---|
+| ROI CSV | `name`, `network` (optional `x, y, z` MNI mm, `hemisphere`, `id`/`roi_id`) in matrix order `0..N-1` | `AtlasInfo.from_csv(path)` | Edge tables, `network_summary` + `cNBS`/`NI-TFNBS`/`FBC-TFNBS`; `sphere` annotation if `x, y, z` present |
+| 3D integer NIfTI (+ optional LUT) | 3D integer labels (`0 = background`), ascending ROI IDs; optional CSV/TSV/FreeSurfer LUT | `AtlasInfo.from_nifti(nii_path, lut=...)` | Edge tables, auto-computed centroids, `network_summary` (with LUT/mapping), exact `parcel` Brainnetome + SUIT annotation |
+| MNI coordinates `(N, 3)` | `(N, 3)` MNI mm array matched against a reference atlas (e.g. Schaefer or BNA) | `AtlasInfo.from_coordinates(coords, reference=...)` | Edge tables, `network_summary` + block methods, `sphere` Brainnetome annotation |
+| `nilearn` deterministic atlas | Deterministic `fetch_atlas_*` result (`nilearn >= 0.13` with `lut`; 4D probabilistic maps rejected) | `AtlasInfo.from_nilearn(atlas)` | Same as 3D NIfTI (`image`, centroids, `parcel` annotation); auto-parses Schaefer Yeo-7 networks |
 
 **Anatomical interpretation (Brainnetome).** `conninfpy.interpret` describes
 ROIs and detected connections with the Brainnetome atlas (BNA-246, Fan et al.
@@ -516,7 +526,7 @@ outside the package scope:
 - **Graph-theory metrics** (degree, global/local efficiency, modularity, clustering) and their group comparisons: use [`bctpy`](https://github.com/aestrivex/bctpy) alongside ConnInfPy.
 - **Dynamic, effective, or directed connectivity**, and **task-fMRI gPPI / beta-series connectivity**: for task-modulated connectivity, see [TMFC](https://github.com/IHB-IBR-department/TMFC_denoise) / TMFCpy.
 - **Unbalanced or mixed $\ge 3$-timepoint longitudinal models** (`Group × Time` across 3+ waves): currently only balanced within-subject omnibus F-contrasts (`D1`) are supported.
-- **Third-party parcellations** (e.g., Seitzman-300, Power-264, AAL3, Glasser MMP): load any ROI table or 3D/4D label volume with `AtlasInfo.from_csv(path)` or `AtlasInfo.from_nifti(nii_path, labels=...)`.
+- **Third-party parcellations** (e.g., Seitzman-300, Power-264, AAL3, Glasser MMP): load any ROI table (`AtlasInfo.from_csv()`), 3D integer label volume (`AtlasInfo.from_nifti()` — 4D probabilistic maps are not label images), MNI coordinate array (`AtlasInfo.from_coordinates()`), or deterministic `nilearn` atlas (`AtlasInfo.from_nilearn()`). See the [custom atlas recipes](docs/source/workflows.rst) for examples.
 
 ## Tutorials and examples
 

@@ -1300,7 +1300,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 from apps.utils.workspace_io import capture_source_hashes
 
                                 extra_source_paths = {}
-                                if st.session_state.get("atlas_mode") == "Custom atlas CSV" and st.session_state.get("custom_atlas_path"):
+                                if st.session_state.get("atlas_mode") in ("Custom atlas", "Custom atlas CSV") and st.session_state.get("custom_atlas_path"):
                                     extra_source_paths["custom_atlas_path"] = st.session_state.get("custom_atlas_path")
                                 st.session_state.dataset_info["source_files"] = capture_source_hashes(
                                     dataset_info=st.session_state.dataset_info,

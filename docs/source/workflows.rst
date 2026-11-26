@@ -887,3 +887,87 @@ See ``examples/fmriprep_nilearn/`` for the full runnable script
 (``run_fmriprep_workflow.py``), ``manifest_template.yaml`` (for Schaefer-100
 and Craddock-200), and the matching ``conninfpy qc`` → ``run`` → ``interpret``
 CLI commands.
+
+
+.. _wf-custom-atlases:
+
+Custom atlases
+--------------
+
+``conninfpy.AtlasInfo`` supports four custom atlas constructors so any
+parcellation or coordinate set plugs into :func:`~conninfpy.analyze`,
+``out.significant_edges(atlas)``, ``out.network_summary(atlas)``, and
+:func:`~conninfpy.interpret.annotate_rois`.
+
+1. **ROI table (CSV)** — ``AtlasInfo.from_csv()``
+
+   Required columns: ``name`` and ``network``. Optional columns: ``x``, ``y``,
+   ``z`` (MNI mm), ``hemisphere``, and ``id`` or ``roi_id``. Rows must be in
+   matrix node order ``0..N-1``:
+
+   .. code-block:: text
+
+      id,name,network,x,y,z,hemisphere
+      1,LH_Vis_1,Visual,-18,-86,-4,L
+      2,RH_Vis_1,Visual,20,-84,-2,R
+
+   .. code-block:: python
+
+      from conninfpy import AtlasInfo, analyze
+      from conninfpy.interpret import annotate_rois
+
+      atlas = AtlasInfo.from_csv("my_atlas.csv")
+      out = analyze(group1=ctrl, group2=pat, method="cnbs", atlas=atlas, rng=42)
+      edges = out.significant_edges(atlas)
+      nets = out.network_summary(atlas)
+      rois = annotate_rois(atlas.coords, names=atlas.labels, networks=atlas.networks,
+                           support="sphere", radius_mm=6, space="MNI152NLin2009cAsym")
+
+2. **3D integer label volume (NIfTI + optional LUT)** — ``AtlasInfo.from_nifti()``
+
+   Accepts a **3D** integer label NIfTI (``0 = background``), reading non-zero
+   ROI IDs in ascending order (matching ``nilearn.maskers.NiftiLabelsMasker``)
+   and computing ROI centroids automatically. Probabilistic **4D** maps are not
+   label masks and are rejected; convert them to 3D integer labels or use
+   ``AtlasInfo.from_coordinates()`` / ``from_csv()``.
+
+   .. code-block:: python
+
+      atlas = AtlasInfo.from_nifti("my_parcellation_3d.nii.gz", lut="my_lut.csv")
+      out = analyze(group1=ctrl, group2=pat, method="tfnbs", rng=42)
+      edges = out.significant_edges(atlas)
+      nets = out.network_summary(atlas)   # uses LUT 'network' column if present
+      rois = annotate_rois(coords=atlas.coords, names=atlas.labels,
+                           networks=atlas.networks, support="parcel",
+                           parcel_image=atlas.image,
+                           parcel_labels=list(atlas.label_ids),
+                           space="MNI152NLin2009cAsym")
+
+3. **MNI coordinates** — ``AtlasInfo.from_coordinates()``
+
+   Assigns an ``(N, 3)`` array of MNI coordinates (mm, in matrix order) to a
+   reference atlas (e.g. ``AtlasInfo.schaefer_200_yeo7()`` or ``AtlasInfo.bna_246()``)
+   to populate ROI labels and network memberships:
+
+   .. code-block:: python
+
+      atlas = AtlasInfo.from_coordinates(coords, reference=AtlasInfo.schaefer_200_yeo7())
+      out = analyze(group1=ctrl, group2=pat, method="cnbs", atlas=atlas, rng=42)
+      nets = out.network_summary(atlas)
+      rois = annotate_rois(atlas.coords, names=atlas.labels, networks=atlas.networks,
+                           support="sphere", radius_mm=6, space="MNI152NLin2009cAsym")
+
+4. **Deterministic nilearn atlas** — ``AtlasInfo.from_nilearn()``
+
+   Wraps deterministic ``nilearn.datasets.fetch_atlas_*`` results (``nilearn >= 0.13``,
+   which provide a ``lut`` table; 4D probabilistic atlases are rejected):
+
+   .. code-block:: python
+
+      from nilearn import datasets
+      ho = datasets.fetch_atlas_harvard_oxford("cort-maxprob-thr25-2mm", symmetric_split=True)
+      atlas = AtlasInfo.from_nilearn(ho)
+      rois = annotate_rois(coords=atlas.coords, names=atlas.labels,
+                           support="parcel", parcel_image=atlas.image,
+                           parcel_labels=list(atlas.label_ids),
+                           space="MNI152NLin2009cAsym")

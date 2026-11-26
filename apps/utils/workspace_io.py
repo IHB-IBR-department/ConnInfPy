@@ -97,6 +97,9 @@ LEGACY_LLM_WIDGET_KEYS = frozenset({"llm_api_key"})
 # Retired narrative/LLM widget keys are covered by _is_excluded_widget_key().
 _EXCLUDED_WIDGET_KEYS = frozenset({
     "custom_atlas_upload",
+    "custom_atlas_nifti_upload",
+    "custom_atlas_lut_upload",
+    "custom_atlas_template_download",
     "workspace_restore_upload",
     "workspace_restore_file",
     "active_tab",
