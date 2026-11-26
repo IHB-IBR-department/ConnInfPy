@@ -460,7 +460,7 @@ place, and no binomial interval is reported for an accelerated result.
 The replaced values are model-based tail estimates that can be smaller than
 1/(J+1); their accuracy is not established by the number of permutations, and
 the option exists for exploration with a few hundred permutations — reported
-results use the empirical default. Known limits of the 2.0.0 implementation:
+results use the empirical default. Known limits of the 2.0 implementation:
 a replaced p-value is capped at min(1, (min_exceedances + 1)/(J + 1)), which
 can be *larger* than the empirical p-value of the same unit — the replacement
 can raise a p, for GPD and gamma alike; the gamma branch has no

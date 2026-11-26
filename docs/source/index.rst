@@ -31,6 +31,6 @@ This description adds no test and leaves the inference unchanged.
 
 To **cite this toolbox**, use the metadata in ``CITATION.cff`` at the root of
 the repository (`github.com/IHB-IBR-department/ConnInfPy
-<https://github.com/IHB-IBR-department/ConnInfPy>`_; ConnInfPy 2.0.0, MIT
+<https://github.com/IHB-IBR-department/ConnInfPy>`_; ConnInfPy 2.0, MIT
 licence). No DOI has been registered for the package yet and the software
 paper is in preparation; this section will be updated once a DOI is assigned.

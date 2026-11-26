@@ -18,8 +18,8 @@ design:
 
 inference:                   # any conninfpy.analyze() keyword
   method: tfnbs
-  n_permutations: 200
-  acceleration: gpd          # remove for exact empirical p-values (then use ~5000)
+  n_permutations: 1000
+  # acceleration: gpd        # opt-in exploratory only; reported results use empirical default (acceleration: null)
   rng: 42
   # two_tailed: false        # legacy: separate one-sided families per direction
                              # (combined-direction FWER is then not alpha; use alpha/2 per tail)

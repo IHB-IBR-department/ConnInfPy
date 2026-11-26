@@ -88,7 +88,9 @@ data-dependent: no binomial
 
 ## Installation
 
-Python **3.12, 3.13 or 3.14**.
+Python **3.12, 3.13 or 3.14** (`>=3.12,<3.15` is required). On systems that default to Python 3.10 or 3.11 (such as Ubuntu 22.04 LTS or older `conda` base environments), create an explicit Python 3.12/3.13 environment via `uv venv --python 3.13` or `conda create -n conninfpy python=3.13`.
+
+> **Shared / read-only HPC environments.** If `site-packages` is read-only on a cluster, set a writable Numba cache directory before running ConnInfPy: `export NUMBA_CACHE_DIR=/tmp/numba_cache` (or a writable scratch directory).
 
 ### Recommended: `uv` (fast, zero-conflict setup)
 

@@ -21,14 +21,14 @@ After the release this becomes ``python -m pip install conninfpy``.
 From a built artifact
 ----------------------
 
-``python -m build`` produces ``dist/conninfpy-2.0.0-py3-none-any.whl`` and
-``dist/conninfpy-2.0.0.tar.gz``. Either installs with its dependencies and the
+``python -m build`` produces ``dist/conninfpy-2.0-py3-none-any.whl`` and
+``dist/conninfpy-2.0.tar.gz``. Either installs with its dependencies and the
 bundled atlas data, and the checkout is no longer needed afterwards:
 
 .. code-block:: bash
 
     python -m build
-    python -m pip install dist/conninfpy-2.0.0-py3-none-any.whl   # or the .tar.gz
+    python -m pip install dist/conninfpy-2.0-py3-none-any.whl   # or the .tar.gz
 
 Optional extras
 ---------------
