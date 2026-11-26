@@ -8,11 +8,16 @@ import sys
 
 import pytest
 
+from conninfpy.atlas.resources import atlas_resource_available
 from conninfpy.loaders.manifest import load_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_DIR = ROOT / "examples" / "fmriprep_nilearn"
 HAS_NILEARN = importlib.util.find_spec("nilearn") is not None
+HAS_BNA_CACHE = (
+    atlas_resource_available("BN_Atlas_246_1mm.nii.gz")
+    and atlas_resource_available("bna246_hierarchy.csv")
+)
 
 
 def test_manifest_template_parses():
@@ -34,6 +39,7 @@ def test_no_bundled_nifti_or_array_datasets_in_example():
 
 
 @pytest.mark.skipif(not HAS_NILEARN, reason="nilearn not installed ([app] extra)")
+@pytest.mark.skipif(not HAS_BNA_CACHE, reason="Brainnetome atlas cache not downloaded; run scripts/download_atlases.py")
 def test_synthetic_fmriprep_workflow_runs_offline(tmp_path):
     script = EXAMPLE_DIR / "run_fmriprep_workflow.py"
     out_dir = tmp_path / "out"

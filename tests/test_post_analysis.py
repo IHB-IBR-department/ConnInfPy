@@ -10,8 +10,37 @@ import pytest
 from conninfpy import ResultBundle, brainnetome_crosswalk
 from conninfpy.atlas import AtlasInfo, assign_coordinates
 from conninfpy.atlas.brainnetome import BrainnetomeReference
-from conninfpy.atlas.resources import read_bna_hierarchy
 from conninfpy.loaders.base import LoadedDataset
+
+
+def _synthetic_bna_regions() -> pd.DataFrame:
+    rows = []
+    for rid in range(1, 247):
+        hemi = "L" if rid % 2 else "R"
+        hom = rid + 1 if rid % 2 else rid - 1
+        name = "A8m_L" if rid == 1 else "A8m_R" if rid == 2 else f"R{rid}_{hemi}"
+        rows.append(
+            {
+                "roi_id": rid,
+                "name": name,
+                "hemisphere": hemi,
+                "homolog_id": hom,
+                "code": f"C_{rid}",
+                "description": f"Region {name}",
+                "gyrus": "SFG" if rid <= 2 else f"G{(rid - 1) // 2}",
+                "gyrus_name": "Superior Frontal Gyrus",
+                "lobe": "Frontal" if rid <= 2 else "Temporal",
+                "structure": "cortex",
+                "yeo7_id": 6,
+                "yeo7": "Frontoparietal",
+                "yeo17_id": 12,
+                "yeo17": "Control A",
+                "x": -10.0 if hemi == "L" else 10.0,
+                "y": float(rid),
+                "z": 20.0,
+            }
+        )
+    return pd.DataFrame(rows).set_index("roi_id")
 from conninfpy.loaders.manifest import filter_dataset_rois
 from conninfpy.results import InferenceResult, OmnibusInferenceResult
 
@@ -132,7 +161,7 @@ def test_crosswalk_profiles_homolog_unknown_and_overlap():
     data = np.zeros((5, 1, 1), dtype=np.int16); data[0, 0, 0] = 1; data[4, 0, 0] = 2
     affine = np.eye(4); affine[0, 3] = -2
     image = nib.Nifti1Image(data, affine)
-    ref = BrainnetomeReference(regions=read_bna_hierarchy(), label_image=image,
+    ref = BrainnetomeReference(regions=_synthetic_bna_regions(), label_image=image,
         profiles={"BD": {1: {"Cognition.Memory": 2.5}, 2: {}}, "PC": {1: {}, 2: {"Task": 1.2}}},
         provenance={"atlas": "synthetic", "profiles": {"source": "fixture"}})
     cross = brainnetome_crosswalk(roi_ids=[12, 3, 9], coords=[[-2, 0, 0], [2, 0, 0], [0, 0, 0]],
@@ -158,7 +187,7 @@ def test_crosswalk_profiles_homolog_unknown_and_overlap():
 def test_annotation_endpoint_pair_and_missing_profile():
     data = np.zeros((5, 1, 1), dtype=np.int16); data[0, 0, 0] = 1; data[4, 0, 0] = 2
     affine = np.eye(4); affine[0, 3] = -2
-    ref = BrainnetomeReference(regions=read_bna_hierarchy(), label_image=nib.Nifti1Image(data, affine),
+    ref = BrainnetomeReference(regions=_synthetic_bna_regions(), label_image=nib.Nifti1Image(data, affine),
         profiles={"BD": {1: {"shared": 2}, 2: {"shared": 3}}, "PC": {1: {"task": 5}}},
         provenance={"atlas": "fixture", "profiles": {"source": "test"}})
     annotation = brainnetome_crosswalk(roi_ids=[1, 5, 12, 190], coords=[[-2, 0, 0], [2, 0, 0], [0, 0, 0], [2, 0, 0]],
@@ -194,7 +223,7 @@ def test_one_sided_grid_validation_and_export_metadata(tmp_path):
 
 def test_sphere_coverage_includes_outside_reference_field():
     data = np.ones((1, 1, 1), dtype=np.int16)
-    ref = BrainnetomeReference(regions=read_bna_hierarchy(), label_image=nib.Nifti1Image(data, np.eye(4)),
+    ref = BrainnetomeReference(regions=_synthetic_bna_regions(), label_image=nib.Nifti1Image(data, np.eye(4)),
                                profiles=None, provenance={"atlas": "fixture"})
     cross = brainnetome_crosswalk(roi_ids=[1], coords=[[0, 0, 0]], space="MNI152NLin6Asym", units="mm",
                                  reference=ref, support="sphere", radius_mm=1.01, min_coverage=.1)
@@ -207,7 +236,7 @@ def test_endpoint_profiles_preserve_small_overlap_terms():
     data = np.zeros((5, 1, 1), dtype=np.int16)
     data[0, 0, 0] = 1; data[4, 0, 0] = 2
     affine = np.eye(4); affine[0, 3] = -2
-    ref = BrainnetomeReference(regions=read_bna_hierarchy(), label_image=nib.Nifti1Image(data, affine),
+    ref = BrainnetomeReference(regions=_synthetic_bna_regions(), label_image=nib.Nifti1Image(data, affine),
         profiles={"BD": {1: {"first": 1.1}, 2: {"second": 1.2}}, "PC": {1: {}, 2: {}}},
         provenance={"atlas": "fixture"})
     source = nib.Nifti1Image(np.full((5, 1, 1), 7, dtype=np.int16), affine)

@@ -143,6 +143,12 @@ class TestInterpretFlags(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
+    @unittest.skipUnless(
+        __import__("conninfpy.atlas.resources", fromlist=["atlas_resource_available"]).atlas_resource_available("BN_Atlas_246_1mm.nii.gz")
+        and __import__("conninfpy.atlas.resources", fromlist=["atlas_resource_available"]).atlas_resource_available("bna246_hierarchy.csv")
+        and __import__("conninfpy.atlas.resources", fromlist=["atlas_resource_available"]).atlas_resource_available("bna246.csv"),
+        "Brainnetome atlas files not in local cache; run scripts/download_atlases.py",
+    )
     def test_interpret_sphere_pdf_and_point(self):
         atlas_path = _write_coords_atlas(self.tmp, n_rois=6)
         cfg = _make_study(
@@ -424,7 +430,6 @@ class TestReportingAndBrainNet(unittest.TestCase):
             rc = main([
                 "interpret", str(self.tmp / "out"),
                 "--methods",
-                "--cerebellum", "anatom",
                 "--no-plots",
                 "--out", str(out_interp),
             ])
@@ -435,7 +440,30 @@ class TestReportingAndBrainNet(unittest.TestCase):
         self.assertIn("2.0", md_cli)
         self.assertIn("combat_site_dummies_glm", md_cli)
         self.assertIn("Fortin", md_cli)
-        self.assertIn("Diedrichsen", md_cli)
+
+        from conninfpy.atlas.resources import atlas_resource_available
+        if all(
+            atlas_resource_available(n)
+            for n in (
+                "BN_Atlas_246_1mm.nii.gz",
+                "bna246_hierarchy.csv",
+                "bna246.csv",
+                "atl-Anatom_space-MNI_dseg.nii.gz",
+                "atl-Anatom_space-MNI_dseg.tsv",
+            )
+        ):
+            out_interp_cb = self.tmp / "interp_methods_cb"
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc_cb = main([
+                    "interpret", str(self.tmp / "out"),
+                    "--methods",
+                    "--cerebellum", "anatom",
+                    "--no-plots",
+                    "--out", str(out_interp_cb),
+                ])
+            self.assertEqual(rc_cb, 0)
+            md_cb = (out_interp_cb / "methods_boilerplate.md").read_text(encoding="utf-8")
+            self.assertIn("Diedrichsen", md_cb)
 
         # AtlasInfo without coords check is independent; test BNA-246 reference trigger
         bna_mock = AtlasInfo(

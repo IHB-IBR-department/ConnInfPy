@@ -180,11 +180,54 @@ def _make_sample_atlas() -> AtlasInfo:
     )
 
 
+def _make_synthetic_bna_ref(n_regions: int = 246) -> BrainnetomeReference:
+    rows = []
+    for rid in range(1, n_regions + 1):
+        hemi = "L" if rid % 2 else "R"
+        hom = rid + 1 if rid % 2 else rid - 1
+        rows.append(
+            {
+                "roi_id": rid,
+                "name": f"R{rid}_{hemi}",
+                "hemisphere": hemi,
+                "homolog_id": hom,
+                "code": f"C_{rid}",
+                "description": f"Synthetic region {rid}",
+                "gyrus": "SFG" if rid <= 4 else f"G{(rid - 1) // 2}",
+                "gyrus_name": "Superior Frontal Gyrus",
+                "lobe": "Frontal" if rid <= 4 else "Temporal",
+                "structure": "cortex",
+                "yeo7_id": 6,
+                "yeo7": "Frontoparietal",
+                "yeo17_id": 12,
+                "yeo17": "Control A",
+                "x": -10.0 if hemi == "L" else 10.0,
+                "y": float(rid),
+                "z": 20.0,
+            }
+        )
+    regions = pd.DataFrame(rows).set_index("roi_id")
+    vol = np.zeros((6, 1, 1), dtype=np.int16)
+    for rid in range(1, 5):
+        vol[rid - 1, 0, 0] = rid
+    img = nib.Nifti1Image(vol, np.eye(4))
+    profiles = {
+        "BD": {1: {"Cognition.Memory.Working": 2.1}, 2: {"Action.Execution": 1.7}},
+        "PC": {1: {"GoNoGo": 1.4}},
+    }
+    return BrainnetomeReference(
+        regions=regions,
+        label_image=img,
+        profiles=profiles,
+        provenance={"atlas": "synthetic BNA fixture"},
+    )
+
+
 def _make_sample_annotation_bundle(res: InferenceResult):
     from conninfpy.interpret.annotate import annotate_bna_regions, summarize_annotation
     from conninfpy.interpret.evidence import build_annotation_evidence
 
-    ref = BrainnetomeReference.load()
+    ref = _make_synthetic_bna_ref()
     rois = annotate_bna_regions([1, 2, 3, 4], reference=ref, names=["R1", "R2", "R3", "R4"])
     summary = summarize_annotation(res, rois, alpha=0.025, tail="positive", level="lobe", param_idx=0)
     edges = summary["edges"]

@@ -625,7 +625,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
 
 
 class AbideSchaeferLoader(BaseDataLoader):
-    """Loader for the pickled dictionary format of the ABIDE Schaefer-100 dataset."""
+    """Loader for the ABIDE Schaefer-100 dataset (.npz without pickle, or legacy .npy dict)."""
     name = "AbideSchaeferLoader"
 
     def __init__(self, data_path: str, pheno_csv_path: str | None = None,
@@ -635,12 +635,34 @@ class AbideSchaeferLoader(BaseDataLoader):
         self.connectivity_kind = connectivity_kind
         self.shrinkage = shrinkage
 
+    def _is_npz(self) -> bool:
+        return str(self.data_path).lower().endswith(".npz")
+
     def preview(self) -> DatasetPreview:
         """Cheap preview of the dataset without a full load."""
         if not os.path.exists(self.data_path):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], 0, 0.0, ["File not found."])
 
         try:
+            if self._is_npz():
+                with np.load(self.data_path, allow_pickle=False) as z:
+                    subject_ids = [str(x) for x in z["subject_ids"].tolist()]
+                    ts_lengths = np.asarray(z["ts_lengths"], dtype=np.int64)
+                    n_rois = int(z["ts_values"].shape[-1])
+                    n_tp = int(ts_lengths[0]) if len(ts_lengths) > 0 else None
+                return DatasetPreview(
+                    n_subjects=len(subject_ids),
+                    n_observations=len(subject_ids),
+                    n_rois=n_rois,
+                    n_timepoints=n_tp,
+                    data_kind_guess="timeseries",
+                    atlas_guess="Schaefer-100",
+                    conditions=None,
+                    subject_ids_sample=subject_ids[:5],
+                    file_count=1,
+                    file_sizes_mb=os.path.getsize(self.data_path) / (1024 * 1024)
+                )
+
             d = np.load(self.data_path, allow_pickle=True).item()
             keys = list(d.keys())
             sample_key = keys[0]
@@ -661,20 +683,35 @@ class AbideSchaeferLoader(BaseDataLoader):
                 file_sizes_mb=os.path.getsize(self.data_path) / (1024 * 1024)
             )
         except Exception as e:
-            return DatasetPreview(None, None, None, None, "unknown", None, None, [], 1, None, [f"Error reading ABIDE dict: {e}"])
+            return DatasetPreview(None, None, None, None, "unknown", None, None, [], 1, None, [f"Error reading ABIDE dataset: {e}"])
 
     def load(self) -> LoadedDataset:
         """Load the dataset into a :class:`LoadedDataset`."""
-        d = np.load(self.data_path, allow_pickle=True).item()
+        if self._is_npz():
+            with np.load(self.data_path, allow_pickle=False) as z:
+                required = {"subject_ids", "labels", "sites", "ts_values", "ts_lengths"}
+                if not required.issubset(z.files):
+                    raise ValueError(
+                        f"{self.data_path}: expected keys {sorted(required)}, got {sorted(z.files)}."
+                    )
+                subject_ids = [str(x) for x in z["subject_ids"].tolist()]
+                labels = [str(x) for x in z["labels"].tolist()]
+                sites = [str(x) for x in z["sites"].tolist()]
+                ts_values = np.asarray(z["ts_values"], dtype=np.float64)
+                ts_lengths = np.asarray(z["ts_lengths"], dtype=np.int64)
+            offsets = np.concatenate(([0], np.cumsum(ts_lengths)))
+            series = [ts_values[start:end] for start, end in zip(offsets[:-1], offsets[1:])]
+        else:
+            d = np.load(self.data_path, allow_pickle=True).item()
 
-        subject_ids = list(d.keys())
-        labels = []
-        sites = []
-        series = []
-        for sub_id in subject_ids:
-            series.append(d[sub_id]["time_series"])
-            labels.append(d[sub_id].get("label", "unknown"))
-            sites.append(d[sub_id].get("site", "unknown"))
+            subject_ids = list(d.keys())
+            labels = []
+            sites = []
+            series = []
+            for sub_id in subject_ids:
+                series.append(d[sub_id]["time_series"])
+                labels.append(d[sub_id].get("label", "unknown"))
+                sites.append(d[sub_id].get("site", "unknown"))
 
         pheno = pd.DataFrame({
             "subject_id": subject_ids,

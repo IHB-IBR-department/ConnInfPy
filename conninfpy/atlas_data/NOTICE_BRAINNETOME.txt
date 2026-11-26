@@ -1,8 +1,11 @@
-Brainnetome Atlas data in this directory
-========================================
+Brainnetome Atlas data (on-demand cache, not bundled in wheel)
+==============================================================
 
-The following files are Brainnetome Atlas data or derived from it, and are NOT
-covered by ConnInfPy's MIT licence (which applies to the code only):
+The Brainnetome Atlas files and derived tables listed below are NOT bundled in
+ConnInfPy's MIT-licensed repository or Python wheel. They are downloaded /
+cached on demand into ~/.cache/conninfpy/atlases/ (or $CONNINFPY_ATLAS_DIR) via
+scripts/download_atlases.py, and remain subject to the Brainnetome Center
+terms below (NOT ConnInfPy's MIT licence):
 
   BN_Atlas_246_1mm.nii.gz, BN_Atlas_246_2mm.nii.gz   maximum-probability label images
   bna246.csv                                        region names and voxel-mass centroids
@@ -23,8 +26,7 @@ researchers, scientists and others at colleges, universities, not-for-profit
 foundations and similar institutions free of charge, subject to proper
 attribution and an agreement to share alike, for use for non-commercial
 purposes. Licences for commercial use: Dr. Lingzhong Fan, lzfan@nlpr.ia.ac.cn.
-These files are redistributed here under the same terms; anything you derive
-from them must be shared under the same terms.
+Anything you derive from these files must be shared under the same terms.
 
 Cite:
   Fan L, Li H, Zhuo J, et al. (2016). The Human Brainnetome Atlas: a new brain

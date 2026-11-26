@@ -51,6 +51,22 @@ class _FakeResult:
         return self._edges[self._edges["p_min"] <= alpha].copy()
 
 
+from conninfpy.atlas.resources import atlas_resource_available as _atlas_resource_available
+
+_HAS_CEREBELLAR_CACHE = all(
+    _atlas_resource_available(n)
+    for n in (
+        "BN_Atlas_246_1mm.nii.gz",
+        "bna246_hierarchy.csv",
+        "bna246.csv",
+        "atl-Anatom_space-MNI_dseg.nii.gz",
+        "atl-Anatom_space-MNI_dseg.tsv",
+    )
+)
+_CACHE_SKIP_REASON = "Brainnetome/SUIT atlas files not in local cache; run scripts/download_atlases.py"
+
+
+@pytest.mark.skipif(not _HAS_CEREBELLAR_CACHE, reason=_CACHE_SKIP_REASON)
 def test_default_cerebellum_none_preserves_bna246_bitwise():
     ref = BrainnetomeReference.load()
     assert ref.n_regions == N_REGIONS == 246
@@ -64,6 +80,7 @@ def test_default_cerebellum_none_preserves_bna246_bitwise():
     assert not lay["s0"].isna().any()
 
 
+@pytest.mark.skipif(not _HAS_CEREBELLAR_CACHE, reason=_CACHE_SKIP_REASON)
 def test_cerebellum_anatom_composite_and_metadata():
     ref_bna = BrainnetomeReference.load()
     ref = BrainnetomeReference.load(cerebellum="anatom")
@@ -97,6 +114,7 @@ def test_cerebellum_anatom_composite_and_metadata():
         BrainnetomeReference.load(resolution_mm=2, cerebellum="anatom")
 
 
+@pytest.mark.skipif(not _HAS_CEREBELLAR_CACHE, reason=_CACHE_SKIP_REASON)
 def test_annotate_rois_edges_summary_and_connectogram_with_cerebellum():
     ref = BrainnetomeReference.load(cerebellum="anatom")
     # Pick exact centroids of:

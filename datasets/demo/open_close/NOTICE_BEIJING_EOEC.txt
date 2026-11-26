@@ -1,20 +1,23 @@
-Beijing EOEC (China) Open-Close derivatives in this directory
-==============================================================
+Beijing EOEC (China) Open-Close derivatives (not bundled in repository)
+=======================================================================
 
-The following files are derived from the Beijing Eyes-Open / Eyes-Closed
-(Beijing EOEC) dataset and are NOT covered by ConnInfPy's MIT licence
-(which applies to the code and documentation only):
+The Beijing Eyes-Open / Eyes-Closed (Beijing EOEC) derivative files are NOT
+bundled in this repository because of their Creative Commons
+Attribution-NonCommercial (CC BY-NC) licence:
 
   china_open_Schaefer200_strategy-4_GSR.npy    Schaefer-200 eyes-open time series
   china_close_Schaefer200_strategy-4_GSR.npy   Schaefer-200 eyes-closed time series
   subject_order_china.txt                      subject IDs aligned to row index
 
-Source: FCP-INDI / NITRC Beijing EOEC dataset
-https://fcon_1000.projects.nitrc.org/indi/retro/BeijingEOEC.html
+How to obtain and prepare locally:
+  1. Download the preprocessed derivatives archive from Medvedeva et al. (2026):
+     https://disk.yandex.ru/d/fNz33QPwJQj7HQ
+     (Original cohort source: https://fcon_1000.projects.nitrc.org/indi/retro/BeijingEOEC.html)
+  2. Run the preparation script to verify shapes, alignment, and SHA-256 checksums:
+     python scripts/prepare_china_open_close.py --source-dir /path/to/downloaded_dir
 
 Terms stated by the upstream FCP-INDI / NITRC release:
 Creative Commons Attribution-NonCommercial (CC BY-NC).
-These derivatives are redistributed here under the same non-commercial terms.
 
 Mandatory attribution:
   Liu D, Dong Z, Zuo X, Wang J, Zang Y (2013). Eyes-Open/Eyes-Closed Dataset

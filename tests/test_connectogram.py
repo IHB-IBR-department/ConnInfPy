@@ -14,9 +14,16 @@ matplotlib.use("Agg")
 import numpy as np
 
 from conninfpy.atlas.brainnetome import BrainnetomeReference
+from conninfpy.atlas.resources import atlas_resource_available
 from conninfpy.interpret.annotate import (_unit_weights, aggregate_connections, annotate_bna_regions,
                                           annotate_rois)
 from conninfpy.results import InferenceResult
+
+HAS_BNA_CACHE = all(
+    atlas_resource_available(name)
+    for name in ("BN_Atlas_246_1mm.nii.gz", "bna246_hierarchy.csv", "bna246.csv")
+)
+BNA_SKIP_REASON = "Brainnetome atlas files not in local cache; run scripts/download_atlases.py"
 
 POINTS = {
     "L dlPFC": (-42, 36, 24), "R dlPFC": (42, 36, 24), "L amygdala": (-22, -4, -18),
@@ -49,6 +56,7 @@ def _result(n, detected, tail="positive"):
     )
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, BNA_SKIP_REASON)
 class TestCoverageOfPlacedROIs(unittest.TestCase):
     """Unassigned ROIs are not placed; their detected connections stay counted."""
 
@@ -102,6 +110,7 @@ class TestCoverageOfPlacedROIs(unittest.TestCase):
         self.assertAlmostEqual(agg["tested"].sum(), cov["tested_placed"])
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, BNA_SKIP_REASON)
 class TestBNARegionsAllPlaced(unittest.TestCase):
     """BNA-246 input: every region is placed, coverage is complete, the connectogram draws."""
 
@@ -137,6 +146,7 @@ class TestBNARegionsAllPlaced(unittest.TestCase):
         self.assertNotIn("touch an unplaced ROI", footer)
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, BNA_SKIP_REASON)
 class TestCoordinateROIs(unittest.TestCase):
     """Coordinate ROIs: sphere and point supports place each ROI in its dominant unit."""
 
@@ -163,6 +173,7 @@ class TestCoordinateROIs(unittest.TestCase):
         self.assertEqual(w[1].sum(), 0.0)      # white-matter point: unassigned, not placed
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, BNA_SKIP_REASON)
 class TestUnitWeightsDefaultUnchanged(unittest.TestCase):
     """placed_only=False (default) keeps the weighted composition of every labelled ROI."""
 

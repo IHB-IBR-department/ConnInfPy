@@ -45,6 +45,7 @@ import numpy as np
 import numpy.typing as npt
 
 from conninfpy.atlas.resources import (
+    atlas_resource_path,
     bundled_path,
     get_bna_246_nifti_path,
     read_bna_hierarchy,
@@ -539,15 +540,16 @@ class AtlasInfo:
             if networks == "lobe"
             else f"Brainnetome division ({networks}, bna246_hierarchy.csv)"
         )
+        bna_csv = atlas_resource_path("bna246.csv")
         if with_image:
             atlas = cls.from_nifti(
                 get_bna_246_nifti_path(1),
-                lut=bundled_path("bna246.csv"),
+                lut=bna_csv,
                 source=f"Fan et al. 2016 Brainnetome Atlas (BN_Atlas_246_1mm.nii.gz); networks = {grouping}.",
             )
         else:
-            atlas = _load_bundled(
-                "bna246.csv",
+            atlas = cls.from_csv(
+                bna_csv,
                 source=(
                     f"Fan et al. 2016 Brainnetome Atlas; networks = {grouping}; centroids "
                     "from BN_Atlas_246_1mm.nii.gz."

@@ -24,5 +24,64 @@
       "sha256": "23e20b1fbd5628962f9bb3fb984b46f13214f7a273efce0fad25c98f06d9ada7",
       "size_bytes": 5802
     }
+  },
+  "atlas_files": {
+    "BN_Atlas_246_1mm.nii.gz": {
+      "sha256": "0d90d084952bdbddf417abb457f4eec016cbb95dfd53a4801713806da5646ba3",
+      "size_bytes": 176321,
+      "download_method": "manual_share_page",
+      "url": "https://pan.cstcloud.cn/s/gfGflpp3Q0E",
+      "source_page": "https://atlas.brainnetome.org/download.html",
+      "license": "Brainnetome non-commercial research use, attribution, and share-alike"
+    },
+    "BN_Atlas_246_2mm.nii.gz": {
+      "sha256": "fe5f69ed40875ad88687fe53302391c0b24a87fa6145bf72b2377e49521c65a5",
+      "size_bytes": 41140,
+      "download_method": "manual_share_page",
+      "url": "https://pan.cstcloud.cn/s/2wL0QvSQQ",
+      "source_page": "https://atlas.brainnetome.org/download.html",
+      "license": "Brainnetome non-commercial research use, attribution, and share-alike"
+    },
+    "bna246.csv": {
+      "sha256": "df30be6b90931b22ff215a5e3365b520afce681b4aa06b1907bd888a718febdc",
+      "size_bytes": 10377,
+      "download_method": "derived",
+      "derived_from": [
+        "BN_Atlas_246_1mm.nii.gz",
+        "sources/BNA_subregions.xlsx",
+        "sources/BN_Atlas_246_LUT.txt"
+      ],
+      "source_page": "https://atlas.brainnetome.org/download.html",
+      "license": "Brainnetome non-commercial research use, attribution, and share-alike"
+    },
+    "bna246_hierarchy.csv": {
+      "sha256": "97dcb98cc0cf1d08df54280f9e7bfb8e669ae1c02982a47479109a3d305d02e8",
+      "size_bytes": 36050,
+      "download_method": "derived",
+      "derived_from": [
+        "bna246.csv",
+        "sources/BNA_subregions.xlsx",
+        "sources/subregion_func_network_Yeo_updated.csv"
+      ],
+      "build_script": "scripts/build_bna_hierarchy.py",
+      "source_page": "https://atlas.brainnetome.org/download.html",
+      "license": "Brainnetome non-commercial research use, attribution, and share-alike"
+    },
+    "BDf_FDR05.json": {
+      "sha256": "6158abc4e606b2ba4e7761f956a44ccc632c81bdade7644e185a912aba32e520",
+      "size_bytes": 26978,
+      "download_method": "direct",
+      "url": "https://atlas.brainnetome.org/js/bnatlasviewer/BDf_FDR05.json",
+      "source_page": "https://atlas.brainnetome.org/download.html",
+      "license": "Brainnetome non-commercial research use, attribution, and share-alike (BrainMap derived)"
+    },
+    "PCf_FDR05.json": {
+      "sha256": "03d1209174e064e56bf449958a96f4944c7497af2038c49124570c413e13b797",
+      "size_bytes": 24976,
+      "download_method": "direct",
+      "url": "https://atlas.brainnetome.org/js/bnatlasviewer/PCf_FDR05.json",
+      "source_page": "https://atlas.brainnetome.org/download.html",
+      "license": "Brainnetome non-commercial research use, attribution, and share-alike (BrainMap derived)"
+    }
   }
 }

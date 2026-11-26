@@ -26,9 +26,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
 
-from conninfpy.atlas.resources import brainnetome_data_dir, bundled_path, verify_brainnetome_resource
+from conninfpy.atlas.resources import (
+    atlas_cache_dir,
+    atlas_resource_path,
+    brainnetome_data_dir,
+    verify_brainnetome_resource,
+)
 
-OUT = ROOT / "conninfpy" / "atlas_data" / "bna246_hierarchy.csv"
+OUT = atlas_cache_dir() / "bna246_hierarchy.csv"
 
 STRUCTURE = {"Amyg": "amygdala", "Hipp": "hippocampus", "BG": "basal_ganglia", "Tha": "thalamus"}
 YEO7 = {1: "Visual", 2: "Somatomotor", 3: "Dorsal Attention", 4: "Ventral Attention",
@@ -76,7 +81,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=OUT)
     args = parser.parse_args()
     source = (args.source_override or args.source_dir or brainnetome_data_dir() / "sources").expanduser().resolve()
-    bundled = pd.read_csv(bundled_path("bna246.csv"))
+    bundled = pd.read_csv(atlas_resource_path("bna246.csv"))
     t1_path = verify_brainnetome_resource(source / "BNA_subregions.xlsx", "sources/BNA_subregions.xlsx")
     yeo_path = verify_brainnetome_resource(source / "subregion_func_network_Yeo_updated.csv", "sources/subregion_func_network_Yeo_updated.csv")
     t1 = _table1(t1_path)

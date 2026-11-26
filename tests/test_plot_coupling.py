@@ -180,8 +180,26 @@ def test_nan_cells_become_missing_category():
 # 3. homotopy markers come from BNA homolog_id only
 # ---------------------------------------------------------------------------
 
+def _synthetic_homology_ref() -> BrainnetomeReference:
+    import nibabel as nib
+    import pandas as pd
+
+    rows = [
+        {"roi_id": 1, "name": "A8m_L", "hemisphere": "L", "homolog_id": 2},
+        {"roi_id": 2, "name": "A8m_R", "hemisphere": "R", "homolog_id": 1},
+        {"roi_id": 3, "name": "A8dl_L", "hemisphere": "L", "homolog_id": 4},
+        {"roi_id": 4, "name": "A8dl_R", "hemisphere": "R", "homolog_id": 3},
+        {"roi_id": 20, "name": "A46_R", "hemisphere": "R", "homolog_id": 19},
+        {"roi_id": 24, "name": "A8vl_R", "hemisphere": "R", "homolog_id": 23},
+    ]
+    return BrainnetomeReference(
+        regions=pd.DataFrame(rows).set_index("roi_id"),
+        label_image=nib.Nifti1Image(np.zeros((2, 2, 2), dtype=np.int16), np.eye(4)),
+    )
+
+
 def test_homotopy_from_bna_metadata_and_order_invariant():
-    ref = BrainnetomeReference.load(profiles=False, resolution_mm=2)
+    ref = _synthetic_homology_ref()
     ids = np.array([1, 2, 3, 4, 20, 24])  # (1,2) and (3,4) are BNA homologues
     res = _synthetic_result()
     ax = plot_coupling_classes(res, atlas=_atlas(ids, 6), reference=ref)
@@ -210,7 +228,7 @@ def test_homotopy_from_bna_metadata_and_order_invariant():
 # ---------------------------------------------------------------------------
 
 def test_unknown_homology_is_explicit():
-    ref = BrainnetomeReference.load(profiles=False, resolution_mm=2)
+    ref = _synthetic_homology_ref()
     res = _synthetic_result()
     ax = plot_coupling_classes(res, atlas=_atlas([1, 2, 3, 4, 20, 24], 6))
     assert ax.attrs["homology"] == "unknown"

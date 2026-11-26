@@ -4,17 +4,18 @@ This directory holds **public demo** study inputs and manifests tracked in the r
 
 | Path | Contents |
 |---|---|
-| `demo/ABIDE_mini/` + `abide_mini.yaml` | 204-subject, 5-site Schaefer-100 ABIDE subset for CLI, Streamlit, and README demos |
+| `demo/ABIDE_mini/` + `abide_mini.yaml` | 204-subject, 5-site Schaefer-100 ABIDE subset (`abide_mini.npz`, pickle-free) for CLI, Streamlit, and README demos |
 | `demo/NBS_schizophrenia/` + `nbs_schizophrenia.yaml` | MATLAB NBS v1.2 example (27 subjects, 74 AAL regions, GPL v3+) |
-| `demo/open_close/` + `open_close.yaml` | Eyes-Open vs. Eyes-Closed Schaefer-200 arrays, labels, and subject lists |
+| `demo/open_close/` + `open_close.yaml` | Eyes-Open vs. Eyes-Closed IHB Schaefer-200 arrays (CC BY 4.0), labels, and subject list |
 
-Full external datasets — ABIDE I PCP CC200 (`../local_datasets/ABIDE_pcp/` or `~/nilearn_data/ABIDE_pcp/`), local Brainnetome Open-Close series, and personal fMRIPrep or clinical cohorts — are stored **outside** the repository (e.g., under `$CONNINFPY_DATA` or an external study directory) and passed via CLI flags (`--data-dir`) or a manifest YAML.
+Full external datasets — ABIDE I PCP CC200 (`../local_datasets/ABIDE_pcp/` or `~/nilearn_data/ABIDE_pcp/`), Beijing EOEC (China) derivatives, local Brainnetome Open-Close series, and personal fMRIPrep or clinical cohorts — are stored **outside** the repository (e.g., under `$CONNINFPY_DATA` or an external study directory) and passed via CLI flags (`--data-dir`) or a manifest YAML.
 
 Atlas resources have separate owners:
 
 | Resource | Location |
 |---|---|
-| Offline atlas label images, lookup/hierarchy tables and BrainMap profiles | Installed `conninfpy/atlas_data/`, accessed through `conninfpy.atlas.resources` |
+| Bundled MIT parcellation tables (`schaefer*_yeo7.csv`) and provenance manifests | Installed `conninfpy/atlas_data/`, accessed through `conninfpy.atlas.resources` |
+| On-demand Brainnetome BNA-246 & SUIT v1.2 atlases | `~/.cache/conninfpy/atlases/` (or `$CONNINFPY_ATLAS_DIR`), populated via `scripts/download_atlases.py` |
 | Optional Brainnetome probabilistic/tractography originals | `~/conninfpy_data/brainnetome/`, or a configured data directory |
 | Original Brainnetome hierarchy-building tables | The external directory's `sources/` subfolder |
 | ENIGMA Schaefer structural-connectivity simulation fixtures | [examples/simulations/sc_prior/data/](../examples/simulations/sc_prior/data/) |
@@ -39,16 +40,32 @@ corrections to the NBS node table and the MATLAB reference result are in
 
 Rebuild with `python scripts/build_nbs_schizophrenia_demo.py --nbs-dir <NBS1.2>`.
 
+## Beijing EOEC (China) Schaefer-200 derivatives (external / link only)
+
+Due to their Creative Commons Attribution-NonCommercial (CC BY-NC) licence, the
+Beijing EOEC derivatives (`china_open_Schaefer200_strategy-4_GSR.npy`,
+`china_close_Schaefer200_strategy-4_GSR.npy`, `subject_order_china.txt`) are
+**not** tracked in this repository.
+
+1. Download the preprocessed derivatives archive from Medvedeva et al. (2026):
+   `https://disk.yandex.ru/d/fNz33QPwJQj7HQ`
+   (Upstream cohort: `https://fcon_1000.projects.nitrc.org/indi/retro/BeijingEOEC.html`).
+2. Prepare and verify shapes/checksums with:
+   `python scripts/prepare_china_open_close.py --source-dir <downloaded_dir>`
+
+See [demo/open_close/NOTICE_BEIJING_EOEC.txt](demo/open_close/NOTICE_BEIJING_EOEC.txt)
+and [NOTICE](../NOTICE) for mandatory attribution and grant acknowledgements.
+
 ## Open-Close Brainnetome series and Beijing EOEC phenotype (external / local only)
 
-These nine files are **not** stored in the repository; keep them in an external study directory (e.g., `$CONNINFPY_DATA/open_close/` or `../local_datasets/open_close/`) and pass `--data-dir` (or an external path) rather than placing them inside `datasets/`. Provenance recorded in the repository: BenchmarkingEOEC pre-processing pipeline ``strategy-4`` (Medvedeva et al. 2026, *Brain Informatics* 13:18, https://doi.org/10.1186/s40708-026-00305-1; preprocessed data archive: https://disk.yandex.ru/d/fNz33QPwJQj7HQ), see the docstring of [examples/open_close/_shared/data.py](../examples/open_close/_shared/data.py). For third-party licence and attribution terms of the bundled demo datasets (including the Beijing EOEC files), see [demo/open_close/NOTICE_BEIJING_EOEC.txt](demo/open_close/NOTICE_BEIJING_EOEC.txt) and the root [NOTICE](../NOTICE).
+These nine files are **not** stored in the repository; keep them in an external study directory (e.g., `$CONNINFPY_DATA/open_close/` or `../local_datasets/open_close/`) and pass `--data-dir` (or an external path) rather than placing them inside `datasets/`. Provenance recorded in the repository: BenchmarkingEOEC pre-processing pipeline ``strategy-4`` (Medvedeva et al. 2026, *Brain Informatics* 13:18, https://doi.org/10.1186/s40708-026-00305-1; preprocessed data archive: https://disk.yandex.ru/d/fNz33QPwJQj7HQ), see the docstring of [examples/open_close/_shared/data.py](../examples/open_close/_shared/data.py). For third-party licence and attribution terms, see [demo/open_close/NOTICE_BEIJING_EOEC.txt](demo/open_close/NOTICE_BEIJING_EOEC.txt) and the root [NOTICE](../NOTICE).
 
 Each ``{experiment}_{state}_Brainnetome_strategy-4_{GSR,noGSR}.npy`` file holds
 the same participants as the Schaefer-200 series (same subject order; IHB: 84
 subjects × 120 TRs, China: 48 subjects × 240 TRs) parcellated with BNA-246,
 with and without global-signal regression; the China close products carry two
 independent closed-eyes runs on the last axis (test-retest). Labels come from
-`conninfpy/atlas_data/bna246_hierarchy.csv`; `drop_missing_rois` removes
+`bna246_hierarchy.csv` (in the on-demand atlas cache); `drop_missing_rois` removes
 `BNA_DROPOUT_IDS` (242 regions retained).
 
 | File | Shape, dtype | Bytes | SHA-256 |
@@ -71,7 +88,9 @@ Read by `OpenCloseDataset.load(..., atlas="brainnetome", gsr=...)` in
 rows) is the Beijing EOEC phenotype: columns `SubjectID`, `Age`, `Sex`,
 `Session_1`–`Session_3` (per-session eyes state). Not read by the package code.
 
-Set `CONNINFPY_DATA` to a data root; optional maps are resolved in its `brainnetome/`
+Set `CONNINFPY_ATLAS_DIR` for the on-demand Brainnetome/SUIT atlas cache
+(default `~/.cache/conninfpy/atlases/`). Set `CONNINFPY_DATA` to a data root;
+optional BNA probabilistic/tractography maps are resolved in its `brainnetome/`
 subfolder. `CONNINFPY_BNA_DIR` remains a direct override; explicit `data_dir=` takes
 precedence. The retired `datasets/atlases/` location is not searched implicitly.
 See the [resource documentation](../docs/source/architecture.rst).

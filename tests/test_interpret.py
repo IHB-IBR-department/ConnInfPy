@@ -7,6 +7,12 @@ import pytest
 
 from conninfpy.interpret.annotate import annotate_rois, summarize_annotation
 from conninfpy.atlas.brainnetome import BrainnetomeReference
+from conninfpy.atlas.resources import atlas_resource_available
+
+pytestmark = pytest.mark.skipif(
+    not all(atlas_resource_available(n) for n in ("BN_Atlas_246_1mm.nii.gz", "bna246_hierarchy.csv", "bna246.csv")),
+    reason="Brainnetome atlas files not in local cache; run scripts/download_atlases.py",
+)
 from conninfpy.interpret.evidence import (
     build_annotation_evidence,
     describe_coverage,

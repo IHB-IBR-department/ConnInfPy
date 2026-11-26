@@ -524,8 +524,8 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                 
                 if dataset_choice == "ABIDE-mini":
                     data_path = st.text_input(
-                        "Pickled Dict Path (.npy)",
-                        value="datasets/demo/ABIDE_mini/abide_mini.npy",
+                        "ABIDE-mini Archive Path (.npz or .npy)",
+                        value="datasets/demo/ABIDE_mini/abide_mini.npz",
                         key=persistent_key('data:pickled_dict_path_npy', scope='data'),
                     )
                     pheno_path = st.text_input(
@@ -546,7 +546,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     with cohort_col:
                         cohort = st.selectbox(
                             "Cohort",
-                            ["Both sites (IHB + China)", "IHB", "China"],
+                            ["IHB", "Both sites (IHB + China)", "China"],
                             key=persistent_key('data:cohort', scope='data'),
                         )
                     with cohort_help_col:
@@ -587,6 +587,12 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             value="datasets/demo/open_close/subject_order_china.txt",
                             key=persistent_key('data:china_subject_order_file_txt', scope='data'),
                         )
+                        if not (os.path.exists(china_open_path) and os.path.exists(china_close_path)):
+                            st.info(
+                                "Beijing EOEC (China) files are not bundled in the repository (CC BY-NC). "
+                                "Download them via `datasets/demo/open_close/NOTICE_BEIJING_EOEC.txt` and "
+                                "run `python scripts/prepare_china_open_close.py --source-dir <dir>`, or select `IHB`."
+                            )
                         atlas = "datasets/demo/open_close/schaefer_labels.csv"
                         loader_instance = MultiSiteOpenCloseLoader(
                             {
@@ -636,6 +642,12 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             value="datasets/demo/open_close/subject_order_china.txt",
                             key=persistent_key('data:subject_order_file_txt_3', scope='data'),
                         )
+                        if not (os.path.exists(open_path) and os.path.exists(close_path)):
+                            st.info(
+                                "Beijing EOEC (China) files are not bundled in the repository (CC BY-NC). "
+                                "Download them via `datasets/demo/open_close/NOTICE_BEIJING_EOEC.txt` and "
+                                "run `python scripts/prepare_china_open_close.py --source-dir <dir>`, or select `IHB`."
+                            )
                         
                     if cohort != "Both sites (IHB + China)":
                         atlas = "datasets/demo/open_close/schaefer_labels.csv"

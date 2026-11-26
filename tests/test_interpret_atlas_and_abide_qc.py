@@ -190,7 +190,7 @@ def test_abide_loader_converts_minus_9999_to_nan():
     repo_root = Path(__file__).resolve().parents[1]
     abide_dir = repo_root / "datasets" / "demo" / "ABIDE_mini"
     loader = AbideSchaeferLoader(
-        data_path=str(abide_dir / "abide_mini.npy"),
+        data_path=str(abide_dir / "abide_mini.npz"),
         pheno_csv_path=str(abide_dir / "ABIDE1_Phenotypic_mini.csv"),
     )
     dataset = loader.load()
@@ -208,7 +208,7 @@ def test_qc_reports_missing_by_column_in_json_and_text(tmp_path: Path):
     manifest = {
         "loader": "AbideSchaeferLoader",
         "paths": {
-            "data_path": str(abide_dir / "abide_mini.npy"),
+            "data_path": str(abide_dir / "abide_mini.npz"),
             "pheno_csv_path": str(abide_dir / "ABIDE1_Phenotypic_mini.csv"),
         },
     }

@@ -130,6 +130,15 @@ if __name__ == "__main__":
     unittest.main()
 
 
+from conninfpy.atlas.resources import atlas_resource_available as _atlas_resource_available
+
+_HAS_BNA_CACHE = all(
+    _atlas_resource_available(n)
+    for n in ("BN_Atlas_246_1mm.nii.gz", "bna246_hierarchy.csv", "bna246.csv")
+)
+
+
+@unittest.skipUnless(_HAS_BNA_CACHE, "Brainnetome atlas files not in local cache; run scripts/download_atlases.py")
 class TestAnnotationUsesCoupling(unittest.TestCase):
 
     def test_summary_and_edges_report_coupling_change(self):

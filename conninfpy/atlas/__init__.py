@@ -3,6 +3,9 @@
 from conninfpy.atlas.brainnetome import BrainnetomeReference
 from conninfpy.atlas.metadata import AtlasInfo, assign_coordinates
 from conninfpy.atlas.resources import (
+    atlas_cache_dir,
+    atlas_resource_available,
+    atlas_resource_path,
     bna_profile_paths,
     brainnetome_data_dir,
     brainnetome_resource_path,
@@ -14,6 +17,9 @@ __all__ = [
     "AtlasInfo",
     "assign_coordinates",
     "BrainnetomeReference",
+    "atlas_cache_dir",
+    "atlas_resource_available",
+    "atlas_resource_path",
     "get_bna_246_nifti_path",
     "bna_profile_paths",
     "brainnetome_data_dir",

@@ -1,12 +1,15 @@
 Third-Party Notices and Dataset / Atlas Licences
 ==================================================
 
-The MIT licence in LICENSE applies to the ConnInfPy source code and
-documentation only. Bundled atlas resources and demonstration datasets are
-excluded from MIT and remain subject to their respective third-party licences
-and attribution terms:
+The MIT licence in LICENSE applies to the ConnInfPy source code, documentation,
+and the bundled Schaefer 2018 parcellation tables (MIT, ThomasYeoLab/CBIG).
+Optional on-demand atlases and demonstration datasets remain subject to their
+respective licences and attribution terms:
 
-1. Brainnetome Atlas (BNA-246) & BrainMap profiles (conninfpy/atlas_data/)
+1. Brainnetome Atlas (BNA-246) & BrainMap profiles (on-demand cache, not bundled)
+   Not bundled in the repository or Python wheel. Downloaded / cached on demand
+   into ~/.cache/conninfpy/atlases/ (or $CONNINFPY_ATLAS_DIR) via
+   scripts/download_atlases.py.
    Non-commercial research use, attribution, and share-alike.
    See conninfpy/atlas_data/NOTICE_BRAINNETOME.txt.
    Citations:
@@ -17,8 +20,11 @@ and attribution terms:
      - Laird AR, Eickhoff SB, Fox PM, et al. (2011). BMC Research Notes 4:349.
        doi:10.1186/1756-0500-4-349
 
-2. DiedrichsenLab SUIT cerebellar atlases v1.2 (conninfpy/atlas_data/)
-   Creative Commons Attribution (CC BY).
+2. DiedrichsenLab SUIT cerebellar atlases v1.2 (on-demand cache, not bundled)
+   Not bundled in the repository or Python wheel. Downloaded on demand into
+   ~/.cache/conninfpy/atlases/ (or $CONNINFPY_ATLAS_DIR) via
+   scripts/download_atlases.py.
+   Creative Commons Attribution 4.0 International (CC BY 4.0).
    See conninfpy/atlas_data/cerebellar_atlases_provenance.json.
    Citations:
      - Diedrichsen J, Balsters JH, Flavell J, Cussans E, Ramnani N (2009).
@@ -35,10 +41,13 @@ and attribution terms:
    Citation:
      - Zalesky A, Fornito A, Bullmore ET (2010). NeuroImage 53(4):1197-1207.
 
-4. Open-Close China / Beijing EOEC derivatives
-   (datasets/demo/open_close/china_*, subject_order_china.txt)
+4. Open-Close China / Beijing EOEC derivatives (not bundled)
+   (china_open_Schaefer200_strategy-4_GSR.npy,
+    china_close_Schaefer200_strategy-4_GSR.npy, subject_order_china.txt)
+   Not distributed in this repository; prepare locally via
+   scripts/prepare_china_open_close.py from the upstream links recorded in
+   datasets/demo/open_close/NOTICE_BEIJING_EOEC.txt.
    Creative Commons Attribution-NonCommercial (CC BY-NC).
-   See datasets/demo/open_close/NOTICE_BEIJING_EOEC.txt.
    Attribution and funding acknowledgements:
      - Liu D, Dong Z, Zuo X, Wang J, Zang Y (2013). Neuroinformatics
        11(4):469-476. doi:10.1007/s12021-013-9187-0
@@ -52,7 +61,9 @@ and attribution terms:
 
 5. Open-Close IHB derivatives
    (datasets/demo/open_close/ihb_*, subject_order_ihb.txt)
-   IHB RAS cohort derivatives published with:
+   Creative Commons Attribution 4.0 International (CC BY 4.0).
+   De-identified ROI time-series derivatives from the IHB RAS cohort
+   published with:
      - Medvedeva T, Knyazeva I, Masharipov R, Korotkov A, Cherednichenko D,
        Kireev M (2026). Brain Informatics 13:18.
        doi:10.1186/s40708-026-00305-1

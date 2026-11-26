@@ -9,6 +9,12 @@ import numpy as np
 
 from conninfpy import AtlasInfo
 from conninfpy import block_mass
+from conninfpy.atlas.resources import atlas_resource_available
+
+HAS_BNA_CACHE = (
+    atlas_resource_available("bna246.csv")
+    and atlas_resource_available("bna246_hierarchy.csv")
+)
 
 
 class TestAtlasInfoBasic(unittest.TestCase):
@@ -163,6 +169,7 @@ class TestBundledAtlases(unittest.TestCase):
         self.assertEqual(atlas.coords.shape, (400, 3))
         self.assertTrue(np.isfinite(atlas.coords).all())
 
+    @unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
     def test_bna_246_brainnetome_division_by_default(self):
         atlas = AtlasInfo.bna_246()
         self.assertEqual(set(atlas.networks), {"Visual", "Somatomotor", "Dorsal Attention", "Ventral Attention",
@@ -173,6 +180,7 @@ class TestBundledAtlases(unittest.TestCase):
         with self.assertRaises(ValueError):
             AtlasInfo.bna_246(networks="schaefer")
 
+    @unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
     def test_bna_246(self):
         atlas = AtlasInfo.bna_246(networks="lobe")
         self.assertEqual(len(atlas), 246)
@@ -192,6 +200,7 @@ class TestBundledAtlases(unittest.TestCase):
         self.assertEqual(atlas.networks[0], "Frontal")
         self.assertEqual(atlas.networks[245], "Subcortical")
 
+    @unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
     def test_bna_246_has_coords(self):
         # Coordinates are MNI152-1mm voxel-mass centroids from
         # BN_Atlas_246_1mm.nii.gz. All 246 ROIs should be finite and
@@ -282,12 +291,13 @@ class TestFetchBnaBehavioralDecoding(unittest.TestCase):
             self.assertEqual(bd2, bd)
             self.assertEqual(pc2, pc)
 
-            # Test as_dataframe
-            df = fetch_bna_behavioral_decoding(cache_dir=self.cache_dir, as_dataframe=True)
-            self.assertEqual(len(df), 246)
-            self.assertEqual(df.loc[166, "name"], "vIa_R")
-            self.assertEqual(df.loc[166, "top_behavioral_domain"], "Gustation")
-            self.assertEqual(df.loc[166, "top_paradigm_class"], "GoNoGo")
+            # Test as_dataframe when Brainnetome table cache is present
+            if HAS_BNA_CACHE:
+                df = fetch_bna_behavioral_decoding(cache_dir=self.cache_dir, as_dataframe=True)
+                self.assertEqual(len(df), 246)
+                self.assertEqual(df.loc[166, "name"], "vIa_R")
+                self.assertEqual(df.loc[166, "top_behavioral_domain"], "Gustation")
+                self.assertEqual(df.loc[166, "top_paradigm_class"], "GoNoGo")
 
     def test_fetch_error_raises_ioerror(self):
         from unittest.mock import patch

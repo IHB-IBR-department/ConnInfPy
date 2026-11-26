@@ -61,16 +61,15 @@ def test_tfnbs_family_has_explicit_implementations():
     assert conninfpy.get_fbc_tfnbs_score is fbc.get_fbc_tfnbs_score
 
 
-@pytest.mark.parametrize("token", ["bna_246_1mm", "bna_246_2mm", "bna246.csv",
-                                   "schaefer100", "schaefer200", "schaefer400"])
+@pytest.mark.parametrize("token", ["schaefer100", "schaefer200", "schaefer400"])
 def test_manifest_and_atlas_use_the_same_resource_path(token, tmp_path):
     resolved = Path(resolve_path(f"BUILTIN:{token}", tmp_path))
     assert resolved == resources.builtin_atlas_path(token)
     assert resolved.is_file()
 
 
-def test_zip_resource_survives_getter_for_lazy_nifti_read(tmp_path, monkeypatch):
-    filename = "BN_Atlas_246_2mm.nii.gz"
+def test_zip_resource_survives_getter_for_lazy_read(tmp_path, monkeypatch):
+    filename = "schaefer100_yeo7.csv"
     original = resources.bundled_path(filename)
     archive = tmp_path / "atlas.zip"
     with zipfile.ZipFile(archive, "w") as z:
@@ -79,14 +78,17 @@ def test_zip_resource_survives_getter_for_lazy_nifti_read(tmp_path, monkeypatch)
     with zipfile.ZipFile(archive) as z, ExitStack() as stack:
         monkeypatch.setattr(resources, "_RESOURCE_CONTEXTS", stack)
         monkeypatch.setattr(resources.resources, "files", lambda package: zipfile.Path(z))
-        extracted = resources.get_bna_246_nifti_path(2)
-        image = nib.load(str(extracted))
+        extracted = resources.bundled_path(filename)
         assert extracted.is_file()
-        assert image.get_fdata().max() == 246
-        assert resources.get_bna_246_nifti_path(2) == extracted
+        assert extracted.read_text(encoding="utf-8").startswith("roi_id,")
+        assert resources.bundled_path(filename) == extracted
     resources.bundled_path.cache_clear()
 
 
+@pytest.mark.skipif(
+    not resources.atlas_resource_available("bna246_hierarchy.csv"),
+    reason="Brainnetome cache not downloaded; run python scripts/download_atlases.py",
+)
 def test_hierarchy_readers_return_independent_tables():
     first = resources.read_bna_hierarchy()
     second = resources.read_bna_hierarchy()

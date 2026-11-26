@@ -233,8 +233,9 @@ def test_info_json_fields_and_no_numba_cache_creation(tmp_path: Path):
 
     assert payload["numba"]["imported"] is False
     assert isinstance(payload["numba"]["installed"], bool)
-    assert payload["resources"]["bna_246"] is True
-    assert payload["resources"]["suit_cerebellum"] is True
+    assert isinstance(payload["resources"]["bna_246"], bool)
+    assert isinstance(payload["resources"]["suit_cerebellum"], bool)
+    assert "atlas_cache_dir" in payload["resources"]
     assert not cache_dir.exists()
 
 

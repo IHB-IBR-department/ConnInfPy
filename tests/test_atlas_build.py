@@ -15,6 +15,13 @@ import pandas as pd
 nib = __import__("importlib").import_module("nibabel")
 
 from conninfpy.atlas import AtlasInfo, assign_coordinates as _assign_coordinates
+from conninfpy.atlas.resources import atlas_resource_available
+
+HAS_BNA_CACHE = (
+    atlas_resource_available("BN_Atlas_246_1mm.nii.gz")
+    and atlas_resource_available("bna246.csv")
+    and atlas_resource_available("bna246_hierarchy.csv")
+)
 
 def assign_coordinates(coords, reference, **kwargs):
     kwargs.setdefault("max_distance", 5.0)
@@ -187,6 +194,7 @@ class TestFromCoordinates(unittest.TestCase):
             _from_coordinates([self.inside])
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
 class TestBundledBrainnetomeImage(unittest.TestCase):
 
     def test_with_image_matches_the_bundled_table(self):

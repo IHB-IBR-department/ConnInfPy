@@ -31,7 +31,7 @@ import nibabel as nib
 import numpy as np
 import pytest
 
-from conninfpy.atlas.resources import bundled_path
+from conninfpy.atlas.resources import atlas_resource_available, atlas_resource_path, bundled_path
 
 ATLAS = {
     "anatom": "atl-Anatom_space-MNI_dseg.nii.gz",
@@ -244,6 +244,11 @@ def test_companion_modality_status_is_nan_not_zero_or_bna_profile():
 
 
 # ------------------------------------------------------- packaged files + provenance
+HAS_SUIT_CACHE = all(atlas_resource_available(n) for n in (*ATLAS.values(), *TABLE.values()))
+HAS_BNA1MM_CACHE = atlas_resource_available("BN_Atlas_246_1mm.nii.gz")
+CACHE_SKIP_REASON = "Brainnetome/SUIT atlas files not in local cache; run scripts/download_atlases.py"
+
+
 @pytest.fixture(scope="module")
 def provenance():
     return json.loads(bundled_path("cerebellar_atlases_provenance.json").read_text())
@@ -258,35 +263,40 @@ def test_provenance_pins_commit_and_all_nine_files(provenance):
         assert f["upstream_url"].startswith(
             f"https://raw.githubusercontent.com/DiedrichsenLab/cerebellar_atlases/{COMMIT}/")
         assert f["git_blob_sha1_matches_tree_at_commit"] is True
-        path = bundled_path(name)
+        if not atlas_resource_available(name):
+            pytest.skip(CACHE_SKIP_REASON)
+        path = atlas_resource_path(name)
         raw = path.read_bytes()
         assert len(raw) == f["packaged_bytes"] and hashlib.sha256(raw).hexdigest() == f["packaged_sha256"]
 
 
+@pytest.mark.skipif(not HAS_SUIT_CACHE, reason=CACHE_SKIP_REASON)
 def test_packaged_nifti_is_deterministic_gzip_and_matches_upstream_facts(provenance):
     for name in ATLAS.values():
         f = provenance["atlas_set"]["files"][name]
-        raw = bundled_path(name).read_bytes()
+        path = atlas_resource_path(name)
+        raw = path.read_bytes()
         flg, mtime = raw[3], int.from_bytes(raw[4:8], "little")
         assert not (flg & 0x08) and mtime == 0 and f["packaging"]["gzip_header"]["MTIME"] == 0
         assert f["packaging"]["decompressed_equals_upstream_bytes"] is True
         assert hashlib.sha256(gzip.decompress(raw)).hexdigest() == f["upstream_sha256"]
-        img = nib.load(str(bundled_path(name)))
+        img = nib.load(str(atlas_resource_path(name)))
         facts = f["nifti"]
         assert list(img.shape) == facts["shape"] and str(img.header.get_data_dtype()) == facts["dtype"]
         assert facts["zooms"] == [1.0, 1.0, 1.0]
         assert np.allclose(img.affine, facts["affine"]) and "".join(nib.aff2axcodes(img.affine)) == facts["axcodes"]
 
 
+@pytest.mark.skipif(not HAS_SUIT_CACHE, reason=CACHE_SKIP_REASON)
 def test_packaged_label_tables_complete_and_upstream_typos_kept(provenance):
-    read = lambda n: list(csv.DictReader(open(bundled_path(n), newline=""), delimiter="\t"))
+    read = lambda n: list(csv.DictReader(open(atlas_resource_path(n), newline=""), delimiter="\t"))
     an = read(TABLE["anatom"])
     assert [int(r["index"]) for r in an] == list(range(1, 35))
     b7 = {int(r["index"]): r["name"] for r in read(TABLE["buckner7"])}
     b17 = {int(r["index"]): r["name"] for r in read(TABLE["buckner17"])}
     assert sorted(b7) == list(range(1, 8)) and sorted(b17) == list(range(1, 18))
     assert b7[6] == "Netowrk6" and b17[8] == "Networks_8" and b17[9] == "Networks_9"   # verbatim, not fixed
-    lut = [l.split() for l in bundled_path(TABLE["nettekoven32"]).read_text().splitlines() if l.strip()]
+    lut = [l.split() for l in atlas_resource_path(TABLE["nettekoven32"]).read_text().splitlines() if l.strip()]
     nk = {int(r[0]): r[4] for r in lut}
     assert lut[0][0] == "0" and lut[0][4] == "0"                        # background row carries no name
     assert sorted(k for k in nk if k != 0) == list(range(1, 33))
@@ -294,8 +304,9 @@ def test_packaged_label_tables_complete_and_upstream_typos_kept(provenance):
     assert not any(n.endswith("M") for n in nk.values())
 
 
+@pytest.mark.skipif(not HAS_SUIT_CACHE, reason=CACHE_SKIP_REASON)
 def test_anatom_hemisphere_and_homolog_come_from_names_not_id_parity(provenance):
-    rows = list(csv.DictReader(open(bundled_path(TABLE["anatom"]), newline=""), delimiter="\t"))
+    rows = list(csv.DictReader(open(atlas_resource_path(TABLE["anatom"]), newline=""), delimiter="\t"))
     names, hemi, homolog = parse_anatom(rows)
     assert [hemi[i] for i in (1, 2, 5, 6, 7, 29, 34)] == ["L", "R", "L", "M", "R", "L", "R"]
     assert sorted(hemi.values()) == ["L"] * 13 + ["M"] * 8 + ["R"] * 13
@@ -305,14 +316,15 @@ def test_anatom_hemisphere_and_homolog_come_from_names_not_id_parity(provenance)
     assert names[29].endswith("Dentate") and names[34].endswith("Fastigial")
 
 
+@pytest.mark.skipif(not (HAS_SUIT_CACHE and HAS_BNA1MM_CACHE), reason=CACHE_SKIP_REASON)
 def test_real_grids_coincide_exactly_with_bna1mm_and_overlap_is_small():
-    bna = nib.load(str(bundled_path("BN_Atlas_246_1mm.nii.gz")))
+    bna = nib.load(str(atlas_resource_path("BN_Atlas_246_1mm.nii.gz")))
     assert bna.shape == (182, 218, 182) and np.allclose(bna.affine[:3, 3], [90, -126, -72])
     bna_arr = np.asanyarray(bna.dataobj).astype(np.int16)
-    cb_img = nib.load(str(bundled_path(ATLAS["anatom"])))
+    cb_img = nib.load(str(atlas_resource_path(ATLAS["anatom"])))
     cb = gather_exact(cb_img, bna)                              # raises if not an exact lattice
     for name in ATLAS.values():
-        assert lattice_mapping(nib.load(str(bundled_path(name))), bna)[1]
+        assert lattice_mapping(nib.load(str(atlas_resource_path(name))), bna)[1]
     b, c = bna_arr > 0, cb > 0
     clipped, cb_only = int((b & c).sum()), int((~b & c).sum())
     assert clipped > 0 and clipped < 0.02 * c.sum() and (b & c & (cb >= 29)).sum() == 0

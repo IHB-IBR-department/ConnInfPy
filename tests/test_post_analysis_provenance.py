@@ -227,6 +227,13 @@ def test_real_nbs_and_cnbs_native_provenance():
     assert cnbs.metadata["native_report"] is not None
 
 
+from conninfpy.atlas.resources import atlas_resource_available as _atlas_resource_available
+
+_HAS_BNA_CACHE = _atlas_resource_available("bna246_hierarchy.csv")
+_BNA_SKIP_REASON = "Brainnetome atlas files not in local cache; run scripts/download_atlases.py"
+
+
+@pytest.mark.skipif(not _HAS_BNA_CACHE, reason=_BNA_SKIP_REASON)
 def test_bna_atlas_supplies_parallel_anatomical_groupings():
     atlas = AtlasInfo(
         labels=["A8m_L", "A8m_R", "A9l_L"], networks=["Default"] * 3,
@@ -244,6 +251,7 @@ def test_bna_atlas_supplies_parallel_anatomical_groupings():
     assert groups["network"] == ("Default",) * 3
 
 
+@pytest.mark.skipif(not _HAS_BNA_CACHE, reason=_BNA_SKIP_REASON)
 def test_bna_mixed_cortical_subcortical_ids_and_functional_unknowns():
     atlas = AtlasInfo(
         labels=["A8m_L", "A8m_R", "mAmyg_L"],

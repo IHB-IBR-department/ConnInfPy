@@ -581,11 +581,45 @@ def test_ac5_apptest_tfnbs_grid_and_compatible_companion_and_bna_component_conte
     assert any("Companion Agreement PNG" in lbl for lbl in dl_labels)
 
     # BNA Annotation view shows ROI selection rule and Aggregated Component Context for NBS
+    import nibabel as nib
+
     res_nbs = compute_p_val(
         g0, g1, test_type="two-sample", method="nbs", threshold=1.5,
         n_permutations=140, rng=1, use_mp=False, acceleration=None,
     )
-    ref = BrainnetomeReference.load(data_dir=tmp_path, cache_dir=tmp_path, profiles=False)
+    rows = [
+        {
+            "roi_id": rid,
+            "name": f"A{rid}_{'L' if rid % 2 else 'R'}",
+            "hemisphere": "L" if rid % 2 else "R",
+            "homolog_id": rid + 1 if rid % 2 else rid - 1,
+            "code": f"C_{rid}",
+            "description": f"Synthetic {rid}",
+            "gyrus": "SFG",
+            "gyrus_name": "Superior Frontal Gyrus",
+            "lobe": "Frontal",
+            "structure": "cortex",
+            "yeo7_id": 6,
+            "yeo7": "Frontoparietal",
+            "yeo17_id": 12,
+            "yeo17": "Control A",
+            "x": -10.0 if rid % 2 else 10.0,
+            "y": float(rid * 5),
+            "z": 50.0,
+        }
+        for rid in range(1, 7)
+    ]
+    vol = np.zeros((6, 1, 1), dtype=np.int16)
+    for rid in range(1, 7):
+        vol[rid - 1, 0, 0] = rid
+    ref = BrainnetomeReference(
+        regions=pd.DataFrame(rows).set_index("roi_id"),
+        label_image=nib.Nifti1Image(vol, np.eye(4)),
+        data_dir=tmp_path,
+        cache_dir=tmp_path,
+        profiles=None,
+        provenance={"atlas": "synthetic BNA fixture"},
+    )
     rois = annotate_bna_regions([1, 2, 3, 4, 5, 6], reference=ref)
     summary = summarize_annotation(res_nbs, rois, alpha=0.05)
     edges = summary["edges"]

@@ -6,6 +6,14 @@ from pathlib import Path
 import numpy as np
 
 from conninfpy.atlas.brainnetome import BrainnetomeReference
+from conninfpy.atlas.resources import atlas_resource_available
+
+HAS_BNA_CACHE = all(
+    atlas_resource_available(n)
+    for n in ("BN_Atlas_246_1mm.nii.gz", "bna246_hierarchy.csv", "bna246.csv")
+)
+HAS_BNA_PROFILES = HAS_BNA_CACHE and atlas_resource_available("BDf_FDR05.json") and atlas_resource_available("PCf_FDR05.json")
+BNA_SKIP_REASON = "Brainnetome atlas files not in local cache; run scripts/download_atlases.py"
 from conninfpy.interpret import annotate_rois, interpret_result
 from conninfpy.interpret.report import reproduction_note, roi_markdown
 from conninfpy.results import InferenceResult
@@ -24,6 +32,7 @@ def _result():
     return InferenceResult(pos, neg, method="tstat", stat_positive=stat, stat_negative=np.where(neg < 1, 3.0, 0.0))
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, BNA_SKIP_REASON)
 class TestInterpretResult(unittest.TestCase):
 
     @classmethod
@@ -85,6 +94,7 @@ class TestInterpretResult(unittest.TestCase):
         self.assertEqual(reproduction_note(self.res, None), "no stored map")
 
 
+@unittest.skipUnless(HAS_BNA_PROFILES, BNA_SKIP_REASON)
 class TestBundledProfiles(unittest.TestCase):
 
     def test_profiles_are_read_without_network(self):

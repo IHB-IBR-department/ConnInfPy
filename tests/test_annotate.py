@@ -14,8 +14,14 @@ from conninfpy.interpret.annotate import (_lens_share, aggregate_connections, an
                                  summarize_annotation)
 from conninfpy.atlas import brainnetome_data_dir, get_bna_246_nifti_path
 from conninfpy.atlas.brainnetome import BrainnetomeReference
+from conninfpy.atlas.resources import atlas_resource_available
 from conninfpy.results import InferenceResult
 
+HAS_BNA_CACHE = (
+    atlas_resource_available("BN_Atlas_246_1mm.nii.gz")
+    and atlas_resource_available("BN_Atlas_246_2mm.nii.gz")
+    and atlas_resource_available("bna246_hierarchy.csv")
+)
 DATA = brainnetome_data_dir()
 HAS_PM = (DATA / "BNA_PM_4D.nii.gz").exists()
 HAS_SC = (DATA / "BNA_SC_3D_246.zip").exists()
@@ -39,6 +45,7 @@ def _reference(data_dir=None):
     return BrainnetomeReference.load(data_dir=data_dir, profiles=False)
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
 class TestRoiAnnotation(unittest.TestCase):
 
     @classmethod
@@ -138,6 +145,7 @@ class TestRoiAnnotation(unittest.TestCase):
         self.assertEqual(set(long["likelihood_ratio"]), {2.5, 1.4})
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
 class TestEdges(unittest.TestCase):
 
     @classmethod
@@ -176,6 +184,7 @@ class TestEdges(unittest.TestCase):
 
 
 @unittest.skipUnless(HAS_PM, "local BNA_PM_4D.nii.gz not available")
+@unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
 class TestMembership(unittest.TestCase):
 
     def test_probabilistic_membership_of_amygdala_sphere(self):
@@ -185,6 +194,7 @@ class TestMembership(unittest.TestCase):
         self.assertGreater(m[210] + m[212], 0.8)                     # mAmyg_L + lAmyg_L
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
 class TestSummary(unittest.TestCase):
 
     def test_detections_are_described_against_tested_opportunities(self):
@@ -211,6 +221,7 @@ class TestSummary(unittest.TestCase):
         self.assertEqual(s["distance_qc"].loc[0, "share_detections_short"], 0.0)   # 84 mm apart
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
 class TestAggregateConnections(unittest.TestCase):
     """Connections summed over BNA units and networks, and the connectogram drawn from them."""
 
@@ -283,6 +294,7 @@ class TestAggregateConnections(unittest.TestCase):
         plt.close("all")
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
 class TestNetworkDivision(unittest.TestCase):
     """Network labels follow the atlas: the source atlas's own, or the Brainnetome division."""
 
@@ -330,6 +342,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
+@unittest.skipUnless(HAS_BNA_CACHE, "Brainnetome cache not downloaded; run scripts/download_atlases.py")
 class TestResultMethods(unittest.TestCase):
 
     def test_annotated_edges(self):

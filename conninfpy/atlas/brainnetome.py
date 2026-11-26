@@ -227,7 +227,7 @@ class BrainnetomeReference:
                 }
                 ref.provenance["profiles"] = {
                     "source": "BrainMap forward inference, FDR q<0.05 (BDf_FDR05.json, PCf_FDR05.json)",
-                    "files": "bundled (conninfpy/atlas_data)",
+                    "files": f"local cache ({bna_profile_paths()[0].parent})",
                     "BD_sha256": _sha256(bna_profile_paths()[0]),
                     "PC_sha256": _sha256(bna_profile_paths()[1]),
                 }
@@ -504,11 +504,11 @@ def _attach_suit_anatom(regions: Any, bna_img: Any) -> tuple[Any, Any, Dict[str,
     import nibabel as nib
     import pandas as pd
 
-    from conninfpy.atlas.resources import bundled_path
+    from conninfpy.atlas.resources import atlas_resource_path
 
-    cb_img = nib.load(str(bundled_path("atl-Anatom_space-MNI_dseg.nii.gz")))
-    b7_img = nib.load(str(bundled_path("atl-Buckner7_space-MNI_dseg.nii.gz")))
-    b17_img = nib.load(str(bundled_path("atl-Buckner17_space-MNI_dseg.nii.gz")))
+    cb_img = nib.load(str(atlas_resource_path("atl-Anatom_space-MNI_dseg.nii.gz")))
+    b7_img = nib.load(str(atlas_resource_path("atl-Buckner7_space-MNI_dseg.nii.gz")))
+    b17_img = nib.load(str(atlas_resource_path("atl-Buckner17_space-MNI_dseg.nii.gz")))
 
     cb_arr = _gather_exact(cb_img, bna_img)
     b7_arr = _gather_exact(b7_img, bna_img)
@@ -525,9 +525,9 @@ def _attach_suit_anatom(regions: Any, bna_img: Any) -> tuple[Any, Any, Dict[str,
     comp_img.header.set_qform(bna_img.affine, code=1)
     comp_img.header.set_sform(bna_img.affine, code=1)
 
-    with open(bundled_path("atl-Anatom.tsv"), newline="") as fh:
+    with open(atlas_resource_path("atl-Anatom.tsv"), newline="") as fh:
         anatom_rows = list(csv.DictReader(fh, delimiter="\t"))
-    with open(bundled_path("atl-Buckner17.tsv"), newline="") as fh:
+    with open(atlas_resource_path("atl-Buckner17.tsv"), newline="") as fh:
         b17_names = {int(r["index"]): r["name"] for r in csv.DictReader(fh, delimiter="\t")}
 
     names_by_id = {int(r["index"]): r["name"] for r in anatom_rows}

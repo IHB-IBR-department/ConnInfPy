@@ -45,6 +45,13 @@ import pandas as pd
 
 from conninfpy.atlas import AtlasInfo
 from conninfpy.atlas.brainnetome import BrainnetomeReference
+from conninfpy.atlas.resources import atlas_resource_available
+
+_HAS_BNA_CACHE = all(
+    atlas_resource_available(n)
+    for n in ("BN_Atlas_246_1mm.nii.gz", "bna246_hierarchy.csv", "bna246.csv")
+)
+_BNA_SKIP_REASON = "Brainnetome atlas files not in local cache; run scripts/download_atlases.py"
 from conninfpy.interpret.annotate import (aggregate_connections, annotate_edges, annotate_rois,
                                           summarize_annotation)
 from conninfpy.interpret.evidence import (build_annotation_evidence, describe_coverage,
@@ -210,6 +217,7 @@ class TestGenericNiftiLutPath(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Spatial limit: flagged, never quantified
 # ---------------------------------------------------------------------------
+@unittest.skipUnless(_HAS_BNA_CACHE, _BNA_SKIP_REASON)
 class TestSpatialLimitIsHonest(unittest.TestCase):
     """An unknown MNI variant is approximate; no numeric offset is promised."""
 
@@ -259,6 +267,7 @@ class TestSpatialLimitIsHonest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Mixed annotation of ROIs and edges (parcel and sphere supports)
 # ---------------------------------------------------------------------------
+@unittest.skipUnless(_HAS_BNA_CACHE, _BNA_SKIP_REASON)
 class TestMixedAnnotation(unittest.TestCase):
     """Excluded ROIs stay visible and unknown labels stay unknown."""
 
@@ -310,6 +319,7 @@ class TestMixedAnnotation(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # End to end at the three inference units
 # ---------------------------------------------------------------------------
+@unittest.skipUnless(_HAS_BNA_CACHE, _BNA_SKIP_REASON)
 class TestUnitsEndToEnd(_MatplotlibCase):
     """ROI restriction, counts and figures agree for edge, component and block results."""
 

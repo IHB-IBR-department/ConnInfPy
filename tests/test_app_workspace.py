@@ -324,24 +324,67 @@ def test_result_graph_direction_selection_and_one_sided_policy(tested_tail):
 
 @pytest.mark.parametrize("has_detection", [True, False])
 def test_completed_annotation_renders_and_survives_navigation(tmp_path, has_detection):
+    import nibabel as nib
     from conninfpy.atlas.brainnetome import BrainnetomeReference
     from conninfpy.interpret.annotate import annotate_bna_regions, summarize_annotation
     from conninfpy.results import InferenceResult
 
-    # Three bundled regions, fixed p-values: rendering only, no statistical run.
-    reference = BrainnetomeReference.load(data_dir=tmp_path, cache_dir=tmp_path, profiles=False)
-    rois = annotate_bna_regions([1, 2, 3], reference=reference)
-    p = np.ones((3, 3))
+    # Four synthetic homologous regions, fixed p-values: rendering only, no external atlas needed.
+    rows = [
+        {
+            "roi_id": rid,
+            "name": name,
+            "hemisphere": hemi,
+            "homolog_id": hom,
+            "code": f"C_{rid}",
+            "description": f"Synthetic {name}",
+            "gyrus": "SFG",
+            "gyrus_name": "Superior Frontal Gyrus",
+            "lobe": "Frontal",
+            "structure": "cortex",
+            "yeo7_id": 6,
+            "yeo7": "Frontoparietal",
+            "yeo17_id": 12,
+            "yeo17": "Control A",
+            "x": x,
+            "y": 15.0,
+            "z": 54.0,
+        }
+        for rid, name, hemi, hom, x in (
+            (1, "A8m_L", "L", 2, -5.0),
+            (2, "A8m_R", "R", 1, 7.0),
+            (3, "A8dl_L", "L", 4, -18.0),
+            (4, "A8dl_R", "R", 3, 18.0),
+        )
+    ]
+    regions = pd.DataFrame(rows).set_index("roi_id")
+    vol = np.zeros((5, 1, 1), dtype=np.int16)
+    vol[0, 0, 0], vol[1, 0, 0], vol[2, 0, 0], vol[3, 0, 0] = 1, 2, 3, 4
+    reference = BrainnetomeReference(
+        regions=regions,
+        label_image=nib.Nifti1Image(vol, np.eye(4)),
+        data_dir=tmp_path,
+        cache_dir=tmp_path,
+        profiles=None,
+        provenance={"atlas": "synthetic BNA fixture"},
+    )
+    rois = annotate_bna_regions([1, 2, 3, 4], reference=reference)
+    p = np.ones((4, 4))
     p[0, 1] = p[1, 0] = 0.01 if has_detection else 1.0
-    stat = np.array([[0, 4.0 if has_detection else 0.5, 0.3], [4.0 if has_detection else 0.5, 0, 1.2], [0.3, 1.2, 0]])
-    result = InferenceResult(p, np.ones((3, 3)), method="tstat", stat_positive=stat, stat_negative=np.zeros((3, 3)))
+    stat = np.array([
+        [0, 4.0 if has_detection else 0.5, 0.3, 0.1],
+        [4.0 if has_detection else 0.5, 0, 1.2, 0.2],
+        [0.3, 1.2, 0, 0.4],
+        [0.1, 0.2, 0.4, 0],
+    ])
+    result = InferenceResult(p, np.ones((4, 4)), method="tstat", stat_positive=stat, stat_negative=np.zeros((4, 4)))
     summary = summarize_annotation(result, rois, alpha=0.05)
     edges = summary["edges"]
     detected = edges[(edges.p_positive <= 0.05) | (edges.p_negative <= 0.05)]
     annotation = {"rois": rois, "summary": summary, "detected": detected, "support": "point", "level": "lobe", "alpha": 0.05, "param_idx": None}
 
     app = AppTest.from_file(str(APP), default_timeout=120)
-    app.session_state.connectivity_data = np.zeros((4, 3, 3))
+    app.session_state.connectivity_data = np.zeros((4, 4, 4))
     app.session_state.pheno_df = pd.DataFrame({"subject_id": ["a", "b", "c", "d"], "group": [0, 0, 1, 1]})
     app.session_state.loaded_reference_atlas = rois.to_atlas()
     app.session_state.loaded_atlas_signature = "fixture atlas"

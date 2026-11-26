@@ -1,7 +1,10 @@
-"""Bundled atlas snapshots, configured external originals and derived caches.
+"""Bundled MIT atlas snapshots, on-demand third-party atlas cache, and external originals.
 
 Materialized package paths remain alive for lazy image reads until process exit.
-Optional originals are never located relative to the caller's working directory.
+Third-party Brainnetome and SUIT atlases are not bundled in the MIT package; they
+are resolved from ``CONNINFPY_ATLAS_DIR`` (default ``~/.cache/conninfpy/atlases``)
+and verified against SHA-256 manifests. Optional originals are never located
+relative to the caller's working directory.
 """
 
 from __future__ import annotations
@@ -33,11 +36,116 @@ def bundled_path(filename: str) -> Path:
     )
 
 
+def atlas_cache_dir(atlas_dir: Optional[Union[str, Path]] = None) -> Path:
+    """Directory for on-demand third-party Brainnetome/SUIT atlases; does not create it.
+
+    Precedence: explicit ``atlas_dir``, ``CONNINFPY_ATLAS_DIR``, then
+    ``~/.cache/conninfpy/atlases``.
+    """
+    if atlas_dir is not None:
+        path = Path(atlas_dir)
+    elif os.environ.get("CONNINFPY_ATLAS_DIR"):
+        path = Path(os.environ["CONNINFPY_ATLAS_DIR"])
+    else:
+        path = Path.home() / ".cache" / "conninfpy" / "atlases"
+    return path.expanduser().resolve()
+
+
+def _atlas_manifest_entries() -> Dict[str, Dict[str, str]]:
+    """Expected SHA-256 and provenance metadata for all on-demand atlas files."""
+    entries: Dict[str, Dict[str, str]] = {}
+
+    bna_manifest = json.loads(bundled_path("brainnetome_external.json").read_text(encoding="utf-8"))
+    for fname, meta in bna_manifest.get("atlas_files", {}).items():
+        entries[fname] = {
+            "sha256": meta["sha256"],
+            "suite": "Brainnetome BNA-246",
+            "source_url": meta.get("url") or bna_manifest.get("source_url", "https://atlas.brainnetome.org/download.html"),
+            "license": meta.get("license", "Brainnetome non-commercial research use, attribution, and share-alike (NOTICE_BRAINNETOME.txt)"),
+        }
+
+    suit_manifest = json.loads(bundled_path("cerebellar_atlases_provenance.json").read_text(encoding="utf-8"))
+    suit_url = suit_manifest.get("atlas_set", {}).get("repository", "https://github.com/DiedrichsenLab/cerebellar_atlases")
+    for fname, meta in suit_manifest.get("atlas_set", {}).get("files", {}).items():
+        entries[fname] = {
+            "sha256": meta["packaged_sha256"],
+            "suite": "DiedrichsenLab SUIT v1.2",
+            "source_url": meta.get("upstream_url", suit_url),
+            "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+        }
+
+    return entries
+
+
+def _verify_atlas_file(path: Path, expected_sha256: str, suite: str) -> Path:
+    path = path.expanduser().resolve()
+    stat = path.stat()
+    digest = _original_sha256(str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+    if digest != expected_sha256:
+        raise ValueError(
+            f"{path}: SHA256 {digest} does not match the expected {suite} checksum "
+            f"({expected_sha256}). Re-run `python scripts/download_atlases.py`."
+        )
+    return path
+
+
+def atlas_resource_path(
+    filename: str,
+    *,
+    atlas_dir: Optional[Union[str, Path]] = None,
+    verify: bool = True,
+) -> Path:
+    """Locate and SHA-256-verify an on-demand Brainnetome or SUIT atlas file.
+
+    Raises ``FileNotFoundError`` with download instructions and upstream terms
+    when the file is absent from ``atlas_cache_dir(atlas_dir)``; never downloads
+    implicitly.
+    """
+    entries = _atlas_manifest_entries()
+    if filename not in entries:
+        raise ValueError(f"Unknown on-demand atlas resource: {filename!r}")
+    meta = entries[filename]
+    cache_root = atlas_cache_dir(atlas_dir)
+    path = cache_root / filename
+    if path.is_file():
+        return _verify_atlas_file(path, meta["sha256"], meta["suite"]) if verify else path
+
+    # Support explicit test mocks/overrides of conninfpy.atlas_data when no cache dir is forced.
+    if atlas_dir is None:
+        try:
+            bundled = bundled_path(filename)
+            if bundled.is_file():
+                return _verify_atlas_file(bundled, meta["sha256"], meta["suite"]) if verify else bundled
+        except (FileNotFoundError, KeyError, OSError):
+            pass
+
+    raise FileNotFoundError(
+        f"Missing {meta['suite']} atlas file {filename!r} (looked in {cache_root}). "
+        f"Third-party atlas files are not bundled in the MIT package. "
+        f"Run `python scripts/download_atlases.py` to populate the local cache, or set "
+        f"CONNINFPY_ATLAS_DIR to a directory containing the verified files. "
+        f"Upstream source: {meta['source_url']} | Terms: {meta['license']}."
+    )
+
+
+def atlas_resource_available(
+    filename: str,
+    *,
+    atlas_dir: Optional[Union[str, Path]] = None,
+) -> bool:
+    """Return True if an on-demand atlas file exists in the local cache and passes SHA-256."""
+    try:
+        atlas_resource_path(filename, atlas_dir=atlas_dir, verify=True)
+        return True
+    except (FileNotFoundError, ValueError):
+        return False
+
+
 def read_bna_hierarchy(*, index: str = "roi_id"):
     """Read a fresh hierarchy table in the requested key order."""
     import pandas as pd
 
-    return pd.read_csv(bundled_path("bna246_hierarchy.csv")).set_index(index)
+    return pd.read_csv(atlas_resource_path("bna246_hierarchy.csv")).set_index(index)
 
 
 _BUILTIN_ALIASES = {
@@ -51,8 +159,13 @@ _BUILTIN_ALIASES = {
 
 
 def builtin_atlas_path(token: str) -> Optional[Path]:
-    """Resolve a manifest's builtin token through the package resource locator."""
+    """Resolve a manifest's builtin token through bundled MIT assets or the atlas cache."""
     filename = _BUILTIN_ALIASES.get(token, token)
+    if filename in _atlas_manifest_entries():
+        try:
+            return atlas_resource_path(filename)
+        except FileNotFoundError:
+            return None
     try:
         candidate = bundled_path(filename)
     except FileNotFoundError:
@@ -156,14 +269,16 @@ def verify_brainnetome_resource(path: Union[str, Path], filename: str) -> Path:
 
 
 def get_bna_246_nifti_path(resolution_mm: int = 2) -> Path:
-    """Get the file system path of the bundled Brainnetome 246 NIfTI atlas image."""
+    """Get the file system path of the cached Brainnetome 246 NIfTI atlas image."""
+    if resolution_mm not in (1, 2):
+        raise ValueError(f"resolution_mm must be 1 or 2; got {resolution_mm!r}")
     filename = f"BN_Atlas_246_{resolution_mm}mm.nii.gz"
-    return bundled_path(filename)
+    return atlas_resource_path(filename)
 
 
 def bna_profile_paths() -> Tuple[Path, Path]:
-    """Paths of the bundled BrainMap profiles of BNA-246 (BDf_FDR05.json, PCf_FDR05.json)."""
-    return bundled_path("BDf_FDR05.json"), bundled_path("PCf_FDR05.json")
+    """Paths of the cached BrainMap profiles of BNA-246 (BDf_FDR05.json, PCf_FDR05.json)."""
+    return atlas_resource_path("BDf_FDR05.json"), atlas_resource_path("PCf_FDR05.json")
 
 
 def fetch_bna_behavioral_decoding(
@@ -175,9 +290,10 @@ def fetch_bna_behavioral_decoding(
 
     The forward-inference Behavioral Domain (BD) and Paradigm Class (PC)
     association scores (thresholded at FDR < 0.05) published with the
-    Brainnetome Atlas (`atlas.brainnetome.org`) are bundled with the package
-    (``conninfpy/atlas_data``, under the Brainnetome terms in
-    ``NOTICE_BRAINNETOME.txt``) and read without network access by default.
+    Brainnetome Atlas (`atlas.brainnetome.org`) are read from the local
+    on-demand atlas cache (``CONNINFPY_ATLAS_DIR`` or
+    ``~/.cache/conninfpy/atlases``, under the Brainnetome terms in
+    ``NOTICE_BRAINNETOME.txt``) without network access by default.
     With ``cache_dir`` or ``force_download=True`` they are downloaded from the
     official repository instead and cached.
 
@@ -200,11 +316,10 @@ def fetch_bna_behavioral_decoding(
     ----------
     cache_dir : str or Path, optional
         Download into (and read from) this directory instead of using the
-        bundled files.
+        on-demand atlas cache.
     force_download : bool, default=False
-        Download a fresh copy even when bundled or cached files exist (into
-        ``cache_dir``, default ``$CONNINFPY_CACHE/bna246`` or
-        ``~/.cache/conninfpy/bna246``).
+        Download a fresh copy even when cached files exist (into
+        ``cache_dir``, default ``atlas_cache_dir()``).
     as_dataframe : bool, default=False
         If True, returns a consolidated ``pandas.DataFrame`` merged with
         BNA-246 parcel names and ROI IDs.
@@ -225,14 +340,7 @@ def fetch_bna_behavioral_decoding(
             pc_data = json.load(f)
         return _bna_decoding_output(bd_data, pc_data, as_dataframe)
 
-    if cache_dir is None:
-        base_cache = os.environ.get(
-            "CONNINFPY_CACHE",
-            str(Path.home() / ".cache" / "conninfpy"),
-        )
-        cache_path = Path(base_cache) / "bna246"
-    else:
-        cache_path = Path(cache_dir)
+    cache_path = atlas_cache_dir() if cache_dir is None else Path(cache_dir)
 
     cache_path.mkdir(parents=True, exist_ok=True)
     bd_file = cache_path / "BDf_FDR05.json"

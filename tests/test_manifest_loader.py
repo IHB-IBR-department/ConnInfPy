@@ -25,9 +25,9 @@ class TestManifestLoader(unittest.TestCase):
         self.temp_dir.cleanup()
         
     def test_resolve_path_builtin(self):
-        # BUILTIN:bna246.csv should resolve to package resources
-        res = resolve_path("BUILTIN:bna246.csv", self.manifest_dir)
-        self.assertTrue(res.endswith("bna246.csv"))
+        # BUILTIN:schaefer100 should always resolve to bundled MIT package resources
+        res = resolve_path("BUILTIN:schaefer100", self.manifest_dir)
+        self.assertTrue(res.endswith("schaefer100_yeo7.csv"))
         self.assertTrue(os.path.exists(res))
         
     def test_resolve_path_relative(self):

@@ -12,9 +12,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from examples.open_close._shared.data import (
     BNA_DROPOUT_IDS,
+    DATA_DIR,
     OpenCloseDataset,
     MISSED_ROI_IDS,
     bad_retest_subjects,
+)
+
+HAS_CHINA_SCHAEFER = (
+    (DATA_DIR / "china_open_Schaefer200_strategy-4_GSR.npy").exists()
+    and (DATA_DIR / "china_close_Schaefer200_strategy-4_GSR.npy").exists()
+    and (DATA_DIR / "subject_order_china.txt").exists()
 )
 
 
@@ -39,6 +46,7 @@ class TestOpenCloseLoader(unittest.TestCase):
         self.assertEqual(ds.n_subjects, 84)
         self.assertEqual(ds.n_edges, 182 * 181 // 2)
 
+    @unittest.skipUnless(HAS_CHINA_SCHAEFER, "Beijing EOEC (China) derivatives not present; run scripts/prepare_china_open_close.py")
     def test_china_shapes(self) -> None:
         ds = OpenCloseDataset.load("china")
         self.assertEqual(ds.open_ts.shape, (48, 240, 182))
@@ -60,6 +68,7 @@ class TestOpenCloseLoader(unittest.TestCase):
         # Fisher z is finite — edges clipped to avoid atanh infinities
         self.assertTrue(np.all(np.isfinite(o_z)))
 
+    @unittest.skipUnless(HAS_CHINA_SCHAEFER, "Beijing EOEC (China) derivatives not present; run scripts/prepare_china_open_close.py")
     def test_china_run1_access(self) -> None:
         ds = OpenCloseDataset.load("china")
         o_z, c1_z = ds.connectivity_z(run=1)
@@ -87,6 +96,7 @@ class TestOpenCloseLoader(unittest.TestCase):
             },
         )
 
+    @unittest.skipUnless(HAS_CHINA_SCHAEFER, "Beijing EOEC (China) derivatives not present; run scripts/prepare_china_open_close.py")
     def test_retest_mask_excludes_bad_subject(self) -> None:
         ds = OpenCloseDataset.load("china")
         mask = ds.retest_subject_mask()

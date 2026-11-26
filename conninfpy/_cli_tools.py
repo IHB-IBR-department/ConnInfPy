@@ -1172,52 +1172,60 @@ def interpret_outputs(
         # 3. Brainnetome (+ optional SUIT cerebellum) annotation
         rois = None
         res_mm = 1 if cb_arg is not None else 2
-        bna_ids = (
-            bna_region_ids(atlas.labels)
-            if atlas is not None and getattr(atlas, "labels", None) is not None
-            else None
-        )
-        if bna_ids is not None:
-            if ref is None:
-                ref = BrainnetomeReference.load(profiles=False, resolution_mm=res_mm, cerebellum=cb_arg)
-            rois = annotate_bna_regions(bna_ids, reference=ref, names=atlas.labels)
-        else:
-            eff_support = support or ("parcel" if parcel_nifti is not None else "sphere")
-            eff_space = space or (getattr(atlas, "space", None) if atlas is not None else None) or "MNI152"
-            coords_arr = None
-            if atlas is not None and getattr(atlas, "coords", None) is not None:
-                cand = np.asarray(atlas.coords, dtype=float)
-                if cand.ndim == 2 and cand.shape[1] == 3 and np.isfinite(cand).all():
-                    coords_arr = cand
-            if eff_support == "parcel" and parcel_nifti is not None:
+        try:
+            bna_ids = (
+                bna_region_ids(atlas.labels)
+                if atlas is not None and getattr(atlas, "labels", None) is not None
+                else None
+            )
+            if bna_ids is not None:
                 if ref is None:
                     ref = BrainnetomeReference.load(profiles=False, resolution_mm=res_mm, cerebellum=cb_arg)
-                if all(isinstance(x, (int, np.integer)) and int(x) > 0 for x in bundle.roi_ids):
-                    p_labels = [int(x) for x in bundle.roi_ids]
-                else:
-                    p_labels = list(range(1, n_regions + 1))
-                rois = annotate_rois(
-                    coords=coords_arr,
-                    reference=ref,
-                    names=getattr(atlas, "labels", None) if atlas is not None else None,
-                    networks=getattr(atlas, "networks", None) if atlas is not None else None,
-                    space=eff_space,
-                    support="parcel",
-                    parcel_image=str(Path(parcel_nifti).resolve()),
-                    parcel_labels=p_labels,
-                )
-            elif coords_arr is not None and eff_support in ("point", "sphere"):
-                if ref is None:
-                    ref = BrainnetomeReference.load(profiles=False, resolution_mm=res_mm, cerebellum=cb_arg)
-                rois = annotate_rois(
-                    coords_arr,
-                    reference=ref,
-                    names=getattr(atlas, "labels", None),
-                    networks=getattr(atlas, "networks", None),
-                    space=eff_space,
-                    support=eff_support,
-                    radius_mm=radius_mm if eff_support == "sphere" else None,
-                )
+                rois = annotate_bna_regions(bna_ids, reference=ref, names=atlas.labels)
+            else:
+                eff_support = support or ("parcel" if parcel_nifti is not None else "sphere")
+                eff_space = space or (getattr(atlas, "space", None) if atlas is not None else None) or "MNI152"
+                coords_arr = None
+                if atlas is not None and getattr(atlas, "coords", None) is not None:
+                    cand = np.asarray(atlas.coords, dtype=float)
+                    if cand.ndim == 2 and cand.shape[1] == 3 and np.isfinite(cand).all():
+                        coords_arr = cand
+                if eff_support == "parcel" and parcel_nifti is not None:
+                    if ref is None:
+                        ref = BrainnetomeReference.load(profiles=False, resolution_mm=res_mm, cerebellum=cb_arg)
+                    if all(isinstance(x, (int, np.integer)) and int(x) > 0 for x in bundle.roi_ids):
+                        p_labels = [int(x) for x in bundle.roi_ids]
+                    else:
+                        p_labels = list(range(1, n_regions + 1))
+                    rois = annotate_rois(
+                        coords=coords_arr,
+                        reference=ref,
+                        names=getattr(atlas, "labels", None) if atlas is not None else None,
+                        networks=getattr(atlas, "networks", None) if atlas is not None else None,
+                        space=eff_space,
+                        support="parcel",
+                        parcel_image=str(Path(parcel_nifti).resolve()),
+                        parcel_labels=p_labels,
+                    )
+                elif coords_arr is not None and eff_support in ("point", "sphere"):
+                    if ref is None:
+                        ref = BrainnetomeReference.load(profiles=False, resolution_mm=res_mm, cerebellum=cb_arg)
+                    rois = annotate_rois(
+                        coords_arr,
+                        reference=ref,
+                        names=getattr(atlas, "labels", None),
+                        networks=getattr(atlas, "networks", None),
+                        space=eff_space,
+                        support=eff_support,
+                        radius_mm=radius_mm if eff_support == "sphere" else None,
+                    )
+        except FileNotFoundError as exc:
+            if cb_arg is not None:
+                raise
+            print(
+                f"conninfpy interpret: skipping Brainnetome annotation ({exc})",
+                file=sys.stderr,
+            )
 
         if rois is not None:
             ann_edges = inf_res.annotated_edges(rois, alpha=eff_alpha, param_idx=eff_param_idx)
@@ -1363,10 +1371,12 @@ def collect_info() -> Dict[str, Any]:
     numba_installed = deps["numba"] is not None
     policy = describe_worker_policy(use_mp=True, n_processes=None, n_permutations=None)
 
-    atlas_dir = Path(__file__).resolve().parent / "atlas_data"
-    bna_ok = (atlas_dir / "bna246.csv").is_file() and (atlas_dir / "BN_Atlas_246_1mm.nii.gz").is_file()
-    suit_ok = (atlas_dir / "atl-Anatom.tsv").is_file() and (
-        atlas_dir / "atl-Anatom_space-MNI_dseg.nii.gz"
+    from conninfpy.atlas.resources import atlas_cache_dir
+
+    cache_dir = atlas_cache_dir()
+    bna_ok = (cache_dir / "bna246.csv").is_file() and (cache_dir / "BN_Atlas_246_1mm.nii.gz").is_file()
+    suit_ok = (cache_dir / "atl-Anatom.tsv").is_file() and (
+        cache_dir / "atl-Anatom_space-MNI_dseg.nii.gz"
     ).is_file()
 
     return {
@@ -1389,6 +1399,7 @@ def collect_info() -> Dict[str, Any]:
             "worker_start_method": policy["worker_start_method"],
         },
         "resources": {
+            "atlas_cache_dir": str(cache_dir),
             "bna_246": bna_ok,
             "suit_cerebellum": suit_ok,
         },
@@ -1516,19 +1527,36 @@ def run_selftest(*, as_json: bool = False, reference: bool = False) -> tuple[int
             "detail": "skipped because synthetic_data failed",
         }
 
-    # 3. Bundled BNA-246 + SUIT cerebellum reference
+    # 3. Bundled MIT Schaefer atlases + optional cached BNA-246 / SUIT reference
     t0 = time.perf_counter()
     try:
-        from conninfpy.atlas.brainnetome import BrainnetomeReference
+        from conninfpy.atlas.metadata import AtlasInfo
+        from conninfpy.atlas.resources import atlas_resource_available
 
-        ref = BrainnetomeReference.load(profiles=False, resolution_mm=1, cerebellum="anatom")
-        n_reg = len(ref.regions)
-        cb_n = int(ref.provenance.get("cerebellum_n_regions", 0))
-        ok_atlas = n_reg >= 280 and cb_n == 34 and ref.label_image is not None
+        s100 = AtlasInfo.schaefer_100_yeo7()
+        s200 = AtlasInfo.schaefer_200_yeo7()
+        s400 = AtlasInfo.schaefer_400_yeo7()
+        ok_schaefer = len(s100) == 100 and len(s200) == 200 and len(s400) == 400
+        detail_parts = ["schaefer=100/200/400"]
+
+        bna_cached = atlas_resource_available("BN_Atlas_246_1mm.nii.gz") and atlas_resource_available("bna246_hierarchy.csv")
+        suit_cached = atlas_resource_available("atl-Anatom_space-MNI_dseg.nii.gz") and atlas_resource_available("atl-Anatom.tsv")
+        ok_atlas = ok_schaefer
+        if bna_cached and suit_cached:
+            from conninfpy.atlas.brainnetome import BrainnetomeReference
+
+            ref = BrainnetomeReference.load(profiles=False, resolution_mm=1, cerebellum="anatom")
+            n_reg = len(ref.regions)
+            cb_n = int(ref.provenance.get("cerebellum_n_regions", 0))
+            ok_atlas = ok_atlas and n_reg >= 280 and cb_n == 34 and ref.label_image is not None
+            detail_parts.append(f"bna_suit_regions={n_reg}, cerebellum_regions={cb_n}")
+        else:
+            detail_parts.append("optional BNA-246/SUIT cache not downloaded (run scripts/download_atlases.py)")
+
         checks["bundled_atlas"] = {
             "status": "PASS" if ok_atlas else "FAIL",
             "wall_time_s": round(time.perf_counter() - t0, 3),
-            "detail": f"regions={n_reg}, cerebellum_regions={cb_n}",
+            "detail": "; ".join(detail_parts),
         }
     except Exception as exc:
         checks["bundled_atlas"] = {
