@@ -1,7 +1,14 @@
 # Study data
 
-This directory holds study inputs and manifests, including ABIDE and Open-Close.
-Local participant data remain subject to their existing acquisition and ignore rules.
+This directory holds **public demo** study inputs and manifests tracked in the repository:
+
+| Path | Contents |
+|---|---|
+| `demo/ABIDE_mini/` + `abide_mini.yaml` | 204-subject, 5-site Schaefer-100 ABIDE subset for CLI, Streamlit, and README demos |
+| `demo/NBS_schizophrenia/` + `nbs_schizophrenia.yaml` | MATLAB NBS v1.2 example (27 subjects, 74 AAL regions, GPL v3+) |
+| `demo/open_close/` + `open_close/` (Schaefer-200) + `open_close.yaml` | Eyes-Open vs. Eyes-Closed Schaefer-200 arrays, labels, and subject lists |
+
+Full external datasets — ABIDE I PCP CC200 (`~/nilearn_data/ABIDE_pcp/`), local Brainnetome Open-Close series, and personal fMRIPrep or clinical cohorts — are stored **outside** the repository (e.g., under `$CONNINFPY_DATA` or an external study directory) and passed via CLI flags (`--data-dir`) or a manifest YAML.
 
 Atlas resources have separate owners:
 
@@ -32,14 +39,9 @@ corrections to the NBS node table and the MATLAB reference result are in
 
 Rebuild with `python scripts/build_nbs_schizophrenia_demo.py --nbs-dir <NBS1.2>`.
 
-## Open-Close Brainnetome series and Beijing EOEC phenotype (local only)
+## Open-Close Brainnetome series and Beijing EOEC phenotype (external / local only)
 
-These nine files stay local (ignored by git, see `.gitignore`) because they are
-participant-level neuroimaging products. Provenance recorded in the repository:
-BenchmarkingEOEC pre-processing pipeline ``strategy-4`` (Medvedeva et al. 2025,
-bioRxiv 10.1101/2025.10.20.683049), see the docstring of
-[examples/open_close/_shared/data.py](../examples/open_close/_shared/data.py);
-a download origin/URL is not recorded in the repository.
+These nine files are **not** stored in the repository; keep them in an external study directory (e.g., `$CONNINFPY_DATA/open_close/` or `../local_datasets/open_close/`) and pass `--data-dir` (or an external path) rather than placing them inside `datasets/`. Provenance recorded in the repository: BenchmarkingEOEC pre-processing pipeline ``strategy-4`` (Medvedeva et al. 2025, bioRxiv 10.1101/2025.10.20.683049), see the docstring of [examples/open_close/_shared/data.py](../examples/open_close/_shared/data.py); a download origin/URL is not recorded in the repository.
 
 Each ``{experiment}_{state}_Brainnetome_strategy-4_{GSR,noGSR}.npy`` file holds
 the same participants as the Schaefer-200 series (same subject order; IHB: 84

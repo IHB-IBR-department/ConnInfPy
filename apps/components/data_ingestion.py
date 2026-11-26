@@ -817,6 +817,113 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     except Exception as e:
                         st.error(f"Error parsing manifest: {e}")
 
+                with st.expander("Build / inspect manifest from a data folder (fMRIPrep, connectivity, timeseries)", expanded=False):
+                    from pathlib import Path as _WizPath
+                    from apps.utils.manifest_wizard import inspect_and_prepare_manifest
+
+                    wiz_data_dir = st.text_input(
+                        "Data folder path",
+                        value="",
+                        placeholder="/path/to/bids/derivatives/fmriprep or /path/to/matrices",
+                        key=persistent_key("data:wizard_data_dir", scope="data"),
+                    )
+                    wiz_pheno_path = st.text_input(
+                        "Optional phenotype file path (participants.tsv / pheno.csv)",
+                        value="",
+                        placeholder="/path/to/participants.tsv",
+                        key=persistent_key("data:wizard_pheno_path", scope="data"),
+                    )
+                    wiz_use_bna = st.checkbox(
+                        "Use built-in Brainnetome-246 volumetric atlas (BUILTIN:bna_246_2mm + BUILTIN:bna246.csv)",
+                        value=True,
+                        key=persistent_key("data:wizard_use_bna", scope="data"),
+                    )
+                    wiz_atlas_path = st.text_input(
+                        "Optional custom atlas NIfTI path (for fMRIPrep)",
+                        value="",
+                        disabled=wiz_use_bna,
+                        placeholder="/path/to/atlas_MNI152NLin2009cAsym.nii.gz",
+                        key=persistent_key("data:wizard_atlas_path", scope="data"),
+                    )
+                    wiz_save_path = st.text_input(
+                        "Save manifest path (outside repository recommended)",
+                        value="",
+                        placeholder="/path/to/study/manifest.yaml",
+                        key=persistent_key("data:wizard_save_path", scope="data"),
+                    )
+
+                    if st.button("Inspect folder & prepare manifest", key="btn_inspect_folder_manifest"):
+                        st.session_state["wizard_inspection_result"] = inspect_and_prepare_manifest(
+                            wiz_data_dir,
+                            pheno_path=wiz_pheno_path or None,
+                            atlas_image_path=None if wiz_use_bna else (wiz_atlas_path or None),
+                            use_builtin_bna=wiz_use_bna,
+                            out_manifest_path=wiz_save_path or None,
+                        )
+
+                    wiz_res = st.session_state.get("wizard_inspection_result")
+                    if wiz_res is not None:
+                        st.markdown("**Readiness checklist**")
+                        for item in wiz_res.checklist:
+                            if item.status == "ok":
+                                st.success(f"**{item.label}:** {item.detail}")
+                            elif item.status == "warning":
+                                msg = f"**{item.label}:** {item.detail}"
+                                if item.guidance:
+                                    msg += f"\n\n*How to fix / where to get:* {item.guidance}"
+                                st.warning(msg)
+                            else:
+                                msg = f"**{item.label}:** {item.detail}"
+                                if item.guidance:
+                                    msg += f"\n\n*How to fix / where to get:* {item.guidance}"
+                                st.error(msg)
+
+                        if wiz_res.ready_for_manifest and wiz_res.manifest_yaml:
+                            st.code(wiz_res.manifest_yaml, language="yaml")
+                            dl_col, save_col = st.columns(2)
+                            with dl_col:
+                                st.download_button(
+                                    "Download manifest.yaml",
+                                    data=wiz_res.manifest_yaml,
+                                    file_name="manifest.yaml",
+                                    mime="text/yaml",
+                                    key="btn_download_wizard_manifest",
+                                )
+                            with save_col:
+                                if st.button("Save manifest to path", key="btn_save_wizard_manifest"):
+                                    if not wiz_save_path.strip():
+                                        st.error("Enter a destination path in 'Save manifest path' first.")
+                                    else:
+                                        dest = _WizPath(wiz_save_path.strip()).expanduser().resolve()
+                                        dest.parent.mkdir(parents=True, exist_ok=True)
+                                        dest.write_text(wiz_res.manifest_yaml, encoding="utf-8")
+                                        st.session_state["wizard_saved_manifest_path"] = str(dest)
+                                        st.success(f"Saved manifest to `{dest}`.")
+
+                    saved_wiz_path = st.session_state.get("wizard_saved_manifest_path")
+                    if saved_wiz_path and _WizPath(saved_wiz_path).is_file():
+                        if st.checkbox(
+                            f"Use saved wizard manifest ({_WizPath(saved_wiz_path).name})",
+                            value=False,
+                            key="chk_use_saved_wizard_manifest",
+                        ):
+                            try:
+                                from conninfpy.loaders.manifest import ManifestLoader
+
+                                loader_instance = ManifestLoader(saved_wiz_path)
+                                if loader_instance.manifest.loader in {
+                                    "NiftiDirectoryLoader",
+                                    "CSVDirectoryLoader",
+                                    "FmriprepDerivativesLoader",
+                                    "TimeseriesDirectoryLoader",
+                                    "StressTimeseriesLoader",
+                                    "ZerssenNiftiLoader",
+                                }:
+                                    ts_preprocess_required = True
+                                st.success(f"✅ Loaded wizard manifest: `{saved_wiz_path}`")
+                            except Exception as e:
+                                st.error(f"Error loading saved manifest: {e}")
+
 
 
         # Right column: Ingestion Preview summary, Validation report, cache status

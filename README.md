@@ -151,6 +151,36 @@ python -m pip install numpy scipy statsmodels pandas matplotlib scikit-learn job
 label images with it, so the annotation fails without it even though the
 statistics still run.
 
+### Testing & verification
+
+1. **Standalone install / wheel check (no repository clone needed):**
+   ```bash
+   conninfpy info          # Python, Numba backend, CPU cores, bundled atlas paths
+   conninfpy selftest      # quick check: TFNBS, multiprocessing, bundled atlases
+   ```
+   Or run the synthetic Quickstart snippet below in Python.
+
+2. **Real demo data (from a repository clone):**
+   ```bash
+   conninfpy init --manifest datasets/abide_mini.yaml --out analysis.yaml
+   conninfpy qc analysis.yaml --motion-qc
+   conninfpy run examples/abide/configs/abide_mini_age.yaml --n-jobs 4 --seed 0
+   ```
+   The repository also bundles `datasets/nbs_schizophrenia.yaml` (MATLAB NBS reference) and `datasets/open_close.yaml` (Schaefer-200 paired Eyes-Open vs. Eyes-Closed).
+
+3. **fMRIPrep derivatives workflow:**
+   ```bash
+   # Offline smoke test with tiny synthetic BIDS derivatives
+   python examples/fmriprep_nilearn/run_fmriprep_workflow.py --synthetic --n-permutations 10
+
+   # On-demand nilearn download (development fMRI + Schaefer-100)
+   python examples/fmriprep_nilearn/run_fmriprep_workflow.py --n-subjects 12 --atlas schaefer100 --n-permutations 100
+   ```
+   To run on your own `bids/derivatives/fmriprep` folder, adapt [`examples/fmriprep_nilearn/manifest_template.yaml`](examples/fmriprep_nilearn/manifest_template.yaml) or generate a manifest automatically with:
+   ```bash
+   conninfpy init-manifest --data-dir /path/to/bids/derivatives/fmriprep --pheno /path/to/participants.tsv --out manifest.yaml
+   ```
+
 ---
 
 ## Quickstart
@@ -496,6 +526,7 @@ outside the package scope:
 | [examples/benchmarks/](examples/benchmarks/) | Timing / GLM / acceleration benchmarks and external validation (PALM, scipy, statsmodels, nilearn) |
 | [examples/simulations/](examples/simulations/) | Simulation validation (FPR + power) backing the validation paper |
 | [examples/abide/](examples/abide/) | Real-data validation on ABIDE (age, diagnosis, motion, within-site replication), CLI analysis files (`configs/`) and the Brainnetome interpretation |
+| [examples/fmriprep_nilearn/](examples/fmriprep_nilearn/) | End-to-end fMRIPrep derivatives + on-demand `nilearn` volumetric atlas workflow (`manifest_template.yaml` and `run_fmriprep_workflow.py`) |
 | [examples/open_close/](examples/open_close/) | Open-Close (eyes closed vs open; IHB and Beijing): paired validation, bidirectional ML transfer (IHB ↔ China), the Brainnetome interpretation, and the experiments `atlas_stability/` (Schaefer vs native Brainnetome), `structural_prior/` (structural connectivity as an edge mask and as NI-TFNBS blocks) and `feature_stability/` (edge-only EO/EC models: post-fit feature importance and overlap at edge/anatomical/functional levels, with/without training-only ComBat) |
 
 ## Documentation

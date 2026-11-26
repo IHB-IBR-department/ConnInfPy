@@ -548,7 +548,7 @@ Data: NBS v1.2 example, GNU GPL v3 or later; see `datasets/demo/NBS_schizophreni
 - For ready connectivity matrices, choose the matching loader and include atlas metadata whenever ROI labels, networks, coordinates, or brain plots are needed.
 - **Prepared Zerssen example:** use `loader: CustomPreparedZerssenLoader`; under `paths`, provide `prepared_npz`, `set84_bnt_ids`, and `atlas_metadata: BUILTIN:bna246.csv`. Set `params.matrix_key` to select the analysis array. `connectivity_pearson_z`, `connectivity_tangent`, and `connectivity_tangent_hc_ref` use the full 246-ROI BNA atlas; `set84m_pearson_z` and `set84w_pearson_z` use the ordered 84-ROI BNA subset defined by BNT IDs. Set `data_kind: fisher_z` for the Pearson-z arrays and `data_kind: correlation` for tangent arrays. Update `checks.expected_rois` to match the selected 84- or 246-ROI matrix.
 - The dataset-provided atlas takes precedence after loading. The sidebar atlas is then only a reference for datasets without their own metadata.
-- See `datasets/zerssen_prepared.yaml` for a working local template; replace its machine-specific paths with your own.
+- See `examples/fmriprep_nilearn/manifest_template.yaml` (or `datasets/abide_mini.yaml`) for a working template; replace its paths with your own.
 """,
     "source_type": """
 **Source File Types**
