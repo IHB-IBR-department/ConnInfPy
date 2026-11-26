@@ -65,7 +65,7 @@ def test_paired_unit_effects_match_explicit_edge_weighting():
     membership = np.array([[1, 0], [.2, .8], [0, 1], [.6, .4]])
     summary = unit_summaries(values, membership, values.mean(0))
     i, j = np.triu_indices(4, 1)
-    for column, (a, b) in enumerate(zip(*np.triu_indices(2))):
+    for column, (a, b) in enumerate(zip(*np.triu_indices(2), strict=True)):
         weights = membership[i, a] * membership[j, b]
         if a != b:
             weights += membership[j, a] * membership[i, b]

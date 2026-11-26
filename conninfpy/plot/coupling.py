@@ -10,7 +10,7 @@ import numpy.typing as npt
 try:
     import matplotlib.pyplot as plt
     from matplotlib.axes import Axes
-    from matplotlib.colors import BoundaryNorm, ListedColormap
+    from matplotlib.colors import BoundaryNorm, Colormap, ListedColormap
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
 except ImportError as exc:  # pragma: no cover (env-specific)
@@ -217,7 +217,7 @@ def plot_coupling_classes(
     has_missing = bool(np.any((codes[off_diagonal] < 0)))
 
     colors = [MISSING_COLOR] + [COUPLING_CLASS_COLORS[name] for name in COUPLING_CLASSES]
-    cmap = ListedColormap(colors)
+    cmap: Colormap = ListedColormap(colors)
     if hasattr(cmap, "with_extremes"):  # masked diagonal reads as background
         cmap = cmap.with_extremes(bad="white")
     bounds = np.arange(-1.5, len(COUPLING_CLASSES) + 0.5, 1.0)
@@ -368,9 +368,9 @@ def plot_coupling_classes(
         "alpha": alpha,
     }
     if hasattr(ax, "attrs"):  # matplotlib >= ? exposes a mapping
-        ax.attrs.update(metadata)
+        getattr(ax, "attrs").update(metadata)
     else:
-        ax.attrs = metadata
+        setattr(ax, "attrs", metadata)
     return ax
 
 

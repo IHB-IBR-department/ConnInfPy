@@ -14,8 +14,8 @@ import warnings
 import numpy as np
 
 from conninfpy import analyze
-from conninfpy._available_case_glm import available_case_glm
-from conninfpy.glm_stats import (
+from conninfpy.stats._missing_glm import available_case_glm
+from conninfpy.stats.glm import (
     _ENHANCE_MAP,
     _compute_reduced_model,
     build_design_matrix,
@@ -24,7 +24,7 @@ from conninfpy.glm_stats import (
     compute_p_val_paired_glm,
 )
 from conninfpy.harmonize import _combat_fit_available, combat_fit, combat_harmonize
-from conninfpy.pairwise_stats import StatMethod
+from conninfpy.stats.pairwise import StatMethod
 
 N, n = 10, 30
 IU = np.triu_indices(N, 1)

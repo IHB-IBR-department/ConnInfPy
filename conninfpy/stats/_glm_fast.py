@@ -261,6 +261,7 @@ def edge_statistics(
         Cbeta = plan.contrast @ beta
         sigma2, meansq = _edge_sigma2(Y_e, beta, plan.X, plan.df)
         floor = _degenerate.RTOL * meansq
+        assert plan.M_inv is not None  # F-stat plans always carry it
         quad = np.einsum("ie,ij,je->e", Cbeta, plan.M_inv, Cbeta)
         with np.errstate(divide="ignore", invalid="ignore"):
             F = quad / (plan.contrast.shape[0] * sigma2)
@@ -389,7 +390,7 @@ def multi_contrast_perm_task(
     ``{contrast_name: {tail: max_stat}}``.
     """
     out: Dict[str, Dict[str, Any]] = {}
-    for name, plan, (yhat_e, r_e) in zip(names, plans, payloads):
+    for name, plan, (yhat_e, r_e) in zip(names, plans, payloads, strict=True):
         rng = np.random.RandomState(seed)
         Y_e = _draw_y_edge(yhat_e, r_e, rng, plan.scheme, plan.strata_codes)
         out[name] = permutation_tails(plan, Y_e)

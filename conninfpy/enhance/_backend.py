@@ -6,10 +6,11 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 import logging
 import threading
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Callable, Dict, Iterator, Optional
 
 logger = logging.getLogger("conninfpy.enhance")
 
+_numba_njit: Optional[Callable[..., Any]]
 try:
     from numba import njit as _numba_njit
 
@@ -40,6 +41,7 @@ if HAS_NUMBA:
         pickling and introspection as before); only the cache activation is
         postponed to :func:`_enable_kernel_caching`.
         """
+        assert _numba_njit is not None  # this branch only exists when numba imported
         cache = bool(kwargs.pop("cache", False))
 
         def _register(disp):

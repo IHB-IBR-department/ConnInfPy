@@ -3,9 +3,9 @@ from unittest import TestCase
 
 import numpy as np
 
-from conninfpy.pairwise_stats import compute_t_stat
-from conninfpy.nbs_score import get_nbs_score, nbs_bct
-from conninfpy.utils import fisher_r_to_z
+from conninfpy.stats.pairwise import compute_t_stat
+from conninfpy.enhance.nbs import get_nbs_score, nbs_bct
+from conninfpy._shared.arrays import fisher_r_to_z
 
 from tests import fixtures
 

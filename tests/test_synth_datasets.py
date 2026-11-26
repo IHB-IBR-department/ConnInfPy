@@ -1,6 +1,6 @@
 import os
 from unittest import TestCase
-from conninfpy.synth_datasets import (generate_fc_matrices, ModularDatasetGenerator)
+from conninfpy.sim.datasets import (generate_fc_matrices, ModularDatasetGenerator)
 import numpy as np
 
 SHOW_PLOTS = os.getenv("CONNINFPY_TEST_PLOTS") == "1"

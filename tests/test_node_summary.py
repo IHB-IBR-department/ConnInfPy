@@ -383,7 +383,7 @@ class TestComponentResults(unittest.TestCase):
         sig = table[table["significant"]]
         for roi in (0, 5, 14, 20):
             for tail in ("positive", "negative"):
-                ids = sorted(sig[(sig["tail"] == tail) & sig["nodes"].map(lambda nodes: roi in nodes)]["component_id"])
+                ids = sorted(sig[(sig["tail"] == tail) & sig["nodes"].map(lambda nodes, roi=roi: roi in nodes)]["component_id"])
                 self.assertEqual(sorted(t.loc[t["roi"] == roi, f"component_ids_{tail}"].iloc[0]), ids)
 
     def test_participation_follows_the_edges_of_the_significant_components(self):

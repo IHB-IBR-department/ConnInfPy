@@ -9,6 +9,7 @@ from __future__ import annotations
 import warnings
 from collections import defaultdict
 from numbers import Real
+from typing import cast
 
 import numpy as np
 from scipy.linalg import cho_solve
@@ -48,7 +49,7 @@ def compute_connectivity(ts, kind="correlation", shrinkage=_DEFAULT, standardize
         shrinkage = None if kind == "correlation" else "ledoit_wolf"
     if isinstance(shrinkage, bool) or not (shrinkage is None or
         (isinstance(shrinkage, str) and shrinkage in ("ledoit_wolf", "oas")) or
-        (isinstance(shrinkage, Real) and np.isfinite(shrinkage) and 0 <= shrinkage <= 1)):
+        (isinstance(shrinkage, Real) and np.isfinite(float(shrinkage)) and 0 <= cast(float, shrinkage) <= 1)):
         raise ValueError("shrinkage must be None, 'ledoit_wolf', 'oas', or a float in [0, 1].")
     if not isinstance(min_valid_tr, int) or min_valid_tr < 2:
         raise ValueError("min_valid_tr must be an integer >= 2.")
@@ -84,6 +85,7 @@ def compute_connectivity(ts, kind="correlation", shrinkage=_DEFAULT, standardize
         counts.append(n)
         cleaned.append(x)
         groups[n].append(i)
+    assert n_rois is not None  # every observation passed the (T, ROI >= 2) check
     result = np.empty((len(series), n_rois, n_rois), dtype=float)
     deltas = np.zeros(len(series))
     # Keep temporary covariance blocks near 32 MiB; output itself is unavoidable.

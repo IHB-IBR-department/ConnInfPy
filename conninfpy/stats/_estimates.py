@@ -91,7 +91,7 @@ def glm_design(
                 "continuous",
                 (f"{names[k]}={lo:.4g} (mean-1SD)", f"{names[k]}={hi:.4g} (mean+1SD)"),
             )
-        for value, label in zip((lo, hi), labels):
+        for value, label in zip((lo, hi), labels, strict=True):
             prof = means.copy()
             prof[k] = value
             design["profiles"][label] = prof.tolist()
@@ -106,6 +106,7 @@ def pairwise_estimates(
     test_type: str,
 ) -> Tuple[npt.NDArray[np.float64], Dict[str, Any]]:
     """Coefficient maps and design of the design equivalent to a pairwise test (NaN-aware)."""
+    design: Dict[str, Any]
     with np.errstate(invalid="ignore"), _quiet():
         if test_type == "one-sample":
             beta = np.nanmean(group1, axis=0)[None]
@@ -117,6 +118,7 @@ def pairwise_estimates(
                 "comparison": None,
             }
         elif test_type == "two-sample":
+            assert group2 is not None  # the two-sample design needs both groups
             m1, m2 = np.nanmean(group1, axis=0), np.nanmean(group2, axis=0)
             beta = np.stack([m1, m2 - m1])
             design = {
@@ -127,6 +129,7 @@ def pairwise_estimates(
                 "comparison": ["group1", "group2"],
             }
         elif test_type == "paired":
+            assert group2 is not None  # the paired design needs both conditions
             beta = np.stack(
                 [np.nanmean(group1, axis=0), np.nanmean(group2 - group1, axis=0)]
             )
@@ -170,10 +173,10 @@ def predict(
     beta: npt.NDArray[np.float64], x: Sequence[float]
 ) -> npt.NDArray[np.float64]:
     """Predicted connectivity ``x' beta`` (N, N) at a covariate profile ``x``."""
-    x = np.asarray(x, dtype=np.float64)
-    if x.shape != (beta.shape[0],):
-        raise ValueError(f"profile must have {beta.shape[0]} values; got {x.shape}.")
-    return np.tensordot(x, beta, axes=(0, 0))
+    xa = np.asarray(x, dtype=np.float64)
+    if xa.shape != (beta.shape[0],):
+        raise ValueError(f"profile must have {beta.shape[0]} values; got {xa.shape}.")
+    return np.tensordot(xa, beta, axes=(0, 0))
 
 
 def effect(

@@ -12,6 +12,8 @@ import glob
 import json
 import os
 
+from typing import List, Literal, Tuple, Union, cast
+
 import numpy as np
 import pandas as pd
 
@@ -103,7 +105,6 @@ class OpenCloseLoader(BaseDataLoader):
         if kept_idx is not None:
             open_data = open_data[:, :, kept_idx]
             close_data = close_data[:, :, kept_idx]
-            n_rois = len(kept_idx)
             
         subject_ids = []
         if self.subject_list_path and os.path.exists(self.subject_list_path):
@@ -200,14 +201,17 @@ class MultiSiteOpenCloseLoader(BaseDataLoader):
                 None, None, None, None, "unknown", None, None, [], 0, 0.0, warnings
             )
 
-        roi_counts = {preview.n_rois for preview in valid}
+        roi_counts = {preview.n_rois for preview in valid if preview.n_rois is not None}
         if len(roi_counts) != 1:
             warnings.append(f"Site ROI counts differ: {sorted(roi_counts)}.")
 
-        timepoints = [preview.n_timepoints for preview in valid if preview.n_timepoints is not None]
-        n_timepoints = (
+        timepoints: List[Union[int, Tuple[int, int]]] = [
+            pt for preview in valid if (pt := preview.n_timepoints) is not None
+        ]
+        n_timepoints: Union[int, Tuple[int, int], None] = (
             timepoints[0] if len(set(timepoints)) == 1
-            else (min(timepoints), max(timepoints))
+            # per-site counts are plain ints here, so the range is (min, max)
+            else cast(Tuple[int, int], (min(timepoints), max(timepoints)))
         )
         return DatasetPreview(
             n_subjects=sum(preview.n_subjects or 0 for preview in valid),
@@ -230,7 +234,7 @@ class MultiSiteOpenCloseLoader(BaseDataLoader):
     def load(self) -> LoadedDataset:
         """Load the dataset into a :class:`LoadedDataset`."""
         datasets = [(site, loader.load()) for site, loader in self._site_loaders()]
-        roi_counts = {dataset.data.shape[1] for _, dataset in datasets}
+        roi_counts = {cast(np.ndarray, dataset.data).shape[1] for _, dataset in datasets}
         if len(roi_counts) != 1:
             raise ValueError(f"All sites must have the same ROI count; got {sorted(roi_counts)}.")
 
@@ -381,8 +385,9 @@ class ZerssenNiftiLoader(BaseDataLoader):
         data = np.vstack([hc_ds.data, pat_ds.data])
         
         # Generate Pheno DataFrame
-        subject_ids = hc_ds.subject_ids + pat_ds.subject_ids
-        groups = ["HC"] * len(hc_ds.subject_ids) + ["PAT"] * len(pat_ds.subject_ids)
+        # Both loaders always name their subjects.
+        subject_ids = cast(List[str], hc_ds.subject_ids) + cast(List[str], pat_ds.subject_ids)
+        groups = ["HC"] * len(cast(List[str], hc_ds.subject_ids)) + ["PAT"] * len(cast(List[str], pat_ds.subject_ids))
         
         pheno = pd.DataFrame({
             "subject_id": subject_ids,
@@ -499,7 +504,7 @@ class CustomPreparedZerssenLoader(BaseDataLoader):
                 n_observations=len(subject_ids),
                 n_rois=data.shape[1],
                 n_timepoints=None,
-                data_kind_guess=self.data_kind,
+                data_kind_guess=cast('Literal["timeseries", "correlation", "fisher_z", "unknown"]', self.data_kind),
                 atlas_guess=(
                     "BNA-246" if data.shape[1] == 246
                     else "BNA-246 set84 subset" if data.shape[1] == 84
@@ -590,7 +595,7 @@ class CustomPreparedZerssenLoader(BaseDataLoader):
         return LoadedDataset(
             data=data,
             pheno=pheno,
-            data_kind=self.data_kind,
+            data_kind=cast('Literal["timeseries", "correlation", "fisher_z"]', self.data_kind),
             subject_ids=subject_ids,
             atlas=atlas,
             provenance={
@@ -675,7 +680,6 @@ class ChinaCloseCloseLoader(BaseDataLoader):
         if kept_idx is not None:
             run0_data = run0_data[:, :, kept_idx]
             run1_data = run1_data[:, :, kept_idx]
-            n_rois = len(kept_idx)
             
         subject_ids = []
         if self.subject_list_path and os.path.exists(self.subject_list_path):

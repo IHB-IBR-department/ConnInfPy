@@ -25,7 +25,7 @@ import platform
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 import numpy as np
 import pandas as pd
@@ -95,13 +95,13 @@ def _redact(value: Any) -> Tuple[Any, int]:
             out[key] = cleaned
         return out, n
     if isinstance(value, (list, tuple)):
-        out = []
+        out_list: List[Any] = []
         n = 0
         for item in value:
             cleaned, sub = _redact(item)
             n += sub
-            out.append(cleaned)
-        return (out if isinstance(value, list) else tuple(out)), n
+            out_list.append(cleaned)
+        return (out_list if isinstance(value, list) else tuple(out_list)), n
     if isinstance(value, str) and _SECRET_VALUE_RE.search(value):
         return "<redacted possible credential>", 1
     return value, 0
@@ -449,7 +449,6 @@ def build_replay_config(
 
     # ---- connectivity / Fisher policy -------------------------------------
     input_kind = run_plan.get("input")
-    scale_map = {"correlation": "r", "fisher_z": "z"}
     if input_kind not in ("r", "z"):
         reasons.append("the input scale of the finished run was not recorded")
         return {"status": "not-replayable", "reasons": reasons, "config": None, "prerequisites": prereqs}
@@ -1024,7 +1023,7 @@ def build_methods_markdown(
     selection = getattr(inner, "tail_selection", None)
     if tested:
         origin = {"prespecified": "fixed before the run",
-                  "post-hoc": "selected after the run (post hoc)"}.get(selection, _fmt(selection))
+                  "post-hoc": "selected after the run (post hoc)"}.get(cast(str, selection), _fmt(selection))
         add(f"- Tested direction: `{tested}` ({origin}); the other direction was not tested.")
     if alpha is not None:
         add(f"- α (captured at launch, applies to the family above): {alpha:g}.")
@@ -1232,7 +1231,7 @@ def _arrays_payload(inner: Any, cell_idx: Optional[int]) -> Tuple[Dict[str, byte
     for tail in tails:
         arr = np.asarray(inner[tail], dtype=np.float64)
         files[f"arrays/p_{tail}.npy"] = _npy_bytes(arr)
-        entry = {"shape": list(arr.shape), "content": "corrected p-values"}
+        entry: Dict[str, Any] = {"shape": list(arr.shape), "content": "corrected p-values"}
         if is_grid:
             entry["content"] += " (full parameter grid)"
             entry["display_cell"] = cell_idx

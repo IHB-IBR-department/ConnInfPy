@@ -87,7 +87,7 @@ def crosswalk(cb_img, net_img, ids, threshold=0.5):
         m = cb_img == i
         n = int(m.sum())
         vals, cnts = np.unique(net_img[m], return_counts=True)
-        dist = {int(v): int(c) for v, c in zip(vals, cnts)}
+        dist = {int(v): int(c) for v, c in zip(vals, cnts, strict=True)}
         assigned = n - dist.get(0, 0)
         ranked = sorted(((c, -v) for v, c in dist.items() if v != 0), reverse=True)
         top = -ranked[0][1] if ranked else None
@@ -185,7 +185,7 @@ def test_non_coincident_grid_is_rejected_not_resampled(tiny, tmp_path):
 @pytest.mark.parametrize("offset", [246, 1000])
 def test_composite_priority_ids_and_bna_identity(tiny, offset):
     comp = composite(tiny["bna_arr"], tiny["cb_arr"], offset)
-    bna, cb = tiny["bna_arr"], tiny["cb_arr"]
+    bna = tiny["bna_arr"]
     # BNA > 0 + CB > 0 -> BNA wins (clipped), BNA-only untouched, both 0 -> 0
     assert comp[0, 0, 0] == 101 and comp[1, 0, 0] == 102 and comp[1, 1, 0] == 0
     # BNA = 0 + CB > 0 -> offset + CB, including L, R, Vermis M and a deep nucleus

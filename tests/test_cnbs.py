@@ -25,11 +25,11 @@ import tempfile
 from pathlib import Path
 
 from conninfpy import ResultBundle, analyze
-from conninfpy._cnbs import block_p_values
+from conninfpy.stats._cnbs import block_p_values
 from conninfpy.stats._cnbs import restrict_block_report
 from conninfpy.enhance import apply_cnbs
-from conninfpy.glm_stats import compute_p_val_glm
-from conninfpy.nbs_score import cnbs_block_means, cnbs_blocks, get_cnbs_score
+from conninfpy.stats.glm import compute_p_val_glm
+from conninfpy.enhance.nbs import cnbs_block_means, cnbs_blocks, get_cnbs_score
 
 LABELS = np.array([0, 0, 0, 1, 1, 2])          # network 2 has a single node
 
@@ -195,7 +195,7 @@ class TestBlockReportRestriction(unittest.TestCase):
         self.assertEqual(neg["n_blocks"], 3)
         self.assertEqual(neg["n_blocks_tested"], 3)
         self.assertEqual(len(neg["blocks"]), 3)
-        for r_orig, r_neg in zip(raw["blocks"], neg["blocks"]):
+        for r_orig, r_neg in zip(raw["blocks"], neg["blocks"], strict=True):
             self.assertEqual((r_neg["network_a"], r_neg["network_b"]),
                              (r_orig["network_a"], r_orig["network_b"]))
             self.assertEqual(r_neg["n_edges"], r_orig["n_edges"])
@@ -265,7 +265,7 @@ class TestBlockReportRestriction(unittest.TestCase):
                 self.assertEqual(rep["correction"], sep_snapshot["correction"])
                 self.assertEqual(rep["node_labels"], labels)
                 self.assertEqual(len(rep["blocks"]), 3)
-                for b_src, b_res in zip(sep_snapshot["blocks"], rep["blocks"]):
+                for b_src, b_res in zip(sep_snapshot["blocks"], rep["blocks"], strict=True):
                     self.assertEqual((b_res["network_a"], b_res["network_b"]),
                                      (b_src["network_a"], b_src["network_b"]))
                     self.assertEqual(b_res["n_edges"], b_src["n_edges"])

@@ -6,8 +6,6 @@ import builtins
 import io
 import json
 from pathlib import Path
-import sys
-import types
 import zipfile
 
 import nibabel as nib
@@ -17,7 +15,7 @@ import pytest
 
 from conninfpy.app.utils import workspace_io
 from conninfpy.app.utils.archive_export import build_analysis_archive
-from conninfpy.app.utils.helpers import active_analysis_atlas, result_is_stale
+from conninfpy.app.utils.helpers import result_is_stale
 from conninfpy.app.utils.workspace import ANNOTATION_TAB, RESULTS_TAB
 from conninfpy.app.utils.workspace_io import (
     WORKSPACE_ARRAYS_PATH,
@@ -25,17 +23,15 @@ from conninfpy.app.utils.workspace_io import (
     WORKSPACE_SCHEMA_VERSION,
     WORKSPACE_STATE_PATH,
     WorkspaceArchiveError,
-    apply_pending_workspace_restore,
     build_workspace_archive,
     capture_source_hashes,
     inspect_workspace_archive,
     restore_workspace_archive,
     verify_source_references,
 )
-from conninfpy.analysis import AnalyzeResult, analyze
+from conninfpy.analysis import AnalyzeResult
 from conninfpy.atlas.brainnetome import BrainnetomeReference
 from conninfpy.atlas.metadata import AtlasInfo
-from conninfpy.interpret.annotate import RoiAnnotation
 from conninfpy.results import InferenceResult, OmnibusInferenceResult
 
 

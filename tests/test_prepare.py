@@ -184,8 +184,8 @@ class TestExactSymmetry(unittest.TestCase):
         self.assertEqual(noisy[0, 0, 1], Y[0, 0, 1] + 1e-16)   # caller's array unchanged
 
     def test_scorers_treat_near_zero_noise_as_symmetric(self):
-        from conninfpy.nbs_score import _is_symmetric as nbs_sym, get_nbs_score
-        from conninfpy.tfnbs_score import _is_symmetric as tf_sym, get_tfnbs_score
+        from conninfpy.enhance.nbs import _is_symmetric as nbs_sym, get_nbs_score
+        from conninfpy.enhance.tfnbs import _is_symmetric as tf_sym, get_tfnbs_score
         t = np.zeros((6, 6))
         for i, j, v in [(0, 1, 3.0), (1, 2, 2.5), (3, 4, 7.4e-06)]:
             t[i, j] = t[j, i] = v

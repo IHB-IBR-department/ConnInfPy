@@ -40,9 +40,7 @@ from conninfpy.stats._engine import (
     _compute_p_values_from_null,
     _encode_strata,
     _extract_max_stats,
-    _is_worker_process,
     _stratified_perm,
-    get_available_cores,
 )
 from conninfpy.stats._glm_fast import _tails_from_edge_stats, score_tails
 from conninfpy.stats._workers import prepare_run, run_permutations
@@ -91,6 +89,7 @@ def _stats(Yp: npt.NDArray[np.float64], pat: _Pattern, contrast, stat_type: str)
     if stat_type == "fstat":
         C = contrast if contrast.ndim == 2 else contrast[None, :]
         Cb = C @ beta
+        assert pat.M_inv is not None  # set for every F-stat pattern below
         quad = np.einsum("ie,ij,je->e", Cb, pat.M_inv, Cb)
         with np.errstate(divide="ignore", invalid="ignore"):
             F = quad / (C.shape[0] * sigma2)
@@ -138,7 +137,7 @@ def _restricted(perm_idx: npt.NDArray[np.intp], pat: _Pattern) -> npt.NDArray[np
 
 def _vector_stats(Y_by_pattern, patterns, contrast, stat_type, n_edges):
     out = np.zeros(n_edges)
-    for Yp, pat in zip(Y_by_pattern, patterns):
+    for Yp, pat in zip(Y_by_pattern, patterns, strict=True):
         out[pat.edges] = _stats(Yp, pat, contrast, stat_type)
     return out
 
@@ -300,8 +299,8 @@ def available_case_glm(
 
     patterns: List[_Pattern] = []
     tested = np.zeros(n_edges, dtype=bool)
-    for edges in groups.values():
-        edges = np.asarray(edges, dtype=np.intp)
+    for edge_list in groups.values():
+        edges = np.asarray(edge_list, dtype=np.intp)
         rows = np.flatnonzero(present[:, edges[0]])
         Xp = X[rows]
         rank = int(np.linalg.matrix_rank(Xp))
@@ -518,7 +517,7 @@ def _report(
         "n_edges_tested": int(tested.sum()),
         "n_edges_untested": int((~tested).sum()),
         "untested_edges": [
-            (int(i), int(j)) for i, j in zip(triu[0][~tested], triu[1][~tested])
+            (int(i), int(j)) for i, j in zip(triu[0][~tested], triu[1][~tested], strict=True)
         ],
         "untested_reasons": reasons,
         "edge_n": n_mat,

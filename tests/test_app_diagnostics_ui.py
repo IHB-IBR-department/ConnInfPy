@@ -10,7 +10,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from conninfpy import analyze
 from conninfpy.cli import run as cli_run

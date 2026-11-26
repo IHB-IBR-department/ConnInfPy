@@ -181,7 +181,6 @@ def build_node_summary(
             )
         name = "components" if unit == "component" else "blocks"
         ids: Dict[str, List[List[Any]]] = {t: [[] for _ in range(n)] for t in tails}
-        in_unit = {t: np.zeros(i.size, dtype=np.int64) for t in tails}
         edge_in_unit = {t: np.zeros(i.size, dtype=bool) for t in tails}
         if unit == "component":
             for row in report["components"]:

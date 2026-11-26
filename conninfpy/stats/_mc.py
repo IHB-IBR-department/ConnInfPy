@@ -447,7 +447,7 @@ def build_report(
         "permutation_space_known": space is not None,
         "permutation_space_reason": space_reason,
         "count_kind": count_kind,
-        "count_kind_note": COUNT_KIND_NOTES.get(count_kind),
+        "count_kind_note": COUNT_KIND_NOTES.get(count_kind) if count_kind is not None else None,
         "counts_unavailable_sentinel": COUNT_UNAVAILABLE,
         "rng": dict(rng) if isinstance(rng, Mapping) else None,
         "flags": flags,

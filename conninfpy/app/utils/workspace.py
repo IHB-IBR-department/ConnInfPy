@@ -233,7 +233,7 @@ def render_progress(tabs):
     ]
     finished = [loaded, complete, complete, annotation is not None]
     styles = []
-    for index, (tab, done) in enumerate(zip(tabs, finished), start=1):
+    for index, (tab, done) in enumerate(zip(tabs, finished, strict=True), start=1):
         selector = f".st-key-workspace_navigation .st-key-nav_step_{index} button"
         if done:
             styles.append(f"{selector} {{ background: #edf8f0; border-color: #8dc5a0; color: #166534; }}")
@@ -243,7 +243,7 @@ def render_progress(tabs):
             styles.append(f"{selector} {{ border-color: #376fa6; box-shadow: inset 0 0 0 1px #376fa6; font-weight: 650; }}")
     # Style-only HTML uses Streamlit's event container, adding no visible row.
     st.html("<style>" + "\n".join(styles) + "</style>")
-    for index, (col, title, tab, status) in enumerate(zip(st.columns(4), ["Data", "Design", "Results", "Annotation"], tabs, statuses), start=1):
+    for index, (col, title, tab, status) in enumerate(zip(st.columns(4), ["Data", "Design", "Results", "Annotation"], tabs, statuses, strict=True), start=1):
         with col:
             label = f"{'✓ ' if finished[index - 1] else ''}{index}. {title}"
             if st.button(label, key=f"nav_step_{index}", width="stretch", help=status):

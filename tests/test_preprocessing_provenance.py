@@ -26,7 +26,7 @@ import pytest
 from conninfpy import ResultBundle, analyze, fisher_r_to_z
 from conninfpy._prepare import make_fisher_entry, normalize_fisher_history, prepare_connectivity
 from conninfpy.loaders import load
-from conninfpy.connectivity import compute_connectivity, connectivity_from_dataset
+from conninfpy.connectivity import connectivity_from_dataset
 from conninfpy.loaders.base import LoadedDataset
 from conninfpy.loaders.builtins import ConditionTimeseriesArrayLoader
 from conninfpy.loaders.manifest import ManifestLoader
@@ -36,7 +36,6 @@ from conninfpy.preprocessing import (
     SOURCE_LOADER_DENOISING,
     SOURCE_MANIFEST,
     aggregate_preprocessing_records,
-    attach_preprocessing,
     connectivity_method_from_kind,
     empty_record,
     fact,
@@ -1171,8 +1170,6 @@ class TestAppPaths:
     def test_worker_threads_record_into_run_plan_and_result(self):
         from conninfpy.app.components.design_inference import InferenceTask, _run_inference_background
         g1, g2 = _two_groups(seed=21)
-        pheno = pd.DataFrame({"subject_id": [f"s{i}" for i in range(12)],
-                              "group": [0] * 6 + [1] * 6})
         data = np.concatenate([g1, g2])
         idx = np.arange(5)
         data[:, idx, idx] = 0.0

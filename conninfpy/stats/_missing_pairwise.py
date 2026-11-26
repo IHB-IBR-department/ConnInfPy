@@ -42,10 +42,8 @@ from conninfpy.stats._engine import (
     _compute_p_values_from_null,
     _encode_strata,
     _extract_max_stats,
-    _is_worker_process,
     _stratified_choice_n1,
     _twosample_se2,
-    get_available_cores,
 )
 from conninfpy.stats._workers import (
     prepare_run,
@@ -140,7 +138,7 @@ def _observed(d: _Design):
     return np.where(d.tested, t_pos, 0.0), np.where(d.tested, t_neg, 0.0)
 
 
-def _permuted(d: _Design, seed: int):
+def _permuted(d: _Design, seed: int) -> "tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]":
     """Same random draws as the complete-data fast path."""
     rng = np.random.RandomState(seed)
     if d.kind == "two-sample":
@@ -149,6 +147,7 @@ def _permuted(d: _Design, seed: int):
             g = np.zeros(n_all, dtype=np.float64)
             g[rng.choice(n_all, d.n1, replace=False)] = 1.0
         else:
+            assert d.strata is not None and d.n1_per_stratum is not None  # the else of ``strata is None``
             g = _stratified_choice_n1(d.strata, d.n1_per_stratum, rng)
         s1, q1, k1 = g @ d.X0, g @ d.X02, g @ d.M
         s, q, k = d.X0.sum(0), d.X02.sum(0), d.M.sum(0)
@@ -256,7 +255,7 @@ def _report(
     n_mat[d.triu] = edge_n
     n_mat = n_mat + n_mat.T
     untested = [
-        (int(i), int(j)) for i, j, ok in zip(d.triu[0], d.triu[1], d.tested) if not ok
+        (int(i), int(j)) for i, j, ok in zip(d.triu[0], d.triu[1], d.tested, strict=True) if not ok
     ]
     rep: Dict[str, Any] = {
         "policy": "available_case",
@@ -448,7 +447,7 @@ def available_case_p_val(
                 c_mat[d.triu[0][used], d.triu[1][used]] = shared[used]
                 c_mat[d.triu[1][used], d.triu[0][used]] = shared[used]
                 count_maps[key] = c_mat
-            count_kind = _mc.COUNT_KIND_TWO_SIDED_SUM_STAT
+            count_kind: Optional[str] = _mc.COUNT_KIND_TWO_SIDED_SUM_STAT
         else:
             for row, key in ((0, "positive"), (1, "negative")):
                 c_mat = np.full((d.N, d.N), _mc.COUNT_UNAVAILABLE, dtype=np.int64)
@@ -533,11 +532,11 @@ def available_case_p_val(
             p[d.triu[0][untested], d.triu[1][untested]] = np.nan
             p[d.triu[1][untested], d.triu[0][untested]] = np.nan
         p_values[key] = p
-    count_maps = None
+    count_maps_out: Optional[Dict[str, npt.NDArray[np.int64]]] = None
     if counts_raw is not None:
         # Untested edges (coverage), the diagonal and replaced accelerated
         # tails keep the sentinel: never a fabricated count.
-        count_maps = {
+        count_maps_out = {
             key: _mc.mark_untested(
                 counts_raw[key],
                 p_values[key],
@@ -546,4 +545,4 @@ def available_case_p_val(
             )
             for key in counts_raw
         }
-    return _counts_return(p_values, raw_t, report, count_maps, count_kind, return_counts)
+    return _counts_return(p_values, raw_t, report, count_maps_out, count_kind, return_counts)

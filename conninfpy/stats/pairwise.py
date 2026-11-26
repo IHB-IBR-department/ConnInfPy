@@ -19,14 +19,13 @@ from dataclasses import dataclass
 import logging
 import time
 from functools import partial
-from multiprocessing import Pool
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple, Union, overload
 
 import numpy as np
 import numpy.typing as npt
 from scipy import stats
 
-from conninfpy._compat import TailResult, make_tail_result, normalize_keys
+from conninfpy._compat import make_tail_result
 from conninfpy._prepare import check_connectivity
 from conninfpy._shared.alignment import (
     IdAlignmentError,
@@ -58,7 +57,7 @@ from conninfpy.enhance import (
 )
 from conninfpy.enhance._backend import _enhance_call_scope, _suppress_fallback_warnings
 from conninfpy._provenance import capture_analysis_provenance
-from conninfpy.results import InferenceResult, make_inference_result
+from conninfpy.results import InferenceResult
 from conninfpy.stats import _degenerate as _degenerate
 from conninfpy.stats import _mc
 from conninfpy.stats._components import build_component_report
@@ -70,7 +69,6 @@ from conninfpy.stats._engine import (
     _extract_max_stats,
     _is_worker_process,
     _stratified_choice_n1,
-    _stratified_perm,
     _twosample_se2,
     get_available_cores,
 )
@@ -78,7 +76,6 @@ from conninfpy.stats._types import (
     CONSTRAINED_METHODS,
     PARAMETRIC_METHODS,
     TFNBS_FAMILY,
-    GLMStatType,
     StatMethod,
     TestType,
     _grid_from_kwargs,
@@ -833,6 +830,7 @@ def compute_null_dist(
                 strata_codes[:n1], minlength=int(strata_codes.max()) + 1
             )
         if use_fast_tstat:
+            assert group2 is not None  # required for the two-sample test (validated above)
             Xall_3d = np.concatenate((group1, group2), axis=0)
             Xall, Xall2, sum_all, sumsq_all = _precompute_twosample_sums(Xall_3d)
             task_func = partial(
@@ -858,6 +856,7 @@ def compute_null_dist(
                 # The worker calls func(g1, g2, test_type=...): use the
                 # public entry point, which accepts it, with the variance choice.
                 func = partial(compute_t_stat, var_equal=var_equal)
+            assert group2 is not None  # required for the two-sample test (validated above)
             array_to_permute = np.concatenate((group1, group2), axis=0)
             task_func = partial(
                 _permutation_task_ind, array_to_permute, func, n1, **func_kwargs
@@ -934,6 +933,7 @@ def _compute_enhanced_null_dist(
     edge_spec = _build_edge_max_spec(enhance_func, enhance_kwargs, triu_idx, N)
 
     if test_type_str == TestType.PAIRED.value:
+        assert group2 is not None  # required for the paired test (validated by the caller)
         diffs = group2 - group1
         X, sumsq_all = _precompute_edge_sums(diffs)
         if edge_spec is not None:
@@ -963,6 +963,7 @@ def _compute_enhanced_null_dist(
                 enhance_kwargs,
             )
     elif test_type_str == TestType.TWO_SAMPLE.value:
+        assert group2 is not None  # required for the two-sample test (validated by the caller)
         n1 = group1.shape[0]
         n_all = n1 + group2.shape[0]
         strata_codes = None
@@ -1063,6 +1064,44 @@ def _reduce_bh_fdr_edge_counts(
     return count
 
 
+@overload
+def _compute_bh_fdr_perm_p_values(
+    group1: npt.NDArray[np.float64],
+    group2: Optional[npt.NDArray[np.float64]],
+    test_type_str: str,
+    n_permutations: int,
+    random_state: Optional[int],
+    use_mp: bool,
+    n_processes: Optional[int],
+    verbose: bool = ...,
+    strata: Optional[npt.NDArray[Any]] = ...,
+    two_tailed: bool = ...,
+    var_equal: bool = ...,
+    return_counts: Literal[False] = ...,
+    progress: Optional[Callable[[int, int], None]] = ...,
+    cancel: Optional[Callable[[], bool]] = ...,
+) -> Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]]]: ...
+
+
+@overload
+def _compute_bh_fdr_perm_p_values(
+    group1: npt.NDArray[np.float64],
+    group2: Optional[npt.NDArray[np.float64]],
+    test_type_str: str,
+    n_permutations: int,
+    random_state: Optional[int],
+    use_mp: bool,
+    n_processes: Optional[int],
+    verbose: bool = ...,
+    strata: Optional[npt.NDArray[Any]] = ...,
+    two_tailed: bool = ...,
+    var_equal: bool = ...,
+    return_counts: Literal[True] = ...,
+    progress: Optional[Callable[[int, int], None]] = ...,
+    cancel: Optional[Callable[[], bool]] = ...,
+) -> Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]], Dict[str, Any]]: ...
+
+
 def _compute_bh_fdr_perm_p_values(
     group1: npt.NDArray[np.float64],
     group2: Optional[npt.NDArray[np.float64]],
@@ -1078,7 +1117,10 @@ def _compute_bh_fdr_perm_p_values(
     return_counts: bool = False,
     progress: Optional[Callable[[int, int], None]] = None,
     cancel: Optional[Callable[[], bool]] = None,
-) -> Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]]]:
+) -> Union[
+    Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]]],
+    Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]], Dict[str, Any]],
+]:
     """
     Compute BH-FDR corrected p-values using permutation-based per-edge nulls.
 
@@ -1094,6 +1136,7 @@ def _compute_bh_fdr_perm_p_values(
     """
     # Compute observed t-stats
     if test_type_str == TestType.PAIRED.value:
+        assert group2 is not None  # required for the paired test (validated by the caller)
         diffs = group2 - group1
         emp_t_dict = compute_t_stat_diff(diffs)
     elif test_type_str == TestType.ONE_SAMPLE.value:
@@ -1117,6 +1160,7 @@ def _compute_bh_fdr_perm_p_values(
     # Prepare permutation task — pre-computed sums fast path (edge vectors).
     # Skips the redundant (N, N) reshape and triu extraction inside the perm loop.
     if test_type_str == TestType.PAIRED.value:
+        assert group2 is not None  # required for the paired test (validated by the caller)
         diffs = group2 - group1
         X, sumsq_all = _precompute_edge_sums(diffs)
         task_func = partial(_fast_permutation_task_paired_edges, X, sumsq_all)
@@ -1124,6 +1168,7 @@ def _compute_bh_fdr_perm_p_values(
         X, sumsq_all = _precompute_edge_sums(group1)
         task_func = partial(_fast_permutation_task_paired_edges, X, sumsq_all)
     else:  # two-sample
+        assert group2 is not None  # required for the two-sample test (validated by the caller)
         Xall_3d = np.concatenate((group1, group2), axis=0)
         Xall, Xall2, sum_all, sumsq_all = _precompute_twosample_sums(Xall_3d)
         n1 = group1.shape[0]
@@ -1318,13 +1363,15 @@ def _compute_parametric_p_values(
     """
     # Compute t-statistics using existing infrastructure
     if test_type_str == TestType.PAIRED.value:
+        assert group2 is not None  # required for the paired test (validated by the caller)
         diffs = group2 - group1
         t_dict = compute_t_stat_diff(diffs)
-        df = _compute_degrees_of_freedom(group1.shape[0], 0, test_type_str)
+        df: Union[int, npt.NDArray[np.float64]] = _compute_degrees_of_freedom(group1.shape[0], 0, test_type_str)
     elif test_type_str == TestType.ONE_SAMPLE.value:
         t_dict = compute_t_stat_diff(group1)
         df = _compute_degrees_of_freedom(group1.shape[0], 0, test_type_str)
     elif test_type_str == TestType.TWO_SAMPLE.value:
+        assert group2 is not None  # required for the two-sample test (validated by the caller)
         t_dict = _compute_t_stat_ind(group1, group2, var_equal=var_equal)
         df = (
             _compute_degrees_of_freedom(group1.shape[0], group2.shape[0], test_type_str)
@@ -1812,7 +1859,7 @@ def compute_p_val(
     _t0 = time.perf_counter()
 
     # Resolve enhancement wrapper (None for raw t-stat)
-    enhance_func = _ENHANCE_MAP[method_enum]
+    enhance_func: Optional[Callable[..., Any]] = _ENHANCE_MAP[method_enum]
 
     # Build enhancement kwargs once (method-specific)
     enhance_kwargs: Dict[str, Any] = {}
@@ -1981,11 +2028,13 @@ def compute_p_val(
 
     # Compute observed t-stat once, then apply enhancement (if any)
     if test_type_str == TestType.PAIRED.value:
+        assert group2 is not None  # required for the paired test (validated by the caller)
         diffs = group2 - group1
         emp_t_dict = compute_t_stat_diff(diffs)
     elif test_type_str == TestType.ONE_SAMPLE.value:
         emp_t_dict = compute_t_stat_diff(group1)
     elif test_type_str == TestType.TWO_SAMPLE.value:
+        assert group2 is not None  # required for the two-sample test (validated above)
         emp_t_dict = _compute_t_stat_ind(group1, group2, var_equal=var_equal)
     else:
         raise ValueError(
@@ -2052,6 +2101,7 @@ def compute_p_val(
     if method_enum == StatMethod.CNBS:
         from conninfpy.stats._cnbs import block_p_values
 
+        assert net_labels is not None  # cNBS always carries network labels here
         result, block_report = block_p_values(
             emp_t_dict,
             max_null_dict,
@@ -2204,11 +2254,13 @@ def compute_t_stat(
         return compute_t_stat_diff(group1)
 
     elif test_type_str == TestType.TWO_SAMPLE.value:
+        assert group2 is not None  # required for the two-sample test (validated above)
         if group1.shape[1:] != group2.shape[1:]:
             raise ValueError("Trailing dimensions of group1 and group2 must match.")
         return _compute_t_stat_ind(group1, group2, var_equal=var_equal)
 
     elif test_type_str == TestType.PAIRED.value:
+        assert group2 is not None  # required for the paired test (validated above)
         _check_paired_counts(group1, group2, test_type_str)
         diffs = group2 - group1
         return compute_t_stat_diff(diffs)

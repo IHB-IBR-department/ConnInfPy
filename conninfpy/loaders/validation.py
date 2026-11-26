@@ -84,7 +84,7 @@ def validate_loaded_dataset(dataset: LoadedDataset, check_inference_ready: bool 
             elif len(set(ids)) < len(ids):
                 if not dataset.condition_column or dataset.condition_column not in pheno:
                     warnings.append("Duplicate subject IDs detected, but no valid condition_column is specified.")
-                elif len(set(zip(ids, pheno[dataset.condition_column]))) < len(ids):
+                elif len(set(zip(ids, pheno[dataset.condition_column], strict=False))) < len(ids):
                     errors.append("Duplicate subject IDs found within the same condition.")
         summary.update(n_observations=len(series), data_kind=data_kind, ok=not errors)
         return DataValidationReport(not errors, errors, warnings, summary)
@@ -139,28 +139,12 @@ def validate_loaded_dataset(dataset: LoadedDataset, check_inference_ready: bool 
                 warnings.append("Duplicate subject IDs detected, but no valid condition_column is specified.")
             else:
                 # Validate that combinations of subject_id + condition are unique
-                combos = list(zip(subj_ids, pheno[dataset.condition_column]))
+                combos = list(zip(subj_ids, pheno[dataset.condition_column], strict=False))
                 if len(set(combos)) < len(combos):
                     errors.append("Duplicate subject IDs found within the same condition.")
 
-    # Validation based on kind
-    if data_kind == "timeseries":
-        n_timepoints = data.shape[1]
-        n_nodes = data.shape[2]
-        summary["n_timepoints"] = n_timepoints
-        summary["n_rois"] = n_nodes
-        
-        if n_timepoints < 10:
-            warnings.append(f"Very short timeseries detected ({n_timepoints} timepoints). Correlation estimation may be unstable.")
-            
-        # Check for constant timeseries (zero variance)
-        for i in range(n_observations):
-            var = np.var(data[i], axis=0)
-            if np.any(var == 0):
-                zero_nodes = np.where(var == 0)[0]
-                warnings.append(f"Observation {i} has constant timeseries (zero variance) in ROIs: {zero_nodes.tolist()}.")
-                
-    elif data_kind in {"correlation", "fisher_z"}:
+    # Validation based on kind (a timeseries dataset returned above)
+    if data_kind in {"correlation", "fisher_z"}:
         n_nodes_i = data.shape[1]
         n_nodes_j = data.shape[2]
         summary["n_rois"] = n_nodes_i

@@ -24,13 +24,12 @@ import logging
 import time
 import warnings
 from functools import partial
-from multiprocessing import Pool
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 import numpy.typing as npt
 
-from conninfpy._compat import TailResult, make_tail_result, normalize_keys
+from conninfpy._compat import make_tail_result
 from conninfpy._prepare import check_connectivity, check_finite_design
 from conninfpy._shared.rng import RngLike, resolve_seed, warn_legacy_random_state
 from conninfpy._shared.alignment import (
@@ -72,25 +71,19 @@ from conninfpy.stats._design import (
     _precompute_ols,
     _residual_degrees_of_freedom,
     build_design_matrix,
-    contrast_is_estimable,
 )
 from conninfpy.stats._engine import (
     _collect_results_to_arrays,
     _compute_p_values_from_null,
     _encode_strata,
     _extract_max_stats,
-    _is_worker_process,
     _stratified_perm,
-    get_available_cores,
 )
 from conninfpy.stats._types import (
     CONSTRAINED_METHODS,
-    PARAMETRIC_METHODS,
     TFNBS_FAMILY,
     GLMStatType,
     StatMethod,
-    TestType,
-    _grid_from_kwargs,
     enhancement_provenance,
     resolve_f_threshold,
 )
@@ -441,7 +434,7 @@ def _freedman_lane_permutation_task(
     strata_codes: Optional[npt.NDArray[np.int_]] = None,
     scheme: str = "permutation",
     **enhance_kwargs,
-) -> Dict[str, np.float64]:
+) -> Dict[str, Union[float, npt.NDArray[np.float64]]]:
     """
     Single Freedman-Lane permutation step.
 
@@ -482,7 +475,7 @@ def _freedman_lane_permutation_task(
         residuals_reduced, rng, scheme, strata_codes
     )
 
-    stat_dict = compute_glm_stat(
+    stat_dict: Dict[str, Any] = compute_glm_stat(
         Y_perm,
         X,
         contrast,
@@ -713,6 +706,7 @@ def compute_p_val_glm(
                 + ["interest"]
             )
     else:
+        assert design_matrix is not None  # rejected above when both inputs are missing
         X = check_finite_design(design_matrix, "design_matrix")
         if contrast is None:
             raise ValueError("contrast is required when using design_matrix.")
@@ -1055,6 +1049,7 @@ def compute_p_val_glm(
     if block_inference is not None:
         from conninfpy.stats._cnbs import block_p_values
 
+        assert net_labels is not None  # cNBS always carries network labels here
         result, block_report = block_p_values(
             emp_stat_dict,
             max_null_dict,
@@ -1175,7 +1170,7 @@ def _multi_contrast_perm_task(
     enhance_kwargs: Dict[str, Any],
     seed: Optional[int] = None,
     strata_codes: Optional[npt.NDArray[np.int_]] = None,
-) -> Dict[str, Dict[str, np.float64]]:
+) -> Dict[str, Dict[str, Union[float, npt.NDArray[np.float64]]]]:
     """One Freedman-Lane permutation, evaluated for every contrast.
 
     ``nulls[k]`` is contrast k's reduced-model fit, residuals and resampling
@@ -1184,15 +1179,15 @@ def _multi_contrast_perm_task(
     a single-contrast :func:`compute_p_val_glm` run with the same seed.
     Returns a nested dict ``{contrast_name: {tail: max_stat}}``.
     """
-    out: Dict[str, Dict[str, np.float64]] = {}
+    out: Dict[str, Dict[str, Union[float, npt.NDArray[np.float64]]]] = {}
     for name, contrast, (Y_hat_reduced, residuals_reduced, scheme) in zip(
-        contrast_names, contrast_arrays, nulls
+        contrast_names, contrast_arrays, nulls, strict=True
     ):
         rng = np.random.RandomState(seed)
         Y_perm = Y_hat_reduced + _shuffle_residuals(
             residuals_reduced, rng, scheme, strata_codes
         )
-        stat_dict = compute_glm_stat(
+        stat_dict: Dict[str, Any] = compute_glm_stat(
             Y_perm,
             X,
             contrast,
@@ -1263,6 +1258,14 @@ def compute_p_val_glm_multi(
     per ``(e, h)`` cell); selecting the most significant contrast needs an
     extra correction.
 
+    The remaining keyword arguments are forwarded to the underlying GLM
+    pipeline: ``method``, ``two_tailed``, ``acceleration``,
+    ``n_permutations``, ``use_mp``, ``rng``, ``random_state``,
+    ``n_processes``, ``verbose``, ``net_labels``, ``threshold``,
+    ``nbs_stat``, ``e``, ``h``, ``n``, ``start_thres``,
+    ``min_cluster_size`` and ``normalization`` (see
+    :func:`compute_p_val_glm`).
+
     Parameters
     ----------
     Y : ndarray of shape (n_subjects, N, N)
@@ -1287,12 +1290,7 @@ def compute_p_val_glm_multi(
         (per-contrast nulls).
     stat_type : ``'tstat'`` or ``'beta'``
         F-stat is unsupported here.
-    method, two_tailed, acceleration, n_permutations, use_mp, rng,
-    n_processes, verbose, net_labels, threshold, nbs_stat, e, h, n,
-    start_thres, min_cluster_size, normalization
-        Forwarded to the underlying GLM pipeline (see
-        :func:`compute_p_val_glm`).
-    missing, min_coverage, scheme
+    missing, min_coverage, scheme : str, float, str
         See :func:`compute_p_val_glm`. With missing values and
         ``missing='available_case'``, each contrast is run separately with
         the same seed (so every contrast sees the same permutations) and
@@ -1433,7 +1431,7 @@ def compute_p_val_glm_multi(
         check_correction(cnbs_correction)
         enhance_kwargs = {"net_labels": net_labels}
 
-    for name, c in zip(contrast_names, contrast_arrays):
+    for name, c in zip(contrast_names, contrast_arrays, strict=True):
         _degenerate.raise_if_infinite(_infinite_edges(Y, X, c, stat_type_str))
 
     # ---- Reduced models: one per contrast (X null(c)), or a shared joint null ----
@@ -1460,7 +1458,7 @@ def compute_p_val_glm_multi(
     # ---- Empirical stats per contrast ----
     emp_dicts: Dict[str, Dict[str, npt.NDArray[np.float64]]] = {}
     raw_stat_dicts: Dict[str, Dict[str, npt.NDArray[np.float64]]] = {}
-    for name, contrast in zip(contrast_names, contrast_arrays):
+    for name, contrast in zip(contrast_names, contrast_arrays, strict=True):
         emp = compute_glm_stat(
             Y,
             X,
@@ -1503,7 +1501,7 @@ def compute_p_val_glm_multi(
     plans: List[Optional[_glm_fast.EdgeGlmPlan]] = []
     payloads: List[Any] = []
     edge_payloads: Dict[int, Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]] = {}
-    for X_reduced, contrast_k in zip(reduced_models, contrast_arrays):
+    for X_reduced, contrast_k in zip(reduced_models, contrast_arrays, strict=True):
         plan_k = _glm_fast.build_plan(
             Y,
             X,
@@ -1526,11 +1524,12 @@ def compute_p_val_glm_multi(
             )
         payloads.append(edge_payloads[id(X_reduced)])
 
-    if all(plan_k is not None for plan_k in plans):
+    complete_plans = [plan_k for plan_k in plans if plan_k is not None]
+    if len(complete_plans) == len(plans):
         task_func = partial(
             _glm_fast.multi_contrast_perm_task,
             tuple(contrast_names),
-            tuple(plans),
+            tuple(complete_plans),
             tuple(payloads),
         )
     else:
@@ -1614,6 +1613,7 @@ def compute_p_val_glm_multi(
         if method_enum == StatMethod.CNBS:
             from conninfpy.stats._cnbs import block_p_values
 
+            assert net_labels is not None  # cNBS always carries network labels here
             res, block_report = block_p_values(
                 emp,
                 null,
@@ -1686,7 +1686,9 @@ def compute_p_val_glm_multi(
             ),
         )
         if method_enum in TFNBS_FAMILY:
-            out[name].design["enhancement"] = enhancement_provenance(e, h, n, start_thres, method_enum, normalization, min_cluster_size)
+            res_k = out[name]
+            assert res_k.design is not None  # built per contrast just above
+            res_k.design["enhancement"] = enhancement_provenance(e, h, n, start_thres, method_enum, normalization, min_cluster_size)
     return out
 
 
@@ -1788,8 +1790,9 @@ def compute_p_val_paired_glm(
                 "do not pass it explicitly."
             )
         try:
+            # One-sided IDs are rejected inside ``paired_id_permutation``.
             perm = paired_id_permutation(
-                ids_A, ids_B,
+                cast(Sequence[Any], ids_A), cast(Sequence[Any], ids_B),
                 n_group1=int(Y_A.shape[0]), n_group2=int(Y_B.shape[0]),
                 name_group1="ids_A", name_group2="ids_B",
             )

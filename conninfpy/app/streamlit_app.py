@@ -1,3 +1,4 @@
+from typing import Any, Mapping, cast
 """Guided connectivity analysis workspace."""
 from pathlib import Path
 
@@ -132,8 +133,9 @@ with st.sidebar.expander("Save & restore workspace", expanded=False):
             ui_sig,
         )
         if st.session_state.get("_workspace_zip_memo_key") != ws_memo:
+            # st.session_state is a Mapping at runtime (SessionStateProxy in the stubs).
             ws_bytes, _ = build_workspace_archive(
-                st.session_state,
+                cast(Mapping[str, Any], st.session_state),
                 include_data=bool(include_data),
                 project_root=PROJECT_ROOT,
             )
@@ -144,7 +146,7 @@ with st.sidebar.expander("Save & restore workspace", expanded=False):
         st.download_button(
             "Save workspace (.zip)",
             data=ws_bytes,
-            file_name=workspace_filename(st.session_state),
+            file_name=workspace_filename(cast(Mapping[str, Any], st.session_state)),
             mime="application/zip",
             key="workspace_save_download",
             width="stretch",

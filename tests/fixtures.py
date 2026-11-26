@@ -8,7 +8,7 @@ to override the defaults via kwargs — the defaults are the canonical shape.
 Two families of scenarios:
 
 **Group-comparison (t-test pipeline)** — built on
-:func:`conninfpy.synth_datasets.generate_fc_matrices`. Returns a 3-tuple
+:func:`conninfpy.sim.datasets.generate_fc_matrices`. Returns a 3-tuple
 ``(group1, group2, (cov1, cov2))`` matching that helper's convention.
 
     small_two_sample       : N=30, effect=0.2, n_g1=30, n_g2=20 — quick sanity
@@ -35,12 +35,12 @@ override if you need independent draws.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import numpy.typing as npt
 
-from conninfpy.synth_datasets import generate_fc_matrices
+from conninfpy.sim.datasets import generate_fc_matrices
 
 
 # -----------------------------------------------------------------------------

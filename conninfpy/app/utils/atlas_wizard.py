@@ -10,6 +10,7 @@ import numpy as np
 
 from conninfpy.app.utils.manifest_wizard import ChecklistItem
 from conninfpy.atlas import AtlasInfo
+from conninfpy.atlas.brainnetome import _spatial_image
 
 _CUSTOM_ATLAS_CSV_TEMPLATE = """id,name,network,x,y,z,hemisphere
 1,LH_Vis_1,Visual,-18,-86,-4,L
@@ -194,7 +195,7 @@ def load_custom_atlas_nifti(
             nifti_path = Path(str(nifti_path_or_bytes).strip()).expanduser()
             if not nifti_path.is_file():
                 raise FileNotFoundError(f"NIfTI atlas file not found: {nifti_path}")
-            nib_img = nib.load(str(nifti_path))
+            nib_img = _spatial_image(nib.load(str(nifti_path)))
         else:
             if isinstance(nifti_path_or_bytes, (bytes, bytearray, memoryview)):
                 raw = bytes(nifti_path_or_bytes)
@@ -210,7 +211,7 @@ def load_custom_atlas_nifti(
                 raise ValueError("Uploaded NIfTI file is empty.")
             tmp_nii = _materialize_temp_file(raw, _suffix_for_nifti(name, raw))
             temp_paths.append(tmp_nii)
-            nib_img = nib.load(str(tmp_nii))
+            nib_img = _spatial_image(nib.load(str(tmp_nii)))
 
         data = np.asarray(nib_img.dataobj)
         if data.ndim == 4 and data.shape[3] == 1:

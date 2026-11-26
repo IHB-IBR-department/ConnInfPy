@@ -23,7 +23,7 @@ import warnings
 import numpy as np
 
 from conninfpy import compute_t_stat, fisher_r_to_z, generate_fc_matrices
-from conninfpy.tfnbs_score import HAS_NUMBA, get_tfnbs_score
+from conninfpy.enhance.tfnbs import HAS_NUMBA, get_tfnbs_score
 
 
 @unittest.skipUnless(HAS_NUMBA, "numba not installed")

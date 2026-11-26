@@ -7,14 +7,13 @@ import hashlib
 import re
 import numpy as np
 import pandas as pd
-from typing import Any, Literal
+from typing import Any, Dict, List, Literal, Optional, Union, cast
 from pathlib import Path
 
 from conninfpy.atlas.metadata import AtlasInfo
 from conninfpy.loaders.base import BaseDataLoader
 from conninfpy.loaders.base import LoadedDataset
 from conninfpy.loaders.base import DatasetPreview
-from conninfpy.loaders.validation import validate_loaded_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +153,6 @@ class NumpyLoader(BaseDataLoader):
 
     def preview(self) -> DatasetPreview:
         """Cheap preview of the dataset without a full load."""
-        warnings = []
         if not os.path.exists(self.data_path):
             return DatasetPreview(None, None, None, None, "unknown", None, None, [], None, None, [f"File not found: {self.data_path}"])
 
@@ -267,10 +265,10 @@ class CSVDirectoryLoader(BaseDataLoader):
         try:
             sample_file = files[0]
             # Detect header: if first line is numeric, it is headerless
-            header_choice = self.header
+            header_choice: Union[bool, int, None] = self.header
             if header_choice is None:
-                with open(sample_file, 'r') as f:
-                    first_line = f.readline().strip()
+                with open(sample_file, 'r') as handle:
+                    first_line = handle.readline().strip()
                 try:
                     [float(x) for x in first_line.split(self.sep)]
                     header_choice = None  # No header
@@ -305,10 +303,10 @@ class CSVDirectoryLoader(BaseDataLoader):
             raise FileNotFoundError(f"No CSV/TSV files found in {self.dir_path}")
 
         # Determine header
-        header_choice = self.header
+        header_choice: Union[bool, int, None] = self.header
         if header_choice is None:
-            with open(files[0], 'r') as f:
-                first_line = f.readline().strip()
+            with open(files[0], 'r') as handle:
+                first_line = handle.readline().strip()
             try:
                 [float(x) for x in first_line.split(self.sep)]
                 header_choice = None
@@ -395,7 +393,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
         if self.subjects:
             total_files = 0
             total_size = 0.0
-            warnings = []
+            warnings: List[str] = []
             subject_ids = []
             for grp, sdir in self.subjects.items():
                 temp_loader = NiftiDirectoryLoader(
@@ -439,16 +437,6 @@ class NiftiDirectoryLoader(BaseDataLoader):
 
         total_size = sum(os.path.getsize(f) for f in files) / (1024 * 1024)
 
-        # Check cache status
-        cache_key = compute_dir_hash(files, {
-            "atlas": self.atlas_image_path,
-            "confounds": self.confounds_pattern,
-            "file_pattern": self.file_pattern,
-            "subject_regex": self.subject_regex,
-            "standardize": self.standardize,
-            "detrend": self.detrend,
-            "extraction_strategy": self.extraction_strategy
-        })
         cached_msg = " [Extraction Needed; legacy pickle cache disabled]"
 
         n_rois = None
@@ -480,12 +468,11 @@ class NiftiDirectoryLoader(BaseDataLoader):
 
     def load(self) -> LoadedDataset:
         """Load the dataset into a :class:`LoadedDataset`."""
-        import nibabel as nib
         from nilearn.maskers import NiftiLabelsMasker, NiftiMasker
 
         if self.subjects:
             all_data = []
-            all_subject_ids = []
+            all_subject_ids: List[str] = []
             all_groups = []
             for grp, sdir in self.subjects.items():
                 sub_loader = NiftiDirectoryLoader(
@@ -504,8 +491,9 @@ class NiftiDirectoryLoader(BaseDataLoader):
                 )
                 sub_ds = sub_loader.load()
                 all_data.append(sub_ds.data)
-                all_subject_ids.extend(sub_ds.subject_ids)
-                all_groups.extend([grp] * len(sub_ds.subject_ids))
+                sub_ids = cast(List[str], sub_ds.subject_ids)  # NumpyLoader always names its subjects
+                all_subject_ids.extend(sub_ids)
+                all_groups.extend([grp] * len(sub_ids))
 
             # Keep each observation's available frames across cohorts.
             data = _pack_timeseries([ts for group in all_data for ts in group])
@@ -554,6 +542,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
 
         is_mask_dir = self.atlas_image_path and os.path.isdir(self.atlas_image_path)
         if is_mask_dir:
+            assert self.atlas_image_path is not None  # a true is_mask_dir implies a path
             mask_files = sorted(glob.glob(os.path.join(self.atlas_image_path, "*.nii*")))
             if not mask_files:
                 raise ValueError(f"No mask files found in atlas directory: {self.atlas_image_path}")
@@ -581,7 +570,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
                 parent_dir = os.path.dirname(f)
                 confound_files = glob.glob(os.path.join(parent_dir, f"*{sub_id}*{self.confounds_pattern}*"))
                 if not confound_files:
-                    confound_files = glob.glob(os.path.join(self.dir_path, f"*{sub_id}*{self.confounds_pattern}*"))
+                    confound_files = glob.glob(os.path.join(cast(str, self.dir_path), f"*{sub_id}*{self.confounds_pattern}*"))
                 if confound_files:
                     confounds = confound_files[0]
 
@@ -702,7 +691,7 @@ class AbideSchaeferLoader(BaseDataLoader):
                 ts_values = np.asarray(z["ts_values"], dtype=np.float64)
                 ts_lengths = np.asarray(z["ts_lengths"], dtype=np.int64)
             offsets = np.concatenate(([0], np.cumsum(ts_lengths)))
-            series = [ts_values[start:end] for start, end in zip(offsets[:-1], offsets[1:])]
+            series = [ts_values[start:end] for start, end in zip(offsets[:-1], offsets[1:], strict=False)]
         else:
             d = _load_numpy(self.data_path, trust_pickle=self.trust_pickle).item()
 
@@ -769,7 +758,7 @@ class AbideSchaeferLoader(BaseDataLoader):
                 if "Diagnosis" in pheno.columns:
                     pheno["Diagnosis"] = pheno["Diagnosis"].map({1: "autism", 2: "healthy_control"})
 
-            except Exception as e:
+            except Exception:
                 # Add warning but continue
                 pass
 
@@ -795,7 +784,8 @@ def build_fmriprep_confounds(img_path: str, strategy: int, n_compcor: int | None
     strategy_5 = {'strategy': ['motion', 'compcor', 'high_pass'], 'motion': 'full', 'compcor': 'anat_combined', 'n_compcor': 'all'}
     strategy_6 = {'strategy': ['motion', 'compcor', 'high_pass'], 'motion': 'full', 'compcor': 'temporal_anat_combined', 'n_compcor': 'all'}
 
-    strategy_dict = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6][strategy - 1].copy()
+    strategies: List[Dict[str, Any]] = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6]
+    strategy_dict = strategies[strategy - 1].copy()
 
     if use_GSR:
         strategy_dict['strategy'] = list(strategy_dict['strategy']) + ['global_signal']
@@ -809,7 +799,7 @@ def build_fmriprep_confounds(img_path: str, strategy: int, n_compcor: int | None
         # Older fMRIPrep derivatives (e.g., nilearn development_fmri) only provide
         # the 6 basic motion regressors and/or raw global_signal without derivatives/power2.
         motion_fallbacks = {"full": ("derivatives", "basic"), "derivatives": ("basic",)}.get(
-            strategy_dict.get("motion"), ()
+            cast(str, strategy_dict.get("motion")), ()
         )
         gsr_fallbacks = ("full", "basic") if use_GSR else (None,)
         for motion_opt in (strategy_dict.get("motion"), *motion_fallbacks):
@@ -868,8 +858,8 @@ class FmriprepDerivativesLoader(BaseDataLoader):
         self.denoising = denoising or {}
         self.cache_dir = cache_dir or os.path.expanduser("~/.conninfpy/loaders")
 
-    def _get_files(self, base_dir: str) -> list[tuple[str, str]]:
-        """Sorted list of data files in the loader's directory."""
+    def _get_files(self, base_dir: str) -> list[tuple[str, Optional[str]]]:
+        """Sorted list of ``(bold_file, confound_file_or_None)`` pairs in the loader's directory."""
         if not os.path.exists(base_dir):
             return []
 
@@ -934,7 +924,6 @@ class FmriprepDerivativesLoader(BaseDataLoader):
 
     def load(self) -> LoadedDataset:
         """Load the dataset into a :class:`LoadedDataset`."""
-        import nibabel as nib
         from nilearn.maskers import NiftiLabelsMasker, NiftiMasker
 
         dirs_to_scan = {}
@@ -954,6 +943,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
 
         is_mask_dir = self.atlas_image_path and os.path.isdir(self.atlas_image_path)
         if is_mask_dir:
+            assert self.atlas_image_path is not None  # a true is_mask_dir implies a path
             mask_files = sorted(glob.glob(os.path.join(self.atlas_image_path, "*.nii*")))
             if not mask_files:
                 raise ValueError(f"No mask files found in atlas directory: {self.atlas_image_path}")
@@ -1038,7 +1028,7 @@ class FmriprepDerivativesLoader(BaseDataLoader):
                 "strategy": strategy,
                 "use_GSR": use_GSR,
                 "censoring": "load_confounds sample_mask applied",
-                "n_volumes": dict(zip(map(str, all_subject_ids), n_volumes)),
+                "n_volumes": dict(zip(map(str, all_subject_ids), n_volumes, strict=True)),
                 "truncated_to": n_volumes[0] if len(set(n_volumes)) == 1 else None,
             }
         )
@@ -1258,7 +1248,6 @@ class ConditionTimeseriesArrayLoader(BaseDataLoader):
 
         try:
             arr = np.load(fpath)
-            n_sub = arr.shape[0]
             n_tp = arr.shape[1]
             n_rois = arr.shape[2]
 
@@ -1453,7 +1442,7 @@ class ConnectivityMatrixLoader(BaseDataLoader):
             prev.file_sizes_mb = total_sizes
             return prev
         else:
-            nl = NumpyLoader(data_path=self.data_path, pheno_path=self.pheno_path, data_kind=self.data_kind)
+            nl = NumpyLoader(data_path=cast(str, self.data_path), pheno_path=self.pheno_path, data_kind=self.data_kind)
             prev = nl.preview()
             prev.atlas_guess = os.path.basename(self.atlas) if self.atlas else None
             return prev
@@ -1492,7 +1481,7 @@ class ConnectivityMatrixLoader(BaseDataLoader):
                 ds = nl.load()
                 all_data.append(ds.data)
                 all_groups.extend([grp] * len(ds.data))
-                all_subject_ids.extend([f"{grp}_{sid}" for sid in ds.subject_ids])
+                all_subject_ids.extend([f"{grp}_{sid}" for sid in cast(List[str], ds.subject_ids)])
 
             data = np.vstack(all_data)
             pheno = pd.DataFrame({
@@ -1511,7 +1500,7 @@ class ConnectivityMatrixLoader(BaseDataLoader):
                 provenance={"data_paths": self.data_paths}
             )
         else:
-            nl = NumpyLoader(data_path=self.data_path, pheno_path=self.pheno_path, data_kind=self.data_kind)
+            nl = NumpyLoader(data_path=cast(str, self.data_path), pheno_path=self.pheno_path, data_kind=self.data_kind)
             dataset = nl.load()
 
             if self.atlas and os.path.exists(self.atlas):

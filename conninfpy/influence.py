@@ -88,7 +88,7 @@ the correctness of the original inference, or about which subjects to exclude.
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -179,7 +179,7 @@ def _nan_allclose(
     if not finite_a.any():
         return True, 0.0
     diff = float(np.max(np.abs(a[finite_a] - b[finite_b])))
-    return bool(np.allclose(a[finite_a], b[finite_b], **tolerance)), diff
+    return bool(np.allclose(a[finite_a], b[finite_b], **cast(Dict[str, Any], tolerance))), diff
 
 
 def _empty_fit(
@@ -314,7 +314,7 @@ def _glm_fit(
     design can be rank deficient before any subject is removed.
     """
     yk = y[keep]
-    Xk = X[keep]
+    Xk = np.asarray(X[keep], dtype=np.float64)
     n = int(yk.size)
     if n == 0:
         return _empty_fit("nan_edge", 0)
@@ -850,8 +850,10 @@ def _align_paired(
     if identity:
         if named:
             try:
+                # One-sided IDs are rejected inside ``paired_id_permutation``.
                 check = paired_id_permutation(
-                    ids_group1, ids_group2, n_group1=n_pairs, n_group2=n_pairs
+                    cast(Sequence[Any], ids_group1), cast(Sequence[Any], ids_group2),
+                    n_group1=n_pairs, n_group2=n_pairs,
                 )
             except IdAlignmentError as exc:
                 raise ValueError(str(exc)) from exc
@@ -877,7 +879,7 @@ def _align_paired(
         ), note
     try:
         check = paired_id_permutation(
-            ids_group1, ids_group2, n_group1=n_pairs, n_group2=n_pairs
+            cast(Sequence[Any], ids_group1), cast(Sequence[Any], ids_group2), n_group1=n_pairs, n_group2=n_pairs
         )
     except IdAlignmentError as exc:
         raise ValueError(str(exc)) from exc
@@ -946,7 +948,7 @@ def _fit_edge(
     full_rank: Optional[int] = None,
 ) -> Dict[str, Any]:
     if kind == "glm":
-        return _glm_fit(arrays["y"], X, contrast, mask, full_rank)
+        return _glm_fit(arrays["y"], cast(npt.NDArray[np.float64], X), contrast, mask, full_rank)
     if kind == "two-sample":
         return _twosample_fit(
             arrays["y1"], arrays["y2"], int(arrays["n1"]), mask, bool(var_equal)
@@ -1085,6 +1087,7 @@ def subject_influence(
     if unavailable is not None:
         return _stop(report, *unavailable)
 
+    assert info is not None  # _structure returns (info, None) or (None, unavailable)
     N = int(info["N"])
     pairs = _validate_edges(edges, N, info["provenance"])
     kind = info["kind"]
@@ -1119,6 +1122,7 @@ def subject_influence(
     inputs, unavailable = _resolve_inputs(kind, N, group1, group2, Y, design_matrix)
     if unavailable is not None:
         return _stop(report, *unavailable)
+    assert inputs is not None  # _resolve_inputs returns (inputs, None) or (None, unavailable)
     report["n_subjects"] = int(inputs["n_rows"])
 
     # ---- Work/output cap before any refit (the refit is quadratic in n) ----
@@ -1236,7 +1240,7 @@ def subject_influence(
                 reproduced = False
                 mismatched.append((int(i), int(j)))
             if difference is not None:
-                max_diff = max(max_diff, difference)
+                max_diff = difference if max_diff is None else max(max_diff, difference)
         scope = (
             "on the selected edges, each on its own coverage rows "
             "(available-case inputs contain NaN, so no dense map exists)"
@@ -1352,7 +1356,7 @@ def subject_influence(
             if target is not None and np.isfinite(recorded):
                 difference = abs(float(target) - float(recorded))
                 matches = bool(
-                    np.isclose(float(target), float(recorded), **CHECK_TOLERANCE)
+                    np.isclose(float(target), float(recorded), **cast(Dict[str, Any], CHECK_TOLERANCE))
                 )
                 entry["stat_matches_result"] = matches
                 stat_differences.append(difference)

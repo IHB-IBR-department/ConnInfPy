@@ -176,7 +176,7 @@ def _component_p_values(
     all_nan = n_nan == sizes
     agree = all_nan | ((n_nan == 0) & np.isclose(lo, hi, rtol=_P_RTOL, atol=_P_ATOL))
     p_component = np.where(agree, pv[starts], np.nan)
-    for cid, ok, a, b, n_bad in zip(ids, agree, lo, hi, n_nan):
+    for cid, ok, a, b, n_bad in zip(ids, agree, lo, hi, n_nan, strict=True):
         if not ok:
             warnings.warn(
                 f"NBS component {int(cid)} of the {tail} tail: its edges do not share one "
@@ -363,6 +363,6 @@ def _network_pair_counts(
     for r in rows:
         labels = report["labels"][r["tail"]]
         i, j = np.nonzero(np.triu(labels == r["component_id"], k=1))
-        pairs = ["—".join(sorted((str(networks[a]), str(networks[b])))) for a, b in zip(i, j)]
+        pairs = ["—".join(sorted((str(networks[a]), str(networks[b])))) for a, b in zip(i, j, strict=True)]
         out.append(_count_labels(pairs))
     return out

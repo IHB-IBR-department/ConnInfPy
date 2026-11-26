@@ -31,6 +31,32 @@ permissions:
   contents: read
 
 jobs:
+  # Static checks: ruff (pyflakes + bugbear B023/B905, configured in
+  # pyproject.toml) and mypy on the package (also configured there). Runs
+  # once on the oldest supported Python so type errors surface fast and
+  # independently of the test matrix.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # mypy analyses the app modules' imports, so the app extra is needed
+      # for an accurate result even though the app itself is untyped glue.
+      - name: Install package + dev/app extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,app]"
+
+      - name: ruff
+        run: ruff check
+
+      - name: mypy
+        run: python -m mypy conninfpy
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:

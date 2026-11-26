@@ -9,10 +9,8 @@ from conninfpy.loaders import (
     LoadedDataset,
     validate_loaded_dataset,
     NumpyLoader,
-    CSVDirectoryLoader,
-    BaseDataLoader
+    CSVDirectoryLoader
 )
-from conninfpy.atlas import AtlasInfo
 
 class TestLoaders(unittest.TestCase):
     def setUp(self):

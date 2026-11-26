@@ -304,7 +304,7 @@ class TestGridAndUnits(unittest.TestCase):
         self.assertEqual(pre.block_report["n_blocks"], sep.block_report["n_blocks"])
         self.assertEqual(pre.block_report["n_blocks_tested"], sep.block_report["n_blocks_tested"])
         self.assertEqual(len(pre.block_report["blocks"]), len(sep.block_report["blocks"]))
-        for src_row, pre_row in zip(sep.block_report["blocks"], pre.block_report["blocks"]):
+        for src_row, pre_row in zip(sep.block_report["blocks"], pre.block_report["blocks"], strict=True):
             self.assertEqual(pre_row["p_positive"], src_row["p_positive"])
             self.assertEqual(pre_row["p_positive_uncorrected"], src_row["p_positive_uncorrected"])
             self.assertNotIn("p_negative", pre_row)
@@ -314,7 +314,7 @@ class TestGridAndUnits(unittest.TestCase):
         self.assertEqual(post.block_report["tail_policy"], "one-sided-negative")
         self.assertEqual(post.block_report["tested_tail"], "negative")
         self.assertEqual(post.block_report["tail_selection"], "post-hoc")
-        for src_row, post_row in zip(sep.block_report["blocks"], post.block_report["blocks"]):
+        for src_row, post_row in zip(sep.block_report["blocks"], post.block_report["blocks"], strict=True):
             self.assertEqual(post_row["p_negative"], src_row["p_negative"])
             self.assertEqual(post_row["p_negative_uncorrected"], src_row["p_negative_uncorrected"])
             self.assertNotIn("p_positive", post_row)

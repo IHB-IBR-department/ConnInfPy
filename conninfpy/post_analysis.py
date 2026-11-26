@@ -13,10 +13,12 @@ import io
 import json
 import zipfile
 from dataclasses import fields
-from typing import Any, Mapping, Sequence
+from typing import Any, Dict, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
+
+from conninfpy.atlas.brainnetome import _spatial_image
 
 SCHEMA_VERSION = 1
 
@@ -227,7 +229,7 @@ class ResultBundle:
                 raise ValueError("tested masks must be boolean")
             p_cells = [p] if p.ndim == 2 else [p[:, :, k] for k in range(p.shape[2])]
             m_cells = [m] if m.ndim == 2 else [m[:, :, k] for k in range(m.shape[2])]
-            for k, (pc, mc) in enumerate(zip(p_cells, m_cells)):
+            for k, (pc, mc) in enumerate(zip(p_cells, m_cells, strict=True)):
                 pc = _square(pc, n, f"{tail} p[{k}]")
                 mc = _mask(mc, n, f"{tail} tested[{k}]")
                 if np.any(mc & ~elig) or not np.isfinite(pc[mc]).all() or np.any((pc[mc] < 0) | (pc[mc] > 1)):
@@ -314,11 +316,9 @@ class ResultBundle:
                     )
                 ),
                 "flags": deepcopy(
-                    list(
-                        getattr(outer, "flags", None)
-                        if getattr(outer, "flags", None) is not None
-                        else (getattr(result, "flags", None) or [])
-                    )
+                    list(outer_flags)
+                    if (outer_flags := getattr(outer, "flags", None)) is not None
+                    else list(getattr(result, "flags", None) or [])
                 )}
         spec = {"name": "contrast_beta", "definition": "cᵀβ", "units": units,
                 "scale": scale, "standardizer": None, "available": effect is not None}
@@ -329,7 +329,7 @@ class ResultBundle:
     def save(self, path: Any) -> None:
         """Save JSON metadata and pickle-free NumPy arrays in a ZIP archive."""
         self._validate()
-        arrays = {}
+        arrays: Dict[str, Any] = {}
         payload = _encode_bundle({f.name: getattr(self, f.name) for f in fields(self)}, arrays)
         def _zip_info(name: str) -> zipfile.ZipInfo:
             info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
@@ -391,11 +391,11 @@ class ResultBundle:
         # Optional Monte-Carlo snapshot: absent for legacy bundles (accepted as
         # "unavailable"), never reconstructed. When present, counts must align
         # with the saved p maps and keep the sentinel convention.
-        mc = self.metadata.get("mc")
-        if mc is not None:
-            if not isinstance(mc, dict):
+        mc_snapshot = self.metadata.get("mc")
+        if mc_snapshot is not None:
+            if not isinstance(mc_snapshot, dict):
                 raise ValueError("monte-carlo metadata must be a mapping")
-            counts = mc.get("exceedance_counts")
+            counts = mc_snapshot.get("exceedance_counts")
             if counts is not None:
                 if not isinstance(counts, dict) or set(counts) - set(self.corrected_p):
                     raise ValueError("monte-carlo counts name unknown tails")
@@ -449,7 +449,7 @@ class ResultBundle:
         rows = []
         for k, a in enumerate(unique):
             for b in unique[k:]:
-                member = np.array([((labels[x] == a and labels[y] == b) or (labels[x] == b and labels[y] == a)) for x, y in zip(i, j)])
+                member = np.array([((labels[x] == a and labels[y] == b) or (labels[x] == b and labels[y] == a)) for x, y in zip(i, j, strict=True)])
                 em = member & self.eligible[i, j]
                 vm = member & self.estimable[i, j]
                 tm = member & tested[i, j]
@@ -506,7 +506,7 @@ class ResultBundle:
         tested = self._cell(self.tested, tail, param_idx)
         report = self.metadata["native_report"]
         rows = []
-        for i, j in zip(*np.triu_indices(len(self.roi_ids), 1)):
+        for i, j in zip(*np.triu_indices(len(self.roi_ids), 1), strict=True):
             if not tested[i, j] or p[i, j] > alpha:
                 continue
             row = {"roi_i": self.roi_ids[i], "roi_j": self.roi_ids[j], "p_corrected": float(p[i, j]),
@@ -554,7 +554,7 @@ class ResultBundle:
             raise ValueError("native unit identities unavailable in this legacy result")
         rows = []
         for ident in dict.fromkeys(pairs.native_id):
-            subset = pairs[pairs.native_id.map(lambda x: x == ident)]
+            subset = pairs[pairs.native_id.map(lambda x, ident=ident: x == ident)]
             members = set(subset.roi_i) | set(subset.roi_j)
             ordered = [x for x in self.roi_ids if x in members]
             composition = {name: {label: sum(1 for k, x in enumerate(self.roi_ids) if x in members and values[k] == label)
@@ -635,13 +635,13 @@ def brainnetome_crosswalk(*, roi_ids: Sequence[Any], coords: Any = None, space: 
     if support == "parcel":
         import nibabel as nib
         import hashlib
-        image = nib.load(str(parcel_image)) if isinstance(parcel_image, (str, Path)) else parcel_image
+        image = _spatial_image(nib.load(str(parcel_image)) if isinstance(parcel_image, (str, Path)) else parcel_image)
         geometry.update({"parcel_labels": [int(x) for x in parcel_labels],
                          "parcel_affine": np.asarray(image.affine, float).tolist(),
                          "parcel_shape": list(image.shape),
                          "parcel_sha256": hashlib.sha256(np.ascontiguousarray(np.asarray(image.dataobj)).tobytes()).hexdigest()})
     endpoints = []
-    for pos, (rid, row) in enumerate(zip(ids, rois.table.to_dict("records"))):
+    for pos, (rid, row) in enumerate(zip(ids, rois.table.to_dict("records"), strict=True)):
         if nearest_mm is not None and "nearest labelled voxel" in row["flags"]:
             expected_hemi = "L" if row["x"] < 0 else "R" if row["x"] > 0 else None
             tissue = "cortex" if row["structure"] == "cortex" else "subcortex" if row["structure"] not in ("", "mixed") else None
@@ -681,8 +681,8 @@ def brainnetome_crosswalk(*, roi_ids: Sequence[Any], coords: Any = None, space: 
                 if source is None or hid not in source:
                     hp[kind] = {"status": "profile_missing", "terms": {}}
                 else:
-                    terms = dict(source[hid])
-                    hp[kind] = {"status": "terms" if terms else "no_source_filtered_terms", "terms": terms}
+                    homolog_terms: Dict[str, Any] = dict(source[hid])
+                    hp[kind] = {"status": "terms" if homolog_terms else "no_source_filtered_terms", "terms": homolog_terms}
             homologs.append({"source_bna_id": bid, "homolog_bna_id": hid,
                              "name": str(ref.regions.at[hid, "name"]), "profiles": hp})
         endpoints.append({"roi_id": rid, "anatomy": row, "bna_overlap": {int(k + 1): float(w[k]) for k in np.flatnonzero(w)},

@@ -106,7 +106,7 @@ def build_annotation_evidence(
 
     pairs: Dict[tuple, int] = {}
     if not edges.empty:
-        for a, b in zip(edges["roi_i"].astype(int), edges["roi_j"].astype(int)):
+        for a, b in zip(edges["roi_i"].astype(int), edges["roi_j"].astype(int), strict=True):
             key = tuple(sorted((str(t.iloc[a]["assigned"]), str(t.iloc[b]["assigned"]))))
             pairs[key] = pairs.get(key, 0) + 1
     region_pairs = [{"source": s, "target": g, "n_edges": n} for (s, g), n in sorted(pairs.items())]
@@ -126,8 +126,8 @@ def build_annotation_evidence(
     unit_phrase = "significant edges" if unit == "edge" else f"edges of the detected {unit}s"
     levels = [str(x) for x in t["level"]]
     all_names = [str(x) for x in t["roi"]]
-    unassigned_rois = [n for n, lv in zip(all_names, levels) if lv == "unassigned"]
-    mixed_rois = [n for n, lv in zip(all_names, levels) if lv == "mixed"]
+    unassigned_rois = [n for n, lv in zip(all_names, levels, strict=True) if lv == "unassigned"]
+    mixed_rois = [n for n, lv in zip(all_names, levels, strict=True) if lv == "mixed"]
     roi_restriction = {
         "applies_to": unit,
         "counts": {"n_rois": len(t), "n_endpoint_rois": len(roi_entries),

@@ -28,8 +28,6 @@ Advanced inference (custom designs, F-contrasts, null distributions):
 
    conninfpy.stats
    conninfpy.influence
-   conninfpy.pairwise_stats
-   conninfpy.glm_stats
 
 Network enhancement:
 
@@ -37,15 +35,12 @@ Network enhancement:
    :maxdepth: 1
 
    conninfpy.enhance
-   conninfpy.tfnbs_score
-   conninfpy.nbs_score
 
-Permutation acceleration and multi-site harmonization:
+Multi-site harmonization:
 
 .. toctree::
    :maxdepth: 1
 
-   conninfpy.acceleration
    conninfpy.harmonize
 
 Synthetic data and benchmark scenarios:
@@ -54,8 +49,6 @@ Synthetic data and benchmark scenarios:
    :maxdepth: 1
 
    conninfpy.sim
-   conninfpy.synth_datasets
-   conninfpy.topologies
 
 Utilities and constants:
 
@@ -63,5 +56,15 @@ Utilities and constants:
    :maxdepth: 1
 
    conninfpy.defaults
-   conninfpy.utils
    conninfpy.preprocessing
+
+Shared array helpers
+--------------------
+
+:func:`~conninfpy._shared.arrays.fisher_r_to_z` (also exported as
+:func:`conninfpy.fisher_r_to_z`) and the connected-component labelling used by
+the enhancement operators.
+
+.. automodule:: conninfpy._shared.arrays
+   :members:
+   :show-inheritance:

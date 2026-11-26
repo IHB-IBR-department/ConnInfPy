@@ -74,7 +74,7 @@ class TestEdgeMask(unittest.TestCase):
         out = analyze(group1=a, group2=b, input="z", method="tfnbs", edge_mask=mask, **RUN)
         self.assertTrue(np.isnan(out.inference.positive[0, 7]))
         self.assertTrue(np.isfinite(out.inference.positive[0, 1]))
-        self.assertNotIn((0, 7), set(zip(*np.nonzero(out.inference.positive < 0.05))))
+        self.assertNotIn((0, 7), set(zip(*np.nonzero(out.inference.positive < 0.05), strict=True)))
 
     def test_validation(self):
         a, b = _paired()

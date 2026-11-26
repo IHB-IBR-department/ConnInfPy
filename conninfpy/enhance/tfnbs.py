@@ -15,7 +15,7 @@ get_tfnbs_score_networkx : Legacy networkx implementation for comparison with ot
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Tuple, Union
+from typing import Optional
 
 import numpy as np
 import numpy.typing as npt
@@ -597,11 +597,8 @@ def get_tfnbs_score_baseline(
     t_stats = np.round(t_stats, decimals=10)
 
     scalar_mode = np.isscalar(e) and np.isscalar(h)
-    if scalar_mode:
-        e, h = [e], [h]
-
-    e = np.array(e)
-    h = np.array(h)
+    e = np.array([e] if scalar_mode else e)
+    h = np.array([h] if scalar_mode else h)
     if e.shape != h.shape:
         raise ValueError("e and h must have the same shape!")
     _check_domain(e, h)
@@ -629,7 +626,7 @@ def get_tfnbs_score_baseline(
         unique, counts = np.unique(labels, return_counts=True)
         clustsize = 1.0 * mask.copy()
 
-        for lbl, size in zip(unique, counts):
+        for lbl, size in zip(unique, counts, strict=True):
             if size >= 2:
                 sz_links = np.sum(mask[np.ix_(labels == lbl, labels == lbl)]) / 2
                 clustsize[np.ix_(labels == lbl, labels == lbl)] *= sz_links
@@ -748,11 +745,5 @@ def get_tfnbs_score_networkx(
 
 
 # Compatibility exports of the other TFNBS family members.
-from conninfpy.enhance._blocks import (
-    _compute_canonical_block_ids,
-    _compute_edge_block_weights,
-    _precompute_block_metadata,
-    _validate_net_labels,
-)
 from conninfpy.enhance.fbc_tfnbs import get_fbc_tfnbs_score
 from conninfpy.enhance.ni_tfnbs import get_network_informed_tfnbs_score

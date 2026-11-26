@@ -8,9 +8,10 @@ independently.
 
 Wrappers accept the legacy keys ``'g2>g1'`` / ``'g1>g2'`` from the v1.x
 t-test pipeline (silently remapped via :func:`conninfpy._compat.normalize_keys`
-) and always return a :class:`~conninfpy._compat.TailResult` with canonical
-``'positive'`` / ``'negative'`` keys. The legacy keys remain readable on
-the result with a :class:`DeprecationWarning` until v2.1.
+) and return a :class:`~conninfpy._compat.TailResult` with canonical
+``'positive'`` / ``'negative'`` keys (a plain dict keyed ``'omnibus'`` for an
+F-stat map). The legacy keys remain readable on the result with a
+:class:`DeprecationWarning` until v2.1.
 
 Wrappers do NOT compute statistics internally — the caller is responsible for
 providing the raw statistic (t-stat, β, etc.). This matches the design
@@ -25,6 +26,10 @@ import numpy as np
 import numpy.typing as npt
 
 from conninfpy._compat import TailResult, make_tail_result, normalize_keys
+
+#: Enhanced statistics: a :class:`~conninfpy._compat.TailResult` for the t / β
+#: tails, or a plain dict for the omnibus (F) map.
+EnhancedStats = Union[TailResult, Dict[str, npt.NDArray[np.float64]]]
 from conninfpy._shared.arrays import create_prior_weights
 from conninfpy.defaults import (
     DEFAULT_EXTENT_EXPONENT,
@@ -39,7 +44,6 @@ from conninfpy.enhance._backend import _enhance_call_scope
 from conninfpy.enhance.nbs import (
     cnbs_block_means,
     cnbs_blocks,
-    get_cnbs_score,
     get_nbs_score,
     nbs_bct,
 )
@@ -66,7 +70,7 @@ __all__ = [
 ]
 
 
-def _wrap(stat_dict: Dict[str, npt.NDArray[np.float64]], score_fn) -> TailResult:
+def _wrap(stat_dict: Dict[str, npt.NDArray[np.float64]], score_fn) -> "EnhancedStats":
     """Apply ``score_fn`` to each tail and wrap the result in a TailResult.
 
     Accepts legacy keys via :func:`normalize_keys`; always emits canonical keys.
@@ -90,7 +94,7 @@ def apply_tfnbs(
     n: Optional[int] = DEFAULT_N_THRESHOLDS,
     start_thres: float = DEFAULT_START_THRESHOLD,
     **kwargs,
-) -> TailResult:
+) -> "EnhancedStats":
     """Apply TFNBS (threshold-free cluster enhancement) to each direction."""
     return _wrap(
         stat_dict,
@@ -103,7 +107,7 @@ def apply_nbs(
     threshold: float = DEFAULT_NBS_THRESHOLD,
     nbs_stat: str = DEFAULT_NBS_STAT,
     **kwargs,
-) -> TailResult:
+) -> "EnhancedStats":
     """Apply classical NBS (fixed threshold) to each direction."""
     return _wrap(
         stat_dict,
@@ -116,14 +120,14 @@ def apply_cnbs(
     net_labels: npt.NDArray[np.int_],
     edge_mask: Optional[npt.NDArray[np.bool_]] = None,
     **kwargs,
-) -> TailResult:
+) -> "EnhancedStats":
     """Constrained NBS (Noble & Scheinost, 2020): one statistic per block.
 
     The signed edge statistic (``positive - negative``) is averaged over every
     edge of each within- and between-network block. Returns block vectors of
     shape (K,): the mean for the positive tail and minus the mean for the
     negative tail (or the mean F for an omnibus map). Inference is per block
-    (see :mod:`conninfpy._cnbs`), not by the maximum over edges.
+    (see :mod:`conninfpy.stats._cnbs`), not by the maximum over edges.
     """
     norm = normalize_keys(stat_dict)
     first = next(iter(norm.values()))
@@ -144,7 +148,7 @@ def apply_ni_tfnbs(
     normalization: str = "sqrt",
     edge_mask: Optional[npt.NDArray[np.bool_]] = None,
     **kwargs,
-) -> TailResult:
+) -> "EnhancedStats":
     """Apply network-informed TFNBS (block-density weighted) to each direction."""
     return _wrap(
         stat_dict,
@@ -170,7 +174,7 @@ def apply_fbc_tfnbs(
     start_thres: float = DEFAULT_START_THRESHOLD,
     min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
     **kwargs,
-) -> TailResult:
+) -> "EnhancedStats":
     """Apply functional-block-clustering TFNBS to each direction."""
     return _wrap(
         stat_dict,
@@ -191,7 +195,7 @@ def apply_edge_mask(
     edge_mask: npt.NDArray[np.bool_],
     inner=None,
     **kwargs,
-) -> TailResult:
+) -> "EnhancedStats":
     """Restrict an enhancement to the edges of ``edge_mask`` (the tested family).
 
     Statistics outside the mask are set to 0 before ``inner`` runs, so those

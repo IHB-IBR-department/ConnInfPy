@@ -86,12 +86,12 @@ class TestDecisionStatistics(unittest.TestCase):
         self.assertEqual(cfc.holm_adjust([1.0]), [1.0])
 
     def test_finalize_verdict_and_holm_column(self):
-        good = [cfc.summarize_arm(a, 200, k, 0.0) for a, k in zip(cfc.ALL_ARMS, (8, 11, 7, 12, 12))]
+        good = [cfc.summarize_arm(a, 200, k, 0.0) for a, k in zip(cfc.ALL_ARMS, (8, 11, 7, 12, 12), strict=True)]
         ok, rows = cfc.finalize(good)
         self.assertTrue(ok)
         self.assertTrue(all(r["p_holm"] >= r["p_hi"] for r in rows))
         self.assertEqual(len(rows), len(cfc.ALL_ARMS))
-        bad = [cfc.summarize_arm(a, 200, k, 0.0) for a, k in zip(cfc.ALL_ARMS, (8, 11, 25, 12, 12))]
+        bad = [cfc.summarize_arm(a, 200, k, 0.0) for a, k in zip(cfc.ALL_ARMS, (8, 11, 25, 12, 12), strict=True)]
         ok_bad, rows_bad = cfc.finalize(bad)
         self.assertFalse(ok_bad)
         self.assertEqual([r["arm"] for r in rows_bad if r["fail"]], ["nbs"])

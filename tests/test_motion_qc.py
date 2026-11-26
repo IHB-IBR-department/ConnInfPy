@@ -755,7 +755,7 @@ def test_roi_level_nonfinite_counts_and_denominators():
     assert roi["nan_count"][1] == 0 and roi["inf_count"][1] == 1
     assert roi["nan_count"][2] == 0 and roi["inf_count"][2] == 0
     assert roi["nonfinite_count"] == [
-        a + b for a, b in zip(roi["nan_count"], roi["inf_count"])
+        a + b for a, b in zip(roi["nan_count"], roi["inf_count"], strict=True)
     ]
     assert roi["finite_count"][0] == roi["denominator"] - 2
     assert roi["nonfinite_share"][0] == pytest.approx(2 / roi["denominator"])

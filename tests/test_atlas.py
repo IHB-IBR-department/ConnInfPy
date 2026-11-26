@@ -215,7 +215,7 @@ class TestBundledAtlases(unittest.TestCase):
         # Left-hemisphere ROIs (suffix '_L') should have x ≤ 0
         # (allowing a small midline tolerance for medial structures).
         for i, (name, x) in enumerate(
-            zip(atlas.labels, atlas.coords[:, 0])
+            zip(atlas.labels, atlas.coords[:, 0], strict=True)
         ):
             if name.endswith("_L"):
                 self.assertLess(x, 5, f"L hemi ROI {name} at x={x:.2f}")

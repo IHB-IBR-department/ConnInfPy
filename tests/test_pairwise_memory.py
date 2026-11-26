@@ -645,7 +645,7 @@ def test_reduction_bound_mp_slow_first_chunk():
     )
     # sum of k**2 for k in 0..31, exact in float64
     assert total == float(sum(k * k for k in seeds))
-    limit = _assert_stats_consistent(stats_out, len(seeds))
+    _assert_stats_consistent(stats_out, len(seeds))
     assert stats_out["mode"] == "mp"
     assert stats_out["workers"] == 2
     assert stats_out["issued_outstanding_limit"] == 4  # 2 * workers

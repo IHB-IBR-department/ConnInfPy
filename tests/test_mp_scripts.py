@@ -19,8 +19,8 @@ from pathlib import Path
 
 import numpy as np
 
-from conninfpy._progress import _references_main, run_permutations
-from conninfpy.pairwise_stats import compute_t_stat
+from conninfpy.stats._workers import _references_main, run_permutations
+from conninfpy.stats.pairwise import compute_t_stat
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -117,7 +117,7 @@ class TestUnguardedScripts(unittest.TestCase):
             proc = _run_script(
                 """
                 import functools
-                from conninfpy._progress import run_permutations
+                from conninfpy.stats._workers import run_permutations
 
                 def square_plus(seed, offset):
                     return seed * seed + offset

@@ -16,13 +16,13 @@ import numpy as np
 from scipy import stats
 
 from conninfpy import compute_p_val
-from conninfpy.glm_stats import (
+from conninfpy.stats._design import contrast_is_estimable
+from conninfpy.stats.glm import (
     compute_glm_stat,
     compute_p_val_glm,
     compute_p_val_glm_multi,
-    contrast_is_estimable,
 )
-from conninfpy.pairwise_stats import compute_t_stat, compute_t_stat_diff
+from conninfpy.stats.pairwise import compute_t_stat, compute_t_stat_diff
 
 N, n = 6, 20
 INFINITE = "zero residual variance but a nonzero effect"

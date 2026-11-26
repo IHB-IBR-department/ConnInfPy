@@ -13,7 +13,7 @@ import pytest
 from conninfpy import ResultBundle, compute_p_val
 from conninfpy.stats._engine import _compute_p_values_from_null
 from conninfpy.stats.acceleration import fit_gpd_tail
-from tests.test_netstat25_workspace import (
+from tests.test_workspace_persistence import (
     _sync_workspace_checksums,
     _workspace_zip_files,
     _zip_from_files,

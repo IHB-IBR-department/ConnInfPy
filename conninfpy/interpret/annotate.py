@@ -27,12 +27,12 @@ or annotating results never changes their correction or inference unit.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 
-from conninfpy.atlas.brainnetome import BD_DOMAINS
+from conninfpy.atlas.brainnetome import BD_DOMAINS, _spatial_image
 from conninfpy.atlas.brainnetome import N_REGIONS
 from conninfpy.atlas.brainnetome import BrainnetomeReference
 
@@ -258,7 +258,7 @@ def annotate_rois(
         if not 0 < v <= 1:
             raise ValueError(f"{nm} must be in (0, 1]; got {v}.")
 
-    supports, coords = _supports(ref, coords, support, radius_mm, parcel_image, parcel_labels)
+    supports, roi_centres = _supports(ref, coords, support, radius_mm, parcel_image, parcel_labels)
     n = len(supports)
     names = [f"ROI_{i + 1:03d}" for i in range(n)] if names is None else [str(x) for x in names]
     if len(names) != n:
@@ -280,13 +280,13 @@ def annotate_rois(
             lab = ref.labels_at(world)
             counts = np.bincount(lab, minlength=n_ref + 1)
             weights[r] = counts[1 : n_ref + 1] / len(world)
-            if has_pm:
+            if has_pm and membership is not None:
                 membership[r] = ref.membership(world)
 
     regions = ref.regions
     rows = []
     for r in range(n):
-        rows.append(_describe(r, names[r], coords[r], supports[r], weights[r],
+        rows.append(_describe(r, names[r], roi_centres[r], supports[r], weights[r],
                               None if membership is None else membership[r], regions, ref,
                               support, radii[r], space, purity, min_coverage, min_weight,
                               nearest_note.get(r)))
@@ -361,7 +361,7 @@ def annotate_bna_regions(
     if bad:
         raise ValueError(f"region_ids must be BNA IDs 1-{N_REGIONS}; got {bad[:5]}.")
     regions = ref.regions.loc[ids]
-    nets = [str(v) if s == "cortex" else "Subcortical" for v, s in zip(regions[division], regions["structure"])]
+    nets = [str(v) if s == "cortex" else "Subcortical" for v, s in zip(regions[division], regions["structure"], strict=True)]
     rois = annotate_rois(reference=ref, names=list(regions["name"]) if names is None else names,
                          support="parcel", space="MNI152NLin6Asym", parcel_image=ref.label_image,
                          parcel_labels=ids, min_weight=min_weight, networks=nets)
@@ -370,14 +370,15 @@ def annotate_bna_regions(
     return rois
 
 
-def _supports(ref, coords, support, radius_mm, parcel_image, parcel_labels):
+def _supports(ref, coords, support, radius_mm, parcel_image, parcel_labels
+) -> "Tuple[List[npt.NDArray[np.float64]], npt.NDArray[np.float64]]":
     """World coordinates of each ROI's support voxels, and the ROI centres."""
     if support == "parcel":
         if parcel_image is None or parcel_labels is None:
             raise ValueError("support='parcel' needs parcel_image and parcel_labels.")
         import nibabel as nib
 
-        img = nib.load(str(parcel_image)) if not hasattr(parcel_image, "affine") else parcel_image
+        img = _spatial_image(nib.load(str(parcel_image)) if not hasattr(parcel_image, "affine") else parcel_image)
         raw = np.asarray(img.dataobj)
         if raw.ndim != 3 or not np.isfinite(raw).all() or not np.allclose(raw, np.rint(raw)):
             raise ValueError("parcel image must be a finite 3-D integer label image")
@@ -406,10 +407,10 @@ def _supports(ref, coords, support, radius_mm, parcel_image, parcel_labels):
     radii = np.broadcast_to(np.asarray(radius_mm, float), (len(coords),))
     if np.any(~np.isfinite(radii)) or np.any(radii <= 0):
         raise ValueError("radius_mm must be positive and finite.")
-    return [ref.sphere(c, rad) for c, rad in zip(coords, radii)], coords
+    return [ref.sphere(c, rad) for c, rad in zip(coords, radii, strict=True)], coords
 
 
-def _check_coords(coords, n):
+def _check_coords(coords, n) -> npt.NDArray[np.float64]:
     c = np.asarray(coords, dtype=np.float64)
     if c.ndim != 2 or c.shape[1] != 3:
         raise ValueError(f"coords must have shape (n_rois, 3); got {c.shape}.")
@@ -438,12 +439,12 @@ def _nearest_labelled(ref, point, max_mm):
 def _shares(w_lab, keys):
     """Largest summed share over groups of regions and its key."""
     out: Dict[Any, float] = {}
-    for k, v in zip(keys, w_lab):
+    for k, v in zip(keys, w_lab, strict=True):
         if v > 0:
             out[k] = out.get(k, 0.0) + float(v)
     if not out:
         return None, 0.0
-    key = max(out, key=out.get)
+    key = max(out, key=out.__getitem__)
     return key, out[key]
 
 
@@ -497,13 +498,13 @@ def _describe(r, name, centre, world, w, m, regions, ref, support, radius, space
     else:
         hemi = "bilateral"
         flags.append(f"bilateral support (left {hemi_l:.0%})")
-    gy_key, gy_p = _shares(w_lab, [f"{g}_{h}" for g, h in zip(regions.gyrus, regions.hemisphere)])
-    lo_key, lo_p = _shares(w_lab, [f"{lb}_{h}" for lb, h in zip(regions.lobe, regions.hemisphere)])
+    gy_key, gy_p = _shares(w_lab, [f"{g}_{h}" for g, h in zip(regions.gyrus, regions.hemisphere, strict=True)])
+    lo_key, lo_p = _shares(w_lab, [f"{lb}_{h}" for lb, h in zip(regions.lobe, regions.hemisphere, strict=True)])
     st_key, st_p = _shares(w_lab, list(regions.structure))
-    yeo_keys = [y if s in ("cortex", "cerebellum") else "not applicable" for y, s in zip(regions.yeo7, regions.structure)]
+    yeo_keys = [y if s in ("cortex", "cerebellum") else "not applicable" for y, s in zip(regions.yeo7, regions.structure, strict=True)]
     y_key, y_p = _shares(w_lab, yeo_keys)
     y17_key, y17_p = _shares(w_lab, [y if s in ("cortex", "cerebellum") else "not applicable"
-                                     for y, s in zip(regions.yeo17, regions.structure)])
+                                     for y, s in zip(regions.yeo17, regions.structure, strict=True)])
 
     if sub_p >= purity:
         level, assigned = "subregion", regions.at[dom, "name"]
@@ -590,7 +591,7 @@ def annotate_edges(edges: Any, rois: RoiAnnotation, *, smoothing_fwhm_mm: Option
     ref = rois.reference
     regions = ref.regions
     rel_h, rel_a, circ, net, shared = [], [], [], [], []
-    for a, b in zip(i, j):
+    for a, b in zip(i, j, strict=True):
         ra, rb = t.iloc[a], t.iloc[b]
         rel_h.append(_hemispheric(ra, rb, regions))
         rel_a.append(_anatomical(ra, rb))
@@ -605,7 +606,7 @@ def annotate_edges(edges: Any, rois: RoiAnnotation, *, smoothing_fwhm_mm: Option
     d = np.linalg.norm(xyz[i] - xyz[j], axis=1)
     df["distance_mm"] = d
     rad = np.nan_to_num(t["radius_mm"].to_numpy(float), nan=0.0)
-    df["shared_support"] = [_lens_share(di, rad[a], rad[b]) for di, a, b in zip(d, i, j)]
+    df["shared_support"] = [_lens_share(di, rad[a], rad[b]) for di, a, b in zip(d, i, j, strict=True)]
     if smoothing_fwhm_mm is not None:
         df["within_smoothing"] = d < rad[i] + rad[j] + float(smoothing_fwhm_mm)
     sc = ref.structural_connectivity()
@@ -763,7 +764,7 @@ def summarize_annotation(
         raise ValueError("tail must be 'both', 'positive' or 'negative'.")
     det = det.to_numpy(bool)
     bands = np.r_[0.0, np.asarray(distance_bands, float), np.inf]
-    labels = [f"{int(a)}-{int(b)} mm" if np.isfinite(b) else f">{int(a)} mm" for a, b in zip(bands[:-1], bands[1:])]
+    labels = [f"{int(a)}-{int(b)} mm" if np.isfinite(b) else f">{int(a)} mm" for a, b in zip(bands[:-1], bands[1:], strict=False)]
     ann["distance_band"] = pd.cut(ann["distance_mm"], bands, labels=labels, right=False).astype(str)
 
     relation_cols = ["circuit", "hemispheric_relation", "anatomical_relation", "distance_band", "network_relation"]
@@ -799,7 +800,7 @@ def summarize_annotation(
     status = rois.table["profile_status"].to_numpy()
     dom_rows = []
     for d in BD_DOMAINS:
-        has = dom.map(lambda s: d in s).to_numpy(bool)
+        has = dom.map(lambda s, d=d: d in s).to_numpy(bool)
         dom_rows.append({"domain": d, "n_detected_endpoint_rois": int(has[det_rois].sum()),
                          "share_detected_endpoint_rois": float(has[det_rois].mean()) if det_rois.size else np.nan,
                          "n_all_rois": int(has.sum()), "share_all_rois": float(has.mean())})
@@ -828,8 +829,8 @@ def summarize_annotation(
     unit_phrase = "significant edges" if unit == "edge" else f"edges of the detected {unit}s"
     levels = list(rois.table["level"])
     roi_names = [str(n) for n in rois.table["roi"]]
-    unassigned = [n for n, lv in zip(roi_names, levels) if lv == "unassigned"]
-    mixed_rois = [n for n, lv in zip(roi_names, levels) if lv == "mixed"]
+    unassigned = [n for n, lv in zip(roi_names, levels, strict=True) if lv == "unassigned"]
+    mixed_rois = [n for n, lv in zip(roi_names, levels, strict=True) if lv == "mixed"]
     meta["roi_restriction"] = {
         "applies_to": unit,
         "counts": {"n_rois": len(rois), "n_unassigned_rois": len(unassigned),
@@ -871,7 +872,7 @@ def _unit_weights(rois: RoiAnnotation, level: str, assign: str, placed_only: boo
     if level == "subregion":
         units = list(regions["name"])
     else:
-        keys = [f"{g}_{h}" for g, h in zip(regions["gyrus" if level == "gyrus" else "lobe"], regions["hemisphere"])]
+        keys = [f"{g}_{h}" for g, h in zip(regions["gyrus" if level == "gyrus" else "lobe"], regions["hemisphere"], strict=True)]
         units = list(dict.fromkeys(keys))
         P = np.zeros((n_reg, len(units)))
         P[np.arange(n_reg), [units.index(k) for k in keys]] = 1.0
@@ -975,13 +976,13 @@ def aggregate_connections(
     df.attrs["coverage"] = {
         "n_rois": len(rois),
         "n_placed": int(placed.sum()),
-        "unplaced_no_support": [nm for nm, u, l in zip(names, unassigned, labelled) if u and not l],
-        "unplaced_low_coverage": [nm for nm, u, l in zip(names, unassigned, labelled) if u and l],
+        "unplaced_no_support": [nm for nm, u, l in zip(names, unassigned, labelled, strict=True) if u and not l],
+        "unplaced_low_coverage": [nm for nm, u, l in zip(names, unassigned, labelled, strict=True) if u and l],
         "detected_total": int(det.sum()),
         "detected_placed": int((det & placed[i] & placed[j]).sum()),
         "tested_total": int(len(i)),
         "tested_placed": int((placed[i] & placed[j]).sum()),
-        "unplaced_rois": [nm for nm, u in zip(names, unassigned) if u],
+        "unplaced_rois": [nm for nm, u in zip(names, unassigned, strict=True) if u],
         "inference_unit": getattr(result, "inference_unit", "edge"),
         "level": level, "assign": assign, "tail": tail,
     }

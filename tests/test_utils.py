@@ -1,4 +1,4 @@
-"""Tests for conninfpy.utils.
+"""Tests for conninfpy._shared.arrays.
 
 Covers:
 - fisher_r_to_z: transform of typical correlations, the ±5 cap at r = ±1,
@@ -14,7 +14,7 @@ import warnings
 
 import numpy as np
 
-from conninfpy.utils import (
+from conninfpy._shared.arrays import (
     binarize,
     create_prior_weights,
     fisher_r_to_z,

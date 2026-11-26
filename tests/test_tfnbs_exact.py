@@ -25,7 +25,7 @@ def _oracle(matrix, e, h, start, mode="graph", labels=None, mask=None,
     levels = sorted({start, *(w for _, _, w in entries)})
     def block(i, j):
         return tuple(sorted((labels[i], labels[j])))
-    for a, b in zip(levels, levels[1:]):
+    for a, b in zip(levels, levels[1:], strict=False):
         active = [(i, j) for i, j, w in entries if w >= b]
         for i, j in active:
             if mode == "graph":

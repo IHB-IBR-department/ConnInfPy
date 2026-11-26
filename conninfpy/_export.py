@@ -90,7 +90,7 @@ def _annotate_with_atlas(
     pair = np.array(
         [
             "—".join(sorted((a, b)))
-            for a, b in zip(df["roi_i_network"], df["roi_j_network"])
+            for a, b in zip(df["roi_i_network"], df["roi_j_network"], strict=True)
         ],
         dtype=object,
     )
@@ -479,7 +479,7 @@ def build_network_summary(
     table = {
         "network_a": [net_names[k] for k in a],
         "network_b": [net_names[k] for k in b],
-        "network_pair": ["—".join(sorted((net_names[i], net_names[j]))) for i, j in zip(a, b)],
+        "network_pair": ["—".join(sorted((net_names[i], net_names[j]))) for i, j in zip(a, b, strict=True)],
         "within_network": a == b,
         "n_edges": n_edges[a, b].astype(int),
     }
@@ -521,7 +521,7 @@ def network_summary_matrix(summary: pd.DataFrame, value: str) -> pd.DataFrame:
     order = summary.attrs.get("networks") or list(
         dict.fromkeys(list(summary["network_a"]) + list(summary["network_b"])))
     mat = pd.DataFrame(0.0, index=order, columns=order)
-    for a, b, v in zip(summary["network_a"], summary["network_b"], summary[value]):
+    for a, b, v in zip(summary["network_a"], summary["network_b"], summary[value], strict=True):
         mat.loc[a, b] = v
         mat.loc[b, a] = v
     return mat

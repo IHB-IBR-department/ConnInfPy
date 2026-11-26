@@ -112,7 +112,7 @@ def analyze_results(output: Path):
     keep = labels.id.to_numpy(int) - 1
     iu = np.triu_indices(len(keep), 1)
     networks = labels.network.to_numpy()
-    pair = np.array([" / ".join(sorted((networks[i], networks[j]))) for i, j in zip(*iu)])
+    pair = np.array([" / ".join(sorted((networks[i], networks[j]))) for i, j in zip(*iu, strict=True)])
     states = {}
     for cohort in ("ihb", "china"):
         op = DATA / f"{cohort}_open_Schaefer200_strategy-4_GSR.npy"

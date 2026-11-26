@@ -97,7 +97,7 @@ class TestNBSSchizophreniaAgainstMatlab(unittest.TestCase):
         self.assertEqual(self.ref["extent"]["n_components"], 1)
         self.assertEqual(len(expected), 40)
         significant = {
-            (int(i), int(j)) for i, j in zip(*self.iu)
+            (int(i), int(j)) for i, j in zip(*self.iu, strict=True)
             if self.result.positive[i, j] < 0.05
         }
         self.assertEqual(significant, expected)
@@ -128,7 +128,7 @@ class TestNBSSchizophreniaAgainstMatlab(unittest.TestCase):
         np.testing.assert_allclose(res.stat_signed[self.iu], np.asarray(self.ref["t_upper"]),
                                    rtol=0, atol=1e-9)
         edges = _edge_set(self.ref["extent"]["edges"])
-        significant = {(int(i), int(j)) for i, j in zip(*self.iu) if res.positive[i, j] < 0.05}
+        significant = {(int(i), int(j)) for i, j in zip(*self.iu, strict=True) if res.positive[i, j] < 0.05}
         self.assertEqual(significant, edges)
         p = {float(res.positive[i, j]) for i, j in edges}
         self.assertEqual(len(p), 1)
@@ -158,7 +158,7 @@ class TestNBSSchizophreniaAgainstMatlab(unittest.TestCase):
                 self.assertEqual(row["n_edges"], len(edges))
                 self.assertEqual(row["n_nodes"], len(nodes))
                 self.assertEqual(row["nodes"], nodes)
-                labelled = {(int(i), int(j)) for i, j in zip(*self.iu)
+                labelled = {(int(i), int(j)) for i, j in zip(*self.iu, strict=True)
                             if report["labels"]["positive"][i, j] == 1}
                 self.assertEqual(labelled, edges)
                 if stat == "extent":

@@ -31,14 +31,13 @@ APIs (``result.positive``, ``result.stat_signed``, ``result.method``,
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union, cast
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
 from conninfpy._compat import TailResult
-from conninfpy._compat import make_tail_result
 from conninfpy._export import build_network_summary
 from conninfpy._export import build_omnibus_dataframe
 from conninfpy._export import build_tailed_dataframe
@@ -118,6 +117,20 @@ def summarize_by_network(
     if as_matrix is not None:
         return network_summary_matrix(summary, as_matrix)
     return summary
+
+
+def _correction_of(result: Any) -> str:
+    """Multiplicity procedure at the method's native inference unit."""
+    if result.method == "cnbs":
+        return (result.block_report or {}).get("correction", "bonferroni")
+    if result.method in ("bh_fdr", "bh_fdr_perm"):
+        return "bh_fdr"
+    return "bonferroni" if result.method == "bonferroni" else "permutation_max"
+
+
+def _inference_unit_of(result: Any) -> str:
+    """Unit of the null hypothesis represented by the projected edge map."""
+    return {"cnbs": "block", "nbs": "component"}.get(result.method, "edge")
 
 
 class InferenceResult(TailResult):
@@ -281,6 +294,15 @@ class InferenceResult(TailResult):
     count_kind: Optional[str] = None
     rng_provenance: Optional[Dict[str, Any]] = None
     permutation_space: Optional[int] = None
+
+    # Attributes ``analyze()`` sets on a finished result (absent on results
+    # made by the low-level entry-points). Declared for type checkers only:
+    # the dataclass fields above are unchanged at runtime.
+    if TYPE_CHECKING:  # noqa: E275
+        resolved_strategy: Optional[str]
+        design_diagnostics: Optional[Dict[str, Any]]
+        flags: Optional[List[str]]
+        motion_qc: Optional[Dict[str, Any]]
 
     def __new__(
         cls,
@@ -517,6 +539,9 @@ class InferenceResult(TailResult):
         from conninfpy.stats._cnbs import restrict_block_report
         from conninfpy.stats._components import restrict_component_report
 
+        # getattr: results pickled before the field existed carry no attribute.
+        counts = cast(Optional[Dict[str, Optional[npt.NDArray[np.int64]]]],
+                      getattr(self, "exceedance_counts", None))
         other = "negative" if direction == "positive" else "positive"
         maps = {direction: np.array(self[direction], copy=True),
                 other: np.ones_like(self[other], dtype=np.float64)}
@@ -554,9 +579,8 @@ class InferenceResult(TailResult):
                 getattr(self, "component_report", None), direction, selection=selection
             ),
             exceedance_counts=(
-                {direction: self.exceedance_counts[direction]}
-                if getattr(self, "exceedance_counts", None)
-                and direction in self.exceedance_counts
+                {direction: counts[direction]}
+                if counts is not None and direction in counts
                 else None
             ),
             count_kind=getattr(self, "count_kind", None),
@@ -567,16 +591,12 @@ class InferenceResult(TailResult):
     @property
     def correction(self) -> str:
         """Multiplicity procedure at the method's native inference unit."""
-        if self.method == "cnbs":
-            return (self.block_report or {}).get("correction", "bonferroni")
-        if self.method in ("bh_fdr", "bh_fdr_perm"):
-            return "bh_fdr"
-        return "bonferroni" if self.method == "bonferroni" else "permutation_max"
+        return _correction_of(self)
 
     @property
     def inference_unit(self) -> str:
         """Unit of the null hypothesis represented by the projected edge map."""
-        return {"cnbs": "block", "nbs": "component"}.get(self.method, "edge")
+        return _inference_unit_of(self)
 
     @property
     def is_grid(self) -> bool:
@@ -627,6 +647,9 @@ class InferenceResult(TailResult):
             raise ValueError(
                 "select() requires a multi-(E, H) result; this one is 2D."
             )
+        # getattr: results pickled before the field existed carry no attribute.
+        counts = cast(Optional[Dict[str, Optional[npt.NDArray[np.int64]]]],
+                      getattr(self, "exceedance_counts", None))
         e_sel = self.e_grid[param_idx:param_idx + 1] if self.e_grid is not None else None
         h_sel = self.h_grid[param_idx:param_idx + 1] if self.h_grid is not None else None
         return InferenceResult(
@@ -663,10 +686,10 @@ class InferenceResult(TailResult):
                         arr[:, :, param_idx].copy() if np.asarray(arr).ndim == 3
                         else np.array(arr, copy=True)
                     )
-                    for tail, arr in self.exceedance_counts.items()
+                    for tail, arr in counts.items()
                     if arr is not None
                 }
-                if getattr(self, "exceedance_counts", None)
+                if counts is not None
                 else None
             ),
             count_kind=getattr(self, "count_kind", None),
@@ -1271,6 +1294,19 @@ class OmnibusInferenceResult(TailResult):
     rng_provenance: Optional[Dict[str, Any]] = None
     permutation_space: Optional[int] = None
 
+    # Same slots as InferenceResult for the shared provenance/export code
+    # (set by ``__new__``; declared for type checkers only).
+    if TYPE_CHECKING:  # noqa: E275
+        missing_report: Optional[Dict[str, Any]]
+        block_report: Optional[Dict[str, Any]]
+        beta: Optional[npt.NDArray[np.float64]]
+        design: Optional[Dict[str, Any]]
+        # Set by ``analyze()`` exactly as on InferenceResult.
+        resolved_strategy: Optional[str]
+        design_diagnostics: Optional[Dict[str, Any]]
+        flags: Optional[List[str]]
+        motion_qc: Optional[Dict[str, Any]]
+
     def __new__(
         cls,
         omnibus: npt.NDArray[np.float64],
@@ -1365,11 +1401,13 @@ class OmnibusInferenceResult(TailResult):
 
     @property
     def correction(self) -> str:
-        return InferenceResult.correction.fget(self)
+        """Multiplicity procedure at the method's native inference unit."""
+        return _correction_of(self)
 
     @property
     def inference_unit(self) -> str:
-        return InferenceResult.inference_unit.fget(self)
+        """Unit of the null hypothesis represented by the projected edge map."""
+        return _inference_unit_of(self)
 
     def n_significant(self, alpha: float = 0.05) -> Dict[str, int]:
         """Edge counts below ``alpha`` per tail."""

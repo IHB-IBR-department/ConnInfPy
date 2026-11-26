@@ -25,7 +25,7 @@ graphs.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Optional
+from typing import Any, Literal, Optional, cast, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -279,7 +279,9 @@ def normalize_fisher_history(history: Any) -> "list[dict] | None":
     if history is None:
         return None
     if isinstance(history, dict):
-        return normalize_fisher_record(history)["applied"]
+        record = normalize_fisher_record(history)
+        assert record is not None  # a dict input always yields a record
+        return record["applied"]
     if not isinstance(history, (list, tuple)):
         raise ValueError("fisher history must be a list of entry dicts or None")
     out = []
@@ -298,8 +300,9 @@ def normalize_fisher_history(history: Any) -> "list[dict] | None":
             raise ValueError("fisher history entry policy contradicts its counts report")
         if "parameters" in entry and dict(entry["parameters"] or {}) != dict(counts.get("parameters") or {}):
             raise ValueError("fisher history entry parameters contradict its counts report")
+        # ``make_fisher_entry`` validates stage/scope itself (nonempty str).
         out.append(make_fisher_entry(
-            stage=entry.get("stage"), scope=entry.get("scope"),
+            stage=cast(str, entry.get("stage")), scope=cast(str, entry.get("scope")),
             report=counts, source=source,
         ))
     return out
@@ -328,6 +331,20 @@ def normalize_fisher_record(record: Any) -> "dict | None":
     return {"schema_version": 1,
             "applied": normalize_fisher_history(record.get("applied") or []),
             "upstream": upstream}
+
+
+@overload
+def prepare_connectivity(
+    Y: npt.ArrayLike, input: str, name: str = ..., allow_missing: bool = ...,
+    *, stage: str = ..., return_report: Literal[False] = ...,
+) -> npt.NDArray[np.float64]: ...
+
+
+@overload
+def prepare_connectivity(
+    Y: npt.ArrayLike, input: str, name: str = ..., allow_missing: bool = ...,
+    *, stage: str = ..., return_report: Literal[True],
+) -> "tuple[npt.NDArray[np.float64], Optional[dict]]": ...
 
 
 def prepare_connectivity(

@@ -62,7 +62,7 @@ def _assert_provenance_equal(left, right):
         return
     if isinstance(left, (list, tuple)):
         assert len(left) == len(right)
-        for a, b in zip(left, right):
+        for a, b in zip(left, right, strict=True):
             _assert_provenance_equal(a, b)
         return
     if isinstance(left, np.ndarray) or isinstance(right, np.ndarray):

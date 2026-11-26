@@ -1,6 +1,5 @@
 import os
 import yaml
-import re
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -132,7 +131,8 @@ class ManifestLoader(BaseDataLoader):
         kwargs.update(self.manifest.params)
 
         # Filter kwargs to match constructor signature
-        sig = inspect.signature(loader_class.__init__)
+        init = getattr(loader_class, "__init__")  # typed as Any: loaders may define it or inherit it
+        sig = inspect.signature(init)
         valid_args = list(sig.parameters.keys())
 
         filtered_kwargs = {}

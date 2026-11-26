@@ -1,5 +1,5 @@
 """
-Tests for conninfpy.topologies — scenario registry and dataset generation.
+Tests for conninfpy.sim.topologies — scenario registry and dataset generation.
 
 Strategy: one subTest-parametrized check iterates the whole scenario registry
 and verifies structural invariants (shape, symmetry, zero diagonal, non-trivial
@@ -10,7 +10,7 @@ import unittest
 
 import numpy as np
 
-from conninfpy.topologies import (
+from conninfpy.sim.topologies import (
     TopologyDataset,
     TopologyDatasetGenerator,
     TopologyScenario,

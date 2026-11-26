@@ -65,7 +65,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -512,7 +512,7 @@ def _combat_fit_available(
     _warn_variance_floor(sigma_sq, "pooled sigma")
     sigma = np.sqrt(np.maximum(sigma_sq, _VAR_FLOOR))
 
-    preserve_fit = preserve @ beta_cov if beta_cov is not None else 0.0
+    preserve_fit = preserve @ beta_cov if (beta_cov is not None and preserve is not None) else 0.0
     Z = (features - alpha[np.newaxis, :] - preserve_fit) / sigma[np.newaxis, :]
 
     gamma_star = np.full((n_sites, p), np.nan)

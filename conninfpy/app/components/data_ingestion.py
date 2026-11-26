@@ -10,12 +10,9 @@ import streamlit as st
 from conninfpy.app.utils.ui_state import persistent_key, persistent_file_uploader, reset_widget_scopes
 from conninfpy.app.utils.workspace import atlas_display_name, remember_dataset, render_dataset_card
 
-from conninfpy.atlas import AtlasInfo, get_bna_246_nifti_path
 from conninfpy.loaders import (
     validate_loaded_dataset,
     NumpyLoader,
-    CSVDirectoryLoader,
-    NiftiDirectoryLoader,
     AbideSchaeferLoader,
 )
 from conninfpy.loaders.manifest import drop_subjects_with_missing
@@ -23,10 +20,8 @@ from conninfpy.app.utils.lab_loaders import (
     ChinaCloseCloseLoader,
     MultiSiteOpenCloseLoader,
     OpenCloseLoader,
-    StressTimeseriesLoader,
-    ZerssenNiftiLoader,
 )
-from conninfpy.topologies import TopologyDatasetGenerator, list_scenarios
+from conninfpy.sim.topologies import TopologyDatasetGenerator, list_scenarios
 
 from conninfpy.app.utils.helpers import (
     LOADER_CLASSES,
@@ -37,9 +32,7 @@ from conninfpy.app.utils.helpers import (
     clear_downstream_results,
     fisher_clip_note,
     load_custom_datasets,
-    local_dataset_templates_enabled,
     make_sub_atlas,
-    resolve_project_path,
     render_help,
     list_manifest_files,
     align_atlas_coordinates,
@@ -864,7 +857,6 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     )
                 if manifest_file:
                     try:
-                        from conninfpy.loaders.manifest import ManifestLoader
                         loader_instance = _open_manifest(manifest_file)
                         
                         # Pre-populate preprocessing checkboxes from manifest
@@ -1006,7 +998,6 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             key="chk_use_saved_wizard_manifest",
                         ):
                             try:
-                                from conninfpy.loaders.manifest import ManifestLoader
 
                                 loader_instance = _open_manifest(saved_wiz_path)
                                 if loader_instance.manifest.loader in {
@@ -1340,7 +1331,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                     
                                 if apply_fisher:
                                     from conninfpy._prepare import make_fisher_entry
-                                    from conninfpy.utils import fisher_r_to_z
+                                    from conninfpy._shared.arrays import fisher_r_to_z
                                     loaded.data, fisher_report = fisher_r_to_z(loaded.data, return_report=True)
                                     loaded.data_kind = "fisher_z"
                                     ingestion_fisher_entry = make_fisher_entry(

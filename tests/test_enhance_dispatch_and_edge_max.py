@@ -22,9 +22,7 @@ from conninfpy.enhance import (
 )
 from conninfpy.enhance._backend import HAS_NUMBA, _enhance_call_scope
 import conninfpy.enhance.nbs as nbs_mod
-from conninfpy.enhance.fbc_tfnbs import get_fbc_tfnbs_score
 from conninfpy.enhance.nbs import get_nbs_score, nbs_components
-from conninfpy.enhance.ni_tfnbs import get_network_informed_tfnbs_score
 from conninfpy.enhance.tfnbs import get_tfnbs_score
 from conninfpy.stats._types import enhancement_provenance
 import conninfpy.stats.pairwise as pw_mod

@@ -16,7 +16,7 @@ from conninfpy import (
     fisher_r_to_z,
     generate_fc_matrices,
 )
-from conninfpy.glm_stats import compute_p_val_glm
+from conninfpy.stats.glm import compute_p_val_glm
 
 
 def _make_glm_data(n=24, N=6, seed=0):

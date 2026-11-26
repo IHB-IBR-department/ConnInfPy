@@ -7,9 +7,9 @@ import yaml
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-from conninfpy.loaders.manifest import load_manifest, resolve_path, ManifestLoader, validate_manifest_dataset
+from conninfpy.loaders.manifest import resolve_path, ManifestLoader, validate_manifest_dataset
 from conninfpy.loaders.base import LoadedDataset
-from conninfpy.loaders.builtins import NumpyLoader, NiftiDirectoryLoader
+from conninfpy.loaders.builtins import NumpyLoader
 from conninfpy.loaders.manifest import DatasetManifest
 from conninfpy.atlas import AtlasInfo
 from conninfpy.plot import plot_connectome_graph

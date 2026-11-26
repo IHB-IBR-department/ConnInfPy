@@ -9,7 +9,10 @@ import sys
 import time
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
+
+if TYPE_CHECKING:  # lazy CLI imports: only the type checker needs these at module level
+    from conninfpy.analysis import AnalyzeResult
 
 import numpy as np
 import pandas as pd
@@ -1444,7 +1447,7 @@ def _run_synthetic_nbs_fallback() -> tuple[bool, str]:
         use_mp=False,
         rng=42,
     )
-    inf = res.inference
+    inf = cast("AnalyzeResult", res).inference  # single-predictor call above
     iu = np.triu_indices(20, 1)
     n_sig = int(np.sum(np.asarray(inf["positive"])[iu] <= 0.05))
     ok = n_sig > 0 and bool(np.isfinite(inf["positive"]).all())
@@ -1501,7 +1504,7 @@ def run_selftest(*, as_json: bool = False, reference: bool = False) -> tuple[int
                 actual = ctx.get("actual_backend") or ("numba" if HAS_NUMBA else "scipy")
             backend_info["actual_backend"] = str(actual)
             try:
-                import threadpoolctl  # type: ignore[import-untyped]  # noqa: F401
+                import threadpoolctl  # noqa: F401
                 tp_avail = True
             except ImportError:
                 tp_avail = False
@@ -1600,7 +1603,7 @@ def run_selftest(*, as_json: bool = False, reference: bool = False) -> tuple[int
                 iu_demo = np.triu_indices(Y_demo.shape[1], 1)
                 sig_edges = {
                     (int(i), int(j))
-                    for i, j in zip(*iu_demo)
+                    for i, j in zip(*iu_demo, strict=True)
                     if nbs_res.positive[i, j] < 0.05
                 }
                 n_sig_edges = len(sig_edges)
@@ -1681,10 +1684,10 @@ def run_selftest(*, as_json: bool = False, reference: bool = False) -> tuple[int
                 rng=42,
             )
             iu_ref = np.triu_indices(20, 1)
-            p1_pos = np.asarray(r1.inference["positive"], dtype=float)
-            p2_pos = np.asarray(r2.inference["positive"], dtype=float)
-            p1_neg = np.asarray(r1.inference["negative"], dtype=float)
-            p2_neg = np.asarray(r2.inference["negative"], dtype=float)
+            p1_pos = np.asarray(cast("AnalyzeResult", r1).inference["positive"], dtype=np.float64)
+            p2_pos = np.asarray(cast("AnalyzeResult", r2).inference["positive"], dtype=np.float64)
+            p1_neg = np.asarray(cast("AnalyzeResult", r1).inference["negative"], dtype=np.float64)
+            p2_neg = np.asarray(cast("AnalyzeResult", r2).inference["negative"], dtype=np.float64)
             n_sig_pos_1 = int(np.sum(p1_pos[iu_ref] <= 0.05))
             n_sig_pos_2 = int(np.sum(p2_pos[iu_ref] <= 0.05))
             n_sig_neg_1 = int(np.sum(p1_neg[iu_ref] <= 0.05))
@@ -1767,7 +1770,7 @@ def _parse_edge_args(
                 f"{edges_file}: expected columns ('roi_i', 'roi_j') or ('i', 'j'); "
                 f"got {list(df.columns)}."
             )
-        for row_i, row_j in zip(df[col_i], df[col_j]):
+        for row_i, row_j in zip(df[col_i], df[col_j], strict=True):
             pairs.append((int(row_i), int(row_j)))
     if not pairs:
         raise ValueError("No edge pairs found in --edges / --edges-file.")

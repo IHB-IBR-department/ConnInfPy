@@ -26,7 +26,7 @@ FWER-corrected p-values. Everything else is grouped by module:
   F-contrasts, null distributions)
 - :mod:`conninfpy.enhance` — network enhancement (TFNBS, NBS, cNBS, ...)
 - :mod:`conninfpy.harmonize` — ComBat and design diagnostics
-- :mod:`conninfpy.acceleration` — GPD / gamma tail approximation
+- :mod:`conninfpy.stats.acceleration` — GPD / gamma tail approximation
 - :mod:`conninfpy.loaders` — manifest-based data loading (also :func:`load`)
 - :mod:`conninfpy.sim` — synthetic data and topology scenarios
 - :mod:`conninfpy.plot` — figures

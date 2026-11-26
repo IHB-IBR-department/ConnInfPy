@@ -385,7 +385,6 @@ class TestReportingAndBrainNet(unittest.TestCase):
 
         # Single-site run: ComBat must NOT be cited; SUIT cited only when cerebellum != none
         r = _correlations(16, N=6, seed=1)
-        grp = np.array(["hc"] * 8 + ["pt"] * 8)
         res = analyze(
             group1=r[:8],
             group2=r[8:],

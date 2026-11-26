@@ -19,7 +19,6 @@ import yaml
 from conninfpy import analyze, compute_p_val, compute_p_val_paired_glm, ResultBundle
 from conninfpy._shared.alignment import (
     IdAlignmentError,
-    alignment_record,
     paired_id_permutation,
     validate_subject_ids,
 )
@@ -99,7 +98,6 @@ def test_identity_ids_record_the_check_without_permuting():
 def test_no_ids_keeps_the_documented_positional_behaviour():
     n = 6
     a, b = matrices(n, 1), matrices(n, 2)
-    ids = ids_for(n)
     positional = analyze(group1=a, group2=b, test_type="paired", input="z", **FAST).inference
     explicit_none = analyze(group1=a, group2=b, test_type="paired", input="z",
                             ids_group1=None, ids_group2=None, **FAST).inference

@@ -13,15 +13,14 @@ Three groups:
 from __future__ import annotations
 
 import unittest
-import warnings
 
 import numpy as np
 
-from conninfpy import analyze, compute_p_val, compute_p_val_glm
-from conninfpy.pairwise_stats import (
+from conninfpy import analyze, compute_p_val
+from conninfpy.stats._engine import _stratified_perm
+from conninfpy.stats.pairwise import (
     _encode_strata,
     _stratified_choice_n1,
-    _stratified_perm,
 )
 
 

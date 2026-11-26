@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import json
 from pathlib import Path
 
 import nibabel as nib
@@ -12,7 +11,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from conninfpy._cli_tools import _resolve_atlas_for_interpret, interpret_outputs, run_qc
+from conninfpy._cli_tools import _resolve_atlas_for_interpret, run_qc
 from conninfpy.analysis import analyze
 from conninfpy.cli import ConfigError, _atlas, build_analysis, main, run
 

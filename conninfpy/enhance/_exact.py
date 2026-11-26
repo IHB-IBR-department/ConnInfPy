@@ -270,13 +270,13 @@ def _integrate_edge_scores(
     all_scores = np.empty((n_edges, n_params), dtype=np.float64)
     if blocks is None:
         fn = _graph_integral if effective_numba else _graph_integral_py
-        for p, (exponent, height) in enumerate(zip(e, h)):
+        for p, (exponent, height) in enumerate(zip(e, h, strict=True)):
             all_scores[:, p] = fn(
                 rows, cols, weights, n_nodes, float(exponent), float(height), start
             )
     else:
         fn = _block_integral if effective_numba else _block_integral_numpy
-        for p, (exponent, height) in enumerate(zip(e, h)):
+        for p, (exponent, height) in enumerate(zip(e, h, strict=True)):
             all_scores[:, p] = fn(
                 blocks, weights, float(exponent), float(height), start, scale, minimum
             )

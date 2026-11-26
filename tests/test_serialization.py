@@ -72,7 +72,7 @@ def assert_tree_equal(tc, a, b, path="value"):
     if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
         tc.assertIs(type(a), type(b), path)
         tc.assertEqual(len(a), len(b), path)
-        for i, (x, y) in enumerate(zip(a, b)):
+        for i, (x, y) in enumerate(zip(a, b, strict=True)):
             assert_tree_equal(tc, x, y, f"{path}[{i}]")
         return
     if isinstance(a, float) or isinstance(b, float):

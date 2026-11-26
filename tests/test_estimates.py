@@ -5,8 +5,8 @@ import warnings
 import numpy as np
 
 from conninfpy import analyze, compute_p_val
-from conninfpy._estimates import coupling_change
-from conninfpy.glm_stats import compute_p_val_glm, compute_p_val_glm_multi, compute_p_val_paired_glm
+from conninfpy.stats._estimates import coupling_change
+from conninfpy.stats.glm import compute_p_val_glm, compute_p_val_glm_multi, compute_p_val_paired_glm
 
 N, n = 6, 30
 

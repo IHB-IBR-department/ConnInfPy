@@ -620,7 +620,7 @@ def _workers_skip_main_script(task_func: Callable[..., Any]) -> Iterator[None]:
     # pool startup so their temporary changes to __main__ cannot interleave.
     with _main_script_lock:
         main = sys.modules.get("__main__")
-        saved = {
+        saved: Dict[str, Any] = {
             k: main.__dict__[k]
             for k in ("__file__", "__spec__")
             if main is not None and k in main.__dict__
@@ -628,6 +628,7 @@ def _workers_skip_main_script(task_func: Callable[..., Any]) -> Iterator[None]:
         if not saved or _references_main(task_func):
             yield
             return
+        assert main is not None  # a non-empty ``saved`` implies a __main__ module
         main.__dict__.pop("__file__", None)
         if "__spec__" in saved:
             main.__spec__ = None
@@ -797,12 +798,12 @@ def _make_chunk_progress(
 
     state = {"next": min(log_every, n)}
 
-    def update(done: int) -> None:
+    def update_logged(done: int) -> None:
         if done >= state["next"] or done == n:
             _print_progress(done, n, desc)
             state["next"] = done + log_every
 
-    return update
+    return update_logged
 
 
 def run_permutations_reduce(

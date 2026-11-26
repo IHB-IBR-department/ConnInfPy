@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence
 
 import numpy as np
 
@@ -183,7 +183,7 @@ def plot_connectogram(
         networks=nets,
         param_idx=param_idx,
     )
-    coverage = dict(agg.attrs.get("coverage", {}))
+    coverage: Dict[str, Any] = dict(agg.attrs.get("coverage", {}))
 
     if ax is None:
         _, ax = plt.subplots(figsize=(9, 9), facecolor="white")
@@ -393,7 +393,7 @@ def plot_connectogram(
     ax.add_artist(leg)
     if len(links):
         if weight == "count":
-            ticks = sorted(
+            ticks: Sequence[float] = sorted(
                 {max(1, round(v)) for v in (vmax, vmax / 2, vmax / 4)}, reverse=True
             )
             fmt = lambda v: f"{v:g} connection{'s' if v != 1 else ''}"  # noqa: E731

@@ -9,7 +9,7 @@ Includes:
 """
 
 import warnings
-from typing import Optional
+from typing import Literal, Optional, Union, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -28,8 +28,10 @@ def _clipped_mask(r: npt.NDArray[np.float64], *, policy: str, max_z: float,
                     clip_r: Optional[float], z: Optional[npt.NDArray[np.float64]]) -> npt.NDArray[np.bool_]:
     """Boolean mask of the values the active policy replaces (NaN: False)."""
     if policy == "clip_r":
+        assert clip_r is not None  # the clip_r policy always carries its bound
         return np.abs(r) > clip_r
     # clip_z policy: |z| beyond max_z (r = ±1 gives |z| = inf, so it is included)
+    assert z is not None  # the transformed values are what this policy inspects
     return np.abs(z) > max_z
 
 
@@ -48,10 +50,16 @@ def _clip_report(mask: npt.NDArray[np.bool_], r: npt.NDArray[np.float64], *,
     clipped: the clipped counts are zero and the values left at ±infinity
     are reported separately in ``left_at_infinity`` (same count units).
     """
+    if policy == "clip_r":
+        assert clip_r is not None  # the clip_r policy always carries its bound
+        parameters = {"clip_r": float(clip_r)}
+    elif policy == "unbounded":
+        parameters = {}
+    else:
+        parameters = {"max_z": float(max_z)}
     report: dict = {
         "policy": policy,
-        "parameters": {"clip_r": float(clip_r)} if policy == "clip_r"
-                      else ({} if policy == "unbounded" else {"max_z": float(max_z)}),
+        "parameters": parameters,
         "n_values_clipped": int(mask.sum()),
         "matrix_shape": None,
         "n_observations": None,
@@ -102,10 +110,24 @@ def _clip_report(mask: npt.NDArray[np.bool_], r: npt.NDArray[np.float64], *,
     return report
 
 
+@overload
+def fisher_r_to_z(
+    r: npt.NDArray[np.float64], handle_bounds: bool = ..., max_z: float = ...,
+    *, clip_r: Optional[float] = ..., return_report: Literal[False] = ...,
+) -> "npt.NDArray[np.float64]": ...
+
+
+@overload
+def fisher_r_to_z(
+    r: npt.NDArray[np.float64], handle_bounds: bool = ..., max_z: float = ...,
+    *, clip_r: Optional[float] = ..., return_report: Literal[True],
+) -> "tuple[npt.NDArray[np.float64], dict]": ...
+
+
 def fisher_r_to_z(
     r: npt.NDArray[np.float64], handle_bounds: bool = True, max_z: float = 5,
     *, clip_r: Optional[float] = None, return_report: bool = False,
-) -> "npt.NDArray[np.float64] | tuple[npt.NDArray[np.float64], dict]":
+) -> "Union[npt.NDArray[np.float64], tuple[npt.NDArray[np.float64], dict]]":
     """
     Apply Fisher r-to-z transformation to correlation coefficients, handling boundary cases.
 
@@ -193,9 +215,9 @@ def fisher_r_to_z(
         # warning (historical in-app behaviour; counts via return_report).
         clipped = np.abs(r) > clip_r  # NaN compares False
         z = np.arctanh(np.clip(r, -clip_r, clip_r))
-        report = _clip_report(clipped, r, policy="clip_r", max_z=max_z, clip_r=float(clip_r)) \
-            if return_report else None
-        return (z, report) if return_report else z
+        if return_report:
+            return z, _clip_report(clipped, r, policy="clip_r", max_z=max_z, clip_r=float(clip_r))
+        return z
 
     with np.errstate(
         divide="ignore", invalid="ignore"
@@ -211,19 +233,19 @@ def fisher_r_to_z(
                 UserWarning,
             )
             z = np.clip(z, -max_z, max_z)
-        report = _clip_report(over, r, policy="clip_z", max_z=max_z, clip_r=None) \
-            if return_report else None
+        if return_report:
+            return z, _clip_report(over, r, policy="clip_z", max_z=max_z, clip_r=None)
     else:
         if np.any(np.isinf(z)):
             warnings.warn(
                 "Input contains r = ±1, resulting in infinite z-values. Left as infinity.",
                 UserWarning,
             )
-        report = _clip_report(np.zeros_like(np.isinf(z)), r, policy="unbounded",
-                              max_z=max_z, clip_r=None, z=z) \
-            if return_report else None
+        if return_report:
+            return z, _clip_report(np.zeros_like(np.isinf(z)), r, policy="unbounded",
+                                   max_z=max_z, clip_r=None, z=z)
 
-    return (z, report) if return_report else z
+    return z
 
 
 def fisher_z_to_r(z: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:

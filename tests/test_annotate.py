@@ -77,10 +77,10 @@ class TestRoiAnnotation(unittest.TestCase):
 
     def test_weights_and_grouping(self):
         np.testing.assert_allclose(self.rois.weights.sum(1), self.t["coverage"].to_numpy())
-        groups = dict(zip(POINTS, self.rois.grouping("lobe")))
+        groups = dict(zip(POINTS, self.rois.grouping("lobe"), strict=True))
         self.assertEqual(groups["L dlPFC"], "Frontal_L")
         self.assertEqual(groups["L cerebellum"], "unassigned")
-        self.assertEqual(dict(zip(POINTS, self.rois.grouping("subregion")))["L amygdala"], "mixed")
+        self.assertEqual(dict(zip(POINTS, self.rois.grouping("subregion"), strict=True))["L amygdala"], "mixed")
         atlas = self.rois.to_atlas("lobe")
         self.assertEqual(atlas.networks, self.rois.grouping("lobe"))
 

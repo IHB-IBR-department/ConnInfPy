@@ -662,7 +662,7 @@ def align_atlas_coordinates(target_atlas, reference_atlas):
         return target_atlas
         
     ref_coords_map = {}
-    for label, coord in zip(reference_atlas.labels, reference_atlas.coords):
+    for label, coord in zip(reference_atlas.labels, reference_atlas.coords, strict=True):
         ref_coords_map[label.strip().lower()] = coord
         
     new_coords = []

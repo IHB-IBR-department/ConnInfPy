@@ -275,7 +275,7 @@ class AtlasInfo:
             keep = np.array([n.lower() not in drop for n in names])
             data = np.where(np.isin(data, ids[~keep]), 0, data)
             ids = ids[keep]
-            names = [n for n, k in zip(names, keep) if k]
+            names = [n for n, k in zip(names, keep, strict=True) if k]
             nib_img = type(nib_img)(
                 data.astype(np.int32), nib_img.affine, nib_img.header
             )
@@ -682,7 +682,7 @@ def _resolve_networks(
     if isinstance(networks, Mapping):
         return [
             str(networks.get(int(i), networks.get(n, "unassigned")))
-            for i, n in zip(ids, names)
+            for i, n in zip(ids, names, strict=True)
         ]
     nets = [str(x) for x in networks]
     if len(nets) != len(ids):
@@ -694,8 +694,8 @@ def _resolve_networks(
 
 def _schaefer_networks(names: List[str]) -> Optional[List[str]]:
     """Yeo network from Schaefer names, or None when the names are not Schaefer's."""
-    matches = [_SCHAEFER_RE.match(n) for n in names]
-    if not names or not all(matches):
+    matches = [m for m in (_SCHAEFER_RE.match(n) for n in names) if m is not None]
+    if not names or len(matches) != len(names):
         return None
     return [
         _YEO7_NAMES.get(m.group(3), m.group(3)) if m.group(1) == "7" else m.group(3)
@@ -829,7 +829,7 @@ def _assign_one(coords: Any, reference: Any, *, max_distance: Optional[float]) -
             labelled = np.argwhere(np.isin(data, ref.label_ids))
             world = labelled @ affine[:3, :3].T + affine[:3, 3]
             d, j = cKDTree(world).query(coords[todo])
-            for i, di, ji in zip(todo, d, j):
+            for i, di, ji in zip(todo, d, j, strict=True):
                 if di <= max_distance:
                     idx[i] = pos[int(data[tuple(labelled[ji])])]
                     dist[i], method[i] = di, "nearest voxel"

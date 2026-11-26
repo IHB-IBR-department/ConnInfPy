@@ -88,6 +88,7 @@ full = [
 ]
 dev = [
     "pytest",
+    "ruff",
     "sphinx",
     "sphinx-rtd-theme",
     "myst-parser",
@@ -123,6 +124,24 @@ filterwarnings = [
     "ignore:divide by zero encountered in arctanh:RuntimeWarning",
 ]
 
+# Run: ruff check (from the repository root; CI lint job).
+[tool.ruff]
+target-version = "py312"
+# Research scripts and the manuscript figure builders are tracked separately
+# from the package lint; the package, its tests and maintained scripts are
+# checked with zero findings.
+extend-exclude = ["examples", "paper"]
+
+[tool.ruff.lint]
+# F (pyflakes: unused imports/variables, undefined names), E9 (syntax errors),
+# B023 (loop variable captured by a closure), B905 (zip without strict=).
+select = ["F", "E9", "B023", "B905"]
+
+[tool.ruff.lint.per-file-ignores]
+# The names not listed in ``__all__`` are deliberate backward-compatible
+# re-exports of the top-level package (see the module docstring).
+"conninfpy/__init__.py" = ["F401"]
+
 # Run: python -m mypy conninfpy.
 [tool.mypy]
 python_version = "3.12"
@@ -144,5 +163,13 @@ module = [
     "scipy.*", "sklearn.*", "nilearn.*",
     "tqdm.*", "numba.*", "yaml.*",
     "pandas.*", "networkx.*",
+    "joblib.*", "threadpoolctl.*", "streamlit.*",
 ]
 ignore_missing_imports = true
+
+# The Streamlit application (``conninfpy.app``) is untyped UI glue: its
+# function bodies are not type-checked until it is annotated. Every other
+# check (imports, typed definitions, calls) stays on for it.
+[[tool.mypy.overrides]]
+module = ["conninfpy.app.*"]
+check_untyped_defs = false

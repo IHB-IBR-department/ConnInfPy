@@ -18,7 +18,7 @@ import pandas as pd
 from conninfpy.app.utils.helpers import atlas_has_networks
 from conninfpy.plot.matrices import _network_order, plot_null_max_distribution
 from conninfpy.plot.networks import plot_network_summary
-from conninfpy.results import InferenceResult, OmnibusInferenceResult
+from conninfpy.results import OmnibusInferenceResult
 from conninfpy.stats._estimates import COUPLING_CLASSES
 
 
@@ -249,7 +249,7 @@ def _draw_network_guides(
         ax.axvline(s - 0.5, color="dimgrey", linewidth=0.6, alpha=0.8)
         ax.axhline(s - 0.5, color="dimgrey", linewidth=0.6, alpha=0.8)
     ends = list(block_starts[1:]) + [n_nodes]
-    mids = [0.5 * (s + e - 1) for s, e in zip(block_starts, ends)]
+    mids = [0.5 * (s + e - 1) for s, e in zip(block_starts, ends, strict=True)]
     if len(block_names) <= 24:
         ax.set_xticks(mids)
         ax.set_xticklabels(block_names, rotation=40, ha="right", fontsize=7)
@@ -362,7 +362,7 @@ def build_connectivity_maps_figure(
     sig_ord = sig_mask[np.ix_(perm, perm)]
     logp_ord = signed_log_p[np.ix_(perm, perm)]
 
-    for ax, kind in zip(axes, panels):
+    for ax, kind in zip(axes, panels, strict=True):
         if kind == "stat":
             finite = stat_ord[np.isfinite(stat_ord)]
             vmax = float(np.quantile(np.abs(finite), 0.98)) if finite.size else 1.0
@@ -500,7 +500,7 @@ def _resolve_cnbs_label_map(report: Dict[str, Any], atlas: Any, n_nodes: int) ->
     if atlas is not None and len(atlas) == n_nodes and atlas_has_networks(atlas):
         atlas_nets = [str(x) for x in atlas.networks]
         code_to_nets: Dict[Any, set] = {}
-        for code, net in zip(node_labels, atlas_nets):
+        for code, net in zip(node_labels, atlas_nets, strict=True):
             code_to_nets.setdefault(code, set()).add(net)
         if all(len(nets) == 1 for nets in code_to_nets.values()):
             return {code: next(iter(nets)) for code, nets in code_to_nets.items()}
@@ -815,6 +815,7 @@ def prepare_predicted_coupling_summary(
                 rec["roi_i_name"] = str(usable_atlas.labels[i])
                 rec["roi_j_name"] = str(usable_atlas.labels[j])
             if has_nets:
+                assert usable_atlas is not None  # has_nets is derived from the usable atlas
                 ni, nj = str(usable_atlas.networks[i]), str(usable_atlas.networks[j])
                 rec["network_pair"] = f"{ni} — {nj}" if ni <= nj else f"{nj} — {ni}"
             if scale == "fisher_z":
@@ -925,7 +926,7 @@ def build_null_max_figure(res_2d: Any, method_name: str = "") -> Tuple[Optional[
         "The observed maximum on this operator's score scale was not saved. "
         "Its reference line is omitted; raw t/F values use a different scale."
     )
-    for ax, tail in zip(axes, tails_to_plot):
+    for ax, tail in zip(axes, tails_to_plot, strict=True):
         arr = np.asarray(null_dist[tail], dtype=np.float64)
         arr = arr[np.isfinite(arr)]
         if tail == "omnibus":
@@ -1228,6 +1229,7 @@ def check_companion_compatibility(
     _, sig_c, _, _ = _signed_neglog10_map(c_2d, alpha)
     iu, ju = np.triu_indices(n_p, k=1)
     if native_p is not None:
+        assert native_c is not None  # assigned together with native_p above
         keys = sorted(native_p)
         sp = np.asarray([native_p[k][0] for k in keys], dtype=bool)
         sc = np.asarray([native_c[k][0] for k in keys], dtype=bool)
@@ -1328,7 +1330,9 @@ def build_unit_annotation_context(
         ranked = sorted(set(int(i) for i in indices), key=lambda idx: (-degree_counts.get(idx, 0), idx))
         top = ranked[:top_rois_per_unit]
         top_labels = []
-        lobes, gyri, domains = [], [], []
+        lobes: List[str] = []
+        gyri: List[str] = []
+        domains: List[str] = []
         for idx in ranked:
             row = roi_by_idx.get(idx)
             if row is None:
@@ -1428,7 +1432,7 @@ def build_unit_annotation_context(
                 nodes_a = {idx for idx, lbl in enumerate(node_labels) if lbl == na}
                 nodes_b = {idx for idx, lbl in enumerate(node_labels) if lbl == nb}
                 block_nodes = sorted(nodes_a | nodes_b)
-                deg: Dict[int, int] = {}
+                deg = {}
                 edge_cnt = 0
                 for _, er in detected_df.iterrows():
                     ii, jj = int(er["roi_i"]), int(er["roi_j"])
@@ -1450,7 +1454,7 @@ def build_unit_annotation_context(
         elif "i_network" in detected_df.columns and "j_network" in detected_df.columns:
             pair_series = [
                 f"{a} — {b}" if str(a) <= str(b) else f"{b} — {a}"
-                for a, b in zip(detected_df["i_network"], detected_df["j_network"])
+                for a, b in zip(detected_df["i_network"], detected_df["j_network"], strict=True)
             ]
             for pair_name, sub in detected_df.assign(_pair=pair_series).groupby("_pair", sort=False):
                 deg = {}

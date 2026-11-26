@@ -55,7 +55,7 @@ def test_block_means_use_all_edges_and_one_shared_mask():
     assert len(edges) == 6
     values = np.arange(1, 7, dtype=float)[None, :]
     expected = {"A | A": 1, "A | B": 3.5, "B | B": 6}
-    for label, value in zip(spaces["functional"].labels, spaces["functional"].transform(values)[0]):
+    for label, value in zip(spaces["functional"].labels, spaces["functional"].transform(values)[0], strict=True):
         assert value == expected[label]
     gyrus_rois, gyrus_edges, gyrus_spaces = inputs.feature_spaces(atlas, annotations, "gyrus")
     assert gyrus_rois.loc[gyrus_rois.eligible, "roi"].tolist() == list("abe")
@@ -89,7 +89,7 @@ def test_splits_folds_and_duplicate_draws_keep_pairs(toy_data, tmp_path):
         assert len(indices) == 20
         assert toy_data.scans.iloc[indices].groupby("site").size().to_dict() == {"china": 10, "ihb": 10}
         for p in np.unique(draw):
-            states = toy_data.scans.iloc[indices].loc[lambda x: x.participant_index == p, "state"].value_counts()
+            states = toy_data.scans.iloc[indices].loc[lambda x, p=p: x.participant_index == p, "state"].value_counts()
             assert states[0] == states[1] == np.sum(draw == p)
     assert any(len(np.unique(draw)) < len(draw) for draw in people)
     saved = tmp_path / "split.csv"

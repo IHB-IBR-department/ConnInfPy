@@ -15,7 +15,7 @@ def test_pearson_shapes_nan_frames_and_constants():
     a[3, 1] = np.nan
     b[5, 4] = np.inf
     out, d = compute_connectivity([a, b], return_diagnostics=True)
-    for matrix, x in zip(out, (a, b)):
+    for matrix, x in zip(out, (a, b), strict=True):
         np.testing.assert_allclose(matrix, np.corrcoef(x[np.isfinite(x).all(axis=1)].T), atol=1e-12, rtol=0)
     assert d['n_valid_tr'].tolist() == [34, 42]
     assert d['delta_s'].tolist() == [0, 0]

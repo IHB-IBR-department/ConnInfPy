@@ -87,7 +87,7 @@ def build(nbs_dir: Path, out_dir: Path) -> None:
     if len(sub_idx) != len(SUBCORTICAL_AAL):
         raise ValueError(f"Expected {len(SUBCORTICAL_AAL)} 'Subcortical' nodes, found {len(sub_idx)}.")
     labels = list(nbs_labels)
-    for i, name in zip(sub_idx, SUBCORTICAL_AAL):
+    for i, name in zip(sub_idx, SUBCORTICAL_AAL, strict=True):
         labels[i] = name
     if len(set(labels)) != N_NODES:
         raise ValueError("Node names are not unique after naming the subcortical nodes.")

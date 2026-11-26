@@ -125,7 +125,7 @@ def test_multi_per_contrast_matches_matrix_task(kind):
     for seed in (11, 12):
         got = fast_mod.multi_contrast_perm_task(names, plans, payloads, seed)
         assert list(got.keys()) == list(names)
-        for name, (Y_hat, resid, scheme_k, c) in zip(names, refs):
+        for name, (Y_hat, resid, scheme_k, c) in zip(names, refs, strict=True):
             want = glm_mod._freedman_lane_permutation_task(
                 Y_hat, resid, X, c, X_pinv, XtX_inv_diag, XtX_inv,
                 (N, N), "tstat", apply_tfnbs, seed=seed,
@@ -152,7 +152,7 @@ def test_multi_fstat_and_plain_routes_match_matrix_task():
         X_pinv, XtX_inv_diag, XtX_inv, strata_codes, _ = extra
         for seed in (21,):
             got = fast_mod.multi_contrast_perm_task(names, plans, payloads, seed)
-            for name, (Y_hat, resid, scheme_k, c) in zip(names, refs):
+            for name, (Y_hat, resid, scheme_k, c) in zip(names, refs, strict=True):
                 want = glm_mod._freedman_lane_permutation_task(
                     Y_hat, resid, X, c, X_pinv, XtX_inv_diag, XtX_inv,
                     (N, N), stat_type, enhance_func, seed=seed,

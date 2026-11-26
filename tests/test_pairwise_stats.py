@@ -1,7 +1,7 @@
 from unittest import TestCase
 import time
-from conninfpy.utils import fisher_r_to_z
-from conninfpy.pairwise_stats import (_permutation_task_ind,
+from conninfpy._shared.arrays import fisher_r_to_z
+from conninfpy.stats.pairwise import (_permutation_task_ind,
                                    _permutation_task_paired,
                                    compute_null_dist,
                                    compute_t_stat_diff,
@@ -760,7 +760,7 @@ class TestPrecomputedSumsFastPath(TestCase):
     def test_sums_helpers_match_reference(self):
         """_onesample_tstat_from_sums / _twosample_tstat_from_sums must
         agree with the baseline t-stat functions edge-for-edge."""
-        from conninfpy.pairwise_stats import (
+        from conninfpy.stats.pairwise import (
             _precompute_edge_sums, _precompute_twosample_sums,
             _onesample_tstat_from_sums, _twosample_tstat_from_sums,
         )

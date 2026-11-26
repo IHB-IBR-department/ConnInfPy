@@ -16,7 +16,6 @@ Synthetic data only; no hosted services.
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -28,17 +27,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
-import pandas as pd
 import pytest
 
 pytest.importorskip("streamlit")
-from streamlit.testing.v1 import AppTest
 
 import conninfpy
 from conninfpy.app.components import design_inference as design
 from conninfpy.app.components.design_inference import InferenceTask, _run_inference_background
 from conninfpy import InferenceCancelled, ProgressSession, analyze
-from conninfpy.atlas import AtlasInfo
 from conninfpy.stats import _workers
 from conninfpy.stats._workers import prepare_run, run_permutations, run_permutations_reduce
 from tests.mp_helpers import sum_squares_chunk
@@ -63,7 +59,7 @@ def _stack(n, seed=3, size=N):
 
 
 def _worker_kwargs(task, n_perms, **overrides):
-    from tests.test_netstat27_gui import _worker_kwargs as base
+    from tests.test_app_background_runner import _worker_kwargs as base
 
     kwargs = base(task, n_perms)
     kwargs["group1"] = _stack(6, seed=1)
@@ -73,7 +69,7 @@ def _worker_kwargs(task, n_perms, **overrides):
 
 
 def _app_with_task(task, **state):
-    from tests.test_netstat27_gui import _app_with_task as base
+    from tests.test_app_background_runner import _app_with_task as base
 
     app = base(task)
     for key, value in state.items():

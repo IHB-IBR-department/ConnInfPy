@@ -1,7 +1,7 @@
 """
 Topology-based synthetic connectivity scenarios.
 
-Built on top of :class:`conninfpy.synth_datasets.ModularDatasetGenerator`,
+Built on top of :class:`conninfpy.sim.datasets.ModularDatasetGenerator`,
 this module adds a library of named topological effect patterns (hub,
 chain, rich-club, checkerboard, gradient, etc.) plus a scenario registry
 so callers can request a scenario by name.
@@ -18,7 +18,7 @@ access them indirectly via the scenario registry.
 
 Example
 -------
->>> from conninfpy.topologies import TopologyDatasetGenerator, list_scenarios
+>>> from conninfpy.sim.topologies import TopologyDatasetGenerator, list_scenarios
 >>> list_scenarios()[:3]
 ['within_module_dense', 'between_modules_dense', 'hub']
 >>> gen = TopologyDatasetGenerator(n_nodes=60, n_modules=4, seed=1)
@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field, replace
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 import numpy as np
 
@@ -239,7 +239,7 @@ class TopologyDatasetGenerator:
             g1[:, diag, diag] = 0.0
             g2[:, diag, diag] = 0.0
 
-        meta = {
+        meta: Dict[str, object] = {
             "mask_seed": int(mask_seed),
             "data_seed": int(data_seed),
             "n_samples_g1": int(n_samples_g1),
@@ -500,7 +500,7 @@ def _mask_cross_block_connected_chain(
     path = rr_nodes[start : start + length + 1]
 
     mask = np.zeros((n_nodes, n_nodes), dtype=np.float64)
-    for a, b in zip(path[:-1], path[1:]):
+    for a, b in zip(path[:-1], path[1:], strict=False):
         mask[a, b] = 1.0
     return _ensure_symmetric_zero_diag(mask)
 

@@ -25,12 +25,11 @@ import hashlib
 import io
 import json
 import math
-import os
 from dataclasses import dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import re
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 import zipfile
 
 import numpy as np
@@ -904,7 +903,7 @@ class _Decoder:
             return {k: self.decode(v) for k, v in node.items()}
 
         if tag == "float":
-            raw = node.get("value")
+            raw: Any = node.get("value")
             if raw == "nan":
                 return float("nan")
             if raw == "inf":
@@ -1065,7 +1064,7 @@ class _Decoder:
                 "exceedance_counts", "count_kind", "rng_provenance",
                 "permutation_space",
             }}
-            obj = InferenceResult(pos, neg, **kwargs)
+            obj: Union[InferenceResult, OmnibusInferenceResult] = InferenceResult(pos, neg, **kwargs)
             for k, v in (node.get("extra") or {}).items():
                 setattr(obj, k, self.decode(v))
             return obj

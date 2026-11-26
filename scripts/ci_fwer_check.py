@@ -151,7 +151,7 @@ def summarize_arm(arm: str, n_null: int, k_joint: int, seconds: float,
 def finalize(rows: list[dict]) -> tuple[bool, list[dict]]:
     """Add Holm-adjusted p-values and return the overall verdict."""
     adj = holm_adjust([r["p_hi"] for r in rows])
-    for r, a in zip(rows, adj):
+    for r, a in zip(rows, adj, strict=True):
         r["p_holm"] = a
     ok = not any(r["fail"] for r in rows)
     return ok, rows

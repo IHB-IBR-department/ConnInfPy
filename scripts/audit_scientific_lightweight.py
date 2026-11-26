@@ -29,24 +29,25 @@ from statsmodels.stats.multitest import multipletests
 from threadpoolctl import threadpool_limits
 
 from conninfpy import analyze
-from conninfpy._engine import _bh_fdr_correction, _compute_p_values_from_null
-from conninfpy.acceleration import _fit_gpd_mom, fit_gamma_tail, fit_gpd_tail
-from conninfpy.glm_stats import (
+from conninfpy.stats._engine import _bh_fdr_correction, _compute_p_values_from_null
+from conninfpy.stats.acceleration import _fit_gpd_mom, fit_gamma_tail, fit_gpd_tail
+from conninfpy.stats.glm import (
     _compute_reduced_model, _freedman_lane_permutation_task, _precompute_ols,
     compute_glm_stat, compute_p_val_paired_glm,
 )
 from conninfpy.harmonize import combat_harmonize
-from conninfpy.nbs_score import get_cnbs_score, get_nbs_score
-from conninfpy.pairwise_stats import (
+from conninfpy.enhance.nbs import get_cnbs_score, get_nbs_score
+from conninfpy.stats.pairwise import (
     _compute_t_stat_ind, _compute_welch_degrees_of_freedom,
     _onesample_tstat_from_sums, compute_p_val, compute_t_stat_diff,
 )
-from conninfpy.synth_datasets import generate_fc_matrices
-from conninfpy.tfnbs_score import (
-    _get_edges, _precompute_block_metadata, get_fbc_tfnbs_score,
+from conninfpy.sim.datasets import generate_fc_matrices
+from conninfpy.enhance._blocks import _precompute_block_metadata
+from conninfpy.enhance.tfnbs import (
+    _get_edges, get_fbc_tfnbs_score,
     get_network_informed_tfnbs_score, get_tfnbs_score,
 )
-from conninfpy.utils import fisher_r_to_z
+from conninfpy._shared.arrays import fisher_r_to_z
 
 
 def stack(values, nodes=2, directed=False):

@@ -2,8 +2,8 @@ conninfpy.enhance
 =================
 
 Network enhancement: the ``apply_*`` wrappers (shared ``stat_dict → score_dict``
-transformations used by both the t-test pipeline (:mod:`conninfpy.pairwise_stats`) and the GLM pipeline
-(:mod:`conninfpy.glm_stats`)) and the raw scoring functions
+transformations used by both the t-test pipeline (:mod:`conninfpy.stats.pairwise`) and the GLM pipeline
+(:mod:`conninfpy.stats.glm`)) and the raw scoring functions
 (``get_*_score``, ``nbs_bct``).
 
 These five wrappers are pure, key-agnostic transformations: a statistic
@@ -20,4 +20,35 @@ sections of the methods chapter.
 .. automodule:: conninfpy.enhance
    :members:
    :undoc-members:
+   :show-inheritance:
+
+TFNBS — :mod:`conninfpy.enhance.tfnbs`
+--------------------------------------
+
+.. automodule:: conninfpy.enhance.tfnbs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+NBS — :mod:`conninfpy.enhance.nbs`
+----------------------------------
+
+.. automodule:: conninfpy.enhance.nbs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :exclude-members: CNBSBlocks
+
+Network-informed TFNBS — :mod:`conninfpy.enhance.ni_tfnbs`
+----------------------------------------------------------
+
+.. automodule:: conninfpy.enhance.ni_tfnbs
+   :members:
+   :show-inheritance:
+
+Functional-block clustering TFNBS — :mod:`conninfpy.enhance.fbc_tfnbs`
+-----------------------------------------------------------------------
+
+.. automodule:: conninfpy.enhance.fbc_tfnbs
+   :members:
    :show-inheritance:

@@ -25,7 +25,7 @@ Entry point                                                    Use case
 Helper modules:
 
 - :mod:`conninfpy.harmonize` — multi-site ComBat harmonization + design diagnostics
-- :mod:`conninfpy.acceleration` — GPD/gamma tail approximation for permutation acceleration
+- :mod:`conninfpy.stats.acceleration` — GPD/gamma tail approximation for permutation acceleration
 - :mod:`conninfpy.enhance` — enhancement without permutation (``apply_*``, ``get_*_score``, ``nbs_bct``)
 - :mod:`conninfpy.sim` — synthetic connectivity and topology scenarios
 - :mod:`conninfpy.loaders` — manifest-based data loading (:func:`conninfpy.load`)
@@ -587,8 +587,8 @@ For cross-site machine-learning transfer (fit ComBat on training
 cohorts, freeze, apply to held-out sites at test time), use
 :func:`combat_fit` / :func:`combat_apply` separately.
 
-Permutation acceleration — :mod:`conninfpy.acceleration`
---------------------------------------------------------
+Permutation acceleration — :mod:`conninfpy.stats.acceleration`
+--------------------------------------------------------------
 
 Set ``acceleration='gpd'`` (or ``'gamma'``) on either pipeline to use a
 fitted parametric tail (Generalized Pareto Distribution, Winkler 2016b)
@@ -811,7 +811,7 @@ four explicit sections plus optional subject data:
 
 
 The guided application (Streamlit) — design step
------------------------------------------------
+------------------------------------------------
 
 The application's *Design & Inference* step exposes four package capabilities
 that are otherwise reachable only through the Python API. Each run still

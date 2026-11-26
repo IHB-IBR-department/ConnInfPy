@@ -365,7 +365,7 @@ def analyze_design_diagnostics(
         if kind in ("binary", "categorical_coded"):
             uniq, counts = np.unique(finite, return_counts=True)
             level_counts = {
-                _format_level_key(float(u)): int(c) for u, c in zip(uniq, counts)
+                _format_level_key(float(u)): int(c) for u, c in zip(uniq, counts, strict=True)
             }
             entry["n_levels"] = int(uniq.size)
             entry["level_counts"] = level_counts
@@ -448,7 +448,7 @@ def analyze_design_diagnostics(
             single_level_sites: List[str] = []
             for s in site_order:
                 row_counts = {lv: 0 for lv in levels}
-                for st_val, lv_val in zip(site_strs, cat_labels_for_site):
+                for st_val, lv_val in zip(site_strs, cat_labels_for_site, strict=False):
                     if st_val == s:
                         row_counts[lv_val] += 1
                 table[s] = row_counts

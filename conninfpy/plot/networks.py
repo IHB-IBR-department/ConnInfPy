@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 
 import numpy as np
 import numpy.typing as npt
@@ -294,8 +294,8 @@ def plot_connectome_graph(
             degrees[j] += 1
 
     # 3. Determine node colors
-    node_colors = []
-    color_map = {}
+    node_colors: List[Any] = []
+    color_map: Dict[str, Any] = {}
     if color_by == "Degree":
         if np.max(degrees) > 0:
             normed = degrees / np.max(degrees)
@@ -303,19 +303,22 @@ def plot_connectome_graph(
             normed = degrees
         cmap = plt.get_cmap("viridis")
         node_colors = [cmap(float(v)) for v in normed]
-    elif color_by == "Hemisphere" and getattr(atlas, "hemisphere", None) is not None:
-        categories = list(dict.fromkeys(str(v) for v in atlas.hemisphere))
-        cmap = plt.get_cmap("tab20")
-        color_map = {cat: cmap(idx % cmap.N) for idx, cat in enumerate(categories)}
-        node_colors = [color_map[str(v)] for v in atlas.hemisphere]
-    elif getattr(atlas, "networks", None) is not None:
-        categories = list(dict.fromkeys(str(v) for v in atlas.networks))
-        cmap = plt.get_cmap("tab20")
-        color_map = {cat: cmap(idx % cmap.N) for idx, cat in enumerate(categories)}
-        node_colors = [color_map[str(v)] for v in atlas.networks]
     else:
-        node_colors = ["#9CA3AF"] * n_nodes
-        color_map = {"ROI": "#9CA3AF"}
+        hemisphere_values = getattr(atlas, "hemisphere", None)
+        network_values = getattr(atlas, "networks", None)
+        if color_by == "Hemisphere" and hemisphere_values is not None:
+            categories = list(dict.fromkeys(str(v) for v in hemisphere_values))
+            cmap = plt.get_cmap("tab20")
+            color_map = {cat: cmap(idx % cmap.N) for idx, cat in enumerate(categories)}
+            node_colors = [color_map[str(v)] for v in hemisphere_values]
+        elif network_values is not None:
+            categories = list(dict.fromkeys(str(v) for v in network_values))
+            cmap = plt.get_cmap("tab20")
+            color_map = {cat: cmap(idx % cmap.N) for idx, cat in enumerate(categories)}
+            node_colors = [color_map[str(v)] for v in network_values]
+        else:
+            node_colors = ["#9CA3AF"] * n_nodes
+            color_map = {"ROI": "#9CA3AF"}
 
     node_sizes = 18 + 18 * np.sqrt(degrees)
     edge_cmap = "Reds" if tail == "positive" else "Blues"

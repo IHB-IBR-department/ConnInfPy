@@ -14,15 +14,15 @@ import unittest
 import numpy as np
 import numpy.testing as npt
 
-from conninfpy.acceleration import (
+from conninfpy.stats.acceleration import (
     _fit_gpd_mom,
     _gpd_sf,
     fit_gpd_tail,
     fit_gamma_tail,
     compute_p_values_accelerated,
 )
-from conninfpy.pairwise_stats import compute_p_val
-from conninfpy.glm_stats import compute_p_val_glm
+from conninfpy.stats.pairwise import compute_p_val
+from conninfpy.stats.glm import compute_p_val_glm
 
 
 # =============================================================================
@@ -110,7 +110,6 @@ class TestFitGPDTail(unittest.TestCase):
         observed = np.array([[0.0, 1.0], [2.0, 3.0]])
 
         p_gpd = fit_gpd_tail(null_dist, observed)
-        p_emp = np.mean(observed[..., np.newaxis] <= null_dist, axis=-1)
 
         # GPD and empirical should roughly agree for moderate values
         # For extreme values (3.0), GPD should give more precise estimate
@@ -129,7 +128,6 @@ class TestFitGPDTail(unittest.TestCase):
         observed = np.array([[1.0, 2.0], [0.5, 0.0]])
 
         p_gpd = fit_gpd_tail(null_dist, observed)
-        p_emp = np.mean(observed[..., np.newaxis] <= null_dist, axis=-1)
 
         # Should get valid p-values regardless
         self.assertEqual(p_gpd.shape, observed.shape)

@@ -13,10 +13,10 @@ import numpy as np
 from scipy import stats
 
 from conninfpy import analyze
-from conninfpy._available_case import available_case_p_val
-from conninfpy.pairwise_stats import _ENHANCE_MAP, StatMethod, compute_p_val
+from conninfpy.stats._missing_pairwise import available_case_p_val
+from conninfpy.stats.pairwise import _ENHANCE_MAP, StatMethod, compute_p_val
 from conninfpy.results import summarize_by_network
-from conninfpy.topologies import TopologyDatasetGenerator
+from conninfpy.sim.topologies import TopologyDatasetGenerator
 
 N = 12
 IU = np.triu_indices(N, 1)

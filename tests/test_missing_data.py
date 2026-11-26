@@ -13,10 +13,10 @@ import numpy as np
 import pandas as pd
 
 from conninfpy import analyze
-from conninfpy._engine import _compute_p_values_from_null
+from conninfpy.stats._engine import _compute_p_values_from_null
 from conninfpy._prepare import check_connectivity, nonfinite_report
-from conninfpy.acceleration import compute_p_values_accelerated
-from conninfpy.glm_stats import compute_p_val_glm
+from conninfpy.stats.acceleration import compute_p_values_accelerated
+from conninfpy.stats.glm import compute_p_val_glm
 from conninfpy.harmonize import combat_harmonize
 from conninfpy.loaders.base import LoadedDataset
 from conninfpy.loaders.manifest import drop_subjects_with_missing

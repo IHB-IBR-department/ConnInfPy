@@ -28,7 +28,6 @@ import numpy as np
 import pytest
 
 from conninfpy import compute_p_val
-from conninfpy.enhance import apply_nbs, apply_tfnbs
 from conninfpy.enhance import fbc_tfnbs as fbc_mod
 from conninfpy.enhance import nbs as nbs_mod
 from conninfpy.enhance import ni_tfnbs as ni_mod
@@ -85,7 +84,7 @@ def _assert_nested_equal(left, right, path: str = "component_report") -> None:
     if isinstance(left, (list, tuple)) or isinstance(right, (list, tuple)):
         assert isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)), path
         assert len(left) == len(right), f"{path}: length {len(left)} != {len(right)}"
-        for index, (l_item, r_item) in enumerate(zip(left, right)):
+        for index, (l_item, r_item) in enumerate(zip(left, right, strict=True)):
             _assert_nested_equal(l_item, r_item, f"{path}[{index}]")
         return
     np.testing.assert_array_equal(
@@ -223,7 +222,6 @@ def test_single_tested_edge_matches_between_paths():
         )
 
         # Only the declared edge is tested; every other off-family edge is NaN.
-        off_diagonal = ~np.eye(n_roi, dtype=bool)
         np.testing.assert_array_equal(np.isnan(fast.positive), ~(mask | np.eye(n_roi, dtype=bool)))
         assert np.all(np.isfinite(fast.positive[mask]))
         assert spec.family_edges is not None
@@ -355,7 +353,6 @@ def test_empty_and_all_zero_inputs_match_between_paths(test_type, method, extra)
     for field in ("stat_positive", "stat_negative"):
         np.testing.assert_array_equal(getattr(fast, field), np.zeros((n_roi, n_roi)))
 
-    off_diagonal = ~np.eye(n_roi, dtype=bool)
     for field in ("positive", "negative"):
         values = getattr(fast, field)
         # Nothing is ever significant with an all-zero input.

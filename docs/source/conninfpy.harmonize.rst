@@ -31,7 +31,7 @@ cross-site machine-learning transfer (fit ComBat on training cohorts,
 apply to held-out sites at test time).
 
 The :func:`compute_vif` and :func:`design_diagnostics` helpers are
-included here because confound regression (in :mod:`~conninfpy.glm_stats`)
+included here because confound regression (in :mod:`~conninfpy.stats.glm`)
 and harmonization both lean on a well-conditioned design matrix.
 
 References

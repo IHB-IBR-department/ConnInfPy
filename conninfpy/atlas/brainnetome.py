@@ -33,7 +33,10 @@ import logging
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Union, cast
+
+if TYPE_CHECKING:  # nibabel is imported lazily at runtime; only the stub type is needed here
+    from nibabel.spatialimages import SpatialImage
 
 import numpy as np
 import numpy.typing as npt
@@ -70,6 +73,17 @@ _ANATOM_MACRO_LOBE = {
     26: ("Flocculonodular", "Flocculonodular Lobe"),
     28: ("Flocculonodular", "Flocculonodular Lobe"),
 }
+
+
+def _spatial_image(img: Any) -> "SpatialImage":
+    """``nib.load`` result narrowed to the spatial image every caller reads.
+
+    ``nibabel.load`` is typed as returning the ``FileBasedImage`` base class,
+    which has no ``shape`` / ``affine`` / ``dataobj``; the atlas, label and
+    probabilistic-map images loaded here always are spatial images. The cast
+    documents that and has no runtime effect.
+    """
+    return cast("SpatialImage", img)
 
 
 def _lattice_mapping(src: Any, dst: Any) -> tuple[npt.NDArray[np.float64], bool]:
@@ -113,14 +127,14 @@ def _crosswalk(
         m = cb_arr == i
         n = int(m.sum())
         vals, cnts = np.unique(net_arr[m], return_counts=True)
-        dist = {int(v): int(c) for v, c in zip(vals, cnts)}
+        dist = {int(v): int(c) for v, c in zip(vals, cnts, strict=True)}
         assigned = n - dist.get(0, 0)
         ranked = sorted(((c, -v) for v, c in dist.items() if v != 0), reverse=True)
         top = -ranked[0][1] if ranked else None
         purity = (ranked[0][0] / assigned) if assigned else None
         status = (
             "unassigned"
-            if assigned == 0
+            if assigned == 0 or purity is None
             else ("dominant" if purity >= threshold else "mixed")
         )
         out[i] = {"top_label": top, "purity_of_assigned": purity, "status": status}
@@ -339,7 +353,7 @@ class BrainnetomeReference:
 
         digest = _sha256(path)
         cache = self.cache_dir / f"pm_sparse_{digest[:16]}.npz"
-        img = nib.load(str(path))
+        img = _spatial_image(nib.load(str(path)))
         shape, affine = img.shape[:3], np.asarray(img.affine, float)
         if cache.exists():
             mat = sparse.load_npz(cache)
@@ -382,7 +396,7 @@ class BrainnetomeReference:
         else:
             from conninfpy.atlas.resources import get_bna_246_nifti_path
 
-            lab_img = nib.load(str(get_bna_246_nifti_path(2)))
+            lab_img = _spatial_image(nib.load(str(get_bna_246_nifti_path(2))))
             lab = np.rint(np.asarray(lab_img.dataobj)).astype(np.int64).ravel()
             keep = lab > 0
             counts = np.bincount(lab[keep], minlength=N_REGIONS + 1)[1:]
@@ -444,7 +458,7 @@ def _build_membership_cache(path: Path, img: Any, cache: Path):
         raw = Path(tmp) / "pm.nii"
         with gzip.open(path, "rb") as src, open(raw, "wb") as dst:
             shutil.copyfileobj(src, dst, length=1 << 24)
-        mm = nib.load(str(raw), mmap=True)
+        mm = _spatial_image(nib.load(str(raw), mmap=True))
         rows, cols, vals = [], [], []
         for k in range(mm.shape[3]):
             v = np.asarray(mm.dataobj[..., k], dtype=np.float32)
@@ -490,7 +504,7 @@ def _sphere_on_grid(
     if np.any(hi < lo):
         return np.zeros((0, 3))
     grid = np.stack(
-        np.meshgrid(*[np.arange(a, b + 1) for a, b in zip(lo, hi)], indexing="ij"), -1
+        np.meshgrid(*[np.arange(a, b + 1) for a, b in zip(lo, hi, strict=True)], indexing="ij"), -1
     ).reshape(-1, 3)
     world = np.c_[grid, np.ones(len(grid))] @ np.asarray(affine).T
     world = world[:, :3]
@@ -531,8 +545,8 @@ def _attach_suit_anatom(regions: Any, bna_img: Any) -> tuple[Any, Any, Dict[str,
         b17_names = {int(r["index"]): r["name"] for r in csv.DictReader(fh, delimiter="\t")}
 
     names_by_id = {int(r["index"]): r["name"] for r in anatom_rows}
-    cw7 = _crosswalk(cb_arr, b7_arr, ids=names_by_id.keys(), threshold=0.5)
-    cw17 = _crosswalk(cb_arr, b17_arr, ids=names_by_id.keys(), threshold=0.5)
+    cw7 = _crosswalk(cb_arr, b7_arr, ids=list(names_by_id), threshold=0.5)
+    cw17 = _crosswalk(cb_arr, b17_arr, ids=list(names_by_id), threshold=0.5)
     aff = np.asarray(bna_img.affine, dtype=np.float64)
 
     cb_records = []

@@ -137,7 +137,7 @@ class ReportChecks(unittest.TestCase):
             self.assertEqual([r["component_id"] for r in rows], list(range(1, len(expected) + 1)))
             labels = report["labels"][tail]
             p_map = np.asarray(res[tail])
-            for row, (nodes, n_edges, stat) in zip(rows, expected):
+            for row, (nodes, n_edges, stat) in zip(rows, expected, strict=True):
                 self.assertEqual(tuple(row["nodes"]), nodes)
                 self.assertEqual(row["n_nodes"], len(nodes))
                 self.assertEqual(row["n_edges"], n_edges)
@@ -208,7 +208,7 @@ class TestNbsComponentsFunction(unittest.TestCase):
         expected = {(5, 6, 7, 8): (4.5 - 3) + (3.2 - 3) + (3.3 - 3),
                     (0, 1, 2): (4.0 - 3) + (5.0 - 3),
                     (10, 11): 9.0 - 3.0}
-        by_nodes = {tuple(n.tolist()): s for n, s in zip(found.nodes, found.statistic)}
+        by_nodes = {tuple(n.tolist()): s for n, s in zip(found.nodes, found.statistic, strict=True)}
         for nodes, stat in expected.items():
             self.assertAlmostEqual(by_nodes[nodes], stat, places=12)
         # ranking by intensity (6.0, 3.0, 2.0) is the reverse of the ranking by extent

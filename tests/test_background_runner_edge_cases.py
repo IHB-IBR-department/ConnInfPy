@@ -31,7 +31,6 @@ import pandas as pd
 import pytest
 
 pytest.importorskip("streamlit")
-from streamlit.testing.v1 import AppTest
 
 from conninfpy.app.components import design_inference as design
 from conninfpy.app.components.design_inference import (
@@ -40,7 +39,6 @@ from conninfpy.app.components.design_inference import (
     _normalize_fact,
     _phenotype_fingerprint,
     _run_inference_background,
-    _run_signature,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -51,7 +49,7 @@ APP = REPO / "conninfpy" / "app" / "streamlit_app.py"
 # helpers
 # ----------------------------------------------------------------------
 def _app_with_task(task):
-    from tests.test_netstat27_gui import _app_with_task as base
+    from tests.test_app_background_runner import _app_with_task as base
 
     return base(task)
 

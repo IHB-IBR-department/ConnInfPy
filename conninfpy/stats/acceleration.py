@@ -158,7 +158,7 @@ def _fit_gpd_mom(
     if sigma <= 0 or not np.isfinite(xi) or not np.isfinite(sigma):
         return 0.0, 0.0, False
 
-    return sigma, xi, True
+    return float(sigma), float(xi), True
 
 
 def _gpd_sf(

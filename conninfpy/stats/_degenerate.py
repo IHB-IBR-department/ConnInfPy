@@ -125,7 +125,7 @@ def raise_if_infinite(mask: npt.NDArray[np.bool_], statistic: str = "t") -> None
     i, j = np.nonzero(np.triu(mask, k=1))
     if i.size == 0:
         return
-    shown = ", ".join(f"({a}, {b})" for a, b in zip(i[:5], j[:5]))
+    shown = ", ".join(f"({a}, {b})" for a, b in zip(i[:5], j[:5], strict=True))
     more = f" and {i.size - 5} more" if i.size > 5 else ""
     raise ValueError(
         f"{i.size} edge(s) have zero residual variance but a nonzero effect, so "

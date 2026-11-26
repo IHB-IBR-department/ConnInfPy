@@ -53,13 +53,16 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 import numpy as np
 import pandas as pd
 import yaml
 
 from conninfpy._shared.alignment import IdAlignmentError, paired_id_permutation
+
+if TYPE_CHECKING:  # the result class is only needed for the type checker (lazy CLI imports)
+    from conninfpy.results import InferenceResult
 
 DESIGNS = ("glm", "two-sample", "paired", "one-sample")
 _TOP_LEVEL_KEYS = {"data", "input", "design", "inference", "atlas", "atlas_lut", "alpha", "output", "connectivity",
@@ -151,7 +154,7 @@ def _apply_fisher_policy(Y: np.ndarray, fisher_cfg: Dict[str, Any]) -> Tuple[np.
     entry is the structured provenance of the actually applied call.
     """
     from conninfpy._prepare import make_fisher_entry
-    from conninfpy.utils import fisher_r_to_z
+    from conninfpy._shared.arrays import fisher_r_to_z
 
     if not isinstance(fisher_cfg, dict):
         raise ConfigError("connectivity.fisher must be a mapping.")
@@ -931,12 +934,14 @@ def run(
     bundle_files: List[str] = []
     for name, res in results.items():
         suffix = f"_{name}" if name else ""
-        inf = res.inference
-        if getattr(inf, "design", None) is not None and cfg["design"]["type"] in ("glm", "paired"):
+        # The CLI only runs t / β contrasts, never the F-stat omnibus path.
+        inf = cast("InferenceResult", res.inference)
+        design = getattr(inf, "design", None)
+        if design is not None and cfg["design"]["type"] in ("glm", "paired"):
             # Keep the original field roles and categorical reference levels in
             # the self-contained bundle, without retaining phenotype rows.
-            inf.design["input_design"] = dict(cfg["design"])
-            inf.design["categorical_coding"] = summary["categorical_coding"]
+            design["input_design"] = dict(cfg["design"])
+            design["categorical_coding"] = summary["categorical_coding"]
         is_grid = bool(getattr(inf, "is_grid", False))
         e_arr = None
         h_arr = None
@@ -978,7 +983,8 @@ def run(
             res.to_csv(edges_path, atlas=atlas_obj, alpha=resolved_alpha)
             written[f"edges{suffix}"] = edges_path
         pvals_path = out / f"pvals{suffix}.npz"
-        arrays = {"positive": inf.positive, "negative": inf.negative}
+        prov = getattr(inf, "analysis_provenance", None)
+        arrays: Dict[str, Any] = {"positive": inf.positive, "negative": inf.negative}
         if is_grid:
             if e_arr is not None:
                 arrays["e_grid"] = e_arr
@@ -986,7 +992,6 @@ def run(
                 arrays["h_grid"] = h_arr
         if getattr(inf, "stat_signed", None) is not None:
             arrays["stat_signed"] = inf.stat_signed
-        design = getattr(inf, "design", None)
         if getattr(inf, "beta", None) is not None and design is not None:
             arrays["beta"] = inf.beta                                  # (p, N, N), response scale
             arrays["beta_columns"] = np.array(design["columns"])
@@ -1006,8 +1011,9 @@ def run(
             inf.block_table(alpha=resolved_alpha).to_csv(blocks_path, index=False)
             written[f"blocks{suffix}"] = blocks_path
         mr = getattr(inf, "missing_report", None)
-        missing_summary = (
-            {
+        missing_summary: Optional[Dict[str, Any]] = None
+        if isinstance(mr, dict):
+            missing_summary = {
                 "edge_n_min": mr.get("edge_n_min"),
                 "edge_n_max": (
                     int(np.max(mr["edge_n"]))
@@ -1015,9 +1021,6 @@ def run(
                     else None
                 ),
             }
-            if isinstance(mr, dict)
-            else None
-        )
         entry: Dict[str, Any] = {
             "n_significant": inf.n_significant(resolved_alpha),
             "is_grid": is_grid,
@@ -1038,8 +1041,7 @@ def run(
             # NETSTAT-28: additive descriptive side-car (absent unless opted in).
             "motion_qc": getattr(res, "motion_qc", None),
             "missing_report": missing_summary,
-            "fisher": (inf.analysis_provenance.get("fisher")
-                       if isinstance(getattr(inf, "analysis_provenance", None), dict) else None),
+            "fisher": (prov.get("fisher") if isinstance(prov, dict) else None),
             "design": None if design is None else {
                 k: design.get(k) for k in ("kind", "columns", "contrast", "column_means", "profiles",
                                            "comparison", "interest", "scale", "estimable_columns",
@@ -1055,8 +1057,8 @@ def run(
                 }
                 for idx in range(k_grid)
             ]
-        if inf.inference_unit == "component" and getattr(inf, "component_report", None) is not None:
-            comp_rep = inf.component_report
+        comp_rep = getattr(inf, "component_report", None)
+        if inf.inference_unit == "component" and comp_rep is not None:
             sig_comps = {"positive": 0, "negative": 0}
             for row in comp_rep.get("components", ()):
                 tail_k = row.get("tail")
@@ -1064,8 +1066,8 @@ def run(
                 if tail_k in sig_comps and p_val is not None and np.isfinite(p_val) and float(p_val) <= resolved_alpha:
                     sig_comps[tail_k] += 1
             entry["n_components"] = sig_comps
-        if inf.inference_unit == "block" and getattr(inf, "block_report", None) is not None:
-            block_rep = inf.block_report
+        block_rep = getattr(inf, "block_report", None)
+        if inf.inference_unit == "block" and block_rep is not None:
             sig_blocks = {"positive": 0, "negative": 0}
             for row in block_rep.get("blocks", ()):
                 for tail_k in ("positive", "negative"):
@@ -1074,8 +1076,8 @@ def run(
                     if p_val is not None and np.isfinite(p_val) and float(p_val) <= resolved_alpha:
                         sig_blocks[tail_k] += 1
             entry["n_blocks"] = sig_blocks
-        if isinstance(getattr(inf, "analysis_provenance", None), dict) and "net_labels_mapping" in inf.analysis_provenance:
-            entry["net_labels_mapping"] = inf.analysis_provenance["net_labels_mapping"]
+        if isinstance(prov, dict) and "net_labels_mapping" in prov:
+            entry["net_labels_mapping"] = prov["net_labels_mapping"]
         per_result[name or "result"] = entry
 
     provenance = {

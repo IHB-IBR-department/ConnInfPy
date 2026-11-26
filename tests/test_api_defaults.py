@@ -216,7 +216,7 @@ def test_worker_fallback_dispatch_uses_shared_defaults(use_ast_loader):
         assert task.status == "success", getattr(task, "error", None)
         assert run.call_count == 2
 
-        for call, method in zip(run.call_args_list, (primary_method, comp_method)):
+        for call, method in zip(run.call_args_list, (primary_method, comp_method), strict=True):
             assert call.kwargs["n_permutations"] == defaults.DEFAULT_N_PERMUTATIONS
             assert call.kwargs["acceleration"] is defaults.DEFAULT_ACCELERATION
             if method in ("tfnbs", "fbc_tfnbs"):

@@ -1,5 +1,5 @@
 """
-Tests for GLM extension (conninfpy.glm_stats).
+Tests for GLM extension (conninfpy.stats.glm).
 
 Covers: core GLM computation, Freedman-Lane permutation,
 enhancement integration, two-tailed FWER, API consistency.
@@ -13,8 +13,7 @@ import numpy as np
 import numpy.testing as npt
 from scipy import stats
 
-from conninfpy.glm_stats import (
-    GLMStatType,
+from conninfpy.stats.glm import (
     _precompute_ols,
     _compute_reduced_model,
     compute_glm_stat,
@@ -23,7 +22,7 @@ from conninfpy.glm_stats import (
     compute_p_val_paired_glm,
     build_design_matrix,
 )
-from conninfpy.pairwise_stats import (
+from conninfpy.stats.pairwise import (
     compute_p_val,
     compute_t_stat,
     _extract_max_stats,
@@ -1114,7 +1113,7 @@ class TestResamplingScheme(unittest.TestCase):
         return Y
 
     def test_auto_rule(self):
-        from conninfpy.glm_stats import _compute_reduced_model, _resolve_scheme
+        from conninfpy.stats.glm import _compute_reduced_model, _resolve_scheme
         rng = np.random.default_rng(0)
         n = 12
         x = rng.normal(size=n)
@@ -1131,7 +1130,7 @@ class TestResamplingScheme(unittest.TestCase):
             _resolve_scheme(X_mean, X_mean, "bootstrap")
 
     def test_zero_confound_paired_glm_equals_paired_test(self):
-        from conninfpy.glm_stats import compute_p_val_paired_glm
+        from conninfpy.stats.glm import compute_p_val_paired_glm
         rng = np.random.default_rng(7)
         n, N = 20, 6
         Ya = self._sym(rng.normal(size=(n, N, N)))
@@ -1143,7 +1142,7 @@ class TestResamplingScheme(unittest.TestCase):
         npt.assert_array_equal(np.asarray(glm["positive"]), np.asarray(ttest["positive"]))
 
     def test_paired_glm_with_confound_detects_a_mean_difference(self):
-        from conninfpy.glm_stats import compute_p_val_paired_glm
+        from conninfpy.stats.glm import compute_p_val_paired_glm
         rng = np.random.default_rng(1)
         n, N = 24, 6
         ca, cb = rng.normal(size=n), rng.normal(size=n)

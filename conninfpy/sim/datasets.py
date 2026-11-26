@@ -1,7 +1,8 @@
 """Synthetic connectivity datasets for benchmarking and testing."""
 
+from typing import Optional
+
 import numpy as np
-from scipy import linalg
 from sklearn.datasets import make_sparse_spd_matrix
 
 __all__ = [
@@ -290,7 +291,7 @@ def generate_fc_matrices(
         # structure; the second adds the population effect to it.
         effect = mod_cov - base_cov
         np.fill_diagonal(effect, 0.0)
-        group1, group2 = [], []
+        g1, g2 = [], []
         for _ in range(n_samples_group1):
             subject = np.corrcoef(
                 np.random.multivariate_normal(np.zeros(N), base_cov, size=4 * N).T
@@ -300,9 +301,9 @@ def generate_fc_matrices(
                 shifted = enforce_spd(subject + effect)
                 d = np.sqrt(np.diag(shifted))
                 shifted = shifted / np.outer(d, d)
-            group1.append(sample_corr(subject))
-            group2.append(sample_corr(shifted))
-        group1, group2 = np.array(group1), np.array(group2)
+            g1.append(sample_corr(subject))
+            g2.append(sample_corr(shifted))
+        group1, group2 = np.array(g1), np.array(g2)
     else:
         # Generate independent groups
         group1 = generate_samples(base_cov, n_samples_group1)
@@ -328,7 +329,7 @@ class ModularDatasetGenerator:
         intra_corr: float = 0.6,
         inter_corr: float = 0.1,
         noise_level: float = 0.05,
-        seed: int = None,
+        seed: Optional[int] = None,
     ):
         """
         Initialize the generator.

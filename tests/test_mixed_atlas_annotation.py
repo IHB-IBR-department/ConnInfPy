@@ -200,7 +200,7 @@ class TestGenericNiftiLutPath(unittest.TestCase):
 
     def test_lut_without_network_column_makes_each_region_its_own_group(self):
         img, lut = _image_and_lut(drop_lut_id=NO_LUT_ID)
-        names_only = dict(zip(lut["id"], lut["name"]))
+        names_only = dict(zip(lut["id"], lut["name"], strict=True))
         atlas = AtlasInfo.from_nifti(img, lut=names_only)
         self.assertEqual(list(atlas.networks), list(atlas.labels))
 

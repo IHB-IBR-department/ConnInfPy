@@ -57,7 +57,7 @@ negative edges says nothing about global signal regression.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -164,7 +164,7 @@ def _quantiles(values: Any) -> Dict[str, Optional[float]]:
     if arr.size == 0:
         return {key: None for key in keys}
     q = np.quantile(arr, [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0])
-    return {key: float(val) for key, val in zip(keys, q)}
+    return {key: float(val) for key, val in zip(keys, q, strict=True)}
 
 
 def _spearman(a: Any, b: Any, *, min_n: int = MIN_COMPLETE_PAIRS) -> Dict[str, Any]:
@@ -269,7 +269,7 @@ def _compare_ids(pheno_ids: Sequence[Any], subject_ids: Sequence[Any]) -> List[i
         import pandas as pd
     except ImportError:  # pragma: no cover - pandas is a hard dependency
         pd = None
-    for idx, (left, right) in enumerate(zip(pheno_ids, subject_ids)):
+    for idx, (left, right) in enumerate(zip(pheno_ids, subject_ids, strict=False)):
         if pd is not None and (pd.isna(left) or pd.isna(right)):
             mismatched.append(idx)
             continue
@@ -327,6 +327,7 @@ def resolve_fd(
             f"fd={fd!r} is a column name, so the phenotype frame must be passed as "
             "pheno=; a column name alone cannot be resolved."
         )
+    source: Dict[str, Any]
     if fd is None:
         detected = detect_fd_column(pheno)
         if detected is None:
@@ -1316,14 +1317,18 @@ def motion_qc_fc_paired(
         from conninfpy._shared.alignment import IdAlignmentError, paired_id_permutation
 
         try:
+            # One-sided IDs are rejected inside ``paired_id_permutation``;
+            # the cast only states that the validator owns the None check.
             perm = paired_id_permutation(
-                ids_group1, ids_group2, n_group1=n_a, n_group2=n_b,
+                cast(Sequence[Any], ids_group1), cast(Sequence[Any], ids_group2),
+                n_group1=n_a, n_group2=n_b,
                 name_group1="ids_group1", name_group2="ids_group2",
             )
         except IdAlignmentError as exc:
             raise ValueError(str(exc)) from exc
         b = b[perm]
         fd_b = None if fd_b is None else fd_b[perm]
+        assert ids_group1 is not None  # a successful permutation implies both ID vectors
         ids = list(ids_group1)
         alignment_source = "exact_id_match"
     elif subject_ids is not None:

@@ -17,7 +17,7 @@ import conninfpy
 from conninfpy.analysis import AnalyzeResult
 from conninfpy.harmonize import block_mass
 from conninfpy.plot import plot_network_summary
-from conninfpy.results import InferenceResult, OmnibusInferenceResult, summarize_by_network
+from conninfpy.results import OmnibusInferenceResult, summarize_by_network
 
 NETS = ["A", "A", "A", "B", "B", "C"]          # 3 networks, sizes 3 / 2 / 1
 

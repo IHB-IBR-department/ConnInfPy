@@ -2,9 +2,9 @@ import time
 import unittest
 from unittest import TestCase
 import numpy as np
-import conninfpy.tfnbs_score as mod
-from conninfpy.pairwise_stats import compute_t_stat, compute_t_stat_diff
-from conninfpy.tfnbs_score import (
+import conninfpy.enhance.tfnbs as mod
+from conninfpy.stats.pairwise import compute_t_stat
+from conninfpy.enhance.tfnbs import (
     get_tfnbs_score_networkx,
     get_tfnbs_score,
     get_tfnbs_score_baseline,
@@ -12,8 +12,8 @@ from conninfpy.tfnbs_score import (
     get_fbc_tfnbs_score,
     HAS_NUMBA,
 )
-from conninfpy.synth_datasets import generate_fc_matrices, ModularDatasetGenerator
-from conninfpy.utils import fisher_r_to_z
+from conninfpy.sim.datasets import generate_fc_matrices, ModularDatasetGenerator
+from conninfpy._shared.arrays import fisher_r_to_z
 from tests import fixtures
 
 
@@ -61,7 +61,7 @@ class TestTFNBS(TestCase):
         expected_pos = np.array([[0.0, 3.0, 5.0], [3.0, 0.0, 3.0], [5.0, 3.0, 0.0]])
         expected_neg = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
         np.testing.assert_allclose(result_pos, expected_pos, rtol=1e-5)
-        np.testing.assert_allclose(result_pos, expected_pos, rtol=1e-5)
+        np.testing.assert_allclose(result_neg, expected_neg, rtol=1e-5)
 
     def test_small_matrix_scipy(self):
         """Test with a small 3x3 matrix and known output."""

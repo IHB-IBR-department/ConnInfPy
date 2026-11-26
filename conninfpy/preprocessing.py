@@ -109,7 +109,7 @@ def gsr_from_file_name(path: Any) -> Optional[bool]:
     # (covers no_GSR / no-GSR / no.GSR across separators).
     if any(gsr_from_file_token(token) is False for token in tokens):
         return False
-    if any(tok == "NO" and nxt == "GSR" for tok, nxt in zip(tokens, tokens[1:])):
+    if any(tok == "NO" and nxt == "GSR" for tok, nxt in zip(tokens, tokens[1:], strict=False)):
         return False
     if "GSR" in tokens:
         return True
@@ -232,7 +232,7 @@ def aggregate_preprocessing_records(records: Any, *, names: Any = None) -> dict:
     else:
         records_list = list(records)
         labels = list(names) if names is not None else [str(i) for i in range(len(records_list))]
-        pairs = list(zip(labels, records_list))
+        pairs = list(zip(labels, records_list, strict=True))
     if not pairs:
         return empty_record()
     normalized = [(str(name), normalize_preprocessing_record(record)) for name, record in pairs]

@@ -1,11 +1,10 @@
-"""Compatibility and resource-lifetime contracts for the domain packages."""
+"""Canonical module layout and resource-lifetime contracts for the domain packages."""
 from contextlib import ExitStack
 import importlib
 import pickle
 from pathlib import Path
 import zipfile
 
-import nibabel as nib
 import pytest
 
 import conninfpy
@@ -13,44 +12,57 @@ from conninfpy.atlas import resources
 from conninfpy.loaders.manifest import resolve_path
 
 
-@pytest.mark.parametrize("legacy,canonical", [
-    ("pairwise_stats", "stats.pairwise"),
-    ("glm_stats", "stats.glm"),
-    ("_engine", "stats._engine"),
-    ("_progress", "stats._workers"),
-    ("_available_case", "stats._missing_pairwise"),
-    ("_available_case_glm", "stats._missing_glm"),
-    ("_estimates", "stats._estimates"),
-    ("_cnbs", "stats._cnbs"),
-    ("_degenerate", "stats._degenerate"),
-    ("acceleration", "stats.acceleration"),
-    ("synth_datasets", "sim.datasets"),
-    ("topologies", "sim.topologies"),
-    ("utils", "_shared.arrays"),
-    ("_rng", "_shared.rng"),
-    ("tfnbs_score", "enhance.tfnbs"),
-    ("nbs_score", "enhance.nbs"),
-    ("brainnetome", "atlas.brainnetome"),
-    ("annotate", "interpret.annotate"),
-])
-def test_legacy_modules_share_objects_and_globals(legacy, canonical):
-    old = importlib.import_module(f"conninfpy.{legacy}")
-    new = importlib.import_module(f"conninfpy.{canonical}")
-    assert old is new
+# Root ``sys.modules`` aliases removed with the v2 layout: every name now
+# lives only in its canonical subpackage.
+LEGACY_ROOT_MODULES = [
+    "pairwise_stats", "glm_stats", "_engine", "_progress",
+    "_available_case", "_available_case_glm", "_estimates", "_cnbs",
+    "_degenerate", "acceleration", "synth_datasets", "topologies",
+    "utils", "_rng", "tfnbs_score", "nbs_score", "brainnetome",
+    "annotate",
+]
+CANONICAL_MODULES = [
+    "conninfpy.stats.pairwise", "conninfpy.stats.glm",
+    "conninfpy.stats._engine", "conninfpy.stats._workers",
+    "conninfpy.stats._missing_pairwise", "conninfpy.stats._missing_glm",
+    "conninfpy.stats._estimates", "conninfpy.stats._cnbs",
+    "conninfpy.stats._degenerate", "conninfpy.stats.acceleration",
+    "conninfpy.sim.datasets", "conninfpy.sim.topologies",
+    "conninfpy._shared.arrays", "conninfpy._shared.rng",
+    "conninfpy.enhance.tfnbs", "conninfpy.enhance.nbs",
+    "conninfpy.atlas.brainnetome", "conninfpy.interpret.annotate",
+]
+
+
+@pytest.mark.parametrize("legacy", LEGACY_ROOT_MODULES)
+def test_legacy_root_modules_are_gone(legacy):
+    # No root file and no ``sys.modules`` alias: the name is importable
+    # only through its canonical subpackage.
+    dotted = f"conninfpy.{legacy}"
+    assert not (Path(conninfpy.__file__).parent / f"{legacy}.py").exists()
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module(dotted)
+
+
+@pytest.mark.parametrize("canonical", CANONICAL_MODULES)
+def test_canonical_modules_import(canonical):
+    module = importlib.import_module(canonical)
+    assert module.__name__ == canonical
 
 
 @pytest.mark.parametrize("module,name,current", [
     ("conninfpy.atlas", "AtlasInfo", conninfpy.AtlasInfo),
     ("conninfpy.harmonize", "ComBatModel", conninfpy.ComBatModel),
     ("conninfpy.harmonize", "CombatResult", conninfpy.CombatResult),
-    ("conninfpy.pairwise_stats", "TestType", conninfpy.TestType),
-    ("conninfpy.pairwise_stats", "StatMethod", conninfpy.StatMethod),
-    ("conninfpy.glm_stats", "GLMStatType", conninfpy.GLMStatType),
-    ("conninfpy.brainnetome", "BrainnetomeReference", conninfpy.BrainnetomeReference),
-    ("conninfpy.annotate", "RoiAnnotation", conninfpy.RoiAnnotation),
+    ("conninfpy.stats.pairwise", "TestType", conninfpy.TestType),
+    ("conninfpy.stats.pairwise", "StatMethod", conninfpy.StatMethod),
+    ("conninfpy.stats.glm", "GLMStatType", conninfpy.GLMStatType),
+    ("conninfpy.atlas.brainnetome", "BrainnetomeReference", conninfpy.BrainnetomeReference),
+    ("conninfpy.interpret.annotate", "RoiAnnotation", conninfpy.RoiAnnotation),
 ])
-def test_saved_objects_can_resolve_old_class_paths(module, name, current):
-    # A protocol-0 GLOBAL exercises the exact lookup used by older pickles.
+def test_saved_objects_resolve_canonical_class_paths(module, name, current):
+    # A protocol-0 GLOBAL exercises the exact lookup used by pickles; the
+    # classes must be reachable at their canonical, documented paths.
     assert pickle.loads(f"c{module}\n{name}\n.".encode()) is current
 
 

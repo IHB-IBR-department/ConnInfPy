@@ -110,7 +110,7 @@ class InterpretationReport:
         with _display_labels(self.result, self.labels):
             for level in levels:
                 fig, axes = plt.subplots(1, 2, figsize=(18, 9.2))
-                for ax, tail in zip(axes, ("positive", "negative")):
+                for ax, tail in zip(axes, ("positive", "negative"), strict=True):
                     plot_connectogram(self.result, self.rois, tail=tail, level=level, labels=level,
                                       alpha=self.alpha, ax=ax)
                 fig.subplots_adjust(left=0.01, right=0.99, top=0.93, bottom=0.01, wspace=0.04)
@@ -302,7 +302,7 @@ def _motion_qc_arm_markdown(diag: Mapping[str, Any], title: str, *, max_rows: in
             for idx, (nan, inf, share) in enumerate(zip(
                 roi_nf.get("nan_count") or [],
                 roi_nf.get("inf_count") or [],
-                roi_nf.get("nonfinite_share") or [],
+                roi_nf.get("nonfinite_share") or [], strict=False
             ))
             if (nan or inf)
         ]

@@ -628,12 +628,13 @@ def _motion_qc_roi_table(arm, *, label: str, key: str):
     roi = (arm or {}).get("roi_nonfinite") or {}
     if not roi.get("nan_count"):
         return
+    roi_ids = roi.get("roi_id")
     rows = [
-        {"roi": roi.get("roi_id")[idx] if roi.get("roi_id") else idx,
+        {"roi": roi_ids[idx] if roi_ids else idx,
          "nan": nan, "inf": inf, "nonfinite_share": share}
         for idx, (nan, inf, share) in enumerate(zip(
             roi.get("nan_count") or [], roi.get("inf_count") or [],
-            roi.get("nonfinite_share") or [],
+            roi.get("nonfinite_share") or [], strict=False
         ))
         if (nan or inf)
     ]

@@ -69,7 +69,7 @@ def create_palette(n_rois: int) -> Path:
 
     for rect, (title, display_mode) in zip(
         ([0.08, 0.66, 0.84, 0.22], [0.08, 0.39, 0.84, 0.22], [0.08, 0.12, 0.84, 0.22]),
-        PROJECTIONS,
+        PROJECTIONS, strict=True
     ):
         _draw_projection(fig, rect, atlas, display_mode, marker_size)
         fig.text(rect[0], rect[1] + rect[3] + 0.008, title, fontsize=13, color="#64748B", va="bottom")

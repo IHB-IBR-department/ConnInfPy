@@ -3,7 +3,7 @@
 Stratified (within-block) permutation, max-statistic extraction, collection
 of per-permutation results, empirical p-values with the +1 Phipson–Smyth
 correction, BH-FDR, and the worker-process / core-count helpers.
-:mod:`conninfpy.pairwise_stats` and :mod:`conninfpy.glm_stats` build their
+:mod:`conninfpy.stats.pairwise` and :mod:`conninfpy.stats.glm` build their
 permutation loops from these pieces.
 """
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -114,7 +114,7 @@ def _stratified_choice_n1(
 
 def _extract_max_stats(
     stat_dict: Dict[str, npt.NDArray], reference_shape: Tuple[int, ...]
-) -> Dict[str, np.float64]:
+) -> Dict[str, Union[float, npt.NDArray[np.float64]]]:
     """
     Extract maximum statistics from a stat dictionary.
 

@@ -8,8 +8,6 @@ from conninfpy.app.utils.ui_state import persistent_key, reset_widget_scopes
 from conninfpy.app.utils.workspace import DATA_TAB, go_to_step
 import threading
 import traceback
-from conninfpy.atlas import AtlasInfo
-from conninfpy import InferenceCancelled, ProgressSession, analyze
 from conninfpy.harmonize.diagnostics import analyze_design_diagnostics
 from conninfpy.defaults import (
     DEFAULT_ACCELERATION,
@@ -140,7 +138,7 @@ def _phenotype_fingerprint(frame):
         meta = "|".join(
             [
                 str(frame.shape),
-                repr([(str(name), str(dtype)) for name, dtype in zip(frame.columns, frame.dtypes)]),
+                repr([(str(name), str(dtype)) for name, dtype in zip(frame.columns, frame.dtypes, strict=True)]),
                 repr([str(name) for name in frame.index.names]),
                 f"na={int(frame.isna().sum().sum())}",
             ]
@@ -156,7 +154,7 @@ def _phenotype_fingerprint(frame):
 
 
 # Every parameter captured by the background worker, mapped to the launch
-# facts that determine it. ``tests/test_netstat27_regressions_r3.py`` asserts
+# facts that determine it. ``tests/test_background_runner_edge_cases.py`` asserts
 # that the worker signature and this table stay in step, and that each fact
 # actually reaches the launch signature.
 LAUNCH_FACT_COVERAGE = {
@@ -560,7 +558,7 @@ def _build_prelaunch_design_qc_summary(
             idx_t = [df_targ[df_targ[subject_col] == s].index[0] for s in common]
             b_sites = df_valid.loc[idx_b, site_col].astype(str).tolist()
             t_sites = df_valid.loc[idx_t, site_col].astype(str).tolist()
-            mismatch = [s for s, bs, ts in zip(common, b_sites, t_sites) if bs != ts]
+            mismatch = [s for s, bs, ts in zip(common, b_sites, t_sites, strict=True) if bs != ts]
             if mismatch:
                 summary["warnings"].append(
                     "Site mismatch between paired conditions for: " + ", ".join(map(str, mismatch[:5]))
@@ -1179,7 +1177,7 @@ def _build_design_arrays(
             # Condition A keeps phenotype order; condition B follows it by ID.
             idx_baseline = [int(i) for i in df_baseline.index]
             target_by_subject = dict(
-                zip(df_target[subject_col].astype(str), df_target.index)
+                zip(df_target[subject_col].astype(str), df_target.index, strict=True)
             )
             idx_target = [
                 int(target_by_subject[str(s)]) for s in df_baseline[subject_col].astype(str)
@@ -1211,7 +1209,7 @@ def _build_design_arrays(
             mismatched_sites = [
                 subject
                 for subject, baseline_site, target_site in zip(
-                    common_subjects, baseline_sites, target_sites
+                    common_subjects, baseline_sites, target_sites, strict=True
                 )
                 if baseline_site != target_site
             ]
@@ -2262,11 +2260,11 @@ def render_design_inference_view(base_atlas, tabs_list):
                         if not grid_errors:
                             cell_labels = [
                                 f"Cell {k}: E={e:g}, H={h:g}"
-                                for k, (e, h) in enumerate(zip(e_values, h_values))
+                                for k, (e, h) in enumerate(zip(e_values, h_values, strict=True))
                             ]
                             default_primary = next(
                                 (
-                                    k for k, (e, h) in enumerate(zip(e_values, h_values))
+                                    k for k, (e, h) in enumerate(zip(e_values, h_values, strict=True))
                                     if np.isclose(e, float(e_exp)) and np.isclose(h, float(h_exp))
                                 ),
                                 0,

@@ -10,11 +10,12 @@ import pytest
 from scipy import stats
 
 from conninfpy import analyze
-from conninfpy._cnbs import block_p_values
-from conninfpy.acceleration import _replace_sparse_tail, fit_gamma_tail, fit_gpd_tail
-from conninfpy.glm_stats import compute_p_val_glm, compute_p_val_glm_multi
-from conninfpy.pairwise_stats import compute_p_val
-from conninfpy.tfnbs_score import _precompute_block_metadata, get_network_informed_tfnbs_score
+from conninfpy.stats._cnbs import block_p_values
+from conninfpy.stats.acceleration import _replace_sparse_tail, fit_gamma_tail, fit_gpd_tail
+from conninfpy.stats.glm import compute_p_val_glm, compute_p_val_glm_multi
+from conninfpy.stats.pairwise import compute_p_val
+from conninfpy.enhance._blocks import _precompute_block_metadata
+from conninfpy.enhance.tfnbs import get_network_informed_tfnbs_score
 
 
 def _data():
@@ -109,7 +110,7 @@ def test_grid_joint_maxima_match_separately_corrected_settings():
                 n=4, start_thres=0, two_tailed=True, n_permutations=7,
                 rng=4, use_mp=False, acceleration=None)
     grid = compute_p_val(y, e=[0.5, 1.0], h=[1.0, 2.0], **opts)
-    for k, (e, h) in enumerate(zip([0.5, 1.0], [1.0, 2.0])):
+    for k, (e, h) in enumerate(zip([0.5, 1.0], [1.0, 2.0], strict=True)):
         single = compute_p_val(y, e=e, h=h, **opts)
         for key in single:
             np.testing.assert_array_equal(grid[key][..., k], single[key])
@@ -243,8 +244,8 @@ def test_legacy_open_close_loader_keeps_undefined_correlations(tmp_path):
 def test_gpd_custom_cutoff_retains_below_threshold_values():
     null = np.arange(200, dtype=float)
     observed = np.array([188.0, 205.0])
-    with patch("conninfpy.acceleration._fit_gpd_mom", return_value=(1.0, 0.0, True)), \
-            patch("conninfpy.acceleration._anderson_darling_gpd", side_effect=[3, 3, 3, 3, 0]):
+    with patch("conninfpy.stats.acceleration._fit_gpd_mom", return_value=(1.0, 0.0, True)), \
+            patch("conninfpy.stats.acceleration._anderson_darling_gpd", side_effect=[3, 3, 3, 3, 0]):
         p = fit_gpd_tail(null, observed, min_exceedances=25)
     assert p[0] == pytest.approx(13 / 201)
     assert p[1] == pytest.approx(0.05 * np.exp(-(205 - np.quantile(null, 0.95))))
@@ -253,8 +254,8 @@ def test_gpd_custom_cutoff_retains_below_threshold_values():
 
 def test_gpd_bounded_endpoint_falls_back_to_empirical():
     null = np.arange(200, dtype=float)
-    with patch("conninfpy.acceleration._fit_gpd_mom", return_value=(1.0, -0.5, True)), \
-            patch("conninfpy.acceleration._anderson_darling_gpd", return_value=0):
+    with patch("conninfpy.stats.acceleration._fit_gpd_mom", return_value=(1.0, -0.5, True)), \
+            patch("conninfpy.stats.acceleration._anderson_darling_gpd", return_value=0):
         p = fit_gpd_tail(null, np.array([205.0]))
     assert p[0] == pytest.approx(1 / 201)
 

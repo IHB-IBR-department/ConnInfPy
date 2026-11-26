@@ -11,8 +11,6 @@ import numpy.testing as npt
 import warnings as _w
 
 from conninfpy.harmonize import (
-    ComBatModel,
-    CombatResult,
     combat_apply,
     combat_fit,
     combat_harmonize,

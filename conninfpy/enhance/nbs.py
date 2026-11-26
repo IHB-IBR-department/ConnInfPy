@@ -8,7 +8,7 @@ cNBS scoring in a single module, mirroring the role of tfnbs_score.py.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -305,7 +305,7 @@ def _component_statistics(
         found.edge_component,
         weights=found.weights.astype(np.float64) - threshold,
         minlength=found.n_components,
-    )
+    ).astype(np.float64, copy=False)
 
 
 def get_nbs_score(
@@ -673,7 +673,9 @@ def nbs_bct(
     if test_type in ("paired", "two-sample") and group2 is None:
         raise ValueError(f"group2 is required for test_type='{test_type}'.")
 
+    t_func: Callable[..., Dict[str, npt.NDArray[np.float64]]]
     if test_type == "paired":
+        assert group2 is not None  # validated above for the paired design
         diffs = group2 - group1
         emp_t_dict = _score_nbs_from_diffs(
             diffs, threshold=threshold, stat_type=stat_type
@@ -681,6 +683,7 @@ def nbs_bct(
         t_func = _score_nbs_from_diffs
 
     elif test_type == "two-sample":
+        assert group2 is not None  # validated above for the two-sample design
         emp_t_dict = _score_nbs_two_sample(
             group1,
             group2,
@@ -708,8 +711,10 @@ def nbs_bct(
     # Build adjacency masks for reporting (raw thresholding on t-stats)
     adj_matrices: Dict[str, npt.NDArray[np.uint8]] = {}
     if test_type == "paired":
+        assert group2 is not None  # validated above for the paired design
         raw_t = compute_t_stat_diff(group2 - group1)
     elif test_type == "two-sample":
+        assert group2 is not None  # validated above for the two-sample design
         raw_t = compute_t_stat(group1, group2, test_type="two-sample", **kwargs)
     else:
         raw_t = compute_t_stat_diff(group1)
