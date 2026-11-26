@@ -1,7 +1,11 @@
 """Deterministic provenance-driven Methods boilerplate and BrainNet Viewer export."""
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
@@ -468,6 +472,35 @@ def methods_boilerplate(
     return "\n".join(lines) + "\n"
 
 
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _find_surface_template(executable: Path, surface_filename: str) -> Optional[Path]:
+    """Locate a bundled BrainNet Viewer surface template relative to ``brainnet-render``."""
+    resolved = executable.resolve()
+    # Typical venv layout: <env>/bin/brainnet-render -> <env>/lib/python*/site-packages/...
+    env_root = resolved.parent.parent
+    for lib_dir in (env_root / "lib", env_root / "lib64"):
+        if not lib_dir.is_dir():
+            continue
+        for candidate in lib_dir.glob(
+            f"python*/site-packages/brainnet_viewer/resources/Data/SurfTemplate/{surface_filename}"
+        ):
+            if candidate.is_file():
+                return candidate
+    win_candidate = (
+        env_root / "Lib" / "site-packages" / "brainnet_viewer" / "resources" / "Data" / "SurfTemplate" / surface_filename
+    )
+    if win_candidate.is_file():
+        return win_candidate
+    return None
+
+
 def export_brainnet(
     result: Any,
     atlas: Any,
@@ -476,8 +509,15 @@ def export_brainnet(
     alpha: float = 0.05,
     tail: str = "both",
     param_idx: Optional[int] = None,
+    write_scene: bool = False,
+    surface_path: "str | os.PathLike[str] | None" = None,
+    surface_name: str = "BrainMesh_ICBM152_smoothed.nv",
 ) -> Dict[str, Path]:
-    """Export thresholded connectivity results to BrainNet Viewer ``.node`` and ``.edge`` files."""
+    """Export thresholded connectivity results to BrainNet Viewer ``.node`` and ``.edge`` files.
+
+    When ``write_scene=True``, also writes ``<out_prefix>.scene.json`` conforming
+    to BrainNet Viewer Python 2.0.0 (``schema_version='0.1'``).
+    """
     if tail not in ("both", "positive", "negative"):
         raise ValueError(f"tail must be 'both', 'positive', or 'negative'; got {tail!r}.")
     if atlas is None:
@@ -551,7 +591,7 @@ def export_brainnet(
     labels: List[str] = []
     for i in range(N):
         raw = str(raw_labels[i]).strip() if raw_labels is not None and i < len(raw_labels) else f"ROI_{i}"
-        clean = "_".join(raw.split()) or f"ROI_{i}"
+        clean = "_".join(raw.split()).lstrip("#") or f"ROI_{i}"
         labels.append(clean)
 
     prefix_path = Path(out_prefix)
@@ -566,7 +606,181 @@ def export_brainnet(
     node_path.write_text("".join(node_lines), encoding="utf-8")
     np.savetxt(edge_path, edge_mat, fmt="%.6g", delimiter="\t")
 
-    return {"node": node_path, "edge": edge_path}
+    out_paths: Dict[str, Path] = {"node": node_path, "edge": edge_path}
+    if write_scene:
+        scene_path = Path(f"{prefix_path}.scene.json")
+        if surface_path is not None:
+            src_surf = Path(surface_path)
+            if not src_surf.is_file():
+                raise FileNotFoundError(f"BrainNet surface file not found: {src_surf}")
+            dest_surf = scene_path.parent / src_surf.name
+            if src_surf.resolve() != dest_surf.resolve():
+                shutil.copy2(src_surf, dest_surf)
+            surf_rel = dest_surf.name
+            surf_sha = _sha256_file(dest_surf)
+        else:
+            dest_surf = scene_path.parent / surface_name
+            surf_rel = surface_name
+            surf_sha = _sha256_file(dest_surf) if dest_surf.is_file() else ""
+
+        scene_data = {
+            "schema_version": "0.1",
+            "id": prefix_path.name,
+            "name": f"ConnInfPy {prefix_path.name}",
+            "loadfile": 7,
+            "map_mode": 0,
+            "coordinate_space": "MNI",
+            "inputs": {
+                "surface": {
+                    "role": "surface",
+                    "relative_path": surf_rel,
+                    "sha256": surf_sha,
+                    "metadata": {},
+                },
+                "node": {
+                    "role": "node",
+                    "relative_path": node_path.name,
+                    "sha256": _sha256_file(node_path),
+                    "metadata": {},
+                },
+                "edge": {
+                    "role": "edge",
+                    "relative_path": edge_path.name,
+                    "sha256": _sha256_file(edge_path),
+                    "metadata": {},
+                },
+            },
+            "options": {
+                "visualization_settings": {
+                    "schema_version": "1.22.0",
+                    "layout": {
+                        "preset": 1,
+                        "view_direction": 1,
+                    },
+                    "surface": {
+                        "opacity": 0.3,
+                    },
+                    "node": {
+                        "color_mode": "modular",
+                        "selection_mode": "connected",
+                        "size_mode": "mapped",
+                    },
+                    "edge": {
+                        "directed": False,
+                        "selection_mode": "all",
+                        "color_mode": "threshold",
+                        "threshold_value_mode": "signed",
+                        "color_threshold": 0.0,
+                    },
+                }
+            },
+            "metadata": {},
+        }
+        scene_path.write_text(json.dumps(scene_data, indent=2) + "\n", encoding="utf-8")
+        out_paths["scene"] = scene_path
+
+    return out_paths
 
 
-__all__ = ["methods_boilerplate", "export_brainnet"]
+def render_brainnet(
+    scene_path: "str | os.PathLike[str]",
+    out_image: "str | os.PathLike[str]",
+    *,
+    executable: "str | os.PathLike[str] | None" = None,
+    surface_path: "str | os.PathLike[str] | None" = None,
+    width: int = 1200,
+    height: int = 900,
+    dpi: int = 150,
+    overwrite: bool = True,
+) -> Path:
+    """Render a BrainNet Viewer ``scene.json`` headlessly via ``brainnet-render``."""
+    if executable is not None:
+        exe_candidate = Path(executable)
+        if exe_candidate.is_file():
+            exe_path = exe_candidate
+        else:
+            found = shutil.which(str(executable))
+            if found is None:
+                raise FileNotFoundError(
+                    f"brainnet-render executable not found: {executable}. "
+                    "Install BrainNet Viewer Python 2.0.0 or provide a valid path."
+                )
+            exe_path = Path(found)
+    else:
+        found = shutil.which("brainnet-render")
+        if found is None:
+            raise FileNotFoundError(
+                "brainnet-render executable not found on PATH. "
+                "Install BrainNet Viewer Python 2.0.0 (e.g. in a dedicated environment) "
+                "or pass executable=/path/to/brainnet-render."
+            )
+        exe_path = Path(found)
+
+    scene_file = Path(scene_path)
+    if not scene_file.is_file():
+        raise FileNotFoundError(f"BrainNet scene file not found: {scene_file}")
+
+    scene_data = json.loads(scene_file.read_text(encoding="utf-8"))
+    inputs = scene_data.setdefault("inputs", {})
+    surf_info = inputs.setdefault("surface", {"role": "surface", "relative_path": "BrainMesh_ICBM152_smoothed.nv", "sha256": "", "metadata": {}})
+    surf_rel = str(surf_info.get("relative_path") or "BrainMesh_ICBM152_smoothed.nv")
+    local_surf = scene_file.parent / surf_rel
+
+    scene_dirty = False
+    if not local_surf.is_file():
+        if surface_path is not None:
+            src_surf = Path(surface_path)
+            if not src_surf.is_file():
+                raise FileNotFoundError(f"BrainNet surface file not found: {src_surf}")
+            dest_surf = scene_file.parent / src_surf.name
+            if src_surf.resolve() != dest_surf.resolve():
+                shutil.copy2(src_surf, dest_surf)
+            surf_info["relative_path"] = dest_surf.name
+            surf_info["sha256"] = _sha256_file(dest_surf)
+            scene_dirty = True
+        else:
+            tmpl = _find_surface_template(exe_path, Path(surf_rel).name)
+            if tmpl is None:
+                raise FileNotFoundError(
+                    f"BrainNet surface file '{surf_rel}' not found next to {scene_file} "
+                    "and no surface_path or bundled SurfTemplate was found."
+                )
+            local_surf.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(tmpl, local_surf)
+            surf_info["sha256"] = _sha256_file(local_surf)
+            scene_dirty = True
+    elif not surf_info.get("sha256"):
+        surf_info["sha256"] = _sha256_file(local_surf)
+        scene_dirty = True
+
+    if scene_dirty:
+        scene_file.write_text(json.dumps(scene_data, indent=2) + "\n", encoding="utf-8")
+
+    out_path = Path(out_image)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        str(exe_path),
+        "--scene",
+        str(scene_file),
+        "--output",
+        str(out_path),
+        "--width",
+        str(int(width)),
+        "--height",
+        str(int(height)),
+        "--dpi",
+        str(int(dpi)),
+    ]
+    if overwrite:
+        cmd.append("--overwrite")
+
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        detail = proc.stderr.strip() or proc.stdout.strip() or "no output"
+        raise RuntimeError(f"brainnet-render failed (exit {proc.returncode}): {detail}")
+    if not out_path.is_file():
+        raise RuntimeError(f"brainnet-render completed but output image was not created: {out_path}")
+    return out_path
+
+
+__all__ = ["methods_boilerplate", "export_brainnet", "render_brainnet"]

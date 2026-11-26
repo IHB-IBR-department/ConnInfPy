@@ -857,6 +857,8 @@ def interpret_outputs(
     dpi: int = 300,
     methods: bool = False,
     export_brainnet: bool = False,
+    brainnet_render: bool = False,
+    brainnet_bin: Optional[str] = None,
     param_idx: Optional[int] = None,
 ) -> Dict[str, Path]:
     """Export post-analysis summaries, node/network tables, BNA annotations, and figures."""
@@ -1115,8 +1117,11 @@ def interpret_outputs(
             methods_path.write_text(text, encoding="utf-8")
             written[f"methods_boilerplate{suffix}"] = methods_path
 
-        if export_brainnet:
-            from conninfpy.reporting import export_brainnet as _export_brainnet
+        if export_brainnet or brainnet_render:
+            from conninfpy.reporting import (
+                export_brainnet as _export_brainnet,
+                render_brainnet as _render_brainnet,
+            )
 
             try:
                 bn_paths = _export_brainnet(
@@ -1125,9 +1130,24 @@ def interpret_outputs(
                     dest / f"brainnet{suffix}",
                     alpha=eff_alpha,
                     param_idx=eff_param_idx,
+                    write_scene=True,
                 )
                 written[f"brainnet_node{suffix}"] = bn_paths["node"]
                 written[f"brainnet_edge{suffix}"] = bn_paths["edge"]
+                written[f"brainnet_scene{suffix}"] = bn_paths["scene"]
+                if brainnet_render:
+                    try:
+                        png_path = _render_brainnet(
+                            bn_paths["scene"],
+                            dest / f"brainnet{suffix}.png",
+                            executable=brainnet_bin,
+                        )
+                        written[f"brainnet_png{suffix}"] = png_path
+                    except (FileNotFoundError, RuntimeError) as exc:
+                        print(
+                            f"conninfpy interpret: skipping BrainNet render for {bp.name}: {exc}",
+                            file=sys.stderr,
+                        )
             except ValueError as exc:
                 print(
                     f"conninfpy interpret: skipping BrainNet export for {bp.name}: {exc}",

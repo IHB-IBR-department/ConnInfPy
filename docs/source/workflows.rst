@@ -826,6 +826,26 @@ For data parcellated with the Brainnetome atlas itself use
 See :ref:`usage-interpret` for the rules, and the ABIDE and Open-Close
 examples (``examples/abide/``, ``examples/open_close/``) for complete runs.
 
+BrainNet Viewer export and headless rendering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Results with 3D MNI coordinates can be exported to BrainNet Viewer ``.node``
+and ``.edge`` files together with a ``.scene.json`` scene manifest
+(compatible with BrainNet Viewer Python 2.0.0):
+
+.. code-block:: python
+
+   from conninfpy.reporting import export_brainnet, render_brainnet
+
+   paths = export_brainnet(out.inference, atlas, 'results/brainnet', alpha=0.05, write_scene=True)
+   # Optional headless PNG rendering if brainnet-render is installed in a separate environment:
+   # png = render_brainnet(paths['scene'], 'results/brainnet.png')
+
+From the CLI, ``conninfpy interpret --export-brainnet`` writes ``.node``,
+``.edge``, and ``.scene.json``; adding ``--brainnet-render`` (and optionally
+``--brainnet-bin <path>``) invokes ``brainnet-render`` when available and warns
+without failing if the renderer is not installed.
+
 Speed vs. publication runs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

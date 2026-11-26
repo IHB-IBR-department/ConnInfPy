@@ -1079,6 +1079,8 @@ def run(
             dpi=int(opts.get("dpi", 300)),
             methods=bool(opts.get("methods", False)),
             export_brainnet=bool(opts.get("export_brainnet", False)),
+            brainnet_render=bool(opts.get("brainnet_render", False)),
+            brainnet_bin=opts.get("brainnet_bin"),
             param_idx=opts.get("param_idx"),
         )
         for k, v in interp_written.items():
@@ -1343,7 +1345,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p_interp.add_argument(
         "--export-brainnet",
         action="store_true",
-        help="export BrainNet Viewer .node and .edge files",
+        help="export BrainNet Viewer .node, .edge, and .scene.json files",
+    )
+    p_interp.add_argument(
+        "--brainnet-render",
+        action="store_true",
+        help="render BrainNet Viewer PNG via brainnet-render if available",
+    )
+    p_interp.add_argument(
+        "--brainnet-bin",
+        default=None,
+        help="path to brainnet-render executable (default: search PATH)",
     )
     p_interp.add_argument(
         "--param-idx",
@@ -1441,6 +1453,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 dpi=args.dpi,
                 methods=args.methods,
                 export_brainnet=args.export_brainnet,
+                brainnet_render=args.brainnet_render,
+                brainnet_bin=args.brainnet_bin,
                 param_idx=args.param_idx,
             )
             return 0
