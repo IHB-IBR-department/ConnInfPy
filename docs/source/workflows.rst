@@ -848,3 +848,42 @@ See :doc:`usage` for the full enhancement-method table and acceleration
 internals. The ``(E, H)`` stability sweep (:ref:`wf-eh-stability`) and the
 several-predictors workflow (:ref:`wf-multi-interest`, which wraps
 :func:`conninfpy.compute_p_val_glm_multi`) are covered above.
+
+
+.. _wf-fmriprep-nilearn:
+
+From fMRIPrep derivatives and on-demand nilearn atlases
+-------------------------------------------------------
+
+``conninfpy`` keeps ``nilearn`` optional and does not bundle third-party NIfTI
+atlases. Fetch a volumetric parcellation on demand with ``nilearn``, extract
+confound-regressed time series with :class:`~conninfpy.loaders.FmriprepDerivativesLoader`,
+and annotate detected edges using ``support='parcel'``:
+
+.. code-block:: python
+
+   from nilearn import datasets
+   from conninfpy import AtlasInfo, analyze, compute_connectivity
+   from conninfpy.atlas.brainnetome import BrainnetomeReference
+   from conninfpy.interpret import annotate_rois
+   from conninfpy.loaders import FmriprepDerivativesLoader
+
+   schaefer = datasets.fetch_atlas_schaefer_2018(n_rois=100, yeo_networks=7, resolution_mm=2)
+   ds = FmriprepDerivativesLoader(
+       derivatives_dir="/path/to/bids/derivatives/fmriprep",
+       atlas_image_path=schaefer.maps,
+       denoising={"strategy": 4, "n_compcor": 10},
+   ).load()
+   corr = compute_connectivity(ds.data, kind="correlation")
+   out = analyze(corr, input="r", interest=age, confounds=mean_fd[:, None],
+                 motion_qc={"fd": mean_fd}, method="tfnbs", rng=42)
+   atlas = AtlasInfo.from_nifti(schaefer.maps)
+   ref = BrainnetomeReference.load(profiles=False, resolution_mm=1, cerebellum="anatom")
+   rois = annotate_rois(coords=atlas.coords, reference=ref, names=atlas.labels,
+                        space="MNI152NLin2009cAsym", support="parcel",
+                        parcel_image=schaefer.maps, parcel_labels=list(atlas.label_ids))
+
+See ``examples/fmriprep_nilearn/`` for the full runnable script
+(``run_fmriprep_workflow.py``), ``manifest_template.yaml`` (for Schaefer-100
+and Craddock-200), and the matching ``conninfpy qc`` → ``run`` → ``interpret``
+CLI commands.

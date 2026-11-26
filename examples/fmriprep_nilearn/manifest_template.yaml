@@ -1,0 +1,46 @@
+# DatasetManifest v1 template for fMRIPrep derivatives
+#
+# Adapt the paths below to your BIDS/fMRIPrep derivatives directory and run:
+#   conninfpy init --manifest manifest.yaml --out analysis.yaml
+#   conninfpy qc analysis.yaml --motion-qc
+#   conninfpy run analysis.yaml
+#
+# Relative paths are resolved against the directory containing this file.
+
+schema_version: 1
+name: "My fMRIPrep Study"
+loader: "FmriprepDerivativesLoader"
+
+paths:
+  # Root of fMRIPrep derivatives (contains sub-*/func/*_desc-preproc_bold.nii.gz)
+  derivatives_dir: "/path/to/bids/derivatives/fmriprep"
+  # Optional subject-level phenotype table (CSV/TSV with a subject_id / participant_id column)
+  pheno_path: "/path/to/bids/participants.tsv"
+  # 3-D integer parcel NIfTI in the same MNI space as the fMRIPrep BOLD outputs
+  # (e.g. Schaefer-100 or Craddock-200 fetched on demand with nilearn)
+  atlas_image_path: "/path/to/atlas_MNI152NLin2009cAsym.nii.gz"
+  # Optional ROI metadata CSV (id, name, network, x, y, z)
+  # atlas_metadata: "/path/to/atlas_lut.csv"
+
+metadata:
+  cohort: "my-fmriprep-cohort"
+  atlas_name: "Schaefer-100"
+  space: "MNI152NLin2009cAsym"
+
+params:
+  bold_pattern: "sub-*/func/*space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz"
+  confounds_pattern: "sub-*/func/*desc-confounds_timeseries.tsv"
+  subject_regex: "sub-([^_/]+)"
+  denoising:
+    # 1=motion(full), 2=motion(deriv)+aCompCor(n_compcor)+cosine,
+    # 3=motion(deriv)+aCompCor(all)+cosine, 4=motion(full)+aCompCor(n_compcor)+cosine,
+    # 5=motion(full)+aCompCor(all)+cosine, 6=motion(full)+t/aCompCor(all)+cosine
+    strategy: 4
+    n_compcor: 10
+    use_GSR: false
+    # smoothing: 6.0  # optional FWHM in mm
+
+checks:
+  expected_rois: 100
+  min_subjects: 5
+  expected_data_kind: "timeseries"
