@@ -364,5 +364,235 @@ class TestInitManifestAndBidsPheno(unittest.TestCase):
         self.assertEqual(ds2.data.shape, (3, 30, 5))
 
 
+class TestReportingAndBrainNet(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_methods_boilerplate_api_and_cli_conditional_refs(self):
+        from conninfpy import analyze
+        from conninfpy.atlas.metadata import AtlasInfo
+
+        # Single-site run: ComBat must NOT be cited; SUIT cited only when cerebellum != none
+        r = _correlations(16, N=6, seed=1)
+        grp = np.array(["hc"] * 8 + ["pt"] * 8)
+        res = analyze(
+            group1=r[:8],
+            group2=r[8:],
+            input="r",
+            test_type="two-sample",
+            method="tfnbs",
+            n_permutations=20,
+            rng=0,
+            use_mp=False,
+        )
+        md_single = res.methods_boilerplate()
+        self.assertIn("2.0", md_single)
+        self.assertIn("inference_unit", md_single)
+        self.assertIn("`edge`", md_single)
+        self.assertIn("tail_policy", md_single)
+        self.assertIn("tfnbs", md_single)
+        self.assertIn("Baggio", md_single)
+        self.assertIn("Phipson", md_single)
+        self.assertNotIn("Fortin", md_single)
+        self.assertNotIn("Diedrichsen", md_single)
+
+        # CLI interpret --methods with cerebellum=anatom and multi-site ComBat
+        atlas_path = _write_coords_atlas(self.tmp, n_rois=6)
+        cfg = _make_study(
+            self.tmp,
+            _pheno(16),
+            _correlations(16, N=6, seed=2),
+            {
+                "type": "glm",
+                "interest": "age",
+                "confounds": ["sex"],
+                "sites": "site",
+                "harmonize": "combat_site_dummies_glm",
+            },
+            atlas=str(atlas_path),
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            run(cfg)
+
+        out_interp = self.tmp / "interp_methods"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = main([
+                "interpret", str(self.tmp / "out"),
+                "--methods",
+                "--cerebellum", "anatom",
+                "--no-plots",
+                "--out", str(out_interp),
+            ])
+        self.assertEqual(rc, 0)
+        methods_file = out_interp / "methods_boilerplate.md"
+        self.assertTrue(methods_file.is_file())
+        md_cli = methods_file.read_text(encoding="utf-8")
+        self.assertIn("2.0", md_cli)
+        self.assertIn("combat_site_dummies_glm", md_cli)
+        self.assertIn("Fortin", md_cli)
+        self.assertIn("Diedrichsen", md_cli)
+
+        # AtlasInfo without coords check is independent; test BNA-246 reference trigger
+        bna_mock = AtlasInfo(
+            labels=[f"R{i}" for i in range(6)],
+            networks=["Net1"] * 6,
+            source="Brainnetome Atlas (BNA-246)",
+        )
+        md_bna = res.methods_boilerplate(atlas=bna_mock)
+        self.assertIn("Fan, L.", md_bna)
+
+    def test_n_effective_in_significant_edges_and_csv(self):
+        from conninfpy import analyze
+
+        r = _correlations(16, N=6, seed=4)
+        # Inject NaNs on edge (0, 1) for 3 subjects -> n_effective = 13
+        r[0, 0, 1] = r[0, 1, 0] = np.nan
+        r[1, 0, 1] = r[1, 1, 0] = np.nan
+        r[8, 0, 1] = r[8, 1, 0] = np.nan
+
+        res = analyze(
+            group1=r[:8],
+            group2=r[8:],
+            input="r",
+            test_type="two-sample",
+            method="tstat",
+            n_permutations=20,
+            missing="available_case",
+            rng=0,
+            use_mp=False,
+        )
+        df = res.significant_edges(include_nonsig=True)
+        self.assertIn("n_effective", df.columns)
+        row_01 = df[(df["roi_i"] == 0) & (df["roi_j"] == 1)].iloc[0]
+        row_23 = df[(df["roi_i"] == 2) & (df["roi_j"] == 3)].iloc[0]
+        self.assertEqual(int(row_01["n_effective"]), 13)
+        self.assertEqual(int(row_23["n_effective"]), 16)
+
+        csv_path = self.tmp / "edges_avail.csv"
+        res.to_csv(csv_path, include_nonsig=True)
+        df_csv = pd.read_csv(csv_path)
+        self.assertIn("n_effective", df_csv.columns)
+
+        # Complete-case result must NOT have n_effective
+        res_cc = analyze(
+            group1=_correlations(16, N=6, seed=4)[:8],
+            group2=_correlations(16, N=6, seed=4)[8:],
+            input="r",
+            test_type="two-sample",
+            method="tstat",
+            n_permutations=20,
+            rng=0,
+            use_mp=False,
+        )
+        self.assertNotIn("n_effective", res_cc.significant_edges(include_nonsig=True).columns)
+
+    def test_export_brainnet_api_cli_and_missing_coords(self):
+        from conninfpy.atlas.metadata import AtlasInfo
+        from conninfpy.results import InferenceResult
+
+        N = 6
+        p_pos = np.ones((N, N), dtype=float)
+        p_neg = np.ones((N, N), dtype=float)
+        p_pos[0, 1] = p_pos[1, 0] = 0.01
+        p_neg[2, 3] = p_neg[3, 2] = 0.02
+        stat_pos = np.zeros((N, N), dtype=float)
+        stat_neg = np.zeros((N, N), dtype=float)
+        stat_pos[0, 1] = stat_pos[1, 0] = 3.5
+        stat_neg[2, 3] = stat_neg[3, 2] = 2.8
+
+        res = InferenceResult(
+            p_pos,
+            p_neg,
+            method="tstat",
+            n_permutations=20,
+            stat_positive=stat_pos,
+            stat_negative=stat_neg,
+        )
+        coords = np.array([
+            [-10.0, 50.0, 20.0],
+            [10.0, 50.0, 20.0],
+            [-40.0, -20.0, 50.0],
+            [40.0, -20.0, 50.0],
+            [-25.0, -70.0, 10.0],
+            [25.0, -70.0, 10.0],
+        ])
+        atlas = AtlasInfo(
+            labels=[f"ROI {i}" for i in range(N)],
+            networks=["DMN", "DMN", "SMN", "SMN", "Vis", "Vis"],
+            coords=coords,
+        )
+        paths = res.to_brainnet(atlas, self.tmp / "bn_test", alpha=0.05)
+        self.assertTrue(paths["node"].is_file())
+        self.assertTrue(paths["edge"].is_file())
+
+        node_lines = paths["node"].read_text(encoding="utf-8").strip().splitlines()
+        self.assertEqual(len(node_lines), N)
+        for idx, line in enumerate(node_lines):
+            cols = line.split("\t")
+            self.assertEqual(len(cols), 6)
+            self.assertNotIn(" ", cols[5])
+            self.assertEqual(cols[5], f"ROI_{idx}")
+
+        edge_mat = np.loadtxt(paths["edge"], delimiter="\t")
+        self.assertEqual(edge_mat.shape, (N, N))
+        self.assertTrue(np.allclose(edge_mat, edge_mat.T))
+        self.assertTrue(np.allclose(np.diag(edge_mat), 0.0))
+        self.assertAlmostEqual(edge_mat[0, 1], 3.5, places=5)
+        self.assertAlmostEqual(edge_mat[2, 3], -2.8, places=5)
+        self.assertEqual(int(np.sum(edge_mat != 0.0)), 4)  # 2 undirected edges * 2
+
+        # Missing coords raises ValueError in API
+        atlas_no_coords = AtlasInfo(labels=[f"ROI_{i}" for i in range(N)], networks=["A"] * N)
+        with self.assertRaises(ValueError):
+            res.to_brainnet(atlas_no_coords, self.tmp / "bn_fail")
+
+        # CLI interpret --export-brainnet with coords
+        atlas_path = _write_coords_atlas(self.tmp, n_rois=N)
+        cfg = _make_study(
+            self.tmp,
+            _pheno(16),
+            _correlations(16, N=N, seed=5),
+            {"type": "glm", "interest": "age"},
+            atlas=str(atlas_path),
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            run(cfg)
+        out_bn = self.tmp / "interp_bn"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = main([
+                "interpret", str(self.tmp / "out"),
+                "--export-brainnet",
+                "--no-plots",
+                "--out", str(out_bn),
+            ])
+        self.assertEqual(rc, 0)
+        self.assertTrue((out_bn / "brainnet.node").is_file())
+        self.assertTrue((out_bn / "brainnet.edge").is_file())
+
+        # CLI interpret --export-brainnet without coords skips gracefully
+        no_coord_csv = self.tmp / "atlas_nocoord.csv"
+        pd.DataFrame({"name": [f"R{i}" for i in range(N)], "network": ["Net"] * N}).to_csv(
+            no_coord_csv, index=False
+        )
+        out_skip = self.tmp / "interp_bn_skip"
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            rc_skip = main([
+                "interpret", str(self.tmp / "out"),
+                "--atlas", str(no_coord_csv),
+                "--export-brainnet",
+                "--no-plots",
+                "--out", str(out_skip),
+            ])
+        self.assertEqual(rc_skip, 0)
+        self.assertFalse((out_skip / "brainnet.node").exists())
+        self.assertIn("skipping BrainNet export", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

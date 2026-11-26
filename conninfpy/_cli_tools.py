@@ -739,6 +739,11 @@ def _reconstruct_inference_result(bundle: Any, pvals_path: Optional[Path]) -> An
             "estimable": bundle.estimable,
             "tested": bundle.tested,
         },
+        missing_report=meta.get("missing_report"),
+        harmonized=bool(
+            meta.get("resolved_strategy") in ("combat_only", "combat_site_dummies_glm")
+        ),
+        combat_diagnostics=meta.get("combat_diagnostics"),
         component_report=native if unit == "component" else None,
         block_report=native if unit == "block" else None,
     )
@@ -758,6 +763,8 @@ def interpret_outputs(
     space: Optional[str] = None,
     fig_format: str = "png",
     dpi: int = 300,
+    methods: bool = False,
+    export_brainnet: bool = False,
 ) -> Dict[str, Path]:
     """Export post-analysis summaries, node/network tables, BNA annotations, and figures."""
     from conninfpy.atlas.brainnetome import BrainnetomeReference
@@ -958,6 +965,48 @@ def interpret_outputs(
                         fig_g.savefig(g_path, dpi=dpi, bbox_inches="tight", facecolor="white")
                         plt.close(fig_g)
                         written[f"connectogram{suffix}_{tail}"] = g_path
+
+        # 5. Deterministic Methods boilerplate & BrainNet Viewer export
+        if methods:
+            from conninfpy.reporting import methods_boilerplate
+
+            prov_data = None
+            if prov_path.is_file():
+                try:
+                    prov_data = json.loads(prov_path.read_text(encoding="utf-8"))
+                except Exception:
+                    prov_data = None
+            result_key = suffix.lstrip("_") or "result"
+            source_obj = prov_data if prov_data is not None else bundle
+            text = methods_boilerplate(
+                source_obj,
+                alpha=eff_alpha,
+                atlas=atlas,
+                cerebellum=cb_arg,
+                result_name=result_key,
+            )
+            methods_path = dest / f"methods_boilerplate{suffix}.md"
+            methods_path.write_text(text, encoding="utf-8")
+            written[f"methods_boilerplate{suffix}"] = methods_path
+
+        if export_brainnet:
+            from conninfpy.reporting import export_brainnet as _export_brainnet
+
+            try:
+                bn_paths = _export_brainnet(
+                    inf_res,
+                    atlas,
+                    dest / f"brainnet{suffix}",
+                    alpha=eff_alpha,
+                    param_idx=param_idx,
+                )
+                written[f"brainnet_node{suffix}"] = bn_paths["node"]
+                written[f"brainnet_edge{suffix}"] = bn_paths["edge"]
+            except ValueError as exc:
+                print(
+                    f"conninfpy interpret: skipping BrainNet export for {bp.name}: {exc}",
+                    file=sys.stderr,
+                )
 
     print(f"conninfpy interpret — wrote {len(written)} artifact(s) to {dest}")
     return written

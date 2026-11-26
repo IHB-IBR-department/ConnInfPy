@@ -783,6 +783,19 @@ def run(
         bundle_path = out / f"bundle{suffix}.pkl"
         res.to_bundle().save(bundle_path)
         written[f"bundle{suffix}"] = bundle_path
+        mr = getattr(inf, "missing_report", None)
+        missing_summary = (
+            {
+                "edge_n_min": mr.get("edge_n_min"),
+                "edge_n_max": (
+                    int(np.max(mr["edge_n"]))
+                    if mr.get("edge_n") is not None
+                    else None
+                ),
+            }
+            if isinstance(mr, dict)
+            else None
+        )
         per_result[name or "result"] = {
             "n_significant": inf.n_significant(alpha),
             "method": inf.method,
@@ -801,6 +814,7 @@ def run(
             "design_diagnostics": res.design_diagnostics,
             # NETSTAT-28: additive descriptive side-car (absent unless opted in).
             "motion_qc": getattr(res, "motion_qc", None),
+            "missing_report": missing_summary,
             "fisher": (inf.analysis_provenance.get("fisher")
                        if isinstance(getattr(inf, "analysis_provenance", None), dict) else None),
             "design": None if design is None else {
@@ -844,6 +858,8 @@ def run(
             space=opts.get("space"),
             fig_format=str(opts.get("format", "png")),
             dpi=int(opts.get("dpi", 300)),
+            methods=bool(opts.get("methods", False)),
+            export_brainnet=bool(opts.get("export_brainnet", False)),
         )
         for k, v in interp_written.items():
             written[f"interpret_{k}"] = v
@@ -1080,6 +1096,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=300,
         help="figure DPI for raster/embedded outputs (default: 300)",
     )
+    p_interp.add_argument(
+        "--methods",
+        action="store_true",
+        help="write deterministic provenance-driven methods_boilerplate.md",
+    )
+    p_interp.add_argument(
+        "--export-brainnet",
+        action="store_true",
+        help="export BrainNet Viewer .node and .edge files",
+    )
 
     p_infl = sub.add_parser(
         "influence",
@@ -1167,6 +1193,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 space=args.space,
                 fig_format=args.format,
                 dpi=args.dpi,
+                methods=args.methods,
+                export_brainnet=args.export_brainnet,
             )
             return 0
         if args.command == "influence":

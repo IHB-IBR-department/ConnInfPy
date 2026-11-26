@@ -46,6 +46,19 @@ from conninfpy._export import network_summary_matrix
 from conninfpy._provenance import project_analysis_provenance
 
 
+def _extract_edge_n(result: Any) -> Optional[npt.NDArray[np.float64]]:
+    """Return per-edge observation counts from missing_report or provenance, or None."""
+    mr = getattr(result, "missing_report", None)
+    if isinstance(mr, dict) and mr.get("edge_n") is not None:
+        return np.asarray(mr["edge_n"])
+    prov = getattr(result, "analysis_provenance", None)
+    if isinstance(prov, dict):
+        cov = prov.get("coverage")
+        if isinstance(cov, dict) and cov.get("edge_n") is not None:
+            return np.asarray(cov["edge_n"])
+    return None
+
+
 def summarize_by_network(
     p_maps: Any,
     networks: Any,
@@ -850,6 +863,7 @@ class InferenceResult(TailResult):
             include_nonsig=include_nonsig,
             top_k=top_k,
             component_labels=None if report is None else report["labels"],
+            n_effective=_extract_edge_n(self),
         )
         eff = self.effect_map()
         if eff is not None and not df.empty:
@@ -1098,6 +1112,39 @@ class InferenceResult(TailResult):
         )
         df.to_csv(path, index=index, **to_csv_kwargs)
 
+    def methods_boilerplate(
+        self,
+        *,
+        alpha: float = 0.05,
+        atlas: Optional[Any] = None,
+        cerebellum: Optional[str] = None,
+    ) -> str:
+        """Generate a deterministic, provenance-driven Methods section in Markdown."""
+        from conninfpy.reporting import methods_boilerplate
+
+        return methods_boilerplate(self, alpha=alpha, atlas=atlas, cerebellum=cerebellum)
+
+    def to_brainnet(
+        self,
+        atlas: Any,
+        out_prefix: "Any",
+        *,
+        alpha: float = 0.05,
+        tail: str = "both",
+        param_idx: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Export thresholded edges and nodes to BrainNet Viewer ``.node`` / ``.edge`` files."""
+        from conninfpy.reporting import export_brainnet
+
+        return export_brainnet(
+            self,
+            atlas,
+            out_prefix,
+            alpha=alpha,
+            tail=tail,
+            param_idx=param_idx,
+        )
+
     def annotated_edges(
         self,
         rois: Any,
@@ -1338,6 +1385,7 @@ class OmnibusInferenceResult(TailResult):
             include_nonsig=include_nonsig,
             top_k=top_k,
             component_labels=None if report is None else report["labels"].get("omnibus"),
+            n_effective=_extract_edge_n(self),
         )
 
     def component_table(
@@ -1434,6 +1482,39 @@ class OmnibusInferenceResult(TailResult):
             top_k=top_k,
         )
         df.to_csv(path, index=index, **to_csv_kwargs)
+
+    def methods_boilerplate(
+        self,
+        *,
+        alpha: float = 0.05,
+        atlas: Optional[Any] = None,
+        cerebellum: Optional[str] = None,
+    ) -> str:
+        """Generate a deterministic, provenance-driven Methods section in Markdown."""
+        from conninfpy.reporting import methods_boilerplate
+
+        return methods_boilerplate(self, alpha=alpha, atlas=atlas, cerebellum=cerebellum)
+
+    def to_brainnet(
+        self,
+        atlas: Any,
+        out_prefix: "Any",
+        *,
+        alpha: float = 0.05,
+        tail: str = "both",
+        param_idx: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Export thresholded edges and nodes to BrainNet Viewer ``.node`` / ``.edge`` files."""
+        from conninfpy.reporting import export_brainnet
+
+        return export_brainnet(
+            self,
+            atlas,
+            out_prefix,
+            alpha=alpha,
+            tail=tail,
+            param_idx=param_idx,
+        )
 
     def __repr__(self) -> str:  # pragma: no cover (cosmetic)
         nsig = self.n_significant(0.05)["omnibus"]

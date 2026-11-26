@@ -114,6 +114,7 @@ def _column_order_tailed(with_atlas: bool) -> list:
             "roi_j_network",
             "network_pair",
             "t_signed",
+            "n_effective",
             "p_positive",
             "p_negative",
             "p_min",
@@ -129,6 +130,7 @@ def _column_order_tailed(with_atlas: bool) -> list:
             "roi_i",
             "roi_j",
             "t_signed",
+            "n_effective",
             "p_positive",
             "p_negative",
             "p_min",
@@ -152,12 +154,13 @@ def _column_order_omnibus(with_atlas: bool) -> list:
             "roi_j_network",
             "network_pair",
             "F",
+            "n_effective",
             "p_omnibus",
             "component_id",
             "hemisphere_i",
             "hemisphere_j",
         ]
-    return ["edge_id", "roi_i", "roi_j", "F", "p_omnibus", "component_id"]
+    return ["edge_id", "roi_i", "roi_j", "F", "n_effective", "p_omnibus", "component_id"]
 
 
 def build_tailed_dataframe(
@@ -172,6 +175,7 @@ def build_tailed_dataframe(
     include_nonsig: bool = False,
     top_k: Optional[int] = None,
     component_labels: Optional[dict] = None,
+    n_effective: Optional[npt.NDArray] = None,
 ) -> pd.DataFrame:
     """Build the significant-edges table for a t / β inference result.
 
@@ -247,6 +251,20 @@ def build_tailed_dataframe(
         df["component_tail"] = columns["component_tail"][keep]
         df["component_id"] = columns["component_id"][keep]
 
+    if n_effective is not None:
+        _check_square(n_effective, "n_effective")
+        if n_effective.shape != p_positive.shape:
+            raise ValueError("n_effective must match p_positive shape.")
+        n_eff_v = np.asarray(n_effective)[iu, ju][keep]
+        if len(n_eff_v) == 0 or np.isfinite(n_eff_v).all():
+            df["n_effective"] = n_eff_v.astype(int)
+        else:
+            df["n_effective"] = pd.Series(
+                [int(round(float(x))) if np.isfinite(x) else pd.NA for x in n_eff_v],
+                dtype="Int64",
+                index=df.index,
+            )
+
     with_atlas = atlas is not None
     if atlas is not None:
         df = _annotate_with_atlas(df, atlas, n_nodes=N)
@@ -270,6 +288,7 @@ def build_omnibus_dataframe(
     include_nonsig: bool = False,
     top_k: Optional[int] = None,
     component_labels: Optional[npt.NDArray[np.int32]] = None,
+    n_effective: Optional[npt.NDArray] = None,
 ) -> pd.DataFrame:
     """Build the significant-edges table for an F-stat omnibus result.
 
@@ -317,6 +336,20 @@ def build_omnibus_dataframe(
         df["component_id"] = component_edge_columns(
             {"omnibus": component_labels}, iu, ju
         )["component_id"][keep]
+
+    if n_effective is not None:
+        _check_square(n_effective, "n_effective")
+        if n_effective.shape != p_omnibus.shape:
+            raise ValueError("n_effective must match p_omnibus shape.")
+        n_eff_v = np.asarray(n_effective)[iu, ju][keep]
+        if len(n_eff_v) == 0 or np.isfinite(n_eff_v).all():
+            df["n_effective"] = n_eff_v.astype(int)
+        else:
+            df["n_effective"] = pd.Series(
+                [int(round(float(x))) if np.isfinite(x) else pd.NA for x in n_eff_v],
+                dtype="Int64",
+                index=df.index,
+            )
 
     with_atlas = atlas is not None
     if atlas is not None:

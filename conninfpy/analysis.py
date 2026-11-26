@@ -206,6 +206,39 @@ class AnalyzeResult:
         """
         return self.inference.to_csv(path, **kwargs)
 
+    def methods_boilerplate(
+        self,
+        *,
+        alpha: float = 0.05,
+        atlas: Optional[Any] = None,
+        cerebellum: Optional[str] = None,
+    ) -> str:
+        """Generate a deterministic, provenance-driven Methods section in Markdown."""
+        from conninfpy.reporting import methods_boilerplate
+
+        return methods_boilerplate(self, alpha=alpha, atlas=atlas, cerebellum=cerebellum)
+
+    def to_brainnet(
+        self,
+        atlas: Any,
+        out_prefix: "Any",
+        *,
+        alpha: float = 0.05,
+        tail: str = "both",
+        param_idx: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Export thresholded edges and nodes to BrainNet Viewer ``.node`` / ``.edge`` files."""
+        from conninfpy.reporting import export_brainnet
+
+        return export_brainnet(
+            self,
+            atlas,
+            out_prefix,
+            alpha=alpha,
+            tail=tail,
+            param_idx=param_idx,
+        )
+
     def one_sided(self, direction: str) -> "AnalyzeResult":
         """Copy restricted to one direction chosen after the run (post hoc);
         see :meth:`~conninfpy.InferenceResult.one_sided`. To fix the direction
