@@ -88,6 +88,16 @@ Read by `OpenCloseDataset.load(..., atlas="brainnetome", gsr=...)` in
 rows) is the Beijing EOEC phenotype: columns `SubjectID`, `Age`, `Sex`,
 `Session_1`–`Session_3` (per-session eyes state). Not read by the package code.
 
+Run order in the Beijing EOEC protocol matters for the Open-Close contrasts:
+scan 1 is always eyes closed and precedes eyes open, while scans 2 and 3 are
+eyes open / eyes closed in random order. Close run 0 (EC₀, the paper contrast)
+is therefore always acquired first and is confounded with scan order, whereas
+close run 1 (EC₁) is counterbalanced with eyes open. The EC₁ − EC₀ repeat-run
+contrast is not an empirical null (556 positive / 416 negative edges in the
+2.0 pipeline). The sensitivity arms (`EC₁ − EO` vs `EC₀ − EO` on the 47
+participants with both closed runs) and the evidence are summarised in
+[paper/README.md](../paper/README.md#open-close-beijing-repeat-run-and-scan-order).
+
 Set `CONNINFPY_ATLAS_DIR` for the on-demand Brainnetome/SUIT atlas cache
 (default `~/.cache/conninfpy/atlases/`). Set `CONNINFPY_DATA` to a data root;
 optional BNA probabilistic/tractography maps are resolved in its `brainnetome/`

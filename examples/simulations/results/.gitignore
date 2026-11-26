@@ -1,3 +1,12 @@
+# Local simulation outputs: everything here is disposable and stays untracked
+# except the summary artefacts whitelisted below (CSV/TXT/PNG/PDF/JSON).
+#
+# NOTE: the root .gitignore excludes `examples/**/results/` as a whole, and a
+# nested rule cannot re-include a path under an excluded parent directory.
+# The committed summary tables in tables/ (the October 2026 files and the
+# v2_* calibration/power tables with their provenance JSON) are therefore
+# staged with `git add -f`; this file governs only once the root rule is
+# lifted for this directory.
 *
 !.gitignore
 !*/
@@ -5,5 +14,6 @@
 !summary*.csv
 !*.csv
 !*.txt
+!*.json
 !*.png
 !*.pdf

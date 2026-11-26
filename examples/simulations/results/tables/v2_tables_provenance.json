@@ -1,0 +1,488 @@
+{
+  "schema": "conninfpy_v2_tables_provenance/1",
+  "generated_at": "2026-11-26T21:51:47+00:00",
+  "repo_head_at_generation": "c3245f2b496a7f21133a16b95470b783351b3188",
+  "generator": {
+    "script": "build_v2_tables.py (thread storage, not committed); no simulation was re-run",
+    "sha256": "8341b0419839bef810e97dbc4a68b9a875cc445ee4682f9de5a8310187bdfd30",
+    "python": "3.12.14",
+    "pandas": "2.3.3"
+  },
+  "outputs": {
+    "v2_glm_fwer_summary.csv": {
+      "rows": 27,
+      "source": "examples/simulations/results/glm/glm_validation_2_0_1000/glm_fwer_summary.csv"
+    },
+    "v2_glm_power_summary.csv": {
+      "rows": 135,
+      "source": "examples/simulations/results/glm/glm_validation_2_0_1000/glm_power_summary.csv"
+    },
+    "v2_pairwise_fpr_summary.csv": {
+      "rows": 20,
+      "sources": [
+        "fpr_calibration_tfnbs_exact/fpr_summary.csv",
+        "fpr_calibration_ni_fbc_exact/fpr_summary.csv",
+        "fpr_calibration_nbs_int_v2/fpr_summary.csv"
+      ]
+    },
+    "v2_exact_power_summary.csv": {
+      "rows": 120,
+      "sources": [
+        "power/power_tfnbs_exact_04_30/power_vs_effect_size_summary.csv",
+        "power/power_ni_fbc_exact_04_30/power_vs_effect_size_summary.csv"
+      ]
+    }
+  },
+  "transformations": [
+    "column selection (and renaming expected->alpha, TPR_count->n_repeats); no rows added, dropped, filtered or re-aggregated",
+    "floats rounded to 6 significant digits; missing values (tfnbs_n=None) written as empty cells",
+    "constant columns joined from the run metadata / YAML configs: n_permutations, two_tailed, tfnbs_n/tfnbs_n_used, alpha, n_samples, n_repeats, seed",
+    "glm_power: cNBS method_params net_labels array summarised as 'net_labels=[0..3]x15 (4 modules of 15 nodes)'",
+    "v2_pairwise_fpr_summary: concatenation of three per-run fpr_summary.csv files (4 + 8 + 8 rows)",
+    "v2_exact_power_summary: concatenation of two power_vs_effect_size_summary.csv files (60 + 60 rows; 4 methods x 10 topologies x 3 effect sizes); 'arm' marks exact (n=None) vs legacy 10-point grid"
+  ],
+  "glm_run": {
+    "script": "examples/simulations/glm/glm_validation.py",
+    "config": "examples/simulations/configs/glm_config_2_0_1000.yaml",
+    "git_sha_recorded": "4c444181364b7d208ccc45add3c8c2a0a37087bb",
+    "git_sha_recorded_is_ancestor_of_generation_head": false,
+    "git_sha_note": "The recorded SHA is a pre-history-rewrite commit object; it is not an ancestor of the current main. Commit e2d92c6 on main carries the same message and author date (2026-11-24 23:40:28 +0300) and an identical tree for examples/simulations/ and conninfpy/ (git diff --stat empty), so e2d92c6 is the equivalent commit on main.",
+    "protocol_sha256": "984baacbaaaf8c8eee2b75e97ffe1ff01d75819d84fba28bef922043ca4b4ebf",
+    "created": "2026-11-24T23:56:54",
+    "python_version": "3.12.14",
+    "numpy_version": "1.26.4",
+    "mode": "all",
+    "methods": [
+      "tstat",
+      "tfnbs",
+      "ni_tfnbs",
+      "fbc_tfnbs",
+      "nbs_extent_2.0",
+      "nbs_intensity_2.0",
+      "nbs_extent_3.0",
+      "nbs_intensity_3.0",
+      "cnbs"
+    ],
+    "n_null": 1000,
+    "sample_sizes": [
+      30,
+      60,
+      100
+    ],
+    "n_permutations": 1000,
+    "alpha": 0.05,
+    "seed": 42,
+    "tfnbs_e": 0.4,
+    "tfnbs_h": 3.0,
+    "tfnbs_n": null,
+    "tfnbs_start_thres": 1.65,
+    "two_tailed": true,
+    "power_arm": {
+      "n_repeats": 30,
+      "n_subjects": 60,
+      "effect_sizes": [
+        0.1,
+        0.2,
+        0.3
+      ],
+      "scenarios": [
+        "within_module_dense",
+        "between_modules_dense",
+        "hub",
+        "chain",
+        "scattered_cross_block"
+      ],
+      "n_nodes": 60,
+      "n_modules": 4,
+      "time_points": 30,
+      "intra_corr": 0.3,
+      "inter_corr": 0.05,
+      "uniform_corr": 0.15,
+      "noise_level": 0.05,
+      "interest_confound_corr": 0.3,
+      "confound_effect_size": 0.15,
+      "confound_scenario": "between_modules_dense",
+      "nbs_threshold": 2.0,
+      "fbc_min_cluster": 3
+    },
+    "power_arm_source": "examples/simulations/configs/glm_config_2_0_1000.yaml"
+  },
+  "pairwise_fpr_runs": {
+    "fpr_calibration_tfnbs_exact": {
+      "methods": [
+        "tfnbs_exact"
+      ],
+      "parameters_from_fpr_summary_txt_header": {
+        "n_null_runs": 1000,
+        "n_permutations": 1000,
+        "alpha": 0.05,
+        "two_sided_alpha_per_tail": 0.025,
+        "n_nodes": 60,
+        "n_edges": 1770,
+        "sample_sizes": [
+          10,
+          30,
+          50,
+          100
+        ],
+        "time_points": 30
+      },
+      "launch": "no dedicated config in the repository; launched via fpr_calibration.py CLI overrides (--methods/--output-dir); header values match fpr_config_1000.yaml",
+      "tfnbs_header_line": "tfnbs: e = 0.4, h = 3.0, n = 10, start_thres = 1.65",
+      "tfnbs_n_used": null,
+      "tfnbs_n_note": "fpr_calibration.py _method_call forces n=None for *_exact methods; the 'n = 10' in the text header is the config value that those methods ignore",
+      "two_tailed": false,
+      "git_sha_embedded": false
+    },
+    "fpr_calibration_ni_fbc_exact": {
+      "methods": [
+        "fbc_tfnbs_exact",
+        "ni_tfnbs_exact"
+      ],
+      "parameters_from_fpr_summary_txt_header": {
+        "n_null_runs": 1000,
+        "n_permutations": 1000,
+        "alpha": 0.05,
+        "two_sided_alpha_per_tail": 0.025,
+        "n_nodes": 60,
+        "n_edges": 1770,
+        "sample_sizes": [
+          10,
+          30,
+          50,
+          100
+        ],
+        "time_points": 30
+      },
+      "launch": "config fpr_config_ni_fbc_exact.yaml (methods/output-dir may be overridden on the command line)",
+      "tfnbs_header_line": "tfnbs: e = 0.4, h = 3.0, n = 10, start_thres = 1.65",
+      "tfnbs_n_used": null,
+      "tfnbs_n_note": "fpr_calibration.py _method_call forces n=None for *_exact methods; the 'n = 10' in the text header is the config value that those methods ignore",
+      "two_tailed": false,
+      "git_sha_embedded": false,
+      "config": "examples/simulations/configs/fpr_config_ni_fbc_exact.yaml",
+      "config_values": {
+        "n_null": 1000,
+        "n_permutations": 1000,
+        "alpha": 0.05,
+        "n_nodes": 60,
+        "n_modules": 4,
+        "sample_sizes": [
+          10,
+          30,
+          50,
+          100
+        ],
+        "time_points": 30,
+        "intra_corr": 0.3,
+        "inter_corr": 0.05,
+        "noise_level": 0.05,
+        "tfnbs_e": 0.4,
+        "tfnbs_h": 3.0,
+        "tfnbs_n": 10,
+        "tfnbs_start_thres": 1.65,
+        "nbs_threshold": 2.0,
+        "fbc_min_cluster": 3,
+        "seed": 42
+      }
+    },
+    "fpr_calibration_nbs_int_v2": {
+      "methods": [
+        "nbs_intensity_2.0",
+        "nbs_intensity_3.0"
+      ],
+      "parameters_from_fpr_summary_txt_header": {
+        "n_null_runs": 1000,
+        "n_permutations": 1000,
+        "alpha": 0.05,
+        "two_sided_alpha_per_tail": 0.025,
+        "n_nodes": 60,
+        "n_edges": 1770,
+        "sample_sizes": [
+          10,
+          30,
+          50,
+          100
+        ],
+        "time_points": 30
+      },
+      "launch": "no dedicated config in the repository; launched via fpr_calibration.py CLI overrides (--methods/--output-dir); header values match fpr_config_1000.yaml",
+      "tfnbs_header_line": "tfnbs: e = 0.4, h = 3.0, n = 10, start_thres = 1.65",
+      "tfnbs_n_used": null,
+      "tfnbs_n_note": "fpr_calibration.py _method_call forces n=None for *_exact methods; the 'n = 10' in the text header is the config value that those methods ignore",
+      "two_tailed": false,
+      "git_sha_embedded": false
+    }
+  },
+  "pairwise_power_runs": {
+    "power/power_tfnbs_exact_04_30": {
+      "config": "examples/simulations/configs/sweep_config_tfnbs_exact_04_30.yaml",
+      "methods": [
+        "tfnbs",
+        "tfnbs_exact"
+      ],
+      "n_samples": 30,
+      "n_repeats": 100,
+      "n_permutations": 1000,
+      "alpha": 0.05,
+      "effect_sizes": [
+        0.075,
+        0.125,
+        0.25
+      ],
+      "n_scenarios": 10,
+      "scenarios": [
+        "within_module_dense",
+        "between_modules_dense",
+        "partial_bipartite_between_modules",
+        "gradient_core_periphery_within_module",
+        "scattered_cross_block",
+        "hub",
+        "rich_club",
+        "cross_block_connected_chain",
+        "chain",
+        "fragmented_within_module"
+      ],
+      "n_nodes": 60,
+      "n_modules": 4,
+      "time_points": 30,
+      "intra_corr": 0.3,
+      "inter_corr": 0.05,
+      "noise_level": 0.05,
+      "tfnbs_options": {
+        "e": 0.4,
+        "h": 3.0,
+        "n_thresholds": 10,
+        "start_thres": 1.65,
+        "fbc_min_cluster_size": 3
+      },
+      "nbs_options": {
+        "threshold": [
+          2.0,
+          3.0
+        ]
+      },
+      "seed": 42,
+      "two_tailed": false,
+      "git_sha_embedded": false,
+      "n_samples_in_raw_per_method": {
+        "tfnbs": [
+          30
+        ],
+        "tfnbs_exact": [
+          30
+        ]
+      }
+    },
+    "power/power_ni_fbc_exact_04_30": {
+      "config": "examples/simulations/configs/sweep_config_ni_fbc_exact_04_30.yaml",
+      "methods": [
+        "ni_tfnbs_exact",
+        "fbc_tfnbs_exact"
+      ],
+      "n_samples": 30,
+      "n_repeats": 100,
+      "n_permutations": 1000,
+      "alpha": 0.05,
+      "effect_sizes": [
+        0.075,
+        0.125,
+        0.25
+      ],
+      "n_scenarios": 10,
+      "scenarios": [
+        "within_module_dense",
+        "between_modules_dense",
+        "partial_bipartite_between_modules",
+        "gradient_core_periphery_within_module",
+        "scattered_cross_block",
+        "hub",
+        "rich_club",
+        "cross_block_connected_chain",
+        "chain",
+        "fragmented_within_module"
+      ],
+      "n_nodes": 60,
+      "n_modules": 4,
+      "time_points": 30,
+      "intra_corr": 0.3,
+      "inter_corr": 0.05,
+      "noise_level": 0.05,
+      "tfnbs_options": {
+        "e": 0.4,
+        "h": 3.0,
+        "n_thresholds": 10,
+        "start_thres": 1.65,
+        "fbc_min_cluster_size": 3
+      },
+      "nbs_options": {
+        "threshold": [
+          2.0,
+          3.0
+        ]
+      },
+      "seed": 42,
+      "two_tailed": false,
+      "git_sha_embedded": false,
+      "n_samples_in_raw_per_method": {
+        "fbc_tfnbs_exact": [
+          30
+        ],
+        "ni_tfnbs_exact": [
+          30
+        ]
+      }
+    }
+  },
+  "pairwise_runs_provenance_note": "The pairwise FPR and power runs embed no git SHA. Their output mtimes (2026-11-24 23:48 .. 2026-11-25 13:42) lie between commits e2d92c6 (2026-11-24 23:40) / 41661f5 (2026-11-25 13:44) and precede c3245f2 (2026-11-27 00:43), which flipped the compute_p_val / compute_p_val_glm default two_tailed=False -> True. Neither runner passes two_tailed=, so these tables are per-tail (directional) results: fwer_max_tail is compared with alpha per tail, fwer_two_sided_bonf (alpha/2 per tail) and fwer_either_at_alpha (expected <= 2*alpha) are the two-sided diagnostics, and NO fwer_two_sided_joint column exists for them.",
+  "column_semantics": {
+    "fwer_two_sided_joint": "GLM run only (two_tailed=True): share of null runs with any edge of EITHER sign having min(p_pos, p_neg) <= alpha, both p-maps corrected against the joint max-null. This is the FWER of the single two-sided family that the 2.0 contract holds at alpha.",
+    "fwer_pos / fwer_neg": "Share of null runs with >= 1 false-positive edge in the positive / negative tail at unadjusted alpha (one-directional families).",
+    "fwer_max_tail": "max(fwer_pos, fwer_neg): pairwise max-tail diagnostic, judged against alpha per tail. It is NOT the two-sided joint FWER.",
+    "fwer_two_sided_bonf": "Share of null runs with min_p_pos <= alpha/2 or min_p_neg <= alpha/2 (Bonferroni over tails); judged against alpha.",
+    "fwer_either_at_alpha": "Share of null runs with any FP in either tail at unadjusted alpha; diagnostic with expected upper bound 2*alpha (= 0.10) under per-tail nulls; equals fwer_two_sided_joint when two_tailed=True.",
+    "mean_fpr_total": "Mean proportion of false-positive edges per null run (edge-level, descriptive).",
+    "ci_low / ci_high": "95% Clopper-Pearson exact intervals (as in the source summaries)."
+  },
+  "legacy_tables_unchanged": {
+    "fdr_ranking_dr0.25.csv": {
+      "path": "examples/simulations/results/tables/fdr_ranking_dr0.25.csv",
+      "sha256": "6add75ebe15af7e0f43fcd09fb5380891c814cc3a6f3c4de4c7475830d24337b",
+      "mtime": "2026-10-09T11:36:12",
+      "bytes": 357,
+      "git_last_commit": "2efabab 2026-10-11"
+    },
+    "tpr_matrix_dr0.125.csv": {
+      "path": "examples/simulations/results/tables/tpr_matrix_dr0.125.csv",
+      "sha256": "1e42a8184aec11f60cdf1c0cd01c762e6d737c3f92feac0e0f15b8b597076b80",
+      "mtime": "2026-10-09T11:36:12",
+      "bytes": 976,
+      "git_last_commit": "2efabab 2026-10-11"
+    },
+    "power_by_method_topology.csv": {
+      "path": "examples/simulations/results/tables/power_by_method_topology.csv",
+      "sha256": "41d39982980ea8c545762e366b108925320adf12fa81cae656934b5b8f98691f",
+      "mtime": "2026-10-09T11:36:12",
+      "bytes": 55415,
+      "git_last_commit": "2efabab 2026-10-11"
+    }
+  },
+  "legacy_tables_note": "The three Oct-2026 tables predate the 2.0 contract (per-tail nulls, n=10 grid, NBS tau=2.0/3.0 naming of that era); they are kept verbatim and are not part of the v2 set.",
+  "sources": {
+    "glm_fwer_summary": {
+      "path": "examples/simulations/results/glm/glm_validation_2_0_1000/glm_fwer_summary.csv",
+      "sha256": "f9e7e0aab8113c78e42864befc5f3f8f02b5b78cce8a2d436b17281a88b5481a",
+      "mtime": "2026-11-25T00:21:14",
+      "bytes": 17393,
+      "rows": 27
+    },
+    "glm_power_summary": {
+      "path": "examples/simulations/results/glm/glm_validation_2_0_1000/glm_power_summary.csv",
+      "sha256": "0e2752b93765469c8ec5a00ae815b7a2ce3c1d3ee60fbc8dfbda1e0996e6165c",
+      "mtime": "2026-11-25T00:24:30",
+      "bytes": 24975,
+      "rows": 135
+    },
+    "glm_run_metadata": {
+      "path": "examples/simulations/results/glm/glm_validation_2_0_1000/glm_run_metadata.json",
+      "sha256": "e2647a9c144b950361626818b43b21b73440301353149a0630270f2504f330fa",
+      "mtime": "2026-11-24T23:56:54",
+      "bytes": 1625
+    },
+    "glm_protocol": {
+      "path": "examples/simulations/results/glm/glm_validation_2_0_1000/glm_protocol.json",
+      "sha256": "a37fbecd997865b050d4d027626db7c7fbcf5d9688824c67ecfc63df79c39847",
+      "mtime": "2026-11-24T23:56:54",
+      "bytes": 655
+    },
+    "fpr_calibration_tfnbs_exact": {
+      "path": "examples/simulations/results/fpr_calibration_tfnbs_exact/fpr_summary.csv",
+      "sha256": "8808e05c9f379a160973c84e13c5d9a7bebb8e7e24b93832d867466ef3e5bf9b",
+      "mtime": "2026-11-24T23:52:32",
+      "bytes": 2801,
+      "rows": 4
+    },
+    "fpr_calibration_tfnbs_exact_summary_txt": {
+      "path": "examples/simulations/results/fpr_calibration_tfnbs_exact/fpr_summary.txt",
+      "sha256": "79b2aa5a5b55406619b97973270e9d28ba173434a3f5266e11f11d0d7f047412",
+      "mtime": "2026-11-24T23:52:32",
+      "bytes": 1879
+    },
+    "fpr_calibration_ni_fbc_exact": {
+      "path": "examples/simulations/results/fpr_calibration_ni_fbc_exact/fpr_summary.csv",
+      "sha256": "d36e5b6d84252c1af6393aa11d2e208496cb2c14f9073c93b56ab7c9516bd3ee",
+      "mtime": "2026-11-25T13:40:40",
+      "bytes": 4963,
+      "rows": 8
+    },
+    "fpr_calibration_ni_fbc_exact_summary_txt": {
+      "path": "examples/simulations/results/fpr_calibration_ni_fbc_exact/fpr_summary.txt",
+      "sha256": "10991871ba4b51a681bcdf9504e050d0a8850e4803d4c2a99eda9dd8c3d50ee3",
+      "mtime": "2026-11-25T13:40:40",
+      "bytes": 2252
+    },
+    "fpr_calibration_ni_fbc_exact_config": {
+      "path": "examples/simulations/configs/fpr_config_ni_fbc_exact.yaml",
+      "sha256": "0788364728cbe18daa95b1e3dd6846d8fbf62b34010e56c509f6ce46c54f389c",
+      "mtime": "2026-11-25T13:37:29",
+      "bytes": 675
+    },
+    "fpr_calibration_nbs_int_v2": {
+      "path": "examples/simulations/results/fpr_calibration_nbs_int_v2/fpr_summary.csv",
+      "sha256": "60a5d80c0c2811b69782489dbfa6fcb7272ae33b3f2a6e61bc12a1c8a3f751bb",
+      "mtime": "2026-11-24T23:48:56",
+      "bytes": 4976,
+      "rows": 8
+    },
+    "fpr_calibration_nbs_int_v2_summary_txt": {
+      "path": "examples/simulations/results/fpr_calibration_nbs_int_v2/fpr_summary.txt",
+      "sha256": "c40b5fd00354daa63b2cf3e7d61e8e4691941019ca64116e8523c07fca7d9176",
+      "mtime": "2026-11-24T23:48:56",
+      "bytes": 2272
+    },
+    "power/power_tfnbs_exact_04_30": {
+      "path": "examples/simulations/results/power/power_tfnbs_exact_04_30/power_vs_effect_size_summary.csv",
+      "sha256": "5a3d2b5b7b59290725fbf644cf821d16e5744db10597b58608a1dbeb5da6ce50",
+      "mtime": "2026-11-24T23:54:30",
+      "bytes": 20601,
+      "rows": 60
+    },
+    "power/power_tfnbs_exact_04_30_raw": {
+      "path": "examples/simulations/results/power/power_tfnbs_exact_04_30/power_vs_effect_size.csv",
+      "sha256": "7e93667438f8b7c962422fb5d84767d0bb4abfde5172a87a3fb81036535d7c27",
+      "mtime": "2026-11-24T23:54:30",
+      "bytes": 1133454
+    },
+    "power/power_tfnbs_exact_04_30_config": {
+      "path": "examples/simulations/configs/sweep_config_tfnbs_exact_04_30.yaml",
+      "sha256": "4a453c0a16d9da9f4582b5050d640f2c55fae7c87c687ebf447e99735dd87905",
+      "mtime": "2026-11-24T23:05:14",
+      "bytes": 3920
+    },
+    "power/power_ni_fbc_exact_04_30": {
+      "path": "examples/simulations/results/power/power_ni_fbc_exact_04_30/power_vs_effect_size_summary.csv",
+      "sha256": "8c27fb080fbd3a1be31ad8cabb961926ac722114c44f2e9bef8441e8ac72f8af",
+      "mtime": "2026-11-25T13:42:21",
+      "bytes": 21710,
+      "rows": 60
+    },
+    "power/power_ni_fbc_exact_04_30_raw": {
+      "path": "examples/simulations/results/power/power_ni_fbc_exact_04_30/power_vs_effect_size.csv",
+      "sha256": "54ad8f19c5c2682d7c8b1d184bef20e5205719ddebc94c6849d1fa757609decb",
+      "mtime": "2026-11-25T13:42:21",
+      "bytes": 1187396
+    },
+    "power/power_ni_fbc_exact_04_30_config": {
+      "path": "examples/simulations/configs/sweep_config_ni_fbc_exact_04_30.yaml",
+      "sha256": "0bb9bbcf1d2e09d0237df331890373608cd4a82268c0db61fff889075be4bf3d",
+      "mtime": "2026-11-25T13:37:30",
+      "bytes": 1032
+    },
+    "glm_config": {
+      "path": "examples/simulations/configs/glm_config_2_0_1000.yaml",
+      "sha256": "ec7e545dd02769284ca58015ee6e65b664495a282338812f70aea430d4e10876",
+      "mtime": "2026-11-24T23:04:42",
+      "bytes": 2114
+    }
+  }
+}

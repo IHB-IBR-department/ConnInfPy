@@ -1,0 +1,106 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# FWER calibration check (nightly / manual)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# What this does
+# --------------
+# Runs `scripts/ci_fwer_check.py`: a fast (~1 min), seeded null simulation that
+# verifies the core inference methods (tstat, exact TFNBS, NBS, cNBS, and the
+# multi-site GLM path) keep the empirical FWER of the joint two-sided family
+# (`two_tailed=True`, alpha = 0.05) within exact binomial bounds. It is the
+# lightweight regression counterpart of the 1,000-null calibration tables in
+# `examples/simulations/results/tables/v2_*` and of the paper's Fig 2.
+#
+# Why it is NOT on `pull_request`
+# -------------------------------
+# Permutation calibration is a statistical check, not a unit test: it needs a
+# JIT warm-up and about a minute of compute, and a fixed seed makes it
+# deterministic rather than flaky, but it still does not belong on the hot path
+# of every PR. It runs nightly on the default branch and on demand from the
+# Actions tab (`workflow_dispatch`), so a calibration regression surfaces
+# within a day without slowing or flaking PR CI.
+#
+# Reading a failure
+# -----------------
+# A red run means at least one method produced more false-positive families
+# under H0 than the exact 99.5 % binomial bound allows (`::error::` annotation
+# names the arm). The per-arm CSV/JSON is uploaded as an artefact.
+#
+# Permissions are scoped to `contents: read`: the workflow only checks out
+# code and never writes anything back to the repository.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: FWER calibration
+
+on:
+  schedule:
+    # 03:23 UTC daily — an off-peak minute (GitHub's cron queue is busiest at
+    # the top of the hour).
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+    inputs:
+      n_null:
+        description: "Null datasets per arm (200 ≈ 1 min; 1000 ≈ 5 min)"
+        required: false
+        default: "200"
+      n_permutations:
+        description: "Permutations per test"
+        required: false
+        default: "199"
+      seed:
+        description: "Base random seed"
+        required: false
+        default: "2026"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fwer-calibration
+  cancel-in-progress: false
+
+jobs:
+  calibration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Same minor version as the recorded 1,000-null v2.0 runs.
+          python-version: "3.12"
+
+      # Editable install so the check exercises the checked-out code; the
+      # script needs only the runtime dependencies (no dev/app extras).
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run FWER calibration check
+        id: fwer
+        continue-on-error: true
+        run: |
+          python scripts/ci_fwer_check.py \
+            --n-null "${{ github.event.inputs.n_null || '200' }}" \
+            --n-permutations "${{ github.event.inputs.n_permutations || '199' }}" \
+            --seed "${{ github.event.inputs.seed || '2026' }}" \
+            --csv fwer-check.csv --json fwer-check.json
+
+      - name: Upload per-arm results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fwer-check-${{ github.run_id }}
+          path: |
+            fwer-check.csv
+            fwer-check.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Fail the job on a calibration regression
+        if: steps.fwer.outcome == 'failure'
+        run: |
+          echo "::error::FWER calibration check failed — see the step summary table and the uploaded fwer-check.json."
+          exit 1

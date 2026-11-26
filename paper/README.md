@@ -64,6 +64,79 @@ datasets.
   $\Delta r = 0.125$ (`n=10`). Panel c shows the paired Monte Carlo difference
   (`Exact n=None` minus `n=10` grid, 95% CI) across $\Delta r \in \{0.075, 0.125, 0.25\}$.
 
+## Calibration and power tables (v2.0)
+
+Compact, auditable summaries of the 1,000-null 2.0 runs are committed under
+`examples/simulations/results/tables/`; the per-run CSVs they are derived from
+stay local (git-ignored) in `examples/simulations/results/`.
+
+| Table | Rows | Derived from | Settings |
+|---|---|---|---|
+| `v2_glm_fwer_summary.csv` | 9 methods × n ∈ {30, 60, 100} | `glm/glm_validation_2_0_1000/glm_fwer_summary.csv` | GLM, `two_tailed=True`, exact integration `n=None`, E = 0.4, H = 3.0, 1,000 permutations |
+| `v2_glm_power_summary.csv` | 9 methods × 5 topologies × Δ ∈ {0.1, 0.2, 0.3} | `glm/glm_validation_2_0_1000/glm_power_summary.csv` | n = 60, 30 repeats, same inference settings |
+| `v2_pairwise_fpr_summary.csv` | 5 methods × n ∈ {10, 30, 50, 100} | `fpr_calibration_tfnbs_exact/`, `fpr_calibration_ni_fbc_exact/`, `fpr_calibration_nbs_int_v2/` | two-sample, per-tail nulls, 1,000 permutations |
+| `v2_exact_power_summary.csv` | 4 methods × 10 topologies × Δr ∈ {0.075, 0.125, 0.25} | `power/power_tfnbs_exact_04_30/`, `power/power_ni_fbc_exact_04_30/` | n = 30, 100 repeats; `arm` marks exact (`n=None`) vs the legacy 10-point grid |
+
+`v2_tables_provenance.json` lists every source file with its SHA-256 and
+modification time, the run parameters, the column semantics and the GLM run's
+recorded commit (a pre-rewrite object whose tree matches the current main
+commit carrying the same message). The three October 2026 tables in the same
+directory predate the 2.0 contract and are kept unchanged.
+
+Two points matter when reading the FWER tables:
+
+- **`fwer_two_sided_joint` is not `fwer_max_tail`.** In the GLM table
+  `fwer_two_sided_joint` is the share of null runs with any edge of either
+  sign at `min(p_pos, p_neg) ≤ α`, both p-maps being corrected against the
+  joint max-null. It is the FWER of the single two-sided family that the 2.0
+  contract holds at α (0.039–0.065 over the 27 cells). `fwer_pos`, `fwer_neg`
+  and `fwer_max_tail` are one-directional diagnostics (`fwer_max_tail`
+  0.021–0.039) and `fwer_two_sided_bonf` the Bonferroni-over-tails one (α/2 per
+  tail; 0.013–0.036).
+- **The pairwise FPR and power runs predate the two-sided default.** They never
+  passed `two_tailed=` and ran while the default was `False`, so they carry no
+  joint column: `fwer_max_tail` is judged against α per tail (0.045–0.063),
+  `fwer_two_sided_bonf` against α (0.032–0.061), and `fwer_either_at_alpha` is
+  the diagnostic with expected upper bound 2α (0.081–0.110). The `*_exact`
+  methods force `n=None`; the `n = 10` printed in those runs' text headers is
+  the configuration value that those methods ignore.
+
+`scripts/ci_fwer_check.py` (nightly and on manual dispatch through
+`.github/workflows/fwer-calibration.yml`, never on pull requests) re-checks the
+joint two-sided FWER of `tstat`, exact TFNBS, NBS (τ = 3.0), cNBS and the
+multi-site GLM path on 200 null datasets × 199 permutations at N = 20 in about
+20 s, and fails when any arm exceeds its exact 99.5 % binomial bound.
+
+## Open-Close: Beijing repeat run and scan order
+
+The Beijing EOEC cohort has two eyes-closed runs per participant. The Fig S3
+repeat-run contrast (EC₁ − EC₀, 47 pairs) yields 556 positive and 416 negative
+edges in the 2.0 pipeline (972 edges;
+`paper/data/openclose_agreement_summary.csv`). This contrast does not serve as an
+empirical null: a valid FWER procedure flags at most a few edges in about 5 % of
+exchangeable null datasets, not hundreds. Its spatial agreement with the state
+contrast EC₀ − EO (1,919 / 1,344 edges) is close to zero or negative (edge
+Jaccard 0.004 / 0.001, Spearman −0.10 / −0.12, block-mass Pearson +0.02 / −0.11),
+so it does not reproduce the eyes-closed pattern. Session or vigilance drift
+between the two runs is a plausible hypothesis for the EC₁ − EC₀ difference,
+not an established cause.
+
+Scan order is a known confound of the primary China contrast. Beijing scan 1 is
+always eyes closed and precedes eyes open; scans 2 and 3 are eyes open / eyes
+closed in random order. Close run 0 (EC₀, the paper contrast) is scan 1 and is
+therefore always acquired before eyes open (the loader's naming of the
+incomplete run of `sub-3258811` as "close second run" fixes the run
+numbering), whereas close run 1 (EC₁) is counterbalanced with eyes open. The
+sensitivity arms `openclose_china_run1` (EC₁ − EO) and `openclose_china_run0_n47`
+(EC₀ − EO on the same 47 participants) are defined in
+`examples/open_close/brainnetome_interpretation.py`. In the October 2026
+Brainnetome analysis (paired TFNBS, 10-point threshold grid, 5,000
+permutations, α = 0.05 per tail) they gave 1,795 / 1,247 (EC₁) versus 2,216 /
+857 (EC₀) edges, and the whole-map correlation between the IHB and China
+EC − EO maps rose from 0.38 with EC₀ to 0.49 with EC₁. EC₁ agrees better with
+IHB; the paper's primary China contrast keeps EC₀, and the two definitions
+should be read together.
+
 ## Details for manuscript captions
 
 - **Fig 1**: Panel b shows the statistical design. The optional site-handling

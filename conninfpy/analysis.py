@@ -333,6 +333,73 @@ def _site_dummies(
     return out
 
 
+def _site_interest_association(
+    sites: Any, interest: Any
+) -> Optional[Dict[str, Any]]:
+    """Multiple correlation ``R`` between site labels and the interest regressor(s).
+
+    Each numeric interest column ``y`` is regressed by least squares on an
+    intercept plus the drop-first site indicators, and ``R = sqrt(R^2)`` is
+    returned, where ``R^2`` is the proportion of variance in ``y`` explained
+    by site. ``R`` lies in ``[0, 1]``: it is the multiple correlation
+    coefficient (eta) for ``K >= 2`` sites and reduces to ``|r|`` for two
+    sites. With a dict of predictors the maximum over the columns is reported
+    together with the per-column values.
+
+    Returns ``None`` when the association is undefined: fewer than two sites,
+    a length mismatch, a non-numeric / constant column, or a rank-deficient
+    site design.
+    """
+    site_arr = np.asarray(sites)
+    if site_arr.ndim != 1:
+        return None
+    n = int(site_arr.shape[0])
+    dummies = _site_dummies(site_arr)
+    if dummies.shape[1] == 0:
+        return None
+    try:
+        if isinstance(interest, Mapping):
+            columns = {
+                str(name): np.asarray(values, dtype=np.float64).ravel()
+                for name, values in interest.items()
+            }
+        else:
+            columns = {"interest": np.asarray(interest, dtype=np.float64).ravel()}
+    except (TypeError, ValueError):
+        return None
+    if not columns or any(col.shape[0] != n for col in columns.values()):
+        return None
+    design = np.column_stack([np.ones(n), dummies])
+    per_column: Dict[str, Optional[float]] = {}
+    for name, y in columns.items():
+        finite = np.isfinite(y)
+        y_f = y[finite]
+        if y_f.size < design.shape[1] + 1 or np.ptp(y_f) == 0.0:
+            per_column[name] = None
+            continue
+        x_f = design[finite]
+        if np.linalg.matrix_rank(x_f) < design.shape[1]:
+            per_column[name] = None
+            continue
+        beta, *_ = np.linalg.lstsq(x_f, y_f, rcond=None)
+        residual = y_f - x_f @ beta
+        total = float(np.sum((y_f - y_f.mean()) ** 2))
+        r2 = 1.0 - float(np.sum(residual**2)) / total if total > 0.0 else 0.0
+        per_column[name] = float(np.clip(r2, 0.0, 1.0))
+    defined = {k: v for k, v in per_column.items() if v is not None}
+    if not defined:
+        return None
+    best = max(defined, key=lambda k: defined[k])
+    r2 = defined[best]
+    return {
+        "R": float(np.sqrt(r2)),
+        "R2": r2,
+        "column": best,
+        "per_column_R2": per_column,
+        "n_sites": int(dummies.shape[1] + 1),
+    }
+
+
 def _resolve_input_kind(
     input: Optional[str],
     fisher_z: Optional[bool],
@@ -1435,6 +1502,27 @@ def analyze(
             flags.append(
                 f"ComBat could not harmonize {lost} value(s) (fewer than 2 subjects "
                 "of their site have them); they are treated as missing."
+            )
+        # Site-interest confounding diagnostic. ComBat never sees `interest`
+        # (label-leak avoidance), so a site effect that is correlated with the
+        # tested variable is partly removed as if it were site noise, which
+        # attenuates the interest effect. Quantify how much site and interest
+        # covary so the trade-off is visible in flags and combat_diagnostics.
+        association = _site_interest_association(sites, interest)
+        if association is not None:
+            combat_diag["site_interest_corr"] = association["R"]
+            combat_diag["site_interest_R2"] = association["R2"]
+            combat_diag["site_interest_column"] = association["column"]
+            if len(association["per_column_R2"]) > 1:
+                combat_diag["site_interest_R2_per_column"] = dict(association["per_column_R2"])
+                column_note = f" (max over interest columns: '{association['column']}')"
+            else:
+                column_note = ""
+            flags.append(
+                f"site_interest_association: R={association['R']:.3f} "
+                f"(R^2={association['R2']:.3f}) between site and interest{column_note}; "
+                "higher site-interest confounding increases attenuation under "
+                "label-leak-free ComBat."
             )
 
     confound_names: Optional[List[str]] = None
