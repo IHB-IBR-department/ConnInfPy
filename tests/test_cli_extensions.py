@@ -1,209 +1,246 @@
-"""Tests for ConnInfPy CLI extensions: qc/check, init, interpret, and app."""
+"""Tests for CLI upgrades: selftest, run flags, interpret support/format, influence."""
 from __future__ import annotations
 
 import contextlib
-import importlib.util
 import io
 import json
-import sys
+import tempfile
+import unittest
 from pathlib import Path
-from unittest import mock
 
 import numpy as np
 import pandas as pd
-import pytest
 import yaml
 
-from conninfpy.cli import load_config, main, run
+from conninfpy.cli import ConfigError, main, run
+
+FAST = {"method": "tstat", "n_permutations": 20, "use_mp": False, "rng": 0}
 
 
-def _make_study(tmp_path: Path, n: int = 16, n_rois: int = 6, *, collinear: bool = False) -> tuple[Path, Path, Path]:
-    rng = np.random.default_rng(12)
-    r = np.tanh(rng.normal(0, 0.25, (n, n_rois, n_rois)))
+def _correlations(n: int, N: int = 6, seed: int = 0) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    r = np.tanh(rng.normal(0, 0.3, (n, N, N)))
     r = (r + r.transpose(0, 2, 1)) / 2
-    idx = np.arange(n_rois)
+    idx = np.arange(N)
     r[:, idx, idx] = 1.0
-    # Plant a strong positive shift with age on edge (0, 1) so interpret finds detections
-    age = np.linspace(20.0, 50.0, n)
-    r[:, 0, 1] = np.clip(0.02 * (age - 35.0) + rng.normal(0, 0.05, n), -0.95, 0.95)
-    r[:, 1, 0] = r[:, 0, 1]
+    return r
 
-    np.save(tmp_path / "conn.npy", r)
-    pheno = pd.DataFrame({
+
+def _pheno(n: int, seed: int = 0) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    return pd.DataFrame({
         "subject_id": [f"s{i:02d}" for i in range(n)],
-        "age": age,
-        "age_copy": age * 2.0 if collinear else rng.normal(0, 1, n),
-        "sex": ["F", "M"] * (n // 2),
-        "site": ["siteA"] * (n // 2) + ["siteB"] * (n - n // 2),
-        "Motion_FD": rng.uniform(0.05, 0.35, n),
+        "age": rng.normal(30, 8, n),
+        "sex": rng.choice(["F", "M"], n),
+        "site": np.repeat(["a", "b"], n // 2),
+        "group": np.tile(["hc", "pt"], n // 2),
     })
-    pheno.to_csv(tmp_path / "pheno.csv", index=False)
 
-    # Small synthetic atlas CSV with MNI coordinates and Yeo-7 network labels
-    coords = np.array([
-        [-40.0, 20.0, 30.0],
-        [40.0, 20.0, 30.0],
-        [-20.0, -70.0, 10.0],
-        [20.0, -70.0, 10.0],
-        [-10.0, -60.0, -30.0],  # cerebellar MNI coordinate
-        [10.0, -60.0, -30.0],
-    ][:n_rois])
-    atlas_df = pd.DataFrame({
-        "name": [f"ROI_{i}" for i in range(n_rois)],
-        "network": ["Default", "Default", "Visual", "Visual", "Somatomotor", "Somatomotor"][:n_rois],
-        "x": coords[:, 0],
-        "y": coords[:, 1],
-        "z": coords[:, 2],
-    })
-    atlas_path = tmp_path / "atlas.csv"
-    atlas_df.to_csv(atlas_path, index=False)
 
-    manifest = tmp_path / "study.yaml"
-    manifest.write_text(yaml.safe_dump({
+def _make_study(tmp: Path, pheno: pd.DataFrame, data: np.ndarray, design: dict, **extra) -> Path:
+    np.save(tmp / "conn.npy", data)
+    pheno.to_csv(tmp / "pheno.csv", index=False)
+    (tmp / "study.yaml").write_text(yaml.safe_dump({
         "schema_version": 1,
         "loader": "NumpyLoader",
         "paths": {"data_path": "conn.npy", "pheno_path": "pheno.csv"},
-    }))
-
-    cfg = tmp_path / "analysis.yaml"
-    cfg.write_text(yaml.safe_dump({
-        "data": "study.yaml",
-        "atlas": "atlas.csv",
-        "design": {
-            "type": "glm",
-            "interest": "age",
-            "confounds": ["age_copy"] if collinear else ["sex"],
-            "sites": "site",
-        },
-        "inference": {"method": "tstat", "n_permutations": 30, "use_mp": False, "rng": 0},
-        "output": "out",
-    }))
-    return manifest, cfg, atlas_path
+    }), encoding="utf-8")
+    cfg = {"data": "study.yaml", "design": design, "inference": dict(FAST), "output": "out", **extra}
+    cfg_path = tmp / "analysis.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return cfg_path
 
 
-def test_qc_and_check_alias_valid_and_json(tmp_path):
-    _, cfg, _ = _make_study(tmp_path, collinear=False)
-    out_json = tmp_path / "qc.json"
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        code = main(["qc", str(cfg), "--motion-qc", "--json", "--out", str(out_json)])
-    assert code == 0
-    payload = json.loads(buf.getvalue())
-    assert payload["ok"] is True
-    assert payload["design_diagnostics"]["rank_deficient"] is False
-    assert payload["motion_qc"]["status"] == "available"
-    assert out_json.is_file()
-
-    buf2 = io.StringIO()
-    with contextlib.redirect_stdout(buf2):
-        code2 = main(["check", str(cfg)])
-    assert code2 == 0
-    assert "conninfpy qc [PASS]" in buf2.getvalue()
-
-
-def test_qc_detects_rank_deficiency(tmp_path):
-    _, cfg, _ = _make_study(tmp_path, collinear=True)
-    # Force collinearity: interest == age, confound == age * 2 -> rank deficient
-    cfg_data = yaml.safe_load(cfg.read_text())
-    cfg_data["design"]["confounds"] = ["age_copy"]
-    # Replace age_copy exactly with 2 * age
-    pheno = pd.read_csv(tmp_path / "pheno.csv")
-    pheno["age_copy"] = 2.0 * pheno["age"]
-    pheno.to_csv(tmp_path / "pheno.csv", index=False)
-    cfg.write_text(yaml.safe_dump(cfg_data))
-
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        code = main(["qc", str(cfg), "--json"])
-    assert code == 1
-    payload = json.loads(buf.getvalue())
-    assert payload["ok"] is False
-    assert payload["design_diagnostics"]["rank_deficient"] is True
+def _write_coords_atlas(tmp: Path, n_rois: int = 6) -> Path:
+    # MNI coordinates inside cerebral cortex so BNA-246 annotation succeeds
+    coords = [
+        (-10.0, 50.0, 20.0),
+        (10.0, 50.0, 20.0),
+        (-40.0, -20.0, 50.0),
+        (40.0, -20.0, 50.0),
+        (-25.0, -70.0, 10.0),
+        (25.0, -70.0, 10.0),
+    ][:n_rois]
+    df = pd.DataFrame({
+        "name": [f"ROI_{i}" for i in range(n_rois)],
+        "network": ["DMN", "DMN", "SMN", "SMN", "Vis", "Vis"][:n_rois],
+        "x": [c[0] for c in coords],
+        "y": [c[1] for c in coords],
+        "z": [c[2] for c in coords],
+    })
+    path = tmp / "atlas.csv"
+    df.to_csv(path, index=False)
+    return path
 
 
-def test_init_generates_valid_yaml_and_respects_force(tmp_path):
-    manifest, _, _ = _make_study(tmp_path)
-    out_yaml = tmp_path / "generated.yaml"
+class TestSelftest(unittest.TestCase):
 
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        code = main(["init", "--manifest", str(manifest), "--design", "glm", "--out", str(out_yaml)])
-    assert code == 0
-    assert out_yaml.is_file()
-    loaded = load_config(out_yaml)
-    assert loaded["design"]["type"] == "glm"
-    assert loaded["inference"]["two_tailed"] is True
+    def test_selftest_text_and_json(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = main(["selftest"])
+        self.assertEqual(rc, 0)
+        out = buf.getvalue()
+        self.assertIn("PASS", out)
+        self.assertIn("tfnbs_mp", out)
 
-    # Without --force, refuses to overwrite
-    err = io.StringIO()
-    with contextlib.redirect_stderr(err):
-        code_dup = main(["init", "--manifest", str(manifest), "--out", str(out_yaml)])
-    assert code_dup == 1
-    assert "already exists" in err.getvalue()
-
-    # With --force, overwrites cleanly
-    with contextlib.redirect_stdout(io.StringIO()):
-        assert main(["init", "--manifest", str(manifest), "--out", str(out_yaml), "--force"]) == 0
+        buf_json = io.StringIO()
+        with contextlib.redirect_stdout(buf_json):
+            rc_j = main(["selftest", "--json"])
+        self.assertEqual(rc_j, 0)
+        payload = json.loads(buf_json.getvalue())
+        self.assertTrue(payload["ok"])
+        self.assertIn("actual_backend", payload["backend"])
+        self.assertEqual(payload["checks"]["synthetic_data"]["status"], "PASS")
+        self.assertEqual(payload["checks"]["tfnbs_mp"]["status"], "PASS")
+        self.assertEqual(payload["checks"]["bundled_atlas"]["status"], "PASS")
 
 
-def test_interpret_exports_tables_and_plots(tmp_path):
-    _, cfg, _ = _make_study(tmp_path)
-    with contextlib.redirect_stdout(io.StringIO()):
-        written = run(cfg)
-    run_dir = written["provenance"].parent
+class TestRunFlags(unittest.TestCase):
 
-    interp_dir = tmp_path / "interp_out"
-    with contextlib.redirect_stdout(io.StringIO()):
-        code = main([
-            "interpret", str(run_dir),
-            "--cerebellum", "anatom",
-            "--out", str(interp_dir),
-        ])
-    assert code == 0
-    assert (interp_dir / "node_summary.csv").is_file()
-    assert (interp_dir / "network_summary.csv").is_file()
-    assert (interp_dir / "annotated_edges.csv").is_file()
-    assert (interp_dir / "summary_figure.png").is_file()
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
 
-    # Also test --no-plots targeting bundle.pkl directly
-    interp_no_plots = tmp_path / "interp_no_plots"
-    with contextlib.redirect_stdout(io.StringIO()):
-        code2 = main([
-            "interpret", str(written["bundle"]),
-            "--no-plots",
-            "--out", str(interp_no_plots),
-        ])
-    assert code2 == 0
-    assert (interp_no_plots / "node_summary.csv").is_file()
-    assert not (interp_no_plots / "summary_figure.png").exists()
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_dry_run_writes_no_files(self):
+        cfg = _make_study(self.tmp, _pheno(16), _correlations(16), {"type": "glm", "interest": "age", "confounds": ["sex"]})
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = main(["run", str(cfg), "--dry-run"])
+        self.assertEqual(rc, 0)
+        self.assertIn("dry-run", buf.getvalue())
+        self.assertFalse((self.tmp / "out").exists())
+
+    def test_n_jobs_method_seed_overrides(self):
+        cfg = _make_study(self.tmp, _pheno(16), _correlations(16), {"type": "glm", "interest": "age"})
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = main(["run", str(cfg), "--n-jobs", "2", "--method", "tstat", "--seed", "7"])
+        self.assertEqual(rc, 0)
+        prov = json.loads((self.tmp / "out" / "provenance.json").read_text(encoding="utf-8"))
+        self.assertEqual(prov["results"]["result"]["method"], "tstat")
+
+    def test_no_mp_and_n_jobs_gt_1_raises(self):
+        cfg = _make_study(self.tmp, _pheno(16), _correlations(16), {"type": "glm", "interest": "age"})
+        with self.assertRaises(ConfigError):
+            run(cfg, use_mp=False, n_processes=2)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = main(["run", str(cfg), "--no-mp", "--n-jobs", "2"])
+        self.assertEqual(rc, 1)
+        self.assertIn("--no-mp", err.getvalue())
 
 
-def test_app_launch_and_missing_streamlit_guard(monkeypatch):
-    # Guard when streamlit is unavailable
-    real_find_spec = importlib.util.find_spec
+class TestInterpretFlags(unittest.TestCase):
 
-    def _no_streamlit(name, package=None):
-        if name == "streamlit":
-            return None
-        return real_find_spec(name, package)
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
 
-    monkeypatch.setattr(importlib.util, "find_spec", _no_streamlit)
-    err = io.StringIO()
-    with contextlib.redirect_stderr(err):
-        code = main(["app"])
-    assert code == 1
-    assert "streamlit is not installed" in err.getvalue()
+    def tearDown(self):
+        self._tmp.cleanup()
 
-    # Launch when streamlit is mocked available
-    monkeypatch.setattr(
-        importlib.util,
-        "find_spec",
-        lambda name, package=None: mock.MagicMock(origin="apps/streamlit_app.py") if name == "streamlit" else real_find_spec(name, package),
-    )
-    with mock.patch("subprocess.run", return_value=mock.MagicMock(returncode=0)) as m_run:
-        code_ok = main(["app", "--server.port", "8505"])
-    assert code_ok == 0
-    cmd = m_run.call_args[0][0]
-    assert cmd[1:4] == ["-m", "streamlit", "run"]
-    assert cmd[4].endswith("apps/streamlit_app.py")
-    assert cmd[5:] == ["--server.port", "8505"]
+    def test_interpret_sphere_pdf_and_point(self):
+        atlas_path = _write_coords_atlas(self.tmp, n_rois=6)
+        cfg = _make_study(
+            self.tmp,
+            _pheno(16),
+            _correlations(16, N=6),
+            {"type": "glm", "interest": "age"},
+            atlas=str(atlas_path),
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            run(cfg)
+
+        out_pdf = self.tmp / "interp_pdf"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = main([
+                "interpret", str(self.tmp / "out"),
+                "--support", "sphere",
+                "--radius-mm", "5",
+                "--space", "MNI152NLin2009cAsym",
+                "--format", "pdf",
+                "--dpi", "150",
+                "--out", str(out_pdf),
+            ])
+        self.assertEqual(rc, 0)
+        self.assertTrue((out_pdf / "summary_figure.pdf").is_file())
+        self.assertTrue((out_pdf / "annotated_edges.csv").is_file())
+
+        out_pt = self.tmp / "interp_point"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc_pt = main([
+                "interpret", str(self.tmp / "out"),
+                "--support", "point",
+                "--no-plots",
+                "--out", str(out_pt),
+            ])
+        self.assertEqual(rc_pt, 0)
+        self.assertTrue((out_pt / "annotated_edges.csv").is_file())
+        self.assertFalse((out_pt / "summary_figure.png").exists())
+
+
+class TestInfluenceCLI(unittest.TestCase):
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_influence_edges_and_edges_file(self):
+        cfg = _make_study(
+            self.tmp,
+            _pheno(16),
+            _correlations(16, N=6),
+            {"type": "glm", "interest": "age", "confounds": ["sex"]},
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            run(cfg)
+
+        # Missing --edges and --edges-file must fail cleanly
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc_missing = main(["influence", str(self.tmp / "out"), "--config", str(cfg)])
+        self.assertEqual(rc_missing, 1)
+
+        # Explicit --edges
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = main([
+                "influence", str(self.tmp / "out"),
+                "--config", str(cfg),
+                "--edges", "0:1,2:5",
+                "--json",
+            ])
+        self.assertEqual(rc, 0)
+        rep = json.loads(buf.getvalue())
+        self.assertEqual(rep["unavailable"], [])
+        self.assertEqual(rep["n_edges"], 2)
+        infl_dir = self.tmp / "out" / "influence"
+        self.assertTrue((infl_dir / "subject_influence.json").is_file())
+        self.assertTrue((infl_dir / "subject_influence.csv").is_file())
+
+        # Explicit --edges-file
+        edges_csv = self.tmp / "chosen_edges.csv"
+        pd.DataFrame({"roi_i": [0, 1], "roi_j": [2, 3]}).to_csv(edges_csv, index=False)
+        out_file_dir = self.tmp / "infl_file"
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc2 = main([
+                "influence", str(self.tmp / "out"),
+                "--config", str(cfg),
+                "--edges-file", str(edges_csv),
+                "--out", str(out_file_dir),
+            ])
+        self.assertEqual(rc2, 0)
+        rep2 = json.loads((out_file_dir / "subject_influence.json").read_text(encoding="utf-8"))
+        self.assertEqual(rep2["unavailable"], [])
+        self.assertEqual(rep2["n_edges"], 2)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -233,15 +233,19 @@ fMRIPrep derivatives and ABIDE.
 
 ### Command line
 
-The full workflow without writing Python — generate a config from a manifest,
-run pre-inference design & motion QC, execute permutation inference, and export
-tables/annotations/figures:
+The full workflow without writing Python — verify the installation, generate a
+config from a manifest, run pre-inference design & motion QC, execute
+permutation inference, and export tables/annotations/figures or per-subject
+influence diagnostics:
 
 ```bash
+conninfpy selftest                                    # quick check: TFNBS, MP, bundled atlases
 conninfpy init --manifest datasets/abide_mini.yaml --out analysis.yaml
 conninfpy qc analysis.yaml --motion-qc                # alias: conninfpy check
-conninfpy run examples/abide/configs/abide_mini_age.yaml   # writes edges.csv, pvals.npz, bundle.pkl, provenance.json
-conninfpy interpret conninfpy_results --cerebellum anatom  # node/network summaries, BNA+SUIT annotation, plots
+conninfpy run examples/abide/configs/abide_mini_age.yaml --dry-run
+conninfpy run examples/abide/configs/abide_mini_age.yaml --n-jobs 4 --seed 0
+conninfpy interpret conninfpy_results --cerebellum anatom --support sphere --radius-mm 6 --format png --dpi 300
+conninfpy influence conninfpy_results --config analysis.yaml --edges "0:1,2:5"
 conninfpy app                                         # launch Streamlit workspace (requires [app])
 conninfpy info                                        # versions, TFNBS backend, cores
 ```

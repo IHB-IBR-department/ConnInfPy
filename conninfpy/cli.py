@@ -1,4 +1,4 @@
-"""Command line: ``conninfpy {run,qc,init,interpret,app,info}``.
+"""Command line: ``conninfpy {run,qc,init,interpret,influence,selftest,app,info}``.
 
 An analysis file names a data manifest, the design (which phenotype
 columns hold the predictor, confounds, sites or groups) and the inference
@@ -656,6 +656,10 @@ def run(
     *,
     n_permutations: Optional[int] = None,
     use_mp: Optional[bool] = None,
+    n_processes: Optional[int] = None,
+    method: Optional[str] = None,
+    seed: Optional[int] = None,
+    dry_run: bool = False,
     motion_qc: bool = False,
 ) -> Dict[str, Path]:
     """Run one analysis file; return the paths written, keyed by name."""
@@ -681,17 +685,71 @@ def run(
         inference["n_permutations"] = n_permutations
     if use_mp is not None:
         inference["use_mp"] = use_mp
+    if n_processes is not None:
+        if n_processes < 1:
+            raise ConfigError("--n-jobs / --n-processes must be >= 1.")
+        if use_mp is False and n_processes > 1:
+            raise ConfigError("--no-mp cannot be combined with --n-jobs > 1.")
+        inference["n_processes"] = int(n_processes)
+        if use_mp is None:
+            inference["use_mp"] = True
+    if method is not None:
+        inference["method"] = str(method)
+    if seed is not None:
+        inference["rng"] = int(seed)
     atlas = _atlas(cfg.get("atlas"), dataset, base, summary["n_regions"])
     alpha = float(cfg.get("alpha", 0.05))
     motion_qc_spec = _motion_qc_spec(dataset, cfg, kwargs=kwargs, enabled=motion_qc)
     if motion_qc_spec is not None:
         kwargs = {**kwargs, "motion_qc": motion_qc_spec}
 
+    out = Path(out_dir) if out_dir else base / cfg.get("output", "conninfpy_results")
+    if dry_run:
+        from conninfpy._cli_tools import _design_matrix_for_qc
+        from conninfpy.harmonize.diagnostics import design_diagnostics
+
+        n_dropped = int(summary["n_subjects_in_data"] - summary["n_subjects_used"])
+        X_qc, col_names_qc, _ = _design_matrix_for_qc(dataset, cfg, kwargs)
+        dd_line = "not applicable"
+        if X_qc is not None:
+            dd = design_diagnostics(X_qc, names=col_names_qc)
+            dd_line = (
+                f"rank={dd['matrix_rank']}/{X_qc.shape[1]}, "
+                f"cond={dd['condition_number']:.2f}, "
+                f"vif_max={dd['vif_max']:.2f}"
+            )
+            if dd["rank_deficient"]:
+                dd_line += " [RANK DEFICIENT]"
+        tested_tail = inference.get("tested_tail")
+        if tested_tail is not None:
+            tail_policy = f"one-sided-{tested_tail}"
+        elif inference.get("two_tailed", True):
+            tail_policy = "two-sided"
+        else:
+            tail_policy = "separate-one-sided"
+        atlas_label = (
+            cfg.get("atlas")
+            or getattr(atlas, "source", None)
+            or ("present" if atlas is not None else "none")
+        )
+        print(f"conninfpy {__version__} — dry-run (no permutations run, no files written)")
+        print(f"  design:        {summary['design']}")
+        print(f"  subjects:      {summary['n_subjects_used']} used ({n_dropped} dropped)")
+        print(f"  regions:       {summary['n_regions']}")
+        print(f"  atlas:         {atlas_label}")
+        print(f"  method:        {inference.get('method', 'tfnbs')}")
+        print(f"  permutations:  {inference.get('n_permutations', 1000)}")
+        print(f"  n_processes:   {inference.get('n_processes', 'auto')} (use_mp={inference.get('use_mp', True)})")
+        print(f"  harmonize:     {kwargs.get('harmonize', 'auto')}")
+        print(f"  tail_policy:   {tail_policy}")
+        print(f"  seed:          {inference.get('rng', 'none')}")
+        print(f"  design_diag:   {dd_line}")
+        print(f"  output_dir:    {out}")
+        return {}
+
     t0 = time.perf_counter()
     result = analyze(**kwargs, **inference, atlas=atlas)
     wall = time.perf_counter() - t0
-
-    out = Path(out_dir) if out_dir else base / cfg.get("output", "conninfpy_results")
     out.mkdir(parents=True, exist_ok=True)
     results = result if isinstance(result, dict) else {"": result}
     written: Dict[str, Path] = {}
@@ -780,6 +838,12 @@ def run(
             alpha=float(opts.get("alpha", alpha)),
             out_dir=out / opts["out"] if opts.get("out") else out / "interpretation",
             no_plots=bool(opts.get("no_plots", False)),
+            support=opts.get("support"),
+            radius_mm=float(opts["radius_mm"]) if opts.get("radius_mm") is not None else 6.0,
+            parcel_nifti=opts.get("parcel_nifti"),
+            space=opts.get("space"),
+            fig_format=str(opts.get("format", "png")),
+            dpi=int(opts.get("dpi", 300)),
         )
         for k, v in interp_written.items():
             written[f"interpret_{k}"] = v
@@ -909,12 +973,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p_run.add_argument("--n-permutations", type=int, help="override inference.n_permutations")
     p_run.add_argument("--no-mp", action="store_true", help="run in a single process")
     p_run.add_argument(
+        "--n-jobs",
+        "--n-processes",
+        dest="n_processes",
+        type=int,
+        help="override inference.n_processes (and enable multiprocessing unless --no-mp)",
+    )
+    p_run.add_argument("--method", help="override inference.method")
+    p_run.add_argument("--seed", type=int, help="override inference.rng")
+    p_run.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="validate manifest, design, and options without running permutations or writing files",
+    )
+    p_run.add_argument(
         "--motion-qc",
         action="store_true",
         help="add the descriptive motion/QC-FC side-car (FD from diagnostics.motion_qc.fd "
              "or an auto-detected Motion_FD/func_mean_fd phenotype column)",
     )
     sub.add_parser("info", help="show versions and the compute backend")
+
+    p_selftest = sub.add_parser(
+        "selftest",
+        help="run a fast synthetic self-test verifying TFNBS, multiprocessing, and bundled atlases",
+    )
+    p_selftest.add_argument("--json", action="store_true", help="print self-test report as JSON")
 
     p_qc = sub.add_parser(
         "qc",
@@ -946,7 +1030,50 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     p_interp.add_argument("--alpha", type=float, help="override significance threshold")
     p_interp.add_argument("--out", help="output directory (default: <target>/interpretation)")
-    p_interp.add_argument("--no-plots", action="store_true", help="skip PNG figure generation")
+    p_interp.add_argument("--no-plots", action="store_true", help="skip figure generation")
+    p_interp.add_argument(
+        "--support",
+        choices=("point", "sphere", "parcel"),
+        default=None,
+        help="spatial support for coordinate atlases (default: sphere; parcel requires --parcel-nifti)",
+    )
+    p_interp.add_argument(
+        "--radius-mm",
+        type=float,
+        default=6.0,
+        help="sphere radius in mm when --support=sphere (default: 6.0)",
+    )
+    p_interp.add_argument(
+        "--parcel-nifti",
+        help="3D integer label NIfTI path when --support=parcel",
+    )
+    p_interp.add_argument(
+        "--space",
+        help="override MNI template space (e.g. MNI152NLin2009cAsym)",
+    )
+    p_interp.add_argument(
+        "--format",
+        choices=("png", "pdf", "svg"),
+        default="png",
+        help="figure output format (default: png)",
+    )
+    p_interp.add_argument(
+        "--dpi",
+        type=int,
+        default=300,
+        help="figure DPI for raster/embedded outputs (default: 300)",
+    )
+
+    p_infl = sub.add_parser(
+        "influence",
+        help="descriptive per-subject leave-one-out influence on explicitly chosen edges",
+    )
+    p_infl.add_argument("target", help="conninfpy run output directory or bundle*.pkl file")
+    p_infl.add_argument("--config", required=True, help="analysis YAML used for the run")
+    p_infl.add_argument("--edges", help="comma-separated 0-based ROI pairs, e.g. '0:1,2:5'")
+    p_infl.add_argument("--edges-file", help="CSV file with roi_i,roi_j (or i,j) columns")
+    p_infl.add_argument("--out", help="output directory (default: <target>/influence)")
+    p_infl.add_argument("--json", action="store_true", help="print influence report as JSON")
 
     p_app = sub.add_parser("app", help="launch the interactive Streamlit workspace")
     p_app.add_argument("streamlit_args", nargs=argparse.REMAINDER, help="extra arguments forwarded to streamlit run")
@@ -962,6 +1089,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command == "info":
         info()
         return 0
+    if args.command == "selftest":
+        from conninfpy._cli_tools import run_selftest
+
+        code, _ = run_selftest(as_json=args.json)
+        return code
     if args.command == "app":
         from conninfpy._cli_tools import launch_app
 
@@ -997,10 +1129,37 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 alpha=args.alpha,
                 out_dir=args.out,
                 no_plots=args.no_plots,
+                support=args.support,
+                radius_mm=args.radius_mm,
+                parcel_nifti=args.parcel_nifti,
+                space=args.space,
+                fig_format=args.format,
+                dpi=args.dpi,
             )
             return 0
-        run(args.config, args.out, n_permutations=args.n_permutations,
-            use_mp=False if args.no_mp else None, motion_qc=args.motion_qc)
+        if args.command == "influence":
+            from conninfpy._cli_tools import run_influence
+
+            run_influence(
+                args.target,
+                config_path=args.config,
+                edges_spec=args.edges,
+                edges_file=args.edges_file,
+                out_dir=args.out,
+                as_json=args.json,
+            )
+            return 0
+        run(
+            args.config,
+            args.out,
+            n_permutations=args.n_permutations,
+            use_mp=False if args.no_mp else None,
+            n_processes=args.n_processes,
+            method=args.method,
+            seed=args.seed,
+            dry_run=args.dry_run,
+            motion_qc=args.motion_qc,
+        )
     except (ConfigError, FileNotFoundError, FileExistsError, ValueError) as exc:
         print(f"conninfpy: error: {exc}", file=sys.stderr)
         return 1
