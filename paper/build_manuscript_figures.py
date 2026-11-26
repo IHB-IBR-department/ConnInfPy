@@ -1,4 +1,4 @@
-"""Build all reproducible >=300 DPI manuscript figures for ConnInfPy 2.0.0 (NETSTAT-46).
+"""Build the 600 DPI manuscript figures for ConnInfPy 2.0.0.
 
 Outputs are written to BOTH:
   - paper/figures/<subdir>/<filename>
@@ -19,6 +19,7 @@ import pickle
 import re
 import shutil
 import sys
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 import matplotlib as mpl
@@ -26,6 +27,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.legend import Legend
 from scipy import stats
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -59,15 +61,31 @@ OUT_PAPER = (
     / "figs"
 )
 PAPER_DATA = REPO_ROOT / "paper" / "data"
+OUTPUT_DIRS = (OUT_REPO, OUT_PAPER)
 
 
-def _save_both(fig: plt.Figure, rel_path: str, dpi: int = 300) -> None:
-    for base in (OUT_REPO, OUT_PAPER):
+def _save_both(fig: plt.Figure, rel_path: str, dpi: int = 600) -> None:
+    for base in OUTPUT_DIRS:
         dest = base / rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(dest, dpi=dpi, bbox_inches="tight", facecolor="white")
         print(f"Wrote {dest}")
     plt.close(fig)
+
+
+def _place_connectogram_legend(ax, legend_ax, ncol: int) -> None:
+    """Move the network and chord-width keys into their own space."""
+    handles, labels = [], []
+    for legend in list(ax.get_children()):
+        if isinstance(legend, Legend):
+            handles.extend(legend.legend_handles)
+            labels.extend(text.get_text() for text in legend.get_texts())
+            legend.remove()
+    for label in list(ax.texts):
+        if "ROIs placed" in label.get_text():
+            label.remove()
+    legend_ax.axis("off")
+    legend_ax.legend(handles, labels, loc="center", ncol=ncol, frameon=False)
 
 
 def _clopper_pearson(k: int, n: int, alpha: float = 0.05) -> tuple[float, float]:
@@ -191,18 +209,25 @@ def build_fig2_fwer_calibration() -> None:
 
     df_glm = pd.read_csv(sim_res / "glm" / "glm_validation_2_0_1000" / "glm_fwer_summary.csv")
 
-    fig, (axA, axB) = plt.subplots(1, 2, figsize=(13.5, 5.4), gridspec_kw={"width_ratios": [1.18, 1.0]})
+    fig, (axA, axB) = plt.subplots(1, 2, figsize=(9.0, 4.8), gridspec_kw={"width_ratios": [1.18, 1.0]})
 
     # Exact binomial quantiles for observed frequency at p=0.05, N=1000
     binom_lo, binom_hi = stats.binom.ppf([0.025, 0.975], 1000, 0.05) / 1000.0
+    band_label = "95% reference band\nBinomial(1,000, 0.05)"
+    sample_styles = {
+        10: ("#0072B2", "o"),
+        30: ("#E69F00", "s"),
+        50: ("#009E73", "^"),
+        60: ("#D55E00", "P"),
+        100: ("#CC79A7", "D"),
+    }
 
     # Panel A: Pairwise/Two-sample
     n_vals_a = [10, 30, 50, 100]
-    palette_a = ["#0072B2", "#E69F00", "#009E73", "#CC79A7"]
     y_pos_a = np.arange(len(SIM_METHOD_ORDER))
     offsets_a = np.linspace(-0.26, 0.26, len(n_vals_a))
 
-    axA.axvspan(binom_lo, binom_hi, color="#e8eef5", alpha=0.7, zorder=0, label="95% Binomial band (N=1000)")
+    axA.axvspan(binom_lo, binom_hi, color="#e8eef5", alpha=0.7, zorder=0, label=band_label)
     axA.axvline(0.05, color="#c0392b", ls="--", lw=1.1, zorder=1, label=r"Nominal $\alpha=0.05$")
 
     for j, n in enumerate(n_vals_a):
@@ -215,27 +240,27 @@ def build_fig2_fwer_calibration() -> None:
                 ys.append(i + offsets_a[j])
                 xerr_lo.append(r["fwer"] - r["lo"])
                 xerr_hi.append(r["hi"] - r["fwer"])
+        color, marker = sample_styles[n]
         axA.errorbar(
-            xs, ys, xerr=[xerr_lo, xerr_hi], fmt="o", markersize=4.0,
-            color=palette_a[j], elinewidth=1.0, capsize=2, label=f"n = {n}", zorder=3
+            xs, ys, xerr=[xerr_lo, xerr_hi], fmt=marker, markersize=4.0,
+            color=color, elinewidth=1.0, capsize=2, label=f"n = {n}", zorder=3
         )
 
     axA.set_yticks(y_pos_a)
     axA.set_yticklabels([SIM_METHOD_LABELS[m] for m in SIM_METHOD_ORDER])
     axA.invert_yaxis()
     axA.set_xlim(0.0, 0.10)
-    axA.set_xlabel("Empirical Max-Tail FWER (simultaneous 95% CI via 97.5% per-tail CP)")
-    axA.set_title("A. Two-Sample Null Calibration (n_null = 1,000, Exact n=None)", fontweight="bold", loc="left")
+    axA.set_xlabel("Max-tail FWER\n95% CI from simultaneous per-tail intervals")
+    axA.set_title("a   Two-sample null", fontweight="bold", loc="left")
     axA.grid(axis="x", ls=":", alpha=0.4)
-    axA.legend(loc="upper center", bbox_to_anchor=(0.5, -0.13), frameon=True, fontsize=6.8, ncol=3)
+    axA.legend(loc="upper center", bbox_to_anchor=(0.5, -0.17), frameon=True, fontsize=6.8, ncol=3)
 
     # Panel B: GLM 2.0.0 Joint Two-Sided
     n_vals_b = [30, 60, 100]
-    palette_b = ["#0072B2", "#009E73", "#D55E00"]
     y_pos_b = np.arange(len(GLM_METHOD_ORDER))
     offsets_b = np.linspace(-0.22, 0.22, len(n_vals_b))
 
-    axB.axvspan(binom_lo, binom_hi, color="#e8eef5", alpha=0.7, zorder=0, label="95% Binomial band (N=1000)")
+    axB.axvspan(binom_lo, binom_hi, color="#e8eef5", alpha=0.7, zorder=0, label=band_label)
     axB.axvline(0.05, color="#c0392b", ls="--", lw=1.1, zorder=1, label=r"Nominal $\alpha=0.05$")
 
     for j, n in enumerate(n_vals_b):
@@ -251,26 +276,21 @@ def build_fig2_fwer_calibration() -> None:
                 ys.append(i + offsets_b[j])
                 xerr_lo.append(val - lo)
                 xerr_hi.append(hi - val)
+        color, marker = sample_styles[n]
         axB.errorbar(
-            xs, ys, xerr=[xerr_lo, xerr_hi], fmt="s", markersize=4.2,
-            color=palette_b[j], elinewidth=1.0, capsize=2, label=f"n = {n}", zorder=3
+            xs, ys, xerr=[xerr_lo, xerr_hi], fmt=marker, markersize=4.2,
+            color=color, elinewidth=1.0, capsize=2, label=f"n = {n}", zorder=3
         )
 
     axB.set_yticks(y_pos_b)
     axB.set_yticklabels([GLM_METHOD_LABELS[m] for m in GLM_METHOD_ORDER])
     axB.invert_yaxis()
     axB.set_xlim(0.0, 0.10)
-    axB.set_xlabel("Empirical Joint Two-Sided FWER (95% Clopper–Pearson CI)")
-    axB.set_title("B. Freedman–Lane GLM 2.0.0 Calibration (two_tailed=True)", fontweight="bold", loc="left")
+    axB.set_xlabel("Joint two-sided FWER\n95% Clopper–Pearson CI")
+    axB.set_title("b   Freedman–Lane GLM null", fontweight="bold", loc="left")
     axB.grid(axis="x", ls=":", alpha=0.4)
-    axB.legend(loc="upper center", bbox_to_anchor=(0.5, -0.13), frameon=True, fontsize=6.8, ncol=3)
+    axB.legend(loc="upper center", bbox_to_anchor=(0.5, -0.17), frameon=True, fontsize=6.8, ncol=3)
 
-    fig.suptitle(
-        "Empirical Family-Wise Error Rate (FWER) Calibration Under Global Null (ConnInfPy 2.0.0)",
-        fontsize=11,
-        fontweight="bold",
-        y=1.01,
-    )
     plt.tight_layout()
     _save_both(fig, "simulation/fig2_fwer_calibration.png")
 
@@ -315,62 +335,68 @@ def build_fig3_power_heatmap() -> None:
     fdp_piv.index = row_labels
     fdp_piv.columns = col_labels
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12.2, 9.6), sharex=True)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.4, 6.8), sharex=True)
     sns.heatmap(
         tpr_piv, annot=True, fmt=".2f", cmap="YlGnBu", vmin=0.0, vmax=1.0,
         linewidths=0.4, cbar_kws={"label": "Mean TPR"}, ax=ax1, annot_kws={"size": 7.2}
     )
-    ax1.set_title(r"A. Edge-Level True Positive Rate (TPR) at $\Delta r = 0.125$, $n = 30$/group", fontweight="bold", loc="left")
+    ax1.set_title("a   Mean edge-level true positive rate", fontweight="bold", loc="left")
     ax1.set_ylabel("")
     ax1.set_xlabel("")
 
+    fdp_max = np.ceil(10 * np.nanmax(fdp_piv.to_numpy())) / 10
     sns.heatmap(
-        fdp_piv, annot=True, fmt=".2f", cmap="YlOrRd", vmin=0.0, vmax=0.50,
+        fdp_piv, annot=True, fmt=".2f", cmap="YlOrRd", vmin=0.0, vmax=max(0.1, fdp_max),
         linewidths=0.4, cbar_kws={"label": "Mean FDP"}, ax=ax2, annot_kws={"size": 7.2}
     )
-    ax2.set_title(
-        r"B. Mean False Discovery Proportion (FDP) at $\Delta r = 0.125$, $n = 30$/group"
-        "  (component/block outputs projected to constituent edges)",
-        fontweight="bold",
-        loc="left",
-    )
+    ax2.set_title("b   Mean edge-level false discovery proportion", fontweight="bold", loc="left")
     ax2.set_ylabel("")
     ax2.set_xlabel("Planted Signal Topology")
     ax2.set_xticklabels(col_labels, rotation=28, ha="right")
 
-    fig.suptitle(
-        r"Topology-Dependent Power and Localization Accuracy ($\Delta r = 0.125$, 60 nodes, 100 repeats $\times$ 1,000 perms)",
-        fontsize=11,
-        fontweight="bold",
-        y=0.995,
-    )
     plt.tight_layout()
     _save_both(fig, "simulation/fig3_power_heatmap.png")
 
 
 def build_fig7_timing_benchmark() -> None:
-    src = REPO_ROOT / "examples" / "benchmarks" / "res_benchmarks" / "timing_benchmark.png"
-    for base in (OUT_REPO, OUT_PAPER):
-        dest = base / "figures" / "fig7_timing_benchmark.png"
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest)
-        print(f"Copied {dest}")
+    src = REPO_ROOT / "examples" / "benchmarks" / "res_benchmarks" / "timing_benchmark.csv"
+    benchmark = pd.read_csv(src)
+    benchmark = benchmark[
+        (benchmark["n_permutations"] == 100)
+        & (benchmark["n_samples"] == 30)
+        & (benchmark["topology"] == "within_module_dense")
+    ]
+    fig, ax = plt.subplots(figsize=(5.5, 3.25), layout="constrained")
+    for method, label, marker, color in [
+        ("nbs", "NBS", "s", "#D55E00"),
+        ("tfnbs", "TFNBS · exact", "o", "#0072B2"),
+        ("tfnbs_n10", "TFNBS · 10-point grid", "^", "#009E73"),
+        ("glm_tfnbs", "GLM TFNBS · exact", "D", "#CC79A7"),
+        ("glm_tfnbs_n10", "GLM TFNBS · 10-point grid", "v", "#6A4C93"),
+    ]:
+        sub = benchmark[benchmark["method"] == method].sort_values("n_nodes")
+        ax.loglog(sub["n_nodes"], sub["per_perm_ms"], marker=marker, color=color, label=label)
+    nodes = sorted(benchmark["n_nodes"].unique())
+    ax.set_xticks(nodes, [str(n) for n in nodes])
+    ax.tick_params(axis="x", which="minor", labelbottom=False)
+    ax.set_xlabel("Number of nodes")
+    ax.set_ylabel("Mean wall-clock time ÷ 100 (ms per permutation)")
+    ax.grid(axis="y", which="both", ls=":", alpha=0.45)
+    ax.legend(loc="upper left")
+    _save_both(fig, "figures/fig7_timing_benchmark.png")
 
 
 def build_figS4_topologies_gallery() -> None:
     from examples.simulations.topology_gallery import plot_topology_gallery
-    tmp_dir = REPO_ROOT / "examples" / "simulations" / "results" / "_tmp_gallery"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    out = plot_topology_gallery(effect_size=0.125, n_samples=30, seed=42, output_dir=tmp_dir)
-    # Re-save at 300 DPI via PIL to ensure exact DPI metadata if needed, or load & save
-    from PIL import Image
-    with Image.open(out) as im:
-        for base in (OUT_REPO, OUT_PAPER):
+    with TemporaryDirectory(prefix="conninf-topology-") as tmp_dir:
+        out = plot_topology_gallery(
+            effect_size=0.125, n_samples=30, seed=42, output_dir=Path(tmp_dir), dpi=600,
+        )
+        for base in OUTPUT_DIRS:
             dest = base / "simulation" / "figS4_topologies_gallery.png"
             dest.parent.mkdir(parents=True, exist_ok=True)
-            im.save(dest, dpi=(300, 300))
-            print(f"Wrote {dest} (300 dpi)")
-    shutil.rmtree(tmp_dir, ignore_errors=True)
+            shutil.copyfile(out, dest)
+            print(f"Wrote {dest}")
 
 
 def build_figS5_tfnbs_eh_sweep_and_paired_diff() -> None:
@@ -390,26 +416,27 @@ def build_figS5_tfnbs_eh_sweep_and_paired_diff() -> None:
 
     df_paired = pd.read_csv(PAPER_DATA / "exact_grid_paired_comparison.csv")
 
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(14.5, 4.8), gridspec_kw={"width_ratios": [1.1, 1.1, 1.0]})
-
-    sns.heatmap(tpr_grid, annot=True, fmt=".2f", cmap="YlGnBu", ax=ax1, cbar_kws={"label": "Mean TPR"}, annot_kws={"size": 6.2})
-    ax1.set_title(r"A. TFNBS $(E, H)$ Sweep: Mean TPR ($\Delta r = 0.125$)", fontweight="bold", loc="left")
-    ax1.set_xlabel("Extent exponent E")
-    ax1.set_ylabel("Height exponent H")
-
-    sns.heatmap(fdp_grid, annot=True, fmt=".3f", cmap="YlOrRd", ax=ax2, cbar_kws={"label": "Mean FDP"}, annot_kws={"size": 6.2})
-    ax2.set_title(r"B. TFNBS $(E, H)$ Sweep: Mean FDP ($\Delta r = 0.125$)", fontweight="bold", loc="left")
-    ax2.set_xlabel("Extent exponent E")
-    ax2.set_ylabel("Height exponent H")
-
-    # Star (0.4, 3.0) on both heatmaps
-    for ax in (ax1, ax2):
-        cols = list(tpr_grid.columns)
-        rows = list(tpr_grid.index)
-        if 0.4 in cols and 3.0 in rows:
-            ci = cols.index(0.4) + 0.5
-            ri = rows.index(3.0) + 0.5
-            ax.add_patch(plt.Rectangle((ci - 0.5, ri - 0.5), 1, 1, fill=False, edgecolor="#0072B2", lw=2.0))
+    fig = plt.figure(figsize=(7.2, 5.6), layout="constrained")
+    grid = fig.add_gridspec(2, 2, height_ratios=[1.15, 1.0])
+    ax1, ax2, ax3 = fig.add_subplot(grid[0, 0]), fig.add_subplot(grid[0, 1]), fig.add_subplot(grid[1, :])
+    for ax, values, title, palette, precision in [
+        (ax1, tpr_grid, "a   Mean TPR", "YlGnBu", ".2f"),
+        (ax2, fdp_grid, "b   Mean FDP", "YlOrRd", ".3f"),
+    ]:
+        sns.heatmap(values, cmap=palette, ax=ax)
+        ax.set_title(title, fontweight="bold", loc="left")
+        ax.set_xlabel("Extent exponent E")
+        ax.set_ylabel("Height exponent H")
+        if 0.4 in values.columns and 3.0 in values.index:
+            col = values.columns.get_loc(0.4)
+            row = values.index.get_loc(3.0)
+            ax.add_patch(plt.Rectangle((col, row), 1, 1, fill=False, edgecolor="#0072B2", lw=1.4))
+            ax.annotate(
+                f"{values.iloc[row, col]:{precision}}",
+                (col + 0.5, row + 0.5), xytext=(13, 8), textcoords="offset points",
+                bbox={"facecolor": "white", "edgecolor": "#0072B2", "pad": 1.5},
+                arrowprops={"arrowstyle": "-", "color": "#0072B2"},
+            )
 
     # Panel C: Paired exact - grid10 MC 95% CI
     drs = sorted(df_paired["delta_r"].unique())
@@ -428,17 +455,10 @@ def build_figS5_tfnbs_eh_sweep_and_paired_diff() -> None:
     ax3.set_xticks(x)
     ax3.set_xticklabels([rf"$\Delta r = {d}$" for d in drs])
     ax3.set_ylabel("Paired Difference (Exact vs 10-Point Grid)")
-    ax3.set_title("C. Exact Integration vs n=10 Grid (95% MC CI)", fontweight="bold", loc="left")
+    ax3.set_title("c   Paired differences between integration schemes (95% Monte Carlo CI)", fontweight="bold", loc="left")
     ax3.legend(loc="upper left", frameon=True, fontsize=7.0)
     ax3.grid(axis="y", ls=":", alpha=0.4)
 
-    fig.suptitle(
-        "TFNBS Hyperparameter Sensitivity (176-Cell Grid) & Exact vs n=10 Integration Parity",
-        fontsize=11,
-        fontweight="bold",
-        y=1.02,
-    )
-    plt.tight_layout()
     _save_both(fig, "simulation/figS5_tfnbs_eh_sweep_and_paired_diff.png")
 
 
@@ -491,30 +511,39 @@ def build_fig4_abide_cc200_workflow() -> None:
     ]
 
     strategies = [
-        ("Naive (drops age/sex/FD & site)", cc200_dir / "dx_naive" / "dx_naive_edges.csv", "Oranges"),
-        ("ComBat-only (no site dummies)", cc200_dir / "dx_combat_only" / "dx_combat_only_edges.csv", "Blues"),
-        ("Site-GLM / Strategy E (no ComBat)", cc200_dir / "dx_strategy_e" / "dx_strategy_e_edges.csv", "Purples"),
-        ("ComBat + Site-GLM / Strategy D", cc200_dir / "dx_strategy_d" / "dx_strategy_d_edges.csv", "Greens"),
+        ("Naive (no age, sex, FD or site)", "dx_naive"),
+        ("ComBat only (no site indicators)", "dx_combat_only"),
+        ("Site GLM (Strategy E)", "dx_strategy_e"),
+        ("ComBat + site GLM (Strategy D)", "dx_strategy_d"),
     ]
+    counts = [_agg_edges(cc200_dir / arm / f"{arm}_edges.csv") for _, arm in strategies]
+    vmax_a = max(int(mat.max()) for mat, _, _ in counts)
 
-    fig = plt.figure(figsize=(15.5, 8.2))
-    gs_main = fig.add_gridspec(1, 2, width_ratios=[1.35, 1.0], wspace=0.22)
+    fig = plt.figure(figsize=(7.4, 9.2), layout="constrained")
+    grid = fig.add_gridspec(5, 3, height_ratios=[0.08, 1, 1, 0.08, 1], width_ratios=[1, 1, 0.07])
+    for row, title in [(0, "a   ASD–HC site-handling strategies"), (3, "b   Age contrast (Strategy D)")]:
+        heading = fig.add_subplot(grid[row, :])
+        heading.set_axis_off()
+        heading.text(0, 0.5, title, weight="bold", va="center")
+    mask = np.triu(np.ones((n_nets, n_nets), dtype=bool), k=1)
 
-    # Panel A: 2x2 ASD-HC site strategies
-    gs_a = gs_main[0].subgridspec(2, 2, wspace=0.28, hspace=0.35)
-    for idx, (title, path, cmap) in enumerate(strategies):
-        ax = fig.add_subplot(gs_a[idx // 2, idx % 2])
-        mat, n_pos, n_neg = _agg_edges(path)
+    def draw(ax, mat, title, vmax, cmap):
         sns.heatmap(
-            mat, annot=True, fmt="d", cmap=cmap, xticklabels=short_nets, yticklabels=short_nets,
-            cbar=False, ax=ax, annot_kws={"size": 5.8}
+            mat, mask=mask, annot=True, fmt="d", cmap=cmap, vmin=0, vmax=vmax,
+            xticklabels=short_nets, yticklabels=short_nets, cbar=False,
+            ax=ax, annot_kws={"size": 7.1},
         )
-        ax.set_title(f"{title}\n(+{n_pos} / -{n_neg}; total {n_pos + n_neg})", fontsize=7.8, fontweight="bold")
-        ax.set_xticklabels(short_nets, rotation=45, ha="right", fontsize=6.2)
-        ax.set_yticklabels(short_nets, rotation=0, fontsize=6.2)
+        ax.set_title(title, fontsize=9)
+        ax.set_xticklabels(short_nets, rotation=45, ha="right")
+        ax.set_yticklabels(short_nets, rotation=0)
+        return ax.collections[0]
+
+    for idx, ((title, _), (mat, n_pos, n_neg)) in enumerate(zip(strategies, counts)):
+        ax = fig.add_subplot(grid[1 + idx // 2, idx % 2])
+        scale_a = draw(ax, mat, f"{title}\n+{n_pos} / −{n_neg} edges", vmax_a, "Blues")
+    fig.colorbar(scale_a, cax=fig.add_subplot(grid[1:3, 2]), label="Detected edges (both tails)")
 
     # Panel B: Age Strategy D 11-block positive vs negative profile
-    gs_b = gs_main[1].subgridspec(2, 1, hspace=0.35)
     age_df = pd.read_csv(cc200_dir / "age" / "age_strategy_d_edges.csv")
     mat_pos = np.zeros((n_nets, n_nets), dtype=int)
     mat_neg = np.zeros((n_nets, n_nets), dtype=int)
@@ -527,28 +556,14 @@ def build_fig4_abide_cc200_workflow() -> None:
             target[nj, ni] += 1
 
     vmax_b = max(int(mat_pos.max()), int(mat_neg.max()))
-    for row_i, (mat_b, ttl, cmap) in enumerate([
-        (mat_pos, f"B1. Age Strategy D: Positive (+{int((age_df['tail']=='positive').sum())} edges)", "Reds"),
-        (mat_neg, f"B2. Age Strategy D: Negative (-{int((age_df['tail']=='negative').sum())} edges)", "Blues"),
+    for column, (mat_b, tail, sign) in enumerate([
+        (mat_pos, "positive", "+"),
+        (mat_neg, "negative", "−"),
     ]):
-        ax = fig.add_subplot(gs_b[row_i, 0])
-        sns.heatmap(
-            mat_b, annot=True, fmt="d", cmap=cmap, vmin=0, vmax=vmax_b,
-            xticklabels=short_nets, yticklabels=short_nets, ax=ax, annot_kws={"size": 6.4},
-            cbar_kws={"label": "Sig. edge count"}
-        )
-        ax.set_title(ttl, fontsize=8.2, fontweight="bold", loc="left")
-        ax.set_xticklabels(short_nets, rotation=45, ha="right", fontsize=6.5)
-        ax.set_yticklabels(short_nets, rotation=0, fontsize=6.5)
-
-    fig.text(0.02, 0.96, "A. ASD–HC Site-Handling Strategies (5,000 perms, exact TFNBS)", fontsize=9.5, fontweight="bold")
-    fig.text(0.57, 0.96, "B. Age Strategy D: 11-Block Network Profile (incl. CBM, Mixed, Unassigned)", fontsize=9.5, fontweight="bold")
-    fig.suptitle(
-        "ABIDE I CC200 (N = 764, 15 sites, available-case): Site-Handling & Network-Block Profiles",
-        fontsize=11,
-        fontweight="bold",
-        y=1.02,
-    )
+        ax = fig.add_subplot(grid[4, column])
+        n = int((age_df["tail"] == tail).sum())
+        scale_b = draw(ax, mat_b, f"{tail.title()} tail ({sign}{n} edges)", vmax_b, "Purples")
+    fig.colorbar(scale_b, cax=fig.add_subplot(grid[4, 2]), label="Detected edges per tail")
     _save_both(fig, "abide/fig4_abide_cc200_workflow.png")
 
 
@@ -607,28 +622,28 @@ def build_fig5_abide_cc200_bna_suit_showcase() -> None:
     with open(cc200_dir / "annotation" / "cerebellum_coverage_diff.json") as f:
         cov = json.load(f)
 
-    fig = plt.figure(figsize=(16.5, 9.2))
-    gs = fig.add_gridspec(2, 2, height_ratios=[0.92, 1.18], width_ratios=[1.32, 1.0], hspace=0.30, wspace=0.16)
+    fig = plt.figure(figsize=(7.3, 9.7), layout="constrained")
+    gs = fig.add_gridspec(4, 2, height_ratios=[1.6, 0.76, 1.0, 0.25])
 
-    axA = fig.add_subplot(gs[:, 0])
+    chord_grid = gs[0, :].subgridspec(2, 1, height_ratios=[4.1, 0.7])
+    axA = fig.add_subplot(chord_grid[0])
     plot_connectogram(
         dx_res, rois_suit, tail="positive", level="gyrus",
-        max_links=80, ax=axA,
-        title="A. ASD > HC (Strategy D, +561 edges): BNA-246 + SUIT Connectogram"
+        max_links=80, labels="none", ax=axA,
+        title="a   ASD > HC connectogram (Strategy D)"
     )
-    import textwrap
-    for txt in axA.texts:
-        s = txt.get_text()
-        if "ROIs placed" in s:
-            txt.set_text(textwrap.fill(s, 92))
-            txt.set_fontsize(6.8)
-        elif "Flocculonodular" in s:
-            txt.set_fontsize(4.8)
-            x0, y0 = txt.get_position()
-            txt.set_position((x0 * 0.94, y0 * 0.94))
+    _place_connectogram_legend(axA, fig.add_subplot(chord_grid[1]), ncol=5)
+    for label in axA.texts:
+        x_pos, y_pos = label.get_position()
+        if label.get_text() == "CBM-L":
+            label.set_x(x_pos - 0.10)
+        elif label.get_text() == "CBM-R":
+            label.set_x(x_pos + 0.10)
+        elif label.get_text() == "CBM-M":
+            label.set_y(y_pos - 0.11)
 
     # Panel B: Descriptive BNA-only vs BNA+SUIT coverage bar chart
-    axC = fig.add_subplot(gs[0, 1])
+    axC = fig.add_subplot(gs[1, :])
     cats = [
         "Unassigned ROIs\n(out of 200)",
         "Age sig. edges\nwith unassigned end\n(out of 881)",
@@ -654,22 +669,41 @@ def build_fig5_abide_cc200_bna_suit_showcase() -> None:
             axC.text(bar.get_x() + bar.get_width() / 2, h + 3, f"{int(h)}", ha="center", va="bottom", fontsize=7.5, fontweight="bold")
     axC.set_xticks(x)
     axC.set_xticklabels(cats, fontsize=7.5)
-    axC.set_ylabel("Descriptive Count (not an enrichment test)")
+    axC.set_ylabel("Count")
     axC.set_ylim(0, max(bna_only_vals) * 1.18)
-    axC.set_title("B. Cerebellar Coverage Recovery: BNA-only vs BNA + SUIT", fontweight="bold", loc="left")
-    axC.legend(loc="upper left", frameon=True, fontsize=7.2)
+    axC.set_title("b   Atlas coverage", fontweight="bold", loc="left")
+    axC.legend(loc="upper left", frameon=True)
     axC.grid(axis="y", ls=":", alpha=0.4)
 
     # Panel C: Coupling-class matrix on ASD-HC Strategy D, reordered by 11 network blocks
-    axD = fig.add_subplot(gs[1, 1])
+    axD = fig.add_subplot(gs[2, 0])
     net_order = np.argsort(net_labels, kind="stable")
     dx_res_ord = _permute_inference_result(dx_res, net_order)
     plot_coupling_classes(
         dx_res_ord,
-        alpha=0.05,
         ax=axD,
-        title="C. ASD–HC Strategy D Coupling Classes (HC → ASD, Network-Ordered)",
+        title="c   Coupling classes (HC → ASD)",
     )
+    coupling_legend = axD.get_legend()
+    legend_ax = fig.add_subplot(gs[3, :])
+    legend_ax.axis("off")
+    legend_items = [
+        (handle, txt.get_text())
+        for handle, txt in zip(coupling_legend.legend_handles, coupling_legend.get_texts())
+        if not txt.get_text().startswith("homotopy")
+    ]
+    handles, labels = zip(*legend_items)
+    legend_ax.legend(handles, labels, loc="center", ncol=3, frameon=False)
+    coupling_legend.remove()
+
+    ax_mask = fig.add_subplot(gs[2, 1])
+    detected = dx_res_ord.significant_edges(alpha=0.05, tail="both")
+    significant = np.zeros((len(net_order), len(net_order)), dtype=bool)
+    i = detected["roi_i"].to_numpy(dtype=int)
+    j = detected["roi_j"].to_numpy(dtype=int)
+    significant[i, j] = significant[j, i] = True
+    ax_mask.imshow(significant, cmap="Greys", vmin=0, vmax=1, interpolation="nearest")
+    ax_mask.set_title("Significant edges (α = 0.05)")
     sorted_nets = net_labels[net_order]
     short_nets = [
         s.replace("Somatomotor", "SMN")
@@ -681,28 +715,20 @@ def build_fig5_abide_cc200_bna_suit_showcase() -> None:
         for s in network_order
     ]
     boundaries = np.where(sorted_nets[:-1] != sorted_nets[1:])[0] + 0.5
-    for b in boundaries:
-        axD.axhline(b, color="white", lw=0.7, alpha=0.85)
-        axD.axvline(b, color="white", lw=0.7, alpha=0.85)
     centers, tick_lbls = [], []
     for k, lbl in enumerate(short_nets):
         idx_k = np.where(sorted_nets == k)[0]
         if len(idx_k):
             centers.append(float(idx_k.mean()))
             tick_lbls.append(lbl)
-    axD.set_xticks(centers)
-    axD.set_xticklabels(tick_lbls, rotation=45, ha="right", fontsize=6.5)
-    axD.set_yticks(centers)
-    axD.set_yticklabels(tick_lbls, fontsize=6.5)
-    axD.set_xlabel("CC200 ROIs (ordered by 11 network blocks)")
-    axD.set_ylabel("CC200 ROIs (ordered by 11 network blocks)")
-
-    fig.suptitle(
-        "ABIDE I CC200 Neuroanatomical Interpretation: BNA-246 + SUIT Cerebellar Mapping & Coupling Classes",
-        fontsize=11.5,
-        fontweight="bold",
-        y=0.98,
-    )
+    for ax, line_color in [(axD, "white"), (ax_mask, "#aab4bf")]:
+        for b in boundaries:
+            ax.axhline(b, color=line_color, lw=0.65)
+            ax.axvline(b, color=line_color, lw=0.65)
+        ax.set_xticks(centers, tick_lbls, rotation=45, ha="right")
+        ax.set_yticks(centers, tick_lbls)
+        ax.set_xlabel("CC200 ROIs by network")
+        ax.set_ylabel("")
     _save_both(fig, "abide/fig5_abide_cc200_bna_suit_showcase.png")
 
 
@@ -743,7 +769,11 @@ def build_figS1_abide_cc200_combat_qc() -> None:
     with open(REPO_ROOT / "examples" / "abide" / "results" / "cc200" / "motion_qc_summary.json") as f:
         mqc = json.load(f)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.5, 5.2), gridspec_kw={"width_ratios": [1.35, 1.0]})
+    fig = plt.figure(figsize=(7.3, 5.8), layout="constrained")
+    grid = fig.add_gridspec(2, 1, height_ratios=[1.5, 1.0])
+    ax1 = fig.add_subplot(grid[0])
+    qc = fig.add_subplot(grid[1])
+    qc.axis("off")
 
     # Panel A: Site-level mean residual FC before vs after ComBat (over identical valid-edge mask)
     df_box = pd.DataFrame({
@@ -754,11 +784,10 @@ def build_figS1_abide_cc200_combat_qc() -> None:
     sns.boxplot(data=df_box, x="Site", y="Mean Residual FC", hue="Status", palette=["#E69F00", "#009E73"], ax=ax1, fliersize=2)
     ax1.axhline(0, color="gray", ls="--", lw=0.8)
     ax1.tick_params(axis="x", labelrotation=38, labelsize=6.5)
-    ax1.set_title(
-        f"A. Global Mean Residual FC (between_site_variance_ratio: {r_before:.4f} → {r_after:.4f}, ×{r_ratio:.3f})",
-        fontweight="bold",
-        loc="left",
-        fontsize=8.2,
+    ax1.set_title("a   Mean residual connectivity by site", fontweight="bold", loc="left")
+    ax1.set_xlabel(
+        f"Between-site / total feature variance (ComBat diagnostics): "
+        f"{r_before:.4f} → {r_after:.4f} (×{r_ratio:.3f})"
     )
     ax1.legend(loc="upper right", frameon=True, fontsize=7.0)
 
@@ -772,32 +801,23 @@ def build_figS1_abide_cc200_combat_qc() -> None:
         ("Long-range |r| (Q4)", all_s["distance_dependence"]["mean_abs_r_longest_quartile"]),
         ("Mean FD ~ Mean FC (ρ)", all_s["subject_level"]["spearman_mean_fd_vs_mean_fc_rho"]),
     ]
-    labels = [m[0] for m in metrics]
-    vals = [m[1] for m in metrics]
-    y = np.arange(len(labels))
-    cols = ["#0072B2", "#D55E00", "#CC79A7", "#009E73", "#56B4E9", "#E69F00"]
-    bars = ax2.barh(y, vals, color=cols, edgecolor="black", lw=0.6)
-    for bar, v in zip(bars, vals):
-        ax2.text(v + 0.01, bar.get_y() + bar.get_height() / 2, f"{v:.3f}", va="center", fontsize=7.5, fontweight="bold")
-    ax2.set_yticks(y)
-    ax2.set_yticklabels(labels)
-    ax2.invert_yaxis()
-    ax2.set_xlim(0, 0.56)
-    ax2.set_xlabel("Metric Value (N = 764, 19,900 edges)")
-    ax2.set_title(
-        f"B. Pre-Inference Motion QC (ASD FD={all_s['mean_fd_asd_mm']:.3f} vs HC {all_s['mean_fd_hc_mm']:.3f} mm, p={all_s['fd_asd_vs_hc_p']:.1e})",
-        fontweight="bold",
-        loc="left",
+    qc.set_title("b   Motion diagnostics before inference", fontweight="bold", loc="left")
+    qc.text(
+        0, 0.91,
+        f"Mean framewise displacement: ASD {all_s['mean_fd_asd_mm']:.3f} mm, "
+        f"HC {all_s['mean_fd_hc_mm']:.3f} mm (p = {all_s['fd_asd_vs_hc_p']:.2g})",
+        va="top",
     )
-    ax2.grid(axis="x", ls=":", alpha=0.4)
-
-    fig.suptitle(
-        "ABIDE I CC200 Quality Control: ComBat Site Harmonization & Pre-Inference Motion QC",
-        fontsize=11,
-        fontweight="bold",
-        y=1.02,
-    )
-    plt.tight_layout()
+    for x_pos, heading, ids in [
+        (0.00, "Edge correlations", (0, 3, 4)),
+        (0.35, "Fractions of edges", (1, 2)),
+        (0.70, "Across participants", (5,)),
+    ]:
+        qc.text(x_pos, 0.67, heading, weight="bold", va="top")
+        for row, idx in enumerate(ids):
+            label, value = metrics[idx]
+            display = f"{value:.1%}" if idx in (1, 2) else f"{value:.3f}"
+            qc.text(x_pos, 0.49 - row * 0.17, f"{label}   {display}", va="top")
     _save_both(fig, "abide/figS1_abide_cc200_combat_qc.png")
 
 
@@ -807,41 +827,65 @@ def build_figS2_abide_cc200_eh_multiverse() -> None:
     jc = pd.read_csv(eh_dir / "jaccard_matrix.csv", index_col=0)
     gs = pd.read_csv(eh_dir / "grid_summary.csv")
 
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15.5, 5.2), gridspec_kw={"width_ratios": [1.0, 1.0, 1.0]})
+    fig = plt.figure(figsize=(7.3, 7.9), layout="constrained")
+    grid = fig.add_gridspec(2, 1, height_ratios=[1.05, 1.0])
+    heatmaps = grid[0].subgridspec(1, 2)
+    settings = gs[["E", "H"]].drop_duplicates().sort_values(["E", "H"])
+    cell_names = [f"E{e:.2f}_H{h:.2f}" for e, h in settings.itertuples(index=False, name=None)]
+    groups = settings.groupby("E").size()
+    boundaries = np.r_[0, groups.cumsum()]
+    centers = (boundaries[1:] + boundaries[:-1]) / 2
+    group_labels = [f"{e:g}" for e in groups.index]
+    for j, (matrix, title, cmap, low, metric) in enumerate([
+        (sp, "a   Positive-tail rank stability", "viridis", min(0.5, float(sp.min().min())), "Spearman ρ"),
+        (jc, "b   Detected-edge overlap", "magma", 0.0, "Jaccard"),
+    ]):
+        ax = fig.add_subplot(heatmaps[0, j])
+        sns.heatmap(
+            matrix.loc[cell_names, cell_names], cmap=cmap, vmin=low, vmax=1,
+            square=True, ax=ax, cbar_kws={"label": metric, "shrink": 0.80},
+        )
+        for line in boundaries[1:-1]:
+            ax.axhline(line, color="white", lw=0.65)
+            ax.axvline(line, color="white", lw=0.65)
+        ax.set_xticks(centers, group_labels, rotation=0)
+        ax.set_yticks(centers, group_labels, rotation=0)
+        ax.set(xlabel="Extent exponent E", ylabel="Extent exponent E")
+        ax.set_title(title, fontweight="bold", loc="left")
 
-    # Show 12x12 or coarsened/full heatmap cleanly with small font
-    sns.heatmap(sp, cmap="viridis", vmin=0.5, vmax=1.0, ax=ax1, cbar_kws={"label": "Spearman ρ"})
-    ax1.set_title("A. TFNBS (E, H) Rank Stability (Spearman ρ, pos. tail)", fontweight="bold", loc="left")
-    ax1.set_xticklabels(ax1.get_xticklabels(), rotation=90, fontsize=5.2)
-    ax1.set_yticklabels(ax1.get_yticklabels(), rotation=0, fontsize=5.2)
-
-    sns.heatmap(jc, cmap="magma", vmin=0.0, vmax=1.0, ax=ax2, cbar_kws={"label": "Jaccard"})
-    ax2.set_title("B. TFNBS (E, H) Significant-Edge Overlap (Jaccard)", fontweight="bold", loc="left")
-    ax2.set_xticklabels(ax2.get_xticklabels(), rotation=90, fontsize=5.2)
-    ax2.set_yticklabels(ax2.get_yticklabels(), rotation=0, fontsize=5.2)
-
-    # Panel C: Discovery counts (pos + neg) across E,H for 3 methods
     gs["total_sig"] = gs["n_sig_pos"] + gs["n_sig_neg"]
-    for m, col, lbl in [
-        ("tfnbs", "#0072B2", "TFNBS"),
-        ("ni_tfnbs", "#009E73", "NI-TFNBS"),
-        ("fbc_tfnbs", "#D55E00", "FBC-TFNBS"),
-    ]:
-        sub = gs[gs["method"] == m].sort_values(["E", "H"])
-        ax3.plot(range(len(sub)), sub["total_sig"].values, marker="o", ms=3.2, lw=1.2, color=col, label=lbl)
-    ax3.set_xlabel("(E, H) Grid Cell Index (36 cells, sorted by E, H)")
-    ax3.set_ylabel("Total Significant Edges (pos + neg, α = 0.05)")
-    ax3.set_title("C. Discovery Counts Across 36 (E, H) Cells (3 Methods)", fontweight="bold", loc="left")
-    ax3.legend(loc="upper right", frameon=True, fontsize=7.5)
-    ax3.grid(ls=":", alpha=0.4)
-
-    fig.suptitle(
-        "ABIDE I CC200 Age Contrast: (E, H) Multiverse Stability & 3-Method Discovery Counts (5,000 perms)",
-        fontsize=11,
-        fontweight="bold",
-        y=1.02,
-    )
-    plt.tight_layout()
+    counts = grid[1].subgridspec(4, 3, height_ratios=[0.19, 1, 1, 0.22])
+    title_ax = fig.add_subplot(counts[0, :])
+    title_ax.axis("off")
+    title_ax.text(0, 0.5, "c   Detected edges by E and H (both tails, α = 0.05)", weight="bold", va="center")
+    first_ax = None
+    h_values = sorted(settings["H"].unique())
+    max_count = gs["total_sig"].max()
+    for idx, (e, by_e) in enumerate(gs.groupby("E")):
+        row, col = divmod(idx, 3)
+        ax = fig.add_subplot(counts[1 + row, col], sharex=first_ax, sharey=first_ax)
+        if first_ax is None:
+            first_ax = ax
+        for method, color, marker, label in [
+            ("tfnbs", "#0072B2", "o", "TFNBS"),
+            ("ni_tfnbs", "#009E73", "^", "NI-TFNBS"),
+            ("fbc_tfnbs", "#D55E00", "s", "FBC-TFNBS"),
+        ]:
+            sub = by_e[by_e["method"] == method].sort_values("H")
+            ax.plot(sub["H"], sub["total_sig"], marker=marker, ms=3.2, color=color, label=label)
+        ax.set_xticks(h_values)
+        ax.set_title(f"E = {e:g}")
+        ax.grid(axis="y", ls=":", alpha=0.45)
+        ax.tick_params(labelbottom=row == 1, labelleft=col == 0)
+        ax.set_ylim(0, max_count * 1.05)
+        if row == 1:
+            ax.set_xlabel("Height exponent H")
+        if col == 0:
+            ax.set_ylabel("Detected edges")
+    legend_ax = fig.add_subplot(counts[3, :])
+    legend_ax.axis("off")
+    handles, labels = first_ax.get_legend_handles_labels()
+    legend_ax.legend(handles, labels, loc="center", ncol=3, frameon=False)
     _save_both(fig, "abide/figS2_abide_cc200_eh_multiverse.png")
 
 
@@ -878,11 +922,10 @@ def build_fig6_openclose_bna242_showcase() -> None:
     bna_res.atlas = bna_atlas
     rois_bna = annotate_bna_regions(bna_atlas_meta["label_ids"], reference=ref_bna)
 
-    fig = plt.figure(figsize=(15.5, 9.8))
-    gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.25], width_ratios=[1.1, 1.0], hspace=0.30, wspace=0.22)
+    fig = plt.figure(figsize=(8.1, 10.1), layout="constrained")
+    gs = fig.add_gridspec(5, 2, height_ratios=[1.1, 0.26, 1.5, 0.25, 0.46])
 
-    # Panel A: Block-mass convergence (IHB vs Beijing positive tail)
-    gs_a = gs[0, 0].subgridspec(1, 2, wspace=0.18)
+    # Panel A: Schaefer-200 block sums (IHB vs Beijing positive tail)
     ma = _block_mass(ihb["positive"], lab)
     mb = _block_mass(china["positive"], lab)
     vmax = max(float(ma.max()), float(mb.max()))
@@ -898,45 +941,43 @@ def build_fig6_openclose_bna242_showcase() -> None:
         .replace("Somatomotor", "SMN")
         for n in names
     ]
-    r_pos = float(agr_v2.loc["positive", "pearson_of_block_sum_neglog10p"])
-    j_pos = float(agr_v2.loc["positive", "jaccard"])
+    block_axes = []
     for c, (M, ttl) in enumerate([
-        (ma, f"A1. IHB EC > EO (+{int(agr_v2.loc['positive', 'n_sig_a'])})"),
-        (mb, f"A2. Beijing EC > EO (+{int(agr_v2.loc['positive', 'n_sig_b'])})"),
+        (ma, f"a   IHB EC > EO ({int(agr_v2.loc['positive', 'n_sig_a']):,} edges)"),
+        (mb, f"Beijing EC > EO ({int(agr_v2.loc['positive', 'n_sig_b']):,} edges)"),
     ]):
-        ax = fig.add_subplot(gs_a[0, c])
+        ax = fig.add_subplot(gs[0, c])
+        block_axes.append(ax)
         im = ax.imshow(M, cmap="viridis", vmin=0, vmax=vmax)
-        ax.set_xticks(range(K))
-        ax.set_xticklabels(short_n, rotation=60, ha="right", fontsize=6.0)
-        ax.set_yticks(range(K))
-        ax.set_yticklabels(short_n if c == 0 else [], fontsize=6.0)
-        ax.set_title(ttl, fontsize=8.0, fontweight="bold")
-        if c == 1:
-            fig.colorbar(im, ax=ax, fraction=0.046, label=r"Block sum($-\log_{10} p$)")
-
-    fig.text(
-        0.04, 0.515,
-        f"Cross-cohort block-mass convergence: Pearson r = +{r_pos:.3f} (pos) / +{float(agr_v2.loc['negative', 'pearson_of_block_sum_neglog10p']):.3f} (neg); "
-        f"edge Jaccard = {j_pos:.3f} / {float(agr_v2.loc['negative', 'jaccard']):.3f}",
-        fontsize=7.6, style="italic", color="#23303d"
+        ax.set_xticks(range(K), short_n, rotation=45, ha="right")
+        ax.set_yticks(range(K), short_n)
+        ax.set_title(ttl, fontweight="bold")
+    fig.colorbar(im, ax=block_axes, shrink=0.86, label=r"Yeo-7 block sum of $-\log_{10}p$")
+    agreement_ax = fig.add_subplot(gs[1, :])
+    agreement_ax.axis("off")
+    r_pos, r_neg = agr_v2.loc[["positive", "negative"], "pearson_of_block_sum_neglog10p"]
+    j_pos, j_neg = agr_v2.loc[["positive", "negative"], "jaccard"]
+    agreement_ax.text(
+        0.5, 0.68, "Schaefer-200  ·  Cross-cohort agreement by tail",
+        weight="bold", va="center", ha="center",
+    )
+    agreement_ax.text(
+        0.5, 0.22,
+        f"Yeo-7 block Pearson r: {r_pos:.3f} (positive), {r_neg:.3f} (negative)     "
+        f"Edge Jaccard: {j_pos:.3f} (positive), {j_neg:.3f} (negative)",
+        va="center", ha="center",
     )
 
     # Panel B: Native BNA-242 Connectogram (IHB EC > EO)
-    axB = fig.add_subplot(gs[0:, 1])
+    chord_grid = gs[2, 0].subgridspec(2, 1, height_ratios=[3, 0.85])
+    axB = fig.add_subplot(chord_grid[0])
+    n_bna_positive = int((bna_res.positive[np.triu_indices_from(bna_res.positive, k=1)] < 0.05).sum())
     plot_connectogram(
         bna_res, rois_bna, tail="positive", level="gyrus",
-        max_links=90, ax=axB,
-        title="B. Native BNA-242 Connectogram (IHB EC > EO, +1,257 edges)"
+        max_links=90, labels="none", ax=axB,
+        title=f"b   Native BNA-242 connectogram\nIHB EC > EO ({n_bna_positive:,} edges)"
     )
-    import textwrap
-    for txt in axB.texts:
-        if "ROIs placed" in txt.get_text():
-            txt.set_text(textwrap.fill(txt.get_text(), 88))
-            txt.set_fontsize(6.8)
-    from matplotlib.legend import Legend
-    for child in axB.get_children():
-        if isinstance(child, Legend) and child.get_title().get_text().strip() == "network":
-            child.set_bbox_to_anchor((-0.10, 0.97), transform=axB.transAxes)
+    _place_connectogram_legend(axB, fig.add_subplot(chord_grid[1]), ncol=3)
 
     # Panel C + 1D zoomed homotopic strip: Native BNA-242 Coupling Classes
     # Reorder nodes by lobe order [Frontal -> Insular -> Limbic -> Temporal -> Parietal -> Occipital -> Subcortical]
@@ -1000,14 +1041,13 @@ def build_fig6_openclose_bna242_showcase() -> None:
         label_ids=lids[bna_order],
     )
 
-    gs_c = gs[1, 0].subgridspec(2, 1, height_ratios=[1.0, 0.22], hspace=0.40)
-    axC = fig.add_subplot(gs_c[0, 0])
+    axC = fig.add_subplot(gs[2, 1])
     plot_coupling_classes(
         bna_res_ord,
         atlas=bna_atlas_ord,
         reference=ref_bna,
         ax=axC,
-        title="C. Native BNA-242 Coupling Classes (EO → EC; Lobe-Ordered L then R)",
+        title="c   Native BNA-242 coupling classes (EO → EC)",
     )
     homotopy_pairs = axC.attrs["homotopy_pairs"]
     assert len(homotopy_pairs) == 120, f"Expected 120 homotopy pairs, got {len(homotopy_pairs)}"
@@ -1034,16 +1074,16 @@ def build_fig6_openclose_bna242_showcase() -> None:
     axC.scatter(xs_sig, ys_sig, s=34, facecolors="none", edgecolors="white", linewidths=1.6, zorder=4)
     axC.scatter(xs_sig, ys_sig, s=34, facecolors="none", edgecolors="black", linewidths=0.95, zorder=5)
 
-    # Update legend text cleanly
     leg_c = axC.get_legend()
     if leg_c is not None:
-        leg_c.set_title(
-            "descriptive labels, not significance\ninference unit: edge\nhomology: BNA homolog_id",
-            prop={"size": 6.8},
-        )
-        for txt in leg_c.get_texts():
-            if "homotopy pair" in txt.get_text():
-                txt.set_text(f"significant homotopic pair (α=0.05, n={len(sig_all_k)}/120)")
+        legend_ax = fig.add_subplot(gs[3, :])
+        legend_ax.axis("off")
+        labels = [
+            "Significant homolog (α = 0.05)" if "homotopy pair" in txt.get_text() else txt.get_text()
+            for txt in leg_c.get_texts()
+        ]
+        legend_ax.legend(leg_c.legend_handles, labels, ncol=4, loc="center", frameon=False)
+        leg_c.remove()
 
     n_left = len(left_indices)
     axC.axhline(n_left - 0.5, color="white", lw=0.9, alpha=0.9)
@@ -1052,11 +1092,11 @@ def build_fig6_openclose_bna242_showcase() -> None:
     axC.set_xticklabels([f"Left (n={n_left})", f"Right (n={len(right_indices)})"], rotation=0, fontsize=7.5)
     axC.set_yticks([n_left / 2, n_left + len(right_indices) / 2])
     axC.set_yticklabels([f"Left (n={n_left})", f"Right (n={len(right_indices)})"], fontsize=7.5)
-    axC.set_xlabel("BNA-242 Regions (L then R; dashed = homotopic off-diagonals)")
-    axC.set_ylabel("BNA-242 Regions (L then R)")
+    axC.set_xlabel("BNA-242 regions (dashed: homotopic diagonals)")
+    axC.set_ylabel("BNA-242 regions")
 
     # 1D zoomed homotopic strip right below Panel C
-    axStrip = fig.add_subplot(gs_c[1, 0])
+    axStrip = fig.add_subplot(gs[4, :])
     classes = np.asarray(bna_res_ord.coupling()["classes"], dtype=object)
     hom_classes = [str(classes[k, k + 121]) for k in range(120)]
     n_strong = sum(c == "stronger positive coupling" for c in hom_classes)
@@ -1088,23 +1128,14 @@ def build_fig6_openclose_bna242_showcase() -> None:
     axStrip.set_xticks(lobe_centers)
     axStrip.set_xticklabels(lobe_lbls, fontsize=7.2, fontweight="bold")
     axStrip.set_title(
-        f"All 120 homotopic pairs (100% positive: {n_strong} stronger, {n_weak} weaker in EC; "
-        f"{len(sig_all_k)} sig.: {len(sig_pos_k)} EC>EO [▲], {len(sig_neg_k)} EO>EC [▼])",
-        fontsize=7.6,
-        loc="left",
-        pad=4,
-    )
-
-    fig.suptitle(
-        "Open–Close Eyes-Closed vs Eyes-Open (2.0.0): Cross-Cohort Convergence & Native BNA-242 Homotopic Coupling",
-        fontsize=11.5,
-        fontweight="bold",
-        y=0.98,
+        f"120 homotopic pairs positive in both states: {n_strong} stronger, {n_weak} weaker in EC\n"
+        f"Significant pairs: {len(sig_pos_k)} EC > EO (▲), {len(sig_neg_k)} EO > EC (▼)",
+        fontsize=8, loc="left",
     )
     _save_both(fig, "openclose/fig6_openclose_bna242_showcase.png")
 
 
-def build_figS3_openclose_retest_orthogonality() -> None:
+def build_figS3_openclose_retest_agreement() -> None:
     maps_dir = REPO_ROOT / "examples" / "open_close" / "results" / "paper_validation" / "v2_0_0" / "methods"
     methods = ["tstat", "tfnbs", "ni_tfnbs", "fbc_tfnbs", "nbs_20", "nbs_30", "bh_fdr"]
     pretty = {
@@ -1112,8 +1143,8 @@ def build_figS3_openclose_retest_orthogonality() -> None:
         "tfnbs": "TFNBS (exact)",
         "ni_tfnbs": "NI-TFNBS",
         "fbc_tfnbs": "FBC-TFNBS",
-        "nbs_20": r"NBS $\tau=2$",
-        "nbs_30": r"NBS $\tau=3$",
+        "nbs_20": r"NBS extent $\tau=2$",
+        "nbs_30": r"NBS extent $\tau=3$",
         "bh_fdr": "BH-FDR",
     }
 
@@ -1132,19 +1163,20 @@ def build_figS3_openclose_retest_orthogonality() -> None:
     agr = pd.read_csv(PAPER_DATA / "openclose_agreement_summary.csv")
     ret = agr[(agr["source"] == "v2") & (agr["comparison"] == "China run0 paired vs China retest")].set_index("tail")
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.5, 5.2), gridspec_kw={"width_ratios": [1.35, 1.0]})
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.2, 6.7), layout="constrained")
     x = np.arange(len(methods))
     w = 0.36
-    ax1.bar(x - w / 2, state_n, w, label="Primary State (EC − EO, run0)", color="#009E73", edgecolor="black", lw=0.6)
-    ax1.bar(x + w / 2, retest_n, w, label="Repeat-Run Contrast (EC1 − EC0)", color="#D55E00", edgecolor="black", lw=0.6)
+    ax1.bar(x - w / 2, state_n, w, label="State (EC₀ − EO)", color="#009E73", edgecolor="black", lw=0.6)
+    ax1.bar(x + w / 2, retest_n, w, label="Repeat run (EC₁ − EC₀)", color="#D55E00", edgecolor="black", lw=0.6, hatch="//")
     ax1.set_xticks(x)
     ax1.set_xticklabels([pretty[m] for m in methods], rotation=28, ha="right")
-    ax1.set_ylabel("# Significant Edges (pos ∪ neg, α = 0.05)")
-    ax1.set_title("A. Beijing State (EC − EO) vs Repeat-Run (EC1 − EC0) Edge Counts", fontweight="bold", loc="left")
+    ax1.set_ylabel("Detected edges (either tail, α = 0.05)")
+    ax1.set_title("a   Beijing state and repeat-run contrasts share EC₀", fontweight="bold", loc="left")
     ax1.legend(loc="upper left", frameon=True, fontsize=7.5)
     ax1.grid(axis="y", ls=":", alpha=0.4)
+    ax1.set_xlabel("NBS counts the member edges of detected components")
 
-    # Panel B: Weak-agreement / orthogonality metrics
+    # Panel B: Spatial agreement between contrasts
     tails = ["Positive tail", "Negative tail"]
     r_vals = [float(ret.loc["positive", "pearson_of_block_sum_neglog10p"]), float(ret.loc["negative", "pearson_of_block_sum_neglog10p"])]
     j_vals = [float(ret.loc["positive", "jaccard"]), float(ret.loc["negative", "jaccard"])]
@@ -1153,31 +1185,27 @@ def build_figS3_openclose_retest_orthogonality() -> None:
     xb = np.arange(len(tails))
     wb = 0.24
     ax2.bar(xb - wb, r_vals, wb, label=r"Block-mass Pearson $r$", color="#0072B2", edgecolor="black", lw=0.6)
-    ax2.bar(xb, sp_vals, wb, label=r"Edge Spearman $-\log_{10} p$", color="#CC79A7", edgecolor="black", lw=0.6)
-    ax2.bar(xb + wb, j_vals, wb, label="Edge Jaccard", color="#E69F00", edgecolor="black", lw=0.6)
+    ax2.bar(xb, sp_vals, wb, label=r"Edge Spearman $\rho$ of $-\log_{10} p$", color="#CC79A7", edgecolor="black", lw=0.6, hatch="//")
+    ax2.bar(xb + wb, j_vals, wb, label="Edge Jaccard", color="#E69F00", edgecolor="black", lw=0.6, hatch="..")
     ax2.axhline(0, color="black", lw=0.8)
     ax2.set_xticks(xb)
     ax2.set_xticklabels(tails)
     ax2.set_ylim(-0.22, 0.15)
-    ax2.set_ylabel("Agreement Metric (EC1 − EC0 vs EC − EO)")
-    ax2.set_title("B. Spatial Orthogonality: Repeat-Run (EC1 − EC0) vs State (EC − EO)", fontweight="bold", loc="left")
-    ax2.legend(loc="lower left", frameon=True, fontsize=7.2)
+    ax2.set_ylabel("Agreement")
+    ax2.set_title("b   Spatial agreement between state and repeat-run contrasts (TFNBS)", fontweight="bold", loc="left")
+    ax2.legend(loc="lower center", ncol=3, frameon=True, fontsize=7.2)
     ax2.grid(axis="y", ls=":", alpha=0.4)
 
-    fig.suptitle(
-        "Open–Close Beijing Repeat-Run (EC1 − EC0) vs Primary State (EC − EO): Orthogonality Check (5,000 perms)",
-        fontsize=11,
-        fontweight="bold",
-        y=1.02,
-    )
-    plt.tight_layout()
     _save_both(fig, "openclose/figS3_openclose_retest_orthogonality.png")
 
 
 def main() -> None:
+    global OUTPUT_DIRS
     parser = argparse.ArgumentParser()
     parser.add_argument("--group", choices=["all", "sim", "abide", "openclose"], default="all")
+    parser.add_argument("--repo-only", action="store_true", help="Write only the repository PNGs")
     args = parser.parse_args()
+    OUTPUT_DIRS = (OUT_REPO,) if args.repo_only else (OUT_REPO, OUT_PAPER)
 
     if args.group in ("all", "sim"):
         build_fig2_fwer_calibration()
@@ -1194,7 +1222,7 @@ def main() -> None:
 
     if args.group in ("all", "openclose"):
         build_fig6_openclose_bna242_showcase()
-        build_figS3_openclose_retest_orthogonality()
+        build_figS3_openclose_retest_agreement()
 
 
 if __name__ == "__main__":

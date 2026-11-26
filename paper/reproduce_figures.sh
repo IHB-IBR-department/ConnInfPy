@@ -8,7 +8,7 @@
 #   bash paper/reproduce_figures.sh abide collect   # selected stages
 # Stages: abide | openclose | mltransfer | simulation | sensitivity | benchmarks | collect | all
 #
-# Results go to examples/*/results/; `collect` builds the 2.0.0 300 dpi
+# Results go to examples/*/results/; `collect` builds the 2.0.0 600 dpi
 # manuscript figures into paper/figures/ (and copies simulation tables).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -129,7 +129,7 @@ copy() {  # copy SRC DEST_DIR [NEW_NAME]
 }
 
 collect() {
-  step "Build 2.0.0 manuscript figures (300 dpi) into paper/figures"
+  step "Build 2.0.0 manuscript figures (600 dpi) into paper/figures"
   local F=paper/figures
   mkdir -p "$F"/{abide,openclose,simulation,figures,tables}
   $PY paper/build_fig1_pipeline.py

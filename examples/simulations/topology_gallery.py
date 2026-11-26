@@ -76,6 +76,7 @@ def plot_topology_gallery(
     n_samples: int = 30,
     seed: int = 42,
     output_dir: Path = (ROOT / "examples/output"),
+    dpi: int = 300,
 ) -> Path:
     """Generate a 10x2 gallery figure: ground truth + t-stat for each scenario."""
     import matplotlib
@@ -91,14 +92,8 @@ def plot_topology_gallery(
         seed=seed,
     )
 
-    nrows = 5
-    ncols = 4  # 2 scenarios per row × 2 panels (GT + t-stat)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(16, 20))
-
-    for idx, scenario_name in enumerate(SCENARIOS):
-        row = idx // 2
-        col_base = (idx % 2) * 2  # 0 or 2
-
+    panels = []
+    for scenario_name in SCENARIOS:
         ds = gen.generate(
             scenario_name,
             effect_size=effect_size,
@@ -113,39 +108,47 @@ def plot_topology_gallery(
         effect_gt = ds.population_diff
         n_edges = int(np.sum(ds.effect_mask != 0) // 2)
         display_name = DISPLAY_NAMES.get(scenario_name, scenario_name)
+        panels.append((display_name, n_edges, effect_gt, t_signed, ds.net_labels))
 
-        # Ground truth panel
+    fig = plt.figure(figsize=(7.2, 9.2), layout="constrained")
+    grid = fig.add_gridspec(6, 4, height_ratios=[1, 1, 1, 1, 1, 0.06])
+    axes = np.array([[fig.add_subplot(grid[row, col]) for col in range(4)] for row in range(5)])
+    max_gt = max(np.max(np.abs(panel[2])) for panel in panels) or 1.0
+    max_t = max(np.max(np.abs(panel[3])) for panel in panels) or 1.0
+    for idx, (display_name, n_edges, effect_gt, t_signed, net_labels) in enumerate(panels):
+        row = idx // 2
+        col_base = (idx % 2) * 2
+
         ax_gt = axes[row, col_base]
-        max_gt = float(np.max(np.abs(effect_gt))) if np.any(effect_gt) else 1.0
         im_gt = ax_gt.imshow(effect_gt, cmap="seismic", vmin=-max_gt, vmax=max_gt)
-        ax_gt.set_title(f"{display_name}\nGT $\\Delta r$ ({n_edges} edges)", fontsize=9)
-        _draw_module_boundaries(ax_gt, ds.net_labels)
-        fig.colorbar(im_gt, ax=ax_gt, fraction=0.046, pad=0.04)
+        ax_gt.set_title(f"{chr(97 + idx)}   {display_name}\n{n_edges} planted edges", fontsize=8)
+        _draw_module_boundaries(ax_gt, net_labels)
 
-        # T-stat panel
         ax_t = axes[row, col_base + 1]
-        max_t = float(np.max(np.abs(t_signed))) if np.any(t_signed) else 1.0
         im_t = ax_t.imshow(t_signed, cmap="seismic", vmin=-max_t, vmax=max_t)
-        ax_t.set_title(f"{display_name}\nt-stat (uncorrected)", fontsize=9)
-        _draw_module_boundaries(ax_t, ds.net_labels)
-        fig.colorbar(im_t, ax=ax_t, fraction=0.046, pad=0.04)
+        _draw_module_boundaries(ax_t, net_labels)
 
         for ax in (ax_gt, ax_t):
             ax.set_xticks([])
             ax.set_yticks([])
 
-    fig.suptitle(
-        f"Topology scenarios  |  $\\Delta r$={effect_size}  |  "
-        f"n_samples={n_samples}  |  {n_nodes} nodes, {n_modules} modules",
-        fontsize=13,
-        y=0.995,
+    fig.colorbar(
+        im_gt, cax=fig.add_subplot(grid[5, :2]), orientation="horizontal",
+        label=r"Population $\Delta r$ (left matrix)",
     )
-    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    fig.colorbar(
+        im_t, cax=fig.add_subplot(grid[5, 2:]), orientation="horizontal",
+        label=r"Uncorrected $t$ (right matrix)",
+    )
+    fig.supxlabel(
+        rf"$n={n_samples}$ per group, {n_nodes} nodes, {n_modules} modules, nominal $\Delta r={effect_size}$",
+        fontsize=8,
+    )
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / f"topologies_gallery_dr{effect_size:g}_n{n_samples}.png"
-    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     return out_path
 

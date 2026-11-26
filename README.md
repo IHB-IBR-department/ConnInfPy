@@ -78,7 +78,7 @@ data-dependent: no binomial
   population structural connectivity, with BrainMap literature context.
   Descriptive: the p-values and the inference unit are unchanged.
 
-![ConnInfPy connectivity-inference pipeline](docs/conninfpy.png)
+![ConnInfPy 2.0 workflow from connectivity inputs and statistical design to permutation inference and neuroanatomical interpretation](docs/conninfpy-workflow.png)
 
 > **History.** Originally a TFNBS-only implementation (`tfnbs`); renamed and
 > expanded in 2026-04 to the framework presented here. The old URL

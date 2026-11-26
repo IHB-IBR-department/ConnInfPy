@@ -1,6 +1,6 @@
 # Reproducing the manuscript figures
 
-The ConnInfPy 2.0 manuscript figures (300 DPI) are built from locked
+The ConnInfPy 2.0 manuscript figures (600 DPI PNG) are built from locked
 `examples/*/results/` outputs and `paper/data/` summary CSVs by two reproducible
 scripts:
 
@@ -8,6 +8,9 @@ scripts:
 python paper/build_fig1_pipeline.py
 python paper/build_manuscript_figures.py --group all   # all | sim | abide | openclose
 ```
+
+Add `--repo-only` to either Python command to write just to `paper/figures/`.
+The root README uses a separate [detailed workflow PNG](../docs/conninfpy-workflow.png).
 
 `paper/reproduce_figures.sh` runs the underlying `examples/` computations and its
 `collect` stage invokes both figure builders and copies simulation summary tables
@@ -48,6 +51,42 @@ datasets.
   integration (`n=None`, `E=0.4, H=3.0, start_thres=1.65`).
 - **`NBS-intensity`**: Uses the MATLAB NBS v1.2-aligned suprathreshold excess
   $\sum (t - \tau)$.
-- **Fig S5**: Panels A–B show the 176-cell $(E, H)$ hyperparameter sweep at
-  $\Delta r = 0.125$ (`n=10`); Panel C shows the paired Monte Carlo difference
+- **Fig 2**: The shaded reference spans the central 95% of the rejection
+  fraction under Binomial(1,000, 0.05). Error bars show the confidence interval
+  for the point estimate in each panel.
+- **Fig 3**: Both panels report edge-level localization. Each detected
+  component or block is projected onto its constituent edges before scoring.
+- **Fig S5**: Panels a–b show the 176-cell $(E, H)$ hyperparameter sweep at
+  $\Delta r = 0.125$ (`n=10`). Panel c shows the paired Monte Carlo difference
   (`Exact n=None` minus `n=10` grid, 95% CI) across $\Delta r \in \{0.075, 0.125, 0.25\}$.
+
+## Details for manuscript captions
+
+- **Fig 1**: Panel b shows the statistical design. The optional site-handling
+  choices in c belong to the GLM path. In d, exact piecewise TFNBS integration
+  computes the enhancement scores. Monte Carlo permutation inference computes
+  the corrected p-values.
+- **Fig 4**: Each matrix shows the diagonal and lower triangle of a symmetric
+  count matrix. The ASD–HC strategies share a color scale. The two Age tails
+  share their own scale.
+- **Fig 5**: The connectogram shows the 80 gyrus/network chords with the most
+  detected positive edges among placed ROIs (249 of 561 detected edges).
+  Of 200 ROIs, 193 were placed, and 58 detected edges touch an unplaced ROI.
+  Panel b reports descriptive counts. Panel c shows descriptive coupling
+  classes alongside a separate edge-significance mask. Homology is unknown
+  for the CC200 ROIs.
+- **Fig 6**: Panel a uses Schaefer-200 edges grouped by Yeo-7 network. Panels
+  b–c use native BNA-242. The connectogram shows 90 chords covering 554 of
+  1,257 detected positive edges. All 120 matched homologs have positive
+  coupling in both eyes-open and eyes-closed conditions.
+- **Fig 7**: Each plotted value is the mean wall-clock time of an inference
+  call divided by its 100 permutations. Data generation and JIT warm-up are
+  outside the timed call.
+- **Fig S1**: The variance ratio uses the mean across edges of the variance
+  of site means divided by the mean across edges of total participant variance.
+  The boxplots show participant-level mean residual connectivity.
+- **Fig S2**: The TFNBS heatmaps order the grid by increasing E and then
+  increasing H within each E group.
+- **Fig S3**: The state contrast uses 48 pairs and the repeat-run contrast
+  uses 47. Both use the first eyes-closed run (EC₀). NBS counts are member
+  edges of detected components. The overlap metrics in b refer to TFNBS.
