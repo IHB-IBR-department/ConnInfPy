@@ -381,6 +381,9 @@ def capture_source_hashes(
     project_root: Optional[Path] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Hash actual readable source files at dataset load time."""
+    from conninfpy.app.utils.helpers import is_public_mode
+    if is_public_mode():
+        return {}
     root = Path(project_root) if project_root is not None else Path.cwd()
     candidates = _collect_provenance_paths(
         dataset_info,
@@ -413,6 +416,9 @@ def _source_entries_for_save(
     project_root: Optional[Path] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Preserve captured source hashes from load time; never fabricate hashes for unhashed paths."""
+    from conninfpy.app.utils.helpers import is_public_mode
+    if is_public_mode():
+        return {}
     info = dataset_info or {}
     root = Path(project_root) if project_root is not None else Path.cwd()
     recorded = info.get("source_files")
@@ -468,6 +474,11 @@ def verify_source_references(
       nothing about it can be verified. It is counted and reported explicitly
       (never skipped) and it can never yield an ``overall`` of ``verified``.
     """
+    from conninfpy.app.utils.helpers import is_public_mode
+    if is_public_mode():
+        return {"overall": "unknown", "files": {},
+                "counts": {"verified": 0, "stale": 0, "missing": 0, "unknown": 0, "malformed": 0},
+                "message": "Source path verification is disabled in public mode."}
     info = dataset_info or {}
     root = Path(project_root) if project_root is not None else Path.cwd()
     entries: Mapping[str, Any] = source_files if isinstance(source_files, Mapping) else {}

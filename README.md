@@ -253,6 +253,12 @@ The repository-root `requirements.txt` mirrors `requirements/gui.txt` for
 Streamlit Cloud, which reads dependency files beside the entry point or at
 the repository root.
 
+For public deployments, set `CONNINFPY_PUBLIC_MODE=1` in the server environment.
+Public mode disables server-path and manifest imports and offers built-in demos
+and direct `.npy` data uploads with an optional phenotype CSV. Custom atlases
+are uploaded, and workspace files remain available as browser downloads. Local
+mode is the default; `true`, `yes`, and `on` also enable public mode.
+
 ## Choosing the design
 
 | Design | Call |

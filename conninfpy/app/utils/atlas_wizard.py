@@ -184,6 +184,9 @@ def load_custom_atlas_nifti(
     Rejects 4D probabilistic images with a clear ``ValueError``.
     """
     import nibabel as nib
+    from conninfpy.app.utils.helpers import require_local_paths
+    if isinstance(nifti_path_or_bytes, (str, Path)) or (isinstance(lut_path_or_buffer, (str, Path)) and lut_path_or_buffer):
+        require_local_paths()
 
     temp_paths: list[Path] = []
     try:

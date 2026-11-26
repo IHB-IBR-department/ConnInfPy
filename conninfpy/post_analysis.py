@@ -2,21 +2,61 @@
 
 The bundle contains no observations, null distribution or test statistic. New
 producers capture ROI identity, family and validity masks; legacy results need
-explicit metadata rather than guessing. Pickle files must come from a trusted
-source. Group summaries do not perform inference.
+explicit metadata rather than guessing. Group summaries do not perform inference.
 """
 from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-import pickle
+import io
+import json
+import zipfile
+from dataclasses import fields
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
 
 SCHEMA_VERSION = 1
+
+
+def _encode_bundle(value, arrays):
+    if isinstance(value, np.ndarray):
+        if value.dtype.hasobject:
+            return {"type": "object_array", "shape": list(value.shape),
+                    "items": _encode_bundle(value.tolist(), arrays)}
+        key = str(len(arrays))
+        arrays[key] = value
+        return {"type": "array", "key": key}
+    if isinstance(value, np.generic):
+        return _encode_bundle(value.item(), arrays)
+    if isinstance(value, dict):
+        return {"type": "dict", "items": [[_encode_bundle(k, arrays), _encode_bundle(v, arrays)] for k, v in value.items()]}
+    if isinstance(value, (tuple, list)):
+        return {"type": "tuple" if isinstance(value, tuple) else "list", "items": [_encode_bundle(v, arrays) for v in value]}
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise ValueError(f"unsupported result bundle value: {type(value).__name__}")
+
+
+def _decode_bundle(value, archive):
+    if not isinstance(value, dict):
+        return value
+    kind = value.get("type")
+    if kind == "array":
+        key = value["key"]
+        if not isinstance(key, str) or not key.isdecimal():
+            raise ValueError("invalid array key")
+        return np.load(io.BytesIO(archive.read(f"arrays/{key}.npy")), allow_pickle=False)
+    if kind == "object_array":
+        return np.asarray(_decode_bundle(value["items"], archive), dtype=object).reshape(value["shape"])
+    if kind == "dict":
+        return {_decode_bundle(k, archive): _decode_bundle(v, archive) for k, v in value["items"]}
+    if kind in ("tuple", "list"):
+        items = [_decode_bundle(v, archive) for v in value["items"]]
+        return tuple(items) if kind == "tuple" else items
+    raise ValueError("invalid bundle value")
 
 
 def _square(value: Any, n: int, name: str, *, boolean: bool = False) -> np.ndarray:
@@ -287,10 +327,16 @@ class ResultBundle:
         return cls(SCHEMA_VERSION, ids, groups, effect, spec, elig, est, tests, p_maps, meta, deepcopy(annotation))
 
     def save(self, path: Any) -> None:
-        """Save a trusted Python pickle envelope with an explicit schema."""
+        """Save JSON metadata and pickle-free NumPy arrays in a ZIP archive."""
         self._validate()
-        with Path(path).open("wb") as f:
-            pickle.dump({"schema_version": SCHEMA_VERSION, "bundle": self}, f, protocol=pickle.HIGHEST_PROTOCOL)
+        arrays = {}
+        payload = _encode_bundle({f.name: getattr(self, f.name) for f in fields(self)}, arrays)
+        with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("manifest.json", json.dumps({"schema_version": SCHEMA_VERSION, "bundle": payload}))
+            for key, array in arrays.items():
+                buffer = io.BytesIO()
+                np.save(buffer, array, allow_pickle=False)
+                archive.writestr(f"arrays/{key}.npy", buffer.getvalue())
 
     def _validate(self) -> None:
         n = len(self.roi_ids)
@@ -353,14 +399,15 @@ class ResultBundle:
 
     @classmethod
     def load(cls, path: Any) -> "ResultBundle":
-        """Load a trusted bundle; unsupported or legacy schemas are rejected."""
-        with Path(path).open("rb") as f:
-            data = pickle.load(f)
-        if not isinstance(data, dict) or data.get("schema_version") != SCHEMA_VERSION:
-            raise ValueError("unsupported or missing result bundle schema")
-        obj = data.get("bundle")
-        if not isinstance(obj, cls) or obj.schema_version != SCHEMA_VERSION:
-            raise ValueError("invalid result bundle")
+        """Load a safe archive; legacy pickle files are rejected."""
+        try:
+            with zipfile.ZipFile(path) as archive:
+                data = json.loads(archive.read("manifest.json"))
+                if not isinstance(data, dict) or data.get("schema_version") != SCHEMA_VERSION:
+                    raise ValueError("unsupported or missing result bundle schema")
+                obj = cls(**_decode_bundle(data["bundle"], archive))
+        except (zipfile.BadZipFile, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("invalid result bundle schema or unsafe legacy pickle; expected a safe archive") from exc
         obj._validate()
         return obj
 

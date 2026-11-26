@@ -1,3 +1,5 @@
+import io
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -28,6 +30,9 @@ from conninfpy.topologies import TopologyDatasetGenerator, list_scenarios
 
 from conninfpy.app.utils.helpers import (
     LOADER_CLASSES,
+    PROJECT_ROOT,
+    is_public_mode,
+    require_local_paths,
     atlas_has_networks,
     clear_downstream_results,
     fisher_clip_note,
@@ -39,6 +44,72 @@ from conninfpy.app.utils.helpers import (
     list_manifest_files,
     align_atlas_coordinates,
 )
+
+
+def _demo_path(label, *, value, key):
+    if is_public_mode():
+        allowed = {
+            "datasets/demo/ABIDE_mini/abide_mini.npz",
+            "datasets/demo/ABIDE_mini/ABIDE1_Phenotypic_mini.csv",
+            "datasets/demo/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy",
+            "datasets/demo/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy",
+            "datasets/demo/open_close/subject_order_ihb.txt",
+        }
+        if value not in allowed:
+            raise ValueError("Only built-in demo paths are allowed in public mode.")
+        return str(PROJECT_ROOT / value)
+    return st.text_input(label, value=value, key=key)
+
+
+def _open_manifest(path):
+    require_local_paths()
+    from conninfpy.loaders.manifest import ManifestLoader
+    return ManifestLoader(path)
+
+
+def _redact_demo_paths(value):
+    if isinstance(value, str):
+        return value.replace(str(PROJECT_ROOT), "<built-in>")
+    if isinstance(value, dict):
+        return {key: _redact_demo_paths(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_demo_paths(item) for item in value]
+    return value
+
+
+class _UploadedNumpyLoader:
+    name = "UploadedNumpyLoader"
+
+    def __init__(self, data_bytes, name, data_kind, pheno_bytes=None):
+        self.data_bytes = data_bytes
+        self.filename = Path(name).name
+        self.data_kind = data_kind
+        self.pheno_bytes = pheno_bytes
+
+    def load(self):
+        from conninfpy.loaders.base import LoadedDataset
+        data = np.load(io.BytesIO(self.data_bytes), allow_pickle=False)
+        if not isinstance(data, np.ndarray) or data.ndim != 3 or data.dtype.kind not in "fiu":
+            raise ValueError("Upload a numeric 3D .npy array.")
+        if self.pheno_bytes:
+            pheno = pd.read_csv(io.BytesIO(self.pheno_bytes))
+            if len(pheno) != len(data):
+                raise ValueError("Phenotype rows must match observations.")
+        else:
+            pheno = pd.DataFrame({"subject_id": [f"sub_{i:02d}" for i in range(len(data))]})
+        if "subject_id" not in pheno:
+            pheno["subject_id"] = [f"sub_{i:02d}" for i in range(len(data))]
+        return LoadedDataset(data=data, pheno=pheno, data_kind=self.data_kind,
+                             subject_ids=pheno["subject_id"].astype(str).tolist(),
+                             provenance={"upload": self.filename})
+
+    def preview(self):
+        from conninfpy.loaders.base import DatasetPreview
+        ds = self.load()
+        n, t, r = ds.data.shape
+        return DatasetPreview(n, n, r, t if self.data_kind == "timeseries" else None,
+                              self.data_kind, None, None, ds.subject_ids[:5], 1,
+                              len(self.data_bytes) / (1024 * 1024))
 
 def _add_group_variance(values, added_percent, rng, *, time_points=30):
     """Add a percentage of the approximate Fisher-z sampling variance per edge."""
@@ -68,14 +139,13 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
     # Ingestion type selector - simplified options
     ingest_mode = st.radio(
         "Select Ingestion Method",
-        [
-            "Generate Synthetic Dataset",
-            "Built-in data",
-            "Dataset Manifest (data.yaml)"
-        ],
+        (["Generate Synthetic Dataset", "Built-in data", "Upload data"] if is_public_mode() else
+         ["Generate Synthetic Dataset", "Built-in data", "Dataset Manifest (data.yaml)"]),
         horizontal=True,
         key=persistent_key('data:select_ingestion_method', scope='data'),
     )
+    if is_public_mode():
+        st.info("Manifest and server-path imports are disabled in public mode. Upload data files instead.")
     with st.container(key="data_actions"):
         load_action, next_action = st.columns(2)
 
@@ -512,7 +582,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                 with col_sh:
                     render_help("built_in_demo")
                 
-                custom_ds = load_custom_datasets()
+                custom_ds = {} if is_public_mode() else load_custom_datasets()
                 builtin_templates = ["ABIDE-mini", "OpenClose"]
                 template_options = builtin_templates
                 
@@ -523,12 +593,12 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                 )
                 
                 if dataset_choice == "ABIDE-mini":
-                    data_path = st.text_input(
+                    data_path = _demo_path(
                         "ABIDE-mini Archive Path (.npz or .npy)",
                         value="datasets/demo/ABIDE_mini/abide_mini.npz",
                         key=persistent_key('data:pickled_dict_path_npy', scope='data'),
                     )
-                    pheno_path = st.text_input(
+                    pheno_path = _demo_path(
                         "Optional Phenotypic CSV Path (optional)",
                         value="datasets/demo/ABIDE_mini/ABIDE1_Phenotypic_mini.csv",
                         key=persistent_key('data:optional_phenotypic_csv_path_optional', scope='data'),
@@ -546,7 +616,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     with cohort_col:
                         cohort = st.selectbox(
                             "Cohort",
-                            ["IHB", "Both sites (IHB + China)", "China"],
+                            (["IHB"] if is_public_mode() else ["IHB", "Both sites (IHB + China)", "China"]),
                             key=persistent_key('data:cohort', scope='data'),
                         )
                     with cohort_help_col:
@@ -557,32 +627,32 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             "Paired Open-Close observations are retained within each site; "
                             "the loaded phenotype table includes `site` for IHB and China."
                         )
-                        ihb_open_path = st.text_input(
+                        ihb_open_path = _demo_path(
                             "IHB Open Condition Path (.npy)",
                             value="datasets/demo/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:ihb_open_condition_path_npy', scope='data'),
                         )
-                        ihb_close_path = st.text_input(
+                        ihb_close_path = _demo_path(
                             "IHB Close Condition Path (.npy)",
                             value="datasets/demo/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:ihb_close_condition_path_npy', scope='data'),
                         )
-                        ihb_sub_list = st.text_input(
+                        ihb_sub_list = _demo_path(
                             "IHB Subject Order file (.txt)",
                             value="datasets/demo/open_close/subject_order_ihb.txt",
                             key=persistent_key('data:ihb_subject_order_file_txt', scope='data'),
                         )
-                        china_open_path = st.text_input(
+                        china_open_path = _demo_path(
                             "China Open Condition Path (.npy)",
                             value="datasets/demo/open_close/china_open_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:china_open_condition_path_npy', scope='data'),
                         )
-                        china_close_path = st.text_input(
+                        china_close_path = _demo_path(
                             "China Close Condition Path (.npy)",
                             value="datasets/demo/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:china_close_condition_path_npy', scope='data'),
                         )
-                        china_sub_list = st.text_input(
+                        china_sub_list = _demo_path(
                             "China Subject Order file (.txt)",
                             value="datasets/demo/open_close/subject_order_china.txt",
                             key=persistent_key('data:china_subject_order_file_txt', scope='data'),
@@ -611,33 +681,33 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             drop_missing_rois=True,
                         )
                     elif cohort == "IHB":
-                        open_path = st.text_input(
+                        open_path = _demo_path(
                             "Open Condition Path (.npy)",
                             value="datasets/demo/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:open_condition_path_npy', scope='data'),
                         )
-                        close_path = st.text_input(
+                        close_path = _demo_path(
                             "Close Condition Path (.npy)",
                             value="datasets/demo/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:close_condition_path_npy_2', scope='data'),
                         )
-                        sub_list = st.text_input(
+                        sub_list = _demo_path(
                             "Subject Order file (.txt)",
                             value="datasets/demo/open_close/subject_order_ihb.txt",
                             key=persistent_key('data:subject_order_file_txt_2', scope='data'),
                         )
                     else:
-                        open_path = st.text_input(
+                        open_path = _demo_path(
                             "Open Condition Path (.npy)",
                             value="datasets/demo/open_close/china_open_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:open_condition_path_npy_2', scope='data'),
                         )
-                        close_path = st.text_input(
+                        close_path = _demo_path(
                             "Close Condition Path (.npy)",
                             value="datasets/demo/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:close_condition_path_npy_3', scope='data'),
                         )
-                        sub_list = st.text_input(
+                        sub_list = _demo_path(
                             "Subject Order file (.txt)",
                             value="datasets/demo/open_close/subject_order_china.txt",
                             key=persistent_key('data:subject_order_file_txt_3', scope='data'),
@@ -650,7 +720,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             )
                         
                     if cohort != "Both sites (IHB + China)":
-                        atlas = "datasets/demo/open_close/schaefer_labels.csv"
+                        atlas = str(PROJECT_ROOT / "datasets/demo/open_close/schaefer_labels.csv") if is_public_mode() else "datasets/demo/open_close/schaefer_labels.csv"
                     if cohort != "Both sites (IHB + China)" and open_path and close_path:
                         loader_instance = OpenCloseLoader(
                             open_path,
@@ -666,12 +736,12 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                         st.caption("China test-retest null example")
                     with close_close_help_col:
                         render_help("china_close_close")
-                    close_path = st.text_input(
+                    close_path = _demo_path(
                         "Close Condition Path (.npy)",
                         value="datasets/demo/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
                         key=persistent_key('data:close_condition_path_npy', scope='data'),
                     )
-                    sub_list = st.text_input(
+                    sub_list = _demo_path(
                         "Subject Order file (.txt)",
                         value="datasets/demo/open_close/subject_order_china.txt",
                         key=persistent_key('data:subject_order_file_txt', scope='data'),
@@ -692,17 +762,17 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                         st.caption("MATLAB NBS example (Zalesky et al., 2010): 12 SZ vs 15 HC, AAL-74")
                     with nbs_help_col:
                         render_help("nbs_schizophrenia")
-                    data_path = st.text_input(
+                    data_path = _demo_path(
                         "Connectivity matrices (.npy)",
                         value="datasets/demo/NBS_schizophrenia/nbs_schizophrenia.npy",
                         key=persistent_key('data:connectivity_matrices_npy', scope='data'),
                     )
-                    pheno_path = st.text_input(
+                    pheno_path = _demo_path(
                         "Phenotype CSV",
                         value="datasets/demo/NBS_schizophrenia/pheno.csv",
                         key=persistent_key('data:phenotype_csv', scope='data'),
                     )
-                    atlas = st.text_input(
+                    atlas = _demo_path(
                         "Atlas CSV",
                         value="datasets/demo/NBS_schizophrenia/aal74_atlas.csv",
                         key=persistent_key('data:atlas_csv', scope='data'),
@@ -725,7 +795,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     
                     edited_params = {}
                     for key, val in params.items():
-                        edited_params[key] = st.text_input(f"{key}", value=str(val), key=persistent_key(f'data:custom:{dataset_choice}:{key}', scope='data'))
+                        edited_params[key] = _demo_path(f"{key}", value=str(val), key=persistent_key(f'data:custom:{dataset_choice}:{key}', scope='data'))
                     
                     # Convert parameter values to python types (int, bool, None, str)
                     final_params = {}
@@ -751,6 +821,22 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             st.error(f"Error instantiating custom loader: {e}")
                     else:
                         st.error(f"Loader class `{loader_name}` is not recognized.")
+
+            elif ingest_mode == "Upload data" and is_public_mode():
+                st.markdown("##### Upload data")
+                uploaded_data = persistent_file_uploader("Upload 3D NumPy data (.npy)", type=["npy"], key="data:upload_numpy")
+                uploaded_pheno = persistent_file_uploader("Upload phenotype table (.csv, optional)", type=["csv"], key="data:upload_pheno")
+                upload_kind = st.selectbox("Uploaded data type", ["correlation", "fisher_z", "timeseries"], key="data:upload_kind")
+                if uploaded_data is not None:
+                    upload_bytes = uploaded_data.getvalue()
+                    manifest_file = Path(uploaded_data.name).name
+                    try:
+                        loader_instance = _UploadedNumpyLoader(upload_bytes, manifest_file, upload_kind,
+                            uploaded_pheno.getvalue() if uploaded_pheno is not None else None)
+                        loader_instance.preview()
+                    except (ValueError, TypeError, OSError) as exc:
+                        loader_instance = None
+                        st.error(f"Could not read uploaded data: {exc}")
 
             # ----------------- INGESTION MODE: DATASET MANIFEST -----------------
             elif ingest_mode == "Dataset Manifest (data.yaml)":
@@ -779,7 +865,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                 if manifest_file:
                     try:
                         from conninfpy.loaders.manifest import ManifestLoader
-                        loader_instance = ManifestLoader(manifest_file)
+                        loader_instance = _open_manifest(manifest_file)
                         
                         # Pre-populate preprocessing checkboxes from manifest
                         manifest = loader_instance.manifest
@@ -922,7 +1008,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             try:
                                 from conninfpy.loaders.manifest import ManifestLoader
 
-                                loader_instance = ManifestLoader(saved_wiz_path)
+                                loader_instance = _open_manifest(saved_wiz_path)
                                 if loader_instance.manifest.loader in {
                                     "NiftiDirectoryLoader",
                                     "CSVDirectoryLoader",
@@ -1000,7 +1086,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     
                         if preview.warnings:
                             for w in preview.warnings:
-                                st.warning(w)
+                                st.warning(_redact_demo_paths(w) if is_public_mode() else w)
                 elif st.session_state.connectivity_data is not None:
                     # Active dataset in session state (e.g. synthetic)
                     n_obs = st.session_state.connectivity_data.shape[0]
@@ -1202,6 +1288,10 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                             loader_instance.manifest.params.pop("connectivity_kind", None)
                             loader_instance.manifest.params.pop("shrinkage", None)
                         loaded = loader_instance.load()
+                        if is_public_mode():
+                            loaded.provenance = _redact_demo_paths(loaded.provenance)
+                            if loaded.atlas is not None and loaded.atlas.source:
+                                loaded.atlas.source = _redact_demo_paths(loaded.atlas.source)
                         if drop_missing_subjects:
                             loaded = drop_subjects_with_missing(loaded)
                         load_notes = list(loaded.warnings)
@@ -1308,7 +1398,6 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                     cohort=cohort if ingest_mode == "Built-in data" and dataset_choice == "OpenClose" else None,
                                     manifest_file=str(manifest_file) if ingest_mode == "Dataset Manifest (data.yaml)" else None,
                                 )
-                                from conninfpy.app.utils.helpers import PROJECT_ROOT
                                 from conninfpy.app.utils.workspace_io import capture_source_hashes
 
                                 extra_source_paths = {}
@@ -1343,7 +1432,8 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                                 st.rerun()
                                 
                     except Exception as e:
-                        st.error(f"Loading failed: {e}")
+                        detail = _redact_demo_paths(str(e)) if is_public_mode() else str(e)
+                        st.error(f"Loading failed: {detail}")
                         st.exception(e)
 
 
@@ -1409,6 +1499,8 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
         source_fields = ("open_path", "close_path", "sub_list", "ihb_open_path", "ihb_close_path", "ihb_sub_list", "china_open_path", "china_close_path", "china_sub_list", "atlas", "final_params")
         source_values = locals()
         settings_parts.extend(f"{field}={source_values[field]}" for field in source_fields if field in source_values)
+    elif ingest_mode == "Upload data" and "upload_bytes" in locals():
+        settings_parts.extend([hashlib.sha256(upload_bytes).hexdigest(), upload_kind, hashlib.sha256(uploaded_pheno.getvalue()).hexdigest() if uploaded_pheno else ""])
     elif ingest_mode == "Dataset Manifest (data.yaml)":
         # A different manifest or connectivity matrix is a different dataset.
         if "manifest_file" in locals(): settings_parts.append(manifest_file)
@@ -1425,7 +1517,7 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
     if roi_idx is not None:
         settings_parts.append(tuple(roi_idx))
         
-    current_settings_hash = "|".join(str(p) for p in settings_parts)
+    current_settings_hash = "|".join(str(_redact_demo_paths(p) if is_public_mode() else p) for p in settings_parts)
     st.session_state["current_settings_hash"] = current_settings_hash
     
     if os.getenv("CONNINFPY_STREAMLIT_DEBUG"):

@@ -23,6 +23,7 @@ from conninfpy.defaults import (
     DEFAULT_START_THRESHOLD,
 )
 from conninfpy.app.utils.helpers import (
+    is_public_mode,
     active_analysis_atlas,
     atlas_for_annotation,
     atlas_has_networks,
@@ -2313,7 +2314,9 @@ def render_design_inference_view(base_atlas, tabs_list):
                     nbs_stat = st.selectbox("NBS statistic", nbs_stat_options, index=nbs_stat_options.index(DEFAULT_NBS_STAT), key=persistent_key('design:nbs_statistic', scope='design', options=nbs_stat_options))
                     op_kwargs["nbs_stat"] = nbs_stat
 
-                if operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs"):
+                if operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs") and is_public_mode():
+                    st.caption("Server paths for SC priors are disabled in public mode.")
+                elif operator_choice in ("ni_tfnbs", "fbc_tfnbs", "cnbs"):
                     sc_prior_path = st.text_input(
                         "SC Prior Matrix (.npy) (Overrides Atlas)",
                         value="",

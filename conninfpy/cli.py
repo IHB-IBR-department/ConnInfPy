@@ -1342,6 +1342,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p_init_m.add_argument("--id-col", help="override subject ID column name in --pheno")
     p_init_m.add_argument("--name", help="dataset name (defaults to directory/file stem)")
     p_init_m.add_argument("--force", action="store_true", help="overwrite --out if it exists")
+    p_init_m.add_argument("--trust-pickle", action="store_true", help="allow pickled NumPy object arrays from trusted sources")
 
     p_interp = sub.add_parser(
         "interpret",
@@ -1486,6 +1487,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 id_col=args.id_col,
                 name=args.name,
                 force=args.force,
+                trust_pickle=args.trust_pickle,
             )
             return 0
         if args.command == "interpret":

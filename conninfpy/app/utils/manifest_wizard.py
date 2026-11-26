@@ -88,6 +88,8 @@ def inspect_and_prepare_manifest(
     out_manifest_path: Optional[str | Path] = None,
 ) -> FolderInspectionResult:
     """Inspect a study folder and generate a v1 ``DatasetManifest`` YAML when possible."""
+    from conninfpy.app.utils.helpers import require_local_paths
+    require_local_paths()
     checklist: list[ChecklistItem] = []
     nilearn_ok = importlib.util.find_spec("nilearn") is not None
 

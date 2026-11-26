@@ -57,6 +57,7 @@ def local_dataset_templates_enabled():
 
 def load_custom_datasets():
     """Load user-defined dataset manifests from the workspace."""
+    require_local_paths()
     if not local_dataset_templates_enabled():
         return {}
     path = os.path.expanduser("~/.conninfpy/custom_datasets.json")
@@ -366,8 +367,19 @@ def _direction_labels_for_question(plan):
         "negative_title": "Negative effect",
     }
 
+def is_public_mode() -> bool:
+    """Whether this deployment disables access to user-selected server paths."""
+    return os.environ.get("CONNINFPY_PUBLIC_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def require_local_paths():
+    if is_public_mode():
+        raise ValueError("Server filesystem paths are disabled in public mode.")
+
+
 def resolve_project_path(user_path):
     """Resolve a user-entered path while keeping writes inside the project."""
+    require_local_paths()
     candidate = Path(user_path).expanduser()
     if not candidate.is_absolute():
         candidate = PROJECT_ROOT / candidate
@@ -454,6 +466,8 @@ def atlas_from_dataframe(df, *, source="Custom atlas"):
 
 def load_custom_atlas_csv(path_or_buffer, *, source="Custom atlas"):
     """Load a user-supplied atlas CSV from the workspace."""
+    if isinstance(path_or_buffer, (str, os.PathLike)):
+        require_local_paths()
     df = pd.read_csv(path_or_buffer)
     if df.empty:
         raise ValueError("Custom atlas CSV has no rows.")
@@ -625,6 +639,7 @@ def render_help(key: str):
 
 def list_manifest_files() -> list[str]:
     """List all YAML manifest files directly under the datasets/ folder of the project root."""
+    require_local_paths()
     datasets_dir = PROJECT_ROOT / "datasets"
     if not datasets_dir.exists():
         return []

@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import glob
 import logging
-import pickle
 import hashlib
 import re
 import numpy as np
@@ -18,6 +17,14 @@ from conninfpy.loaders.base import DatasetPreview
 from conninfpy.loaders.validation import validate_loaded_dataset
 
 logger = logging.getLogger(__name__)
+
+def _load_numpy(path, *, trust_pickle=False):
+    try:
+        return np.load(path, allow_pickle=trust_pickle)
+    except ValueError as exc:
+        if "Object arrays cannot be loaded" in str(exc):
+            raise ValueError("Pickled NumPy object arrays require explicit trust_pickle=True; only trust files from a trusted source.") from exc
+        raise
 
 def compute_dir_hash(files: list[str], extra_params: dict) -> str:
     """Compute a deterministic hash for a list of files and parameters to check cache validity."""
@@ -136,12 +143,14 @@ class NumpyLoader(BaseDataLoader):
         pheno_path: str | None = None,
         data_kind: Literal["timeseries", "correlation", "fisher_z"] = "correlation",
         atlas_metadata: str | None = None,
+        trust_pickle: bool = False,
     ):
         self.data_path = data_path
         self.pheno_path = pheno_path
         self.data_kind = data_kind
         # Optional atlas CSV (see AtlasInfo.from_csv), one row per ROI in data order.
         self.atlas_metadata = atlas_metadata
+        self.trust_pickle = trust_pickle
 
     def preview(self) -> DatasetPreview:
         """Cheap preview of the dataset without a full load."""
@@ -151,7 +160,7 @@ class NumpyLoader(BaseDataLoader):
 
         try:
             # Check if it is a pickled dict (like ABIDE)
-            d = np.load(self.data_path, allow_pickle=True)
+            d = _load_numpy(self.data_path, trust_pickle=self.trust_pickle)
             if d.ndim == 0:  # object array containing dict
                 return DatasetPreview(
                     n_subjects=None, n_observations=None, n_rois=None, n_timepoints=None,
@@ -186,7 +195,7 @@ class NumpyLoader(BaseDataLoader):
         if not os.path.exists(self.data_path):
             raise FileNotFoundError(f"File not found: {self.data_path}")
 
-        data = np.load(self.data_path, allow_pickle=True)
+        data = _load_numpy(self.data_path, trust_pickle=self.trust_pickle)
         if data.ndim == 0:
             raise ValueError("This numpy file contains a pickled dictionary. Use AbideSchaeferLoader.")
 
@@ -440,8 +449,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
             "detrend": self.detrend,
             "extraction_strategy": self.extraction_strategy
         })
-        cache_file = os.path.join(self.cache_dir, f"{cache_key}.pkl")
-        cached_msg = " [Cached]" if os.path.exists(cache_file) else " [Extraction Needed]"
+        cached_msg = " [Extraction Needed; legacy pickle cache disabled]"
 
         n_rois = None
         if self.atlas_image_path and os.path.isdir(self.atlas_image_path):
@@ -538,11 +546,7 @@ class NiftiDirectoryLoader(BaseDataLoader):
             "detrend": self.detrend,
             "extraction_strategy": self.extraction_strategy
         })
-        cache_file = os.path.join(self.cache_dir, f"{cache_key}.pkl")
-
-        if os.path.exists(cache_file):
-            with open(cache_file, 'rb') as f:
-                return pickle.load(f)
+        # Legacy pickle caches are deliberately ignored: they are executable data.
 
         data_list = []
         subject_ids = []
@@ -618,9 +622,6 @@ class NiftiDirectoryLoader(BaseDataLoader):
             }
         )
 
-        with open(cache_file, 'wb') as f:
-            pickle.dump(result, f)
-
         return result
 
 
@@ -629,11 +630,12 @@ class AbideSchaeferLoader(BaseDataLoader):
     name = "AbideSchaeferLoader"
 
     def __init__(self, data_path: str, pheno_csv_path: str | None = None,
-                 connectivity_kind="correlation", shrinkage="auto"):
+                 connectivity_kind="correlation", shrinkage="auto", trust_pickle: bool = False):
         self.data_path = data_path
         self.pheno_csv_path = pheno_csv_path
         self.connectivity_kind = connectivity_kind
         self.shrinkage = shrinkage
+        self.trust_pickle = trust_pickle
 
     def _is_npz(self) -> bool:
         return str(self.data_path).lower().endswith(".npz")
@@ -663,7 +665,7 @@ class AbideSchaeferLoader(BaseDataLoader):
                     file_sizes_mb=os.path.getsize(self.data_path) / (1024 * 1024)
                 )
 
-            d = np.load(self.data_path, allow_pickle=True).item()
+            d = _load_numpy(self.data_path, trust_pickle=self.trust_pickle).item()
             keys = list(d.keys())
             sample_key = keys[0]
             ts = d[sample_key]["time_series"]
@@ -702,7 +704,7 @@ class AbideSchaeferLoader(BaseDataLoader):
             offsets = np.concatenate(([0], np.cumsum(ts_lengths)))
             series = [ts_values[start:end] for start, end in zip(offsets[:-1], offsets[1:])]
         else:
-            d = np.load(self.data_path, allow_pickle=True).item()
+            d = _load_numpy(self.data_path, trust_pickle=self.trust_pickle).item()
 
             subject_ids = list(d.keys())
             labels = []

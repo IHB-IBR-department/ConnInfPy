@@ -101,6 +101,23 @@ def test_roundtrip_summary_masks_zero_and_selection(tmp_path):
     ax = loaded.plot_summary(s); assert ax.images[0].get_array()[0, 1] == pytest.approx(5 / 3)
 
 
+def test_bundle_roundtrip_never_uses_pickle(tmp_path, monkeypatch):
+    result, kwargs = fixture_result(grid=True)
+    bundle = ResultBundle.from_result(result, **kwargs)
+    bundle.metadata["mc"] = {"exceedance_counts": {"positive": np.zeros_like(bundle.corrected_p["positive"], dtype=int)}}
+    monkeypatch.setattr(pickle, "load", lambda *a, **k: pytest.fail("pickle.load called"))
+    monkeypatch.setattr(pickle, "dump", lambda *a, **k: pytest.fail("pickle.dump called"))
+    path = tmp_path / "bundle.zip"
+    bundle.save(path)
+    restored = ResultBundle.load(path)
+    assert restored.schema_version == bundle.schema_version
+    assert restored.roi_ids == bundle.roi_ids
+    assert restored.groupings == bundle.groupings
+    assert restored.annotation == bundle.annotation
+    np.testing.assert_array_equal(restored.effect, bundle.effect)
+    np.testing.assert_array_equal(restored.metadata["mc"]["exceedance_counts"]["positive"], bundle.metadata["mc"]["exceedance_counts"]["positive"])
+
+
 def test_schema_validation_and_f_omnibus(tmp_path):
     bad = tmp_path / "bad.pkl"
     bad.write_bytes(pickle.dumps({"schema_version": 999}))

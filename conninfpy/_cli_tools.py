@@ -620,6 +620,7 @@ def init_manifest(
     id_col: Optional[str] = None,
     name: Optional[str] = None,
     force: bool = False,
+    trust_pickle: bool = False,
 ) -> str:
     """Generate a v1 ``DatasetManifest`` YAML from a data directory or 3D NumPy file."""
     from conninfpy.loaders.builtins import _match_subject_id_column, _read_pheno_table
@@ -676,12 +677,17 @@ def init_manifest(
             raise FileNotFoundError(f"Data file not found: {df_p}")
         dataset_name = dataset_name or df_p.stem
         loader_name = "NumpyLoader"
-        loaded = np.load(df_p, allow_pickle=True)
-        if isinstance(loaded, np.lib.npyio.NpzFile):
-            first_key = loaded.files[0]
-            arr = np.asarray(loaded[first_key])
-        else:
-            arr = np.asarray(loaded)
+        try:
+            loaded = np.load(df_p, allow_pickle=trust_pickle)
+            if isinstance(loaded, np.lib.npyio.NpzFile):
+                with loaded:
+                    arr = np.asarray(loaded[loaded.files[0]])
+            else:
+                arr = np.asarray(loaded)
+        except ValueError as exc:
+            if "Object arrays cannot be loaded" in str(exc):
+                raise ValueError("Pickled NumPy object arrays require explicit --trust-pickle (trusted files only).") from exc
+            raise
         if arr.ndim != 3:
             raise ValueError(f"Expected a 3D array in {df_p}; got shape {arr.shape}.")
         n_subjects_found = int(arr.shape[0])

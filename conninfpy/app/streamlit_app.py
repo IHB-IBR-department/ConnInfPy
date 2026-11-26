@@ -14,7 +14,7 @@ from conninfpy.app.utils.atlas_wizard import (
     inspect_atlas_readiness,
     load_custom_atlas_nifti,
 )
-from conninfpy.app.utils.helpers import PROJECT_ROOT, atlas_has_coords, atlas_has_networks, load_custom_atlas_csv
+from conninfpy.app.utils.helpers import PROJECT_ROOT, is_public_mode, atlas_has_coords, atlas_has_networks, load_custom_atlas_csv
 from conninfpy.app.utils.ui_state import persistent_file_uploader, persistent_key, retain_widget_state
 from conninfpy.app.utils.workspace import (
     DATA_TAB, DESIGN_TAB, RESULTS_TAB, ANNOTATION_TAB, DOCS_TAB,
@@ -203,7 +203,7 @@ elif atlas_mode == "Custom atlas":
         ["ROI Table (CSV)", "3D Label Mask (NIfTI + optional LUT)"],
         key=persistent_key("custom_atlas_format", scope="atlas"),
     )
-    custom_source = st.sidebar.radio("Custom atlas source", ["Path", "Upload"], horizontal=True, key=persistent_key("custom_atlas_source", scope="atlas"))
+    custom_source = "Upload" if is_public_mode() else st.sidebar.radio("Custom atlas source", ["Path", "Upload"], horizontal=True, key=persistent_key("custom_atlas_source", scope="atlas"))
     try:
         if custom_format == "ROI Table (CSV)":
             if custom_source == "Path":
