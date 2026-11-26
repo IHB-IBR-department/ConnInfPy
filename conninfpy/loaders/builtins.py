@@ -711,10 +711,11 @@ class AbideSchaeferLoader(BaseDataLoader):
                 pheno = pheno[keep_cols]
 
                 # Coerce target columns to numeric (except DX_GROUP which we map to categorical strings)
+                # and convert ABIDE missing value codes (-9999 / -9999.0) to NaN.
                 numeric_cols = ["AGE_AT_SCAN", "SEX", "FIQ", "func_mean_fd", "ADOS_TOTAL", "SRS_RAW_TOTAL"]
                 for nc in numeric_cols:
                     if nc in pheno.columns:
-                        pheno[nc] = pd.to_numeric(pheno[nc], errors='coerce')
+                        pheno[nc] = pd.to_numeric(pheno[nc], errors='coerce').replace([-9999, -9999.0], np.nan)
 
                 # Rename columns for clarity in the UI
                 rename_map = {

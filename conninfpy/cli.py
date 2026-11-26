@@ -470,7 +470,13 @@ def build_analysis(dataset: Any, cfg: Dict[str, Any]) -> Tuple[Dict[str, Any], D
         summary["n_pairs_used"] = int(n_used)
         summary["n_scans_used"] = int(2 * n_used)
         summary["n_dropped"] = int(Y.shape[0] - 2 * n_used)
-        summary["contrast_direction"] = f"positive: {levels[1]} > {levels[0]}"
+        if interest_cols:
+            interest_label = interest_cols[0] if len(interest_cols) == 1 else ", ".join(interest_cols)
+            summary["contrast_direction"] = (
+                f"positive: higher {interest_label} -> larger ({levels[1]} - {levels[0]})"
+            )
+        else:
+            summary["contrast_direction"] = f"positive: {levels[1]} > {levels[0]}"
     if fisher_entry is not None:
         summary["fisher_applied"] = {
             "policy": fisher_entry["policy"],
@@ -852,11 +858,14 @@ def run(
 
     out = Path(out_dir) if out_dir else base / cfg.get("output", "conninfpy_results")
     if dry_run:
-        from conninfpy._cli_tools import _design_matrix_for_qc
+        from conninfpy._cli_tools import _design_matrix_for_qc, _format_model_summary
         from conninfpy.harmonize.diagnostics import design_diagnostics
 
         n_dropped = int(summary["n_subjects_in_data"] - summary["n_subjects_used"])
-        X_qc, col_names_qc, _ = _design_matrix_for_qc(dataset, cfg, kwargs)
+        X_qc, col_names_qc, balance_qc = _design_matrix_for_qc(dataset, cfg, kwargs)
+        model_summary = _format_model_summary(
+            cfg, kwargs, harmonize_strategy=balance_qc.get("harmonize_strategy")
+        )
         dd_line = "not applicable"
         if X_qc is not None:
             dd = design_diagnostics(X_qc, names=col_names_qc)
@@ -881,6 +890,8 @@ def run(
         )
         print(f"conninfpy {__version__} — dry-run (no permutations run, no files written)")
         print(f"  design:        {summary['design']}")
+        if model_summary is not None:
+            print(f"  model:         {model_summary}")
         if summary["design"] == "paired":
             print(
                 f"  scans/pairs:   {summary['n_scans_in_data']} scans -> "

@@ -50,10 +50,72 @@ def launch_app(extra_args: Optional[Sequence[str]] = None) -> int:
     return int(proc.returncode)
 
 
+def _format_model_summary(
+    cfg: Mapping[str, Any],
+    kwargs: Mapping[str, Any],
+    *,
+    harmonize_strategy: Optional[str] = None,
+) -> Optional[str]:
+    """Build a concise, human-readable model summary line for ``qc`` and ``dry-run``."""
+    from conninfpy.analysis import _resolve_strategy
+    from conninfpy.cli import _as_list
+
+    design = cfg["design"]
+    kind = design["type"]
+    if kind not in ("glm", "paired"):
+        return None
+
+    interest_cols = _as_list(design.get("interest"))
+    confound_cols = _as_list(design.get("confounds"))
+    site_col = design.get("sites")
+    harmonize_opt = kwargs.get("harmonize", "auto")
+
+    if harmonize_strategy is None and kind == "glm":
+        harmonize_strategy = _resolve_strategy(
+            harmonize_opt,
+            glm_mode=True,
+            ttest_mode=False,
+            sites_provided=bool(site_col),
+            confounds_provided=bool(confound_cols),
+        )
+
+    input_kind = str(kwargs.get("input") or "r")
+    r_to_z = bool(kwargs.get("r_to_z", True))
+    scale = "correlation" if (input_kind == "r" and not r_to_z) else "fisher_z"
+
+    if kind == "glm":
+        pred_str = ", ".join(interest_cols) if len(interest_cols) > 1 else (interest_cols[0] if interest_cols else "none")
+        conf_str = f"[{', '.join(confound_cols)}]" if confound_cols else "none"
+        if site_col:
+            site_str = f"{site_col} ({harmonize_strategy or harmonize_opt})"
+        else:
+            site_str = "none"
+        return f"predictor={pred_str} | confounds={conf_str} | sites={site_str} | scale={scale}"
+
+    # paired
+    parts: List[str] = []
+    if interest_cols:
+        pred_str = ", ".join(interest_cols) if len(interest_cols) > 1 else interest_cols[0]
+        parts.append(f"predictor={pred_str}")
+    subj_confs = _as_list(design.get("subject_confounds"))
+    all_confs = confound_cols + subj_confs
+    if all_confs:
+        parts.append(f"confounds=[{', '.join(all_confs)}]")
+    if site_col:
+        parts.append(f"sites={site_col} (stratified)")
+    parts.append(f"scale={scale}")
+    return " | ".join(parts)
+
+
 def _design_matrix_for_qc(
     dataset: Any, cfg: Mapping[str, Any], kwargs: Mapping[str, Any]
 ) -> tuple[Optional[np.ndarray], List[str], Dict[str, Any]]:
     """Construct the design matrix and extra balance diagnostics for ``qc``."""
+    from conninfpy.analysis import (
+        COMBAT_SITE_DUMMIES_GLM,
+        SITE_DUMMIES_GLM,
+        _resolve_strategy,
+    )
     from conninfpy.cli import _as_list, _columns, _numeric
 
     design = cfg["design"]
@@ -100,7 +162,17 @@ def _design_matrix_for_qc(
                 names.append(c)
             else:
                 names.extend([f"{c}_{k}" for k in range(arr.shape[1])])
-        if site_col:
+        harmonize_opt = kwargs.get("harmonize", "auto")
+        strategy = _resolve_strategy(
+            harmonize_opt,
+            glm_mode=True,
+            ttest_mode=False,
+            sites_provided=bool(site_col),
+            confounds_provided=bool(confound_cols),
+        )
+        if strategy is not None:
+            extra["harmonize_strategy"] = strategy
+        if site_col and strategy in (COMBAT_SITE_DUMMIES_GLM, SITE_DUMMIES_GLM):
             s_arr = pd.get_dummies(p[site_col].astype(str), drop_first=True, dtype=float)
             if s_arr.shape[1] > 0:
                 blocks.append(s_arr.to_numpy(dtype=np.float64))
@@ -144,6 +216,7 @@ def run_qc(
         _motion_qc_single_diagnostics,
     )
     from conninfpy.cli import (
+        _as_list,
         _atlas,
         _cnbs_bonferroni_warning,
         _jsonable,
@@ -201,6 +274,22 @@ def run_qc(
             )
 
     pheno = dataset.pheno
+    design_cfg = cfg["design"]
+    design_cols: List[str] = []
+    for key in ("interest", "confounds", "group", "condition", "sites", "subject_confounds"):
+        for col in _as_list(design_cfg.get(key)):
+            if col not in design_cols:
+                design_cols.append(col)
+    if design_cfg["type"] == "paired" and not design_cfg.get("condition"):
+        cond_col = getattr(dataset, "condition_column", None)
+        if cond_col and cond_col not in design_cols:
+            design_cols.append(cond_col)
+    missing_by_column: Dict[str, int] = {
+        col: int(pheno[col].isna().sum())
+        for col in design_cols
+        if col in pheno.columns
+    }
+
     tr_summary = None
     if "n_valid_tr" in pheno.columns:
         tr_vals = pd.to_numeric(pheno["n_valid_tr"], errors="coerce").dropna()
@@ -216,6 +305,8 @@ def run_qc(
 
     X, col_names, balance = _design_matrix_for_qc(dataset, cfg, kwargs)
     warnings_list.extend(balance.pop("warnings", []))
+    harmonize_strategy = balance.pop("harmonize_strategy", None)
+    model_summary = _format_model_summary(cfg, kwargs, harmonize_strategy=harmonize_strategy)
 
     design_diag = None
     rank_deficient = False
@@ -269,9 +360,11 @@ def run_qc(
         "n_subjects_in_data": int(summary["n_subjects_in_data"]),
         "n_subjects_used": int(summary["n_subjects_used"]),
         "n_dropped": n_dropped,
+        "missing_by_column": missing_by_column,
         "n_regions": int(summary["n_regions"]),
         "atlas": getattr(atlas, "name", None) if atlas is not None else None,
         "design": summary["design"],
+        "model_summary": model_summary,
         "balance": balance,
         "design_diagnostics": design_diag,
         "n_valid_tr": tr_summary,
@@ -304,6 +397,11 @@ def run_qc(
                 f"conninfpy qc [{status_txt}] — {summary['design']} | "
                 f"{summary['n_subjects_used']}/{summary['n_subjects_in_data']} subjects × {summary['n_regions']} regions"
             )
+        if model_summary is not None:
+            print(f"  model: {model_summary}")
+        if missing_by_column:
+            miss_str = ", ".join(f"{col}={cnt}" for col, cnt in missing_by_column.items())
+            print(f"  missing_by_column: {miss_str}")
         if balance:
             print(f"  balance: {json.dumps(balance)}")
         if design_diag is not None:
@@ -711,11 +809,46 @@ def init_manifest(
     return yaml_text
 
 
+def _is_trivial_roi_ids(roi_ids: Sequence[Any]) -> bool:
+    """Return True if ``roi_ids`` are default 0..N-1, 1..N, or generic ``ROI_i``/``region_i`` placeholders."""
+    n = len(roi_ids)
+    if n == 0:
+        return True
+    str_ids = [str(x) for x in roi_ids]
+    return any(
+        str_ids == [fmt.format(i=i) for i in range(start, start + n)]
+        for start in (0, 1)
+        for fmt in ("{i}", "ROI_{i}", "region_{i}")
+    )
+
+
+def _validate_atlas_roi_ids(atlas: Any, bundle_roi_ids: Optional[Sequence[Any]]) -> None:
+    """Ensure a resolved atlas agrees with non-trivial ``bundle.roi_ids``."""
+    if bundle_roi_ids is None or _is_trivial_roi_ids(bundle_roi_ids):
+        return
+    str_ids = [str(x) for x in bundle_roi_ids]
+    atlas_labels = [str(x) for x in (getattr(atlas, "labels", None) or ())]
+    if atlas_labels and str_ids == atlas_labels:
+        return
+    atlas_roi_ids = getattr(atlas, "roi_ids", None)
+    if atlas_roi_ids is not None and str_ids == [str(x) for x in atlas_roi_ids]:
+        return
+    atlas_label_ids = getattr(atlas, "label_ids", None)
+    if atlas_label_ids is not None and str_ids == [str(x) for x in atlas_label_ids]:
+        return
+    raise ValueError(
+        f"Atlas ROI labels do not match bundle roi_ids "
+        f"(bundle[:3]={str_ids[:3]!r} vs atlas[:3]={atlas_labels[:3]!r}); "
+        f"refusing to attach mismatched atlas metadata."
+    )
+
+
 def _resolve_atlas_for_interpret(
     atlas_spec: Optional[str],
     provenance_path: Optional[Path],
     n_regions: int,
     atlas_lut: Optional[str] = None,
+    bundle_roi_ids: Optional[Sequence[Any]] = None,
 ) -> Any:
     from conninfpy.atlas.metadata import AtlasInfo
     from conninfpy.cli import _BUILTIN_ATLASES, _is_nifti_path
@@ -734,8 +867,10 @@ def _resolve_atlas_for_interpret(
             atlas = _load_file_atlas(Path(atlas_spec), lut_path)
         if len(atlas) != n_regions:
             raise ValueError(f"atlas has {len(atlas)} regions but the data has {n_regions}.")
+        _validate_atlas_roi_ids(atlas, bundle_roi_ids)
         return atlas
 
+    cfg_atlas = None
     if provenance_path is not None and provenance_path.is_file():
         try:
             prov = json.loads(provenance_path.read_text(encoding="utf-8"))
@@ -762,20 +897,25 @@ def _resolve_atlas_for_interpret(
                 if atlas is not None:
                     if len(atlas) != n_regions:
                         raise ValueError(f"atlas has {len(atlas)} regions but the data has {n_regions}.")
+                    _validate_atlas_roi_ids(atlas, bundle_roi_ids)
                     return atlas
         except ValueError:
             raise
         except Exception:
             pass
 
-    by_size = {
-        100: "schaefer_100_yeo7",
-        200: "schaefer_200_yeo7",
-        400: "schaefer_400_yeo7",
-        246: "bna_246",
-    }
-    if n_regions in by_size:
-        return getattr(AtlasInfo, by_size[n_regions])()
+    if isinstance(cfg_atlas, str):
+        msg = (
+            f"conninfpy interpret: atlas {cfg_atlas!r} from provenance.json was not found; "
+            f"returning None without guessing an atlas by n_regions={n_regions} (pass --atlas to supply it)."
+        )
+    else:
+        msg = (
+            f"conninfpy interpret: no atlas specified or resolved from provenance.json; "
+            f"returning None without guessing an atlas by n_regions={n_regions} (pass --atlas to supply it)."
+        )
+    warnings.warn(msg, UserWarning, stacklevel=2)
+    print(msg, file=sys.stderr)
     return None
 
 
@@ -920,6 +1060,7 @@ def interpret_outputs(
             prov_path if prov_path.is_file() else None,
             n_regions,
             atlas_lut=atlas_lut,
+            bundle_roi_ids=bundle.roi_ids,
         )
         pvals_path = base_dir / f"pvals{suffix}.npz"
         inf_res = _reconstruct_inference_result(bundle, pvals_path if pvals_path.is_file() else None)
@@ -979,6 +1120,8 @@ def interpret_outputs(
         # 2. Node / Network / Component summaries
         try:
             node_df = inf_res.node_summary(atlas=atlas, alpha=eff_alpha, param_idx=eff_param_idx)
+            if atlas is None and not _is_trivial_roi_ids(bundle.roi_ids) and "roi_id" not in node_df.columns:
+                node_df.insert(1, "roi_id", [bundle.roi_ids[int(r)] for r in node_df["roi"]])
             node_path = dest / f"node_summary{suffix}.csv"
             node_df.to_csv(node_path, index=False)
             written[f"node_summary{suffix}"] = node_path
