@@ -147,7 +147,7 @@ def test_internal_builtin_loaders_options_and_diagnostics(tmp_path):
     a, b = rng.normal(size=(22, 5)), rng.normal(size=(27, 5))
     np.save(tmp_path / 'dict.npy', {'s1': {'time_series': a, 'label': 'a'}, 's2': {'time_series': b, 'label': 'b'}})
     with pytest.warns(UserWarning, match='n_valid_tr'):
-        ds = AbideSchaeferLoader(str(tmp_path / 'dict.npy'), connectivity_kind='partial_correlation', shrinkage=.3).load()
+        ds = AbideSchaeferLoader(str(tmp_path / 'dict.npy'), connectivity_kind='partial_correlation', shrinkage=.3, trust_pickle=True).load()
     assert ds.pheno.n_valid_tr.tolist() == [22, 27]
     assert np.allclose(ds.pheno.delta_s, .3)
     np.save(tmp_path / 'site_open.npy', np.stack([a, a + 1]))

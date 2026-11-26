@@ -1421,12 +1421,12 @@ def build_analysis_archive(
                            f"analysis metadata ({exc}).")
             notes.append(bundle_note)
         if bundle is not None:
-            import pickle
+            import tempfile
 
-            bundle_buffer = io.BytesIO()
-            pickle.dump({"schema_version": bundle.schema_version, "bundle": bundle},
-                        bundle_buffer, protocol=pickle.HIGHEST_PROTOCOL)
-            files["bundle.pkl"] = bundle_buffer.getvalue()
+            with tempfile.TemporaryDirectory() as _tmp:
+                _bundle_path = Path(_tmp) / "bundle.zip"
+                bundle.save(_bundle_path)
+                files["bundle.pkl"] = _bundle_path.read_bytes()
     else:
         # A pickle-free export states the omission instead of implying that the
         # finished result lacked the metadata a snapshot needs.

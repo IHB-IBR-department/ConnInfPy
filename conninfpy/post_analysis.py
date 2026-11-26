@@ -331,12 +331,20 @@ class ResultBundle:
         self._validate()
         arrays = {}
         payload = _encode_bundle({f.name: getattr(self, f.name) for f in fields(self)}, arrays)
+        def _zip_info(name: str) -> zipfile.ZipInfo:
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            return info
+
         with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr("manifest.json", json.dumps({"schema_version": SCHEMA_VERSION, "bundle": payload}))
+            archive.writestr(
+                _zip_info("manifest.json"),
+                json.dumps({"schema_version": SCHEMA_VERSION, "bundle": payload}),
+            )
             for key, array in arrays.items():
                 buffer = io.BytesIO()
                 np.save(buffer, array, allow_pickle=False)
-                archive.writestr(f"arrays/{key}.npy", buffer.getvalue())
+                archive.writestr(_zip_info(f"arrays/{key}.npy"), buffer.getvalue())
 
     def _validate(self) -> None:
         n = len(self.roi_ids)
