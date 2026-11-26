@@ -34,11 +34,15 @@ inference and descriptive anatomical reports.
 
 ![ConnInfPy 2.0 workflow from connectivity inputs and statistical design to permutation inference and neuroanatomical interpretation](docs/conninfpy-workflow.png)
 
+*End-to-end ConnInfPy pipeline: from connectivity inputs and study design through optional site harmonization and permutation inference to neuroanatomical reporting.*
+
+**Example visualization outputs.** Generated with `conninfpy interpret --cerebellum anatom --export-brainnet --brainnet-render` (nodes colored by BNA-246 anatomical lobe, edges by effect sign):
+
 | ABIDE I (CC200) ASD > HC connectogram (BNA-246 + SUIT) | Open-Close IHB EC vs EO (ICBM152, top-150 \|t\|) | ABIDE I (CC200) ASD vs HC (Ch2withCerebellum, top-150 \|t\|) |
 |---|---|---|
 | ![ABIDE I CC200 ASD vs HC connectogram with BNA-246 and SUIT cerebellum](docs/images/connectogram_abide_asd_hc.png) | ![Open-Close IHB EC vs EO 3D BrainNet Viewer render on ICBM152](docs/images/brainnet_open_close_ihb.png) | ![ABIDE I CC200 ASD vs HC 3D BrainNet Viewer render on Ch2withCerebellum](docs/images/brainnet_abide_asd_hc.png) |
 
-*Example outputs from `conninfpy interpret --cerebellum anatom --export-brainnet --brainnet-render` (nodes colored by BNA-246 anatomical lobe, edges by effect sign). See [workflows.rst](docs/source/workflows.rst) for Python API examples and color legends.*
+*See [workflows.rst](docs/source/workflows.rst) for Python API examples and color legends.*
 
 ## Installation
 
