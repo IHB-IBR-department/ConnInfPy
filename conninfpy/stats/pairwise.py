@@ -37,6 +37,8 @@ from conninfpy._shared.alignment import (
 from conninfpy._shared.rng import RngLike, resolve_seed, warn_legacy_random_state
 from conninfpy.defaults import (
     DEFAULT_ACCELERATION,
+    warn_low_nbs_threshold,
+    warn_bh_permutation_resolution,
     DEFAULT_EXTENT_EXPONENT,
     DEFAULT_HEIGHT_EXPONENT,
     DEFAULT_MIN_CLUSTER_SIZE,
@@ -1106,6 +1108,8 @@ def _compute_bh_fdr_perm_p_values(
     N = emp_t_dict["positive"].shape[0]
     triu_idx = np.triu_indices(N, k=1)
 
+    warn_bh_permutation_resolution(len(triu_idx[0]), n_permutations)
+
     # Generate seeds
     rng = np.random.RandomState(random_state)
     seeds = rng.randint(0, 2**32 - 1, size=n_permutations, dtype=np.int64)
@@ -1282,7 +1286,7 @@ def _compute_parametric_p_values(
     test_type_str: str,
     method_enum: "StatMethod",
     alpha: float = 0.05,
-    two_tailed: bool = False,
+    two_tailed: bool = True,
     var_equal: bool = False,
 ) -> Tuple[Dict[str, npt.NDArray[np.float64]], Dict[str, npt.NDArray[np.float64]]]:
     """
@@ -1524,7 +1528,7 @@ def compute_p_val(
     missing: str = "raise",
     min_coverage: float = 0.8,
     cnbs_correction: str = "bonferroni",
-    two_tailed: bool = False,
+    two_tailed: bool = True,
     edge_mask: Optional[npt.ArrayLike] = None,
     var_equal: bool = False,
     atlas: Optional[Any] = None,
@@ -1606,7 +1610,7 @@ def compute_p_val(
         Number of CPU cores for parallel computing.
     net_labels : ndarray of shape (N,), optional
         Network labels for each node. Required for cnbs, ni_tfnbs, and fbc_tfnbs.
-    threshold : float, default=2.0
+    threshold : float, default=3.0
         T-statistic threshold for NBS (only used when method='nbs').
     nbs_stat : {'extent', 'intensity'}, default='extent'
         Cluster statistic for NBS (only used when method='nbs'): the number
@@ -1664,7 +1668,7 @@ def compute_p_val(
     cnbs_correction : {'bonferroni', 'bh'}, default='bonferroni'
         For ``method='cnbs'``: correction of the block p-values across blocks
         (Bonferroni: FWER over blocks; 'bh': FDR over blocks).
-    two_tailed : bool, default=False
+    two_tailed : bool, default=True
         Correct one two-sided family. Max-statistic methods pool positive
         and negative null maxima; cNBS uses absolute block means; BH methods
         correct two-sided marginal p-values once across eligible edges.
@@ -1736,6 +1740,7 @@ def compute_p_val(
     # Normalize inputs
     test_type_str = test_type.value if isinstance(test_type, TestType) else test_type
     method_str = method.value if isinstance(method, StatMethod) else method
+    warn_low_nbs_threshold(method_str, threshold)
     if random_state is not None and rng is None:
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)

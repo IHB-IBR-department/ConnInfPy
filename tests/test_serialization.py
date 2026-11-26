@@ -422,7 +422,7 @@ class TestSpecializedPaths(unittest.TestCase):
     def test_one_sided_result(self):
         r = compute_p_val(self.g1z, self.g2z, test_type="two-sample",
                           method="tstat", n_permutations=N_PERM, use_mp=False,
-                          acceleration=None, rng=11)
+                          acceleration=None, rng=11, two_tailed=False)
         one = r.one_sided("positive")
         self.assertEqual(one.tested_tail, "positive")
         assert_all_roundtrips(self, one)
@@ -450,7 +450,7 @@ class TestRestoredFunctionality(unittest.TestCase):
         g1z, g2z = _pairwise_z(seed=21)
         cls.two_sample = compute_p_val(
             g1z, g2z, test_type="two-sample", method="tstat",
-            n_permutations=N_PERM, use_mp=False, acceleration=None, rng=21)
+            n_permutations=N_PERM, use_mp=False, acceleration=None, rng=21, two_tailed=False)
         grid = compute_p_val(
             g1z, g2z, test_type="two-sample", method="tfnbs",
             e=[0.4, 0.5], h=[3.0, 2.0], n=10,

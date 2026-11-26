@@ -1150,6 +1150,6 @@ class TestResamplingScheme(unittest.TestCase):
         Ya = self._sym(rng.normal(size=(n, N, N)) + 0.5 * ca[:, None, None])
         Yb = self._sym(rng.normal(size=(n, N, N)) + 0.5 * cb[:, None, None] + 1.0)
         r = compute_p_val_paired_glm(Ya, Yb, confounds_A=ca, confounds_B=cb, method="tstat",
-                                     n_permutations=99, rng=0, use_mp=False)
+                                     n_permutations=99, rng=0, use_mp=False, two_tailed=False)
         iu = np.triu_indices(N, 1)
         self.assertTrue(np.all(np.asarray(r["positive"])[iu] <= 0.05))

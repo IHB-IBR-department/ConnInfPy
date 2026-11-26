@@ -18,7 +18,9 @@ Network-based statistics and enhancement
 - Noble, S., & Scheinost, D. (2020). The constrained network-based statistic: a
   new level of inference for neuroimaging. *MICCAI 2020*, LNCS 12267.
 - Hao, Z., Wang, P., Xia, X., Pan, Y., & Dou, W. (2024). Threshold-free
-  network-oriented statistics in neuroscience. *bioRxiv*, 2024-01.
+  network-oriented statistics in neuroscience (TFNOS). *bioRxiv* (preprint),
+  doi:10.1101/2024.01.03.574016. For TFNOS-TT edge-wise t-statistics,
+  E=0.4, H=3.0 yielded empirical FDR < 10%, and E=0.4, H=7.0 < 5%.
 - Vinokur, L., Smith, R. E., Dhollander, T., Vaughan, D., Jackson, G. D., &
   Connelly, A. (2023). Parameter Sensitivity of Network-Based Statistical
   Inference. *Research Square* (preprint).

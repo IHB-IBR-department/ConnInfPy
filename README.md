@@ -300,10 +300,10 @@ Pass `method=` to `analyze()` (or to the advanced pipelines):
 Shared numerical defaults (`conninfpy.defaults`):
 1000 permutations with empirical permutation p-values (`acceleration=None`), exact
 TFNBS integration (`n=None`) with `e=0.4`, `h=3.0`, `start_thres=1.65`
-(asymptotic normal reference; NBS `threshold=2.0`, `nbs_stat="extent"`;
+(asymptotic normal reference; NBS `threshold=3.0`, `nbs_stat="extent"`;
 FBC-TFNBS `min_cluster_size=3`). `analyze()` uses a single two-sided family
-(`two_tailed=True`) by default, while the low-level `compute_p_val*`
-functions default to `two_tailed=False` (separate one-sided families).
+(`two_tailed=True`) by default, as do the low-level `compute_p_val*` functions. Explicit
+`two_tailed=False` selects separate one-sided families.
 
 The max-statistic methods (`tstat`, `tfnbs`, `ni_tfnbs`, `fbc_tfnbs`, `nbs`)
 share the permutation engine and empirical +1 Phipson–Smyth p-values. FWER

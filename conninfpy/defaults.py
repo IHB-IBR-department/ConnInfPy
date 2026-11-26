@@ -19,10 +19,15 @@ References
   NeuroImage 44(1):83-98.
 - Baggio et al. (2018). TFNBS: a threshold-free method for the analysis
   of brain networks. Hum Brain Mapp 39(6):2289-2302.
-- Vinokur et al. (2023). Parameter sensitivity of NBS / TFNBS in
-  connectivity inference.
-- Hao et al. (2024). TFNOS: threshold-free network omnibus statistics
-  (recommends ``E=0.4, H in [3.0, 7.0]`` for FDR < 10%).
+- Vinokur, L., Smith, R. E., Dhollander, T., Vaughan, D., Jackson, G. D., &
+  Connelly, A. (2023). Parameter Sensitivity of Network-Based Statistical
+  Inference. Research Square (preprint), doi:10.21203/rs.3.rs-3081615/v1.
+- Hao, Z., Wang, P., Xia, X., Pan, Y., & Dou, W. (2024). Threshold-Free
+  Network-Oriented Statistics in Neuroscience (TFNOS). bioRxiv (preprint),
+  doi:10.1101/2024.01.03.574016. For edge-wise t-statistics in TFNOS-TT,
+  ``E=0.4, H=3.0`` yielded empirical FDR < 10% and ``E=0.4, H=7.0``
+  empirical FDR < 5%; earlier voxel/network defaults such as Baggio 2018
+  were overly liberal in the reported conditions.
 """
 
 # =============================================================================
@@ -66,7 +71,7 @@ fitted tail replaces the p-values that fewer than 10 permutations reach
 # NBS defaults
 # =============================================================================
 
-DEFAULT_NBS_THRESHOLD: float = 2.0
+DEFAULT_NBS_THRESHOLD: float = 3.0
 """Default t-statistic threshold for classical NBS edge inclusion."""
 
 DEFAULT_NBS_STAT: str = "extent"
@@ -78,3 +83,30 @@ DEFAULT_NBS_STAT: str = "extent"
 
 DEFAULT_MIN_CLUSTER_SIZE: int = 3
 """Default minimum edges in a functional block to form a cluster (for FBC-TFNBS)."""
+
+
+def warn_low_nbs_threshold(method, threshold):
+    """Warn about interpretation of components at a low NBS threshold."""
+    if method == "nbs" and threshold < 3.0:
+        import warnings
+        warnings.warn(
+            "NBS threshold < 3.0 increases non-null edge spillover within "
+            "detected components; NBS inference is at the component level, "
+            "not the individual edge level.", UserWarning, stacklevel=3
+        )
+
+
+def warn_bh_permutation_resolution(m, n_permutations):
+    """Warn when permutation resolution cannot support sparse BH rejections."""
+    import math
+    import warnings
+
+    rank = m / (0.05 * (n_permutations + 1.0))
+    if rank > 1.0:
+        warnings.warn(
+            f"bh_fdr_perm resolution: m={m} edges, B={n_permutations}, "
+            f"p_min={1 / (n_permutations + 1.0):.6g}; minimum rejection "
+            f"rank k_min={math.ceil(rank)} at q=0.05. For single-edge "
+            f"sensitivity use n_permutations >= {math.ceil(m / 0.05)} "
+            "or consider parametric bh_fdr.", UserWarning, stacklevel=3
+        )

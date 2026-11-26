@@ -163,7 +163,7 @@ class TestPostHocSelection(unittest.TestCase):
 
     def test_one_sided_marks_post_hoc(self):
         Y, x = _glm_data()
-        sep = compute_p_val_glm(Y, interest=x, method="tstat",
+        sep = compute_p_val_glm(Y, interest=x, method="tstat", two_tailed=False,
                                 n_permutations=N_PERM, rng=7, use_mp=False)
         one = sep.one_sided("positive")
         self.assertEqual(one.tail_selection, "post-hoc")

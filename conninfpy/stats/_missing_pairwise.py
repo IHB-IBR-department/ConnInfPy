@@ -401,6 +401,9 @@ def available_case_p_val(
     )
 
     if method == "bh_fdr_perm":
+        from conninfpy.defaults import warn_bh_permutation_resolution
+
+        warn_bh_permutation_resolution(int(d.tested.sum()), n_permutations)
         # Streaming reduction: partial per-edge counts per chunk instead of
         # B per-seed edge vectors collected in the parent. Untested edges
         # carry 0 in both the observed statistics and the permutations, so

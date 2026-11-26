@@ -112,8 +112,7 @@ The inference unit is the component. Its statistic is compared with the
 permutation distribution of the *largest* component statistic (family-wise
 error control over components; see Step 4): with ``two_tailed=True`` (the ``analyze()`` default) the two
 tails share one null, the larger of the two tails' maxima in every
-permutation; with separate one-sided families (the low-level pipelines'
-default, ``two_tailed=False``) each tail has its own null of maxima. Every
+permutation; with separate one-sided families (explicit ``two_tailed=False``) each tail has its own null of maxima. Every
 edge of a component carries the
 component's p-value, so a significant component is a claim about the set, not
 about each of its edges. ``result.component_report`` (and
@@ -495,7 +494,7 @@ at α = 0.05 do not promise a combined-direction FWER of 0.05 — for FWER,
 α/2 per tail bounds the combined FWER at α by Bonferroni (under the same
 premises); this is not an FDR statement. The low-level
 :func:`~conninfpy.compute_p_val` / :func:`~conninfpy.compute_p_val_glm`
-entry-points keep ``two_tailed=False`` as their own default.
+entry-points also default to ``two_tailed=True``.
 
 For a single prespecified direction (e.g. controls > patients, as in the
 MATLAB NBS toolbox's t-test), declare it before the run:

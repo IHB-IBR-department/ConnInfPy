@@ -79,7 +79,7 @@ def test_one_edge_parametric_tail_changes_significance():
     edge = (np.arange(8) - 3.5) / np.std(np.arange(8), ddof=1) + 0.75
     y = np.zeros((8, 2, 2))
     y[:, 0, 1] = y[:, 1, 0] = edge
-    one = compute_p_val(y, test_type="one-sample", method="bonferroni")
+    one = compute_p_val(y, test_type="one-sample", method="bonferroni", two_tailed=False)
     two = compute_p_val(y, test_type="one-sample", method="bonferroni", two_tailed=True)
     np.testing.assert_allclose(two.positive[0, 1], stats.ttest_1samp(edge, 0).pvalue)
     assert one.positive[0, 1] < 0.05 < two.positive[0, 1]

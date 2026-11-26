@@ -196,7 +196,7 @@ def test_grid_select_and_one_sided_keep_aligned_masks():
     y = _stack(np.random.default_rng(10), 6)
     result = compute_p_val(
         y, test_type="one-sample", method="tfnbs", e=[.4, .7], h=[3., 4.],
-        n_permutations=2, acceleration=None, use_mp=False, rng=0,
+        n_permutations=2, acceleration=None, use_mp=False, rng=0, two_tailed=False,
     )
     assert result.analysis_provenance["tested"]["positive"].shape == (3, 3, 2)
     selected = result.select(1).to_bundle()

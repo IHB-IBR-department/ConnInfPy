@@ -17,7 +17,7 @@ from streamlit.testing.v1 import AppTest
 
 REPO = Path(__file__).resolve().parents[1]
 APP = REPO / "conninfpy" / "app" / "streamlit_app.py"
-DESIGN_INFERENCE = REPO / "apps" / "components" / "design_inference.py"
+DESIGN_INFERENCE = REPO / "conninfpy" / "app" / "components" / "design_inference.py"
 
 
 def _design_page():

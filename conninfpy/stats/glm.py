@@ -41,6 +41,7 @@ from conninfpy._shared.alignment import (
 )
 from conninfpy.defaults import (
     DEFAULT_ACCELERATION,
+    warn_low_nbs_threshold,
     DEFAULT_EXTENT_EXPONENT,
     DEFAULT_HEIGHT_EXPONENT,
     DEFAULT_MIN_CLUSTER_SIZE,
@@ -531,7 +532,7 @@ def compute_p_val_glm(
     stat_type: Union[str, GLMStatType] = GLMStatType.TSTAT,
     method: Union[str, StatMethod] = StatMethod.TFNBS,
     n_permutations: int = DEFAULT_N_PERMUTATIONS,
-    two_tailed: bool = False,
+    two_tailed: bool = True,
     acceleration: Optional[str] = DEFAULT_ACCELERATION,
     use_mp: bool = True,
     rng: RngLike = None,
@@ -596,9 +597,9 @@ def compute_p_val_glm(
         Enhancement method.
     n_permutations : int, default=1000
         Number of permutations for null distribution.
-    two_tailed : bool, default=False
-        If False (default), per-tail FWER control (separate null for positive
-        and negative). If True, joint null from max(max_positive, max_negative).
+    two_tailed : bool, default=True
+        If False, per-tail FWER control (separate null for positive
+        and negative). If True (default), joint null from max(max_positive, max_negative).
     acceleration : {'gpd', 'gamma'} or None, default=None
         Permutation acceleration method (Winkler et al., 2016). If None,
         use standard empirical p-values. 'gpd' fits a Generalized Pareto
@@ -753,6 +754,7 @@ def compute_p_val_glm(
 
     stat_type_str = stat_type.value if isinstance(stat_type, GLMStatType) else stat_type
     method_str = method.value if isinstance(method, StatMethod) else method
+    warn_low_nbs_threshold(method_str, threshold)
 
     try:
         method_enum = StatMethod(method_str)
@@ -1215,7 +1217,7 @@ def compute_p_val_glm_multi(
     stat_type: Union[str, GLMStatType] = GLMStatType.TSTAT,
     method: Union[str, StatMethod] = StatMethod.TFNBS,
     n_permutations: int = DEFAULT_N_PERMUTATIONS,
-    two_tailed: bool = False,
+    two_tailed: bool = True,
     acceleration: Optional[str] = DEFAULT_ACCELERATION,
     use_mp: bool = True,
     rng: RngLike = None,
@@ -1392,6 +1394,7 @@ def compute_p_val_glm_multi(
         )
 
     method_str = method.value if isinstance(method, StatMethod) else method
+    warn_low_nbs_threshold(method_str, threshold)
     try:
         method_enum = StatMethod(method_str)
     except ValueError:

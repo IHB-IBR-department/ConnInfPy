@@ -67,7 +67,7 @@ class TestGLMCompleteDataUnchanged(unittest.TestCase):
         p, _, _ = available_case_glm(
             Y, X, c, _compute_reduced_model(X, c), stat_type, _ENHANCE_MAP[StatMethod(method)], dict(kw),
             n_permutations=49, random_state=2, use_mp=False, n_processes=None, verbose=False,
-            strata=strata, acceleration=None, two_tailed=False)
+            strata=strata, acceleration=None, two_tailed=True)
         for key in p:
             np.testing.assert_allclose(p[key][IU], np.asarray(ref[key])[IU], atol=1e-12)
 

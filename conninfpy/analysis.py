@@ -762,8 +762,8 @@ def analyze(
         of 0.05 (use α/2 per tail for that). F-stat omnibus runs have no
         direction and ignore this setting. The low-level
         :func:`~conninfpy.compute_p_val` / :func:`~conninfpy.compute_p_val_glm`
-        entry-points keep their own ``two_tailed=False`` default; passing
-        ``two_tailed=False`` here explicitly reproduces them exactly.
+        entry-points also default to ``two_tailed=True``; pass
+        ``two_tailed=False`` explicitly for separate one-sided families.
     tested_tail : {'positive', 'negative'} or None, default None
         A directional hypothesis fixed **before** the run: the inference uses
         per-tail nulls (``two_tailed=False`` at the kernel level) and the

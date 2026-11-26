@@ -89,7 +89,7 @@ def test_permutation_methods_record_and_use_student(method):
 def test_parametric_bonferroni_degrees_of_freedom(var_equal):
     g1, g2 = _groups()
     res = compute_p_val(g1, g2, test_type="two-sample", method="bonferroni",
-                        var_equal=var_equal)
+                        var_equal=var_equal, two_tailed=False)
     a, b = g2[:, IU[0], IU[1]], g1[:, IU[0], IU[1]]
     ref = stats.ttest_ind(a, b, equal_var=var_equal, alternative="greater").pvalue
     np.testing.assert_allclose(res.positive[IU], np.minimum(ref * IU[0].size, 1.0), rtol=1e-8)
@@ -105,7 +105,7 @@ def test_available_case_uses_student_on_the_available_subjects():
     ref = stats.ttest_ind(g2[:, 0, 1], g1[1:, 0, 1], equal_var=True).statistic
     assert res.stat_signed[0, 1] == pytest.approx(ref, abs=1e-10)
     bonf = compute_p_val(g1, g2, test_type="two-sample", method="bonferroni",
-                         missing="available_case", min_coverage=0.5, var_equal=True)
+                         missing="available_case", min_coverage=0.5, var_equal=True, two_tailed=False)
     p = stats.ttest_ind(g2[:, 0, 1], g1[1:, 0, 1], equal_var=True, alternative="greater").pvalue
     assert bonf.positive[0, 1] == pytest.approx(min(p * IU[0].size, 1.0), rel=1e-8)
 

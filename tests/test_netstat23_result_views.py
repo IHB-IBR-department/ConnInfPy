@@ -193,7 +193,7 @@ def test_ac2_summaries_across_tstat_tfnbs_nbs_cnbs_and_omnibus():
     res_tstat = compute_p_val(g0, g1, test_type="two-sample", method="tstat", n_permutations=40, rng=1, use_mp=False, acceleration=None)
     res_tfnbs = compute_p_val(g0, g1, test_type="two-sample", method="tfnbs", e=[0.5, 0.75], h=[2.0, 2.0], n_permutations=30, rng=1, use_mp=False, acceleration=None)
     res_nbs = compute_p_val(g0, g1, test_type="two-sample", method="nbs", threshold=1.5, n_permutations=80, rng=1, use_mp=False, acceleration=None)
-    res_cnbs = compute_p_val(g0, g1, test_type="two-sample", method="cnbs", net_labels=atlas.network_index(), n_permutations=140, rng=1, use_mp=False, acceleration=None)
+    res_cnbs = compute_p_val(g0, g1, test_type="two-sample", method="cnbs", net_labels=atlas.network_index(), n_permutations=140, rng=1, use_mp=False, acceleration=None, two_tailed=False)
     res_omni = _omnibus_f_result(data, pheno)
 
     # TFNBS grid selection produces a 2D slice without crashing
@@ -305,8 +305,8 @@ def test_ac3_predicted_and_coupling_scales_and_legacy_missing_beta():
 
 def test_ac3_unit_annotation_context_for_nbs_and_cnbs():
     g0, g1, _, _, atlas, _ = _synthetic_group_data()
-    res_nbs = compute_p_val(g0, g1, test_type="two-sample", method="nbs", threshold=1.5, n_permutations=140, rng=1, use_mp=False, acceleration=None)
-    res_cnbs = compute_p_val(g0, g1, test_type="two-sample", method="cnbs", net_labels=atlas.network_index(), n_permutations=140, rng=1, use_mp=False, acceleration=None)
+    res_nbs = compute_p_val(g0, g1, test_type="two-sample", method="nbs", threshold=1.5, n_permutations=140, rng=1, use_mp=False, acceleration=None, two_tailed=False)
+    res_cnbs = compute_p_val(g0, g1, test_type="two-sample", method="cnbs", net_labels=atlas.network_index(), n_permutations=140, rng=1, use_mp=False, acceleration=None, two_tailed=False)
 
     # Note: real RoiAnnotation.table has string 'roi' names (e.g. 'A8m_L'), NOT int indices
     rois = SimpleNamespace(
@@ -585,7 +585,7 @@ def test_ac5_apptest_tfnbs_grid_and_compatible_companion_and_bna_component_conte
 
     res_nbs = compute_p_val(
         g0, g1, test_type="two-sample", method="nbs", threshold=1.5,
-        n_permutations=140, rng=1, use_mp=False, acceleration=None,
+        n_permutations=140, rng=1, use_mp=False, acceleration=None, two_tailed=False,
     )
     rows = [
         {

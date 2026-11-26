@@ -54,7 +54,7 @@ class TestCompleteDataUnchanged(unittest.TestCase):
         p, _, rep = available_case_p_val(
             a, b, test, mode, _ENHANCE_MAP[StatMethod(method)], dict(kw),
             n_permutations=99, random_state=3, use_mp=False, n_processes=None,
-            verbose=False, strata=None, acceleration=None)
+            verbose=False, strata=None, acceleration=None, two_tailed=True)
         self.assertEqual(rep["n_edges_untested"], 0)
         for tail in ("positive", "negative"):
             np.testing.assert_allclose(p[tail][IU], np.asarray(ref[tail])[IU], atol=1e-12)
