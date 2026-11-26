@@ -151,46 +151,22 @@ python -m pip install numpy scipy statsmodels pandas matplotlib scikit-learn job
 label images with it, so the annotation fails without it even though the
 statistics still run.
 
-### Testing & verification
-
-1. **Standalone install / wheel check (no repository clone needed):**
-   ```bash
-   conninfpy info          # Python, Numba backend, CPU cores, bundled atlas paths
-   conninfpy selftest      # quick check: TFNBS, multiprocessing, bundled atlases
-   ```
-   Or run the synthetic Quickstart snippet below in Python.
-
-2. **Real demo data (from a repository clone):**
-   ```bash
-   conninfpy init --manifest datasets/abide_mini.yaml --out analysis.yaml
-   conninfpy qc analysis.yaml --motion-qc
-   conninfpy run examples/abide/configs/abide_mini_age.yaml --n-jobs 4 --seed 0
-   ```
-   The repository also bundles `datasets/nbs_schizophrenia.yaml` (MATLAB NBS reference) and `datasets/open_close.yaml` (Schaefer-200 paired Eyes-Open vs. Eyes-Closed).
-
-3. **fMRIPrep derivatives workflow:**
-   ```bash
-   # Offline smoke test with tiny synthetic BIDS derivatives
-   python examples/fmriprep_nilearn/run_fmriprep_workflow.py --synthetic --n-permutations 10
-
-   # On-demand nilearn download (development fMRI + Schaefer-100)
-   python examples/fmriprep_nilearn/run_fmriprep_workflow.py --n-subjects 12 --atlas schaefer100 --n-permutations 100
-   ```
-   To run on your own `bids/derivatives/fmriprep` folder, adapt [`examples/fmriprep_nilearn/manifest_template.yaml`](examples/fmriprep_nilearn/manifest_template.yaml) or generate a manifest automatically with:
-   ```bash
-   conninfpy init-manifest --data-dir /path/to/bids/derivatives/fmriprep --pheno /path/to/participants.tsv --out manifest.yaml
-   ```
-
 ---
 
-## Quickstart
+## Quick test
 
-Simulate two groups with a planted difference, run TFNBS, and check the result
-against the ground truth. `conninfpy.sim` builds modular networks with 20
-effect topologies (hub, chain, rich club, …); here group 2 has stronger
-connectivity inside one module. Needs only the core install; takes a few
-seconds (the first run in a new environment adds some time while numba
-compiles and caches its kernels):
+Verify that ConnInfPy is installed and working before connecting your own study.
+
+### 1. Verify the installation (no repository clone needed)
+
+```bash
+conninfpy info          # Python, Numba backend, CPU cores, bundled atlas paths
+conninfpy selftest      # synthetic 20-node TFNBS, multiprocessing, bundled atlases
+```
+
+Or run a short synthetic Python test (`conninfpy.sim` builds modular networks
+with 20 effect topologies — hub, chain, rich club, …; needs only the core
+install and takes a few seconds, plus one-time Numba compilation on first run):
 
 <!-- readme-quickstart -->
 ```python
@@ -228,12 +204,12 @@ detects this itself, and data that could be either raise an error instead of
 being guessed. `out.significant_edges(atlas)` turns the result into an edge
 table — see [Results](#results).
 
-### Real data
+### 2. Try bundled demo datasets (from a repository clone)
 
-From a clone of the repository, the bundled ABIDE-mini dataset (204 subjects,
-Schaefer-100, 5 sites; one subject with a region without signal is dropped on
-loading, as its manifest specifies) runs an age analysis with multi-site
-harmonization and 1,000 permutations:
+From a clone of the repository, run an age analysis with multi-site
+harmonization on the bundled ABIDE-mini dataset (204 subjects, Schaefer-100,
+5 sites; one subject with a region without signal is dropped on loading, as its
+manifest specifies):
 
 <!-- readme-real-data -->
 ```python
@@ -255,37 +231,70 @@ print(out.significant_edges(conninfpy.AtlasInfo.schaefer_100_yeo7()))
 Permutations run on all CPU cores by default (`use_mp=True`), in scripts and
 notebooks alike — no `if __name__ == "__main__":` guard is needed.
 
-Your own data can be any NumPy stack of shape `(n_subjects, N, N)`, or a small
-YAML manifest read with `conninfpy.load()`; see
-[`datasets/abide_mini.yaml`](datasets/abide_mini.yaml) for the schema.
-Bundled loaders cover NumPy arrays, CSV/NIfTI/timeseries directories,
-fMRIPrep derivatives and ABIDE.
-
-### Command line
-
-The full workflow without writing Python — verify the installation, generate a
-config from a manifest, run pre-inference design & motion QC, execute
-permutation inference, and export tables/annotations/figures or per-subject
-influence diagnostics:
+To test the CLI and the fMRIPrep workflow on demo data:
 
 ```bash
-conninfpy selftest                                    # quick check: TFNBS, MP, bundled atlases
-conninfpy init-manifest --data-dir data/ --pheno participants.tsv --out manifest.yaml
-conninfpy init --manifest datasets/abide_mini.yaml --out analysis.yaml
-conninfpy qc analysis.yaml --motion-qc                # alias: conninfpy check
+# CLI on bundled ABIDE-mini (also available: datasets/nbs_schizophrenia.yaml, datasets/open_close.yaml)
 conninfpy run examples/abide/configs/abide_mini_age.yaml --dry-run
 conninfpy run examples/abide/configs/abide_mini_age.yaml --n-jobs 4 --seed 0
-conninfpy interpret conninfpy_results --cerebellum anatom --support sphere --radius-mm 6 --format png --dpi 300
-conninfpy influence conninfpy_results --config analysis.yaml --edges "0:1,2:5"
-conninfpy app                                         # launch Streamlit workspace (requires [app])
-conninfpy info                                        # versions, TFNBS backend, cores
+
+# Offline fMRIPrep smoke test (tiny synthetic BIDS derivatives; no download)
+python examples/fmriprep_nilearn/run_fmriprep_workflow.py --synthetic --n-permutations 10
+
+# Optional: live nilearn download (12 subjects development fMRI + Schaefer-100; requires [app] / nilearn)
+python examples/fmriprep_nilearn/run_fmriprep_workflow.py --n-subjects 12 --atlas schaefer100 --n-permutations 100
 ```
 
+---
+
+## Your own data
+
+Choose whichever entry point fits your study:
+
+### Option A — Python API (NumPy matrices or time series)
+
+Pass any `(n_subjects, N, N)` connectivity stack directly to
+`conninfpy.analyze()`, or estimate connectivity from ROI time series first with
+`conninfpy.compute_connectivity()`. Bundled loaders (`conninfpy.load()`) also
+read NumPy arrays, CSV/TSV matrix or time-series directories, NIfTI directories,
+and fMRIPrep derivatives via a v1 YAML manifest. Load any custom parcellation
+with `AtlasInfo.from_csv()`, `from_nifti()`, `from_coordinates()`, or
+`from_nilearn()` (see [Custom atlases](#results)).
+
+### Option B — Command-line pipeline (matrices, time series, or fMRIPrep derivatives)
+
+Run the full workflow on your own folder without writing Python:
+
+```bash
+# 1. Auto-detect your folder (matrices, time series, or bids/derivatives/fmriprep) and build a manifest
+conninfpy init-manifest --data-dir /path/to/data_or_fmriprep --pheno /path/to/participants.tsv --out manifest.yaml
+
+# 2. Generate an analysis config and run pre-inference design & motion QC
+conninfpy init --manifest manifest.yaml --out analysis.yaml
+conninfpy qc analysis.yaml --motion-qc                # alias: conninfpy check
+
+# 3. Preview, run permutation inference, and export anatomical interpretation or subject influence
+conninfpy run analysis.yaml --dry-run
+conninfpy run analysis.yaml --n-jobs 4 --seed 0
+conninfpy interpret conninfpy_results --cerebellum anatom --support sphere --radius-mm 6 --format png --dpi 300
+conninfpy influence conninfpy_results --config analysis.yaml --edges "0:1,2:5"
+```
+
+For fMRIPrep studies you can also copy and adapt
+[`examples/fmriprep_nilearn/manifest_template.yaml`](examples/fmriprep_nilearn/manifest_template.yaml).
 See [`examples/abide/configs/abide_mini_age.yaml`](examples/abide/configs/abide_mini_age.yaml)
-for every option; designs are `glm`, `two-sample`, `paired` (including `Group × Condition`
-and `interactions`) and `one-sample`. `provenance.json` records the package version,
-the analysis file, the data used and any warnings, so a result can be traced back
-to how it was made.
+for every `analysis.yaml` option; designs are `glm`, `two-sample`, `paired`
+(including `Group × Condition` and `interactions`) and `one-sample`.
+`provenance.json` records the package version, the analysis file, the data used
+and any warnings, so every result can be traced back to how it was made.
+
+### Option C — Interactive Streamlit app
+
+Launch the GUI with `conninfpy app` (requires `conninfpy[app]`). Under
+**Dataset Manifest (data.yaml)**, use **Build / inspect manifest from a data
+folder** to check an fMRIPrep, connectivity, or time-series directory for
+missing files and generate `manifest.yaml`; use **Custom atlas** in the sidebar
+to load a custom ROI CSV or 3D integer NIfTI mask.
 
 ---
 
