@@ -1027,17 +1027,46 @@ def interpret_outputs(
     if target_path.is_file():
         bundle_paths = [target_path]
         base_dir = target_path.parent
+        prov_path = base_dir / "provenance.json"
+        prov_data_early: Optional[Dict[str, Any]] = None
+        if prov_path.is_file():
+            try:
+                prov_data_early = json.loads(prov_path.read_text(encoding="utf-8"))
+            except Exception:
+                prov_data_early = None
     else:
-        bundle_paths = sorted(target_path.glob("bundle*.pkl"))
         base_dir = target_path
-        if not bundle_paths:
-            raise FileNotFoundError(f"No bundle*.pkl files found in {target_path}")
+        prov_path = base_dir / "provenance.json"
+        prov_data_early = None
+        if prov_path.is_file():
+            try:
+                prov_data_early = json.loads(prov_path.read_text(encoding="utf-8"))
+            except Exception:
+                prov_data_early = None
+        prov_bundles = prov_data_early.get("bundles") if isinstance(prov_data_early, Mapping) else None
+        if isinstance(prov_bundles, Mapping) and len(prov_bundles) > 0:
+            bundle_names = [str(v) for v in prov_bundles.values()]
+        elif isinstance(prov_bundles, Sequence) and not isinstance(prov_bundles, (str, bytes)) and len(prov_bundles) > 0:
+            bundle_names = [str(b) for b in prov_bundles]
+        else:
+            bundle_names = None
 
-    prov_path = base_dir / "provenance.json"
+        if bundle_names is not None:
+            bundle_paths = [base_dir / b for b in bundle_names]
+            missing = [str(p) for p in bundle_paths if not p.is_file()]
+            if missing:
+                raise FileNotFoundError(
+                    f"Bundle file(s) listed in {prov_path} not found: {missing}"
+                )
+        else:
+            bundle_paths = sorted(target_path.glob("bundle*.pkl"))
+            if not bundle_paths:
+                raise FileNotFoundError(f"No bundle*.pkl files found in {target_path}")
+
     eff_alpha = alpha
-    if eff_alpha is None and prov_path.is_file():
+    if eff_alpha is None and isinstance(prov_data_early, Mapping):
         try:
-            eff_alpha = float(json.loads(prov_path.read_text(encoding="utf-8")).get("alpha", 0.05))
+            eff_alpha = float(prov_data_early.get("alpha", 0.05))
         except Exception:
             eff_alpha = 0.05
     if eff_alpha is None:
@@ -1535,17 +1564,38 @@ def run_selftest(*, as_json: bool = False, reference: bool = False) -> tuple[int
                     two_tailed=False,
                 )
                 iu_demo = np.triu_indices(Y_demo.shape[1], 1)
-                n_sig_edges = int(np.sum(nbs_res.positive[iu_demo] < 0.05))
+                sig_edges = {
+                    (int(i), int(j))
+                    for i, j in zip(*iu_demo)
+                    if nbs_res.positive[i, j] < 0.05
+                }
+                n_sig_edges = len(sig_edges)
                 comp_tbl = nbs_res.component_table()
+                ref_json = Path(__file__).resolve().parents[1] / "tests" / "data" / "nbs_schizophrenia_matlab_reference.json"
+                exact_edge_set_ok: Optional[bool] = None
+                if ref_json.is_file():
+                    ref_data = json.loads(ref_json.read_text(encoding="utf-8"))
+                    expected_edges = {
+                        (int(i), int(j))
+                        for component in ref_data["extent"]["edges"]
+                        for i, j in np.asarray(component).reshape(-1, 2)
+                    }
+                    exact_edge_set_ok = sig_edges == expected_edges
                 ok_nbs = (
                     n_sig_edges == 40
                     and len(comp_tbl) == 1
                     and int(comp_tbl.iloc[0]["n_edges"]) == 40
+                    and (exact_edge_set_ok is None or exact_edge_set_ok)
+                )
+                edge_set_note = (
+                    f", exact_edge_set_match={exact_edge_set_ok}"
+                    if exact_edge_set_ok is not None
+                    else ""
                 )
                 checks["reference_nbs_schizophrenia"] = {
                     "status": "PASS" if ok_nbs else "FAIL",
                     "wall_time_s": round(time.perf_counter() - t0, 3),
-                    "detail": f"n_sig_edges={n_sig_edges} (expected 40), components={len(comp_tbl)}",
+                    "detail": f"n_sig_edges={n_sig_edges} (expected 40), components={len(comp_tbl)}{edge_set_note}",
                 }
             except Exception as exc:
                 checks["reference_nbs_schizophrenia"] = {
@@ -1629,9 +1679,14 @@ def run_selftest(*, as_json: bool = False, reference: bool = False) -> tuple[int
             }
 
     all_pass = all(c["status"] in ("PASS", "SKIP") for c in checks.values())
+    has_skip = any(c["status"] == "SKIP" for c in checks.values())
+    overall_status = "FAIL" if not all_pass else ("SKIPPED" if has_skip else "PASS")
+    overall_text = "FAIL" if not all_pass else ("PASS (reference skipped)" if has_skip else "PASS")
     total_wall = round(time.perf_counter() - t_start, 3)
     report: Dict[str, Any] = {
         "ok": all_pass,
+        "status": overall_status,
+        "skipped": [k for k, c in checks.items() if c["status"] == "SKIP"],
         "wall_time_s": total_wall,
         "backend": backend_info,
         "checks": checks,
@@ -1639,7 +1694,7 @@ def run_selftest(*, as_json: bool = False, reference: bool = False) -> tuple[int
     if as_json:
         print(json.dumps(report, indent=2))
     else:
-        print(f"conninfpy selftest — {'PASS' if all_pass else 'FAIL'} ({total_wall:.2f} s, backend={backend_info['actual_backend']})")
+        print(f"conninfpy selftest — {overall_text} ({total_wall:.2f} s, backend={backend_info['actual_backend']})")
         for name, item in checks.items():
             print(f"  [{item['status']}] {name} ({item['wall_time_s']:.2f} s): {item['detail']}")
     return (0 if all_pass else 1), report

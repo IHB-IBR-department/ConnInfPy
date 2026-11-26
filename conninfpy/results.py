@@ -941,6 +941,21 @@ class InferenceResult(TailResult):
             significant_only=significant_only,
         )
 
+    def block_table(
+        self,
+        *,
+        alpha: float = 0.05,
+        significant_only: bool = False,
+    ) -> pd.DataFrame:
+        """Network-pair blocks of a cNBS result: one row per within/between-network block."""
+        from conninfpy.stats._cnbs import block_table as _cnbs_block_table
+
+        return _cnbs_block_table(
+            getattr(self, "block_report", None),
+            alpha=alpha,
+            significant_only=significant_only,
+        )
+
     def node_summary(
         self,
         atlas: Optional[Any] = None,

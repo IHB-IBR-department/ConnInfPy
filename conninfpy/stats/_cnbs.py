@@ -214,3 +214,32 @@ def restrict_block_report(
         for row in restricted.get("blocks", ())
     ]
     return restricted
+
+
+def block_table(
+    report: Optional[Dict[str, Any]],
+    *,
+    alpha: float = 0.05,
+    significant_only: bool = False,
+) -> Any:
+    """Tabulate a cNBS ``block_report`` as a :class:`pandas.DataFrame`."""
+    import pandas as pd
+
+    if report is None:
+        raise ValueError("block_table requires a cNBS result with block_report.")
+    rows = report.get("blocks") or []
+    df = pd.DataFrame(list(rows))
+    if df.empty:
+        df = pd.DataFrame(columns=["network_a", "network_b", "n_edges", "mean_stat"])
+    p_cols = [c for c in ("p_positive", "p_negative") if c in df.columns]
+    if p_cols:
+        sig = np.zeros(len(df), dtype=bool)
+        for col in p_cols:
+            vals = pd.to_numeric(df[col], errors="coerce").to_numpy(dtype=float)
+            sig |= np.isfinite(vals) & (vals <= alpha)
+        df["significant"] = sig
+    else:
+        df["significant"] = False
+    if significant_only:
+        df = df[df["significant"]].reset_index(drop=True)
+    return df

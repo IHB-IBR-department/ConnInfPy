@@ -928,6 +928,7 @@ def run(
     results = result if isinstance(result, dict) else {"": result}
     written: Dict[str, Path] = {}
     per_result: Dict[str, Any] = {}
+    bundle_files: List[str] = []
     for name, res in results.items():
         suffix = f"_{name}" if name else ""
         inf = res.inference
@@ -999,6 +1000,11 @@ def run(
         bundle_path = out / f"bundle{suffix}.pkl"
         res.to_bundle().save(bundle_path)
         written[f"bundle{suffix}"] = bundle_path
+        bundle_files.append(bundle_path.name)
+        if inf.inference_unit == "block" and getattr(inf, "block_report", None) is not None:
+            blocks_path = out / f"blocks{suffix}.csv"
+            inf.block_table(alpha=resolved_alpha).to_csv(blocks_path, index=False)
+            written[f"blocks{suffix}"] = blocks_path
         mr = getattr(inf, "missing_report", None)
         missing_summary = (
             {
@@ -1049,6 +1055,25 @@ def run(
                 }
                 for idx in range(k_grid)
             ]
+        if inf.inference_unit == "component" and getattr(inf, "component_report", None) is not None:
+            comp_rep = inf.component_report
+            sig_comps = {"positive": 0, "negative": 0}
+            for row in comp_rep.get("components", ()):
+                tail_k = row.get("tail")
+                p_val = row.get("p_fwer")
+                if tail_k in sig_comps and p_val is not None and np.isfinite(p_val) and float(p_val) <= resolved_alpha:
+                    sig_comps[tail_k] += 1
+            entry["n_components"] = sig_comps
+        if inf.inference_unit == "block" and getattr(inf, "block_report", None) is not None:
+            block_rep = inf.block_report
+            sig_blocks = {"positive": 0, "negative": 0}
+            for row in block_rep.get("blocks", ()):
+                for tail_k in ("positive", "negative"):
+                    p_key = f"p_{tail_k}"
+                    p_val = row.get(p_key)
+                    if p_val is not None and np.isfinite(p_val) and float(p_val) <= resolved_alpha:
+                        sig_blocks[tail_k] += 1
+            entry["n_blocks"] = sig_blocks
         if isinstance(getattr(inf, "analysis_provenance", None), dict) and "net_labels_mapping" in inf.analysis_provenance:
             entry["net_labels_mapping"] = inf.analysis_provenance["net_labels_mapping"]
         per_result[name or "result"] = entry
@@ -1063,6 +1088,7 @@ def run(
         "config": cfg,
         "data": {"manifest": str((base / cfg["data"]).resolve()), **summary},
         "alpha": resolved_alpha,
+        "bundles": bundle_files,
         "results": per_result,
     }
     prov_path = out / "provenance.json"
@@ -1102,8 +1128,25 @@ def run(
     for name, info_entry in per_result.items():
         label = "" if name == "result" else f"[{name}] "
         sig = info_entry["n_significant"]
-        print(f"  {label}significant at α={resolved_alpha}: positive={sig['positive']}, "
-              f"negative={sig['negative']}")
+        n_comp = info_entry.get("n_components")
+        n_blk = info_entry.get("n_blocks")
+        if n_comp is not None:
+            print(
+                f"  {label}significant at α={resolved_alpha}: "
+                f"positive={n_comp['positive']} component(s) ({sig['positive']} edges), "
+                f"negative={n_comp['negative']} component(s) ({sig['negative']} edges)"
+            )
+        elif n_blk is not None:
+            print(
+                f"  {label}significant at α={resolved_alpha}: "
+                f"positive={n_blk['positive']} block(s) ({sig['positive']} edges), "
+                f"negative={n_blk['negative']} block(s) ({sig['negative']} edges)"
+            )
+        else:
+            print(
+                f"  {label}significant at α={resolved_alpha}: positive={sig['positive']}, "
+                f"negative={sig['negative']}"
+            )
     print(f"  results written to {out}")
     return written
 

@@ -70,7 +70,7 @@ _REFERENCES: Dict[str, str] = {
 def _extract_provenance_fields(
     result_or_provenance: Any,
     *,
-    alpha: float,
+    alpha: Optional[float] = None,
     result_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Normalize InferenceResult / AnalyzeResult / ResultBundle / provenance dict."""
@@ -79,7 +79,7 @@ def _extract_provenance_fields(
     info: Dict[str, Any] = {
         "version": __version__,
         "python": None,
-        "alpha": alpha,
+        "alpha": float(alpha) if alpha is not None else 0.05,
         "design_kind": None,
         "design": None,
         "n_subjects": None,
@@ -113,7 +113,7 @@ def _extract_provenance_fields(
         if "results" in prov and isinstance(prov["results"], Mapping):
             info["version"] = prov.get("conninfpy_version") or info["version"]
             info["python"] = prov.get("python")
-            if prov.get("alpha") is not None:
+            if alpha is None and prov.get("alpha") is not None:
                 info["alpha"] = float(prov["alpha"])
             data = prov.get("data") or {}
             info["design_kind"] = data.get("design")
@@ -288,7 +288,7 @@ def _format_enhancement_params(info: Mapping[str, Any]) -> str:
 def methods_boilerplate(
     result_or_provenance: Any,
     *,
-    alpha: float = 0.05,
+    alpha: Optional[float] = None,
     atlas: Optional[Any] = None,
     cerebellum: Optional[str] = None,
     result_name: Optional[str] = None,
