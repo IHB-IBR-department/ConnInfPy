@@ -510,6 +510,91 @@ def _atlas(
     return atlas
 
 
+def _resolve_cli_net_labels(
+    inference: Dict[str, Any],
+    atlas: Any,
+    cfg: Mapping[str, Any],
+    base: Path,
+    n_regions: int,
+) -> tuple[Optional[np.ndarray], Optional[Dict[str, int]]]:
+    """Resolve ``inference.net_labels`` ('atlas', CSV column, or array) for block methods."""
+    from conninfpy.analysis import _encode_net_labels
+
+    method_name = str(inference.get("method", "tfnbs")).lower()
+    if method_name not in ("cnbs", "ni_tfnbs", "fbc_tfnbs"):
+        return None, None
+    nl_spec = inference.get("net_labels")
+    if nl_spec is None:
+        if atlas is not None and getattr(atlas, "networks", None) is not None:
+            encoded, mapping = _encode_net_labels(atlas.networks)
+            return encoded, mapping
+        return None, None
+    if nl_spec == "atlas":
+        if atlas is None or getattr(atlas, "networks", None) is None:
+            raise ConfigError("inference.net_labels='atlas' requires an atlas with network labels.")
+        encoded, mapping = _encode_net_labels(atlas.networks)
+        inference["net_labels"] = encoded
+        inference["net_labels_mapping"] = mapping
+        return encoded, mapping
+    if isinstance(nl_spec, str):
+        atlas_spec = cfg.get("atlas")
+        csv_path = None
+        if atlas_spec and atlas_spec not in _BUILTIN_ATLASES and not _is_nifti_path(str(atlas_spec)):
+            csv_path = (base / str(atlas_spec)).resolve()
+        elif atlas is not None and getattr(atlas, "source", None) and str(atlas.source).lower().endswith(".csv"):
+            cand = Path(str(atlas.source))
+            if cand.is_file():
+                csv_path = cand
+        if csv_path is None or not csv_path.is_file():
+            raise ConfigError(
+                f"inference.net_labels={nl_spec!r} requires a CSV atlas file with that column."
+            )
+        df_atlas = pd.read_csv(csv_path)
+        if nl_spec not in df_atlas.columns:
+            raise ConfigError(
+                f"inference.net_labels column {nl_spec!r} not found in atlas CSV {csv_path}."
+            )
+        if len(df_atlas) != n_regions:
+            raise ConfigError(
+                f"atlas CSV {csv_path} has {len(df_atlas)} rows; expected {n_regions}."
+            )
+        encoded, mapping = _encode_net_labels(df_atlas[nl_spec].tolist())
+        inference["net_labels"] = encoded
+        inference["net_labels_mapping"] = mapping
+        return encoded, mapping
+    arr = np.asarray(nl_spec)
+    if arr.shape != (n_regions,):
+        raise ConfigError(
+            f"inference.net_labels shape {arr.shape} does not match {n_regions} regions."
+        )
+    return arr, None
+
+
+def _cnbs_bonferroni_warning(
+    inference: Mapping[str, Any],
+    net_labels: Optional[np.ndarray],
+    alpha: float,
+) -> Optional[str]:
+    """Return a warning message if cNBS Bonferroni min_p exceeds alpha."""
+    method_name = str(inference.get("method", "tfnbs")).lower()
+    if method_name != "cnbs" or net_labels is None:
+        return None
+    corr = str(inference.get("cnbs_correction", "bonferroni")).lower()
+    if corr != "bonferroni":
+        return None
+    m_nets = int(len(np.unique(np.asarray(net_labels))))
+    k_blocks = m_nets * (m_nets + 1) / 2
+    n_perm = int(inference.get("n_permutations", 1000))
+    min_p = k_blocks / (n_perm + 1)
+    if min_p > alpha:
+        return (
+            f"cNBS with Bonferroni correction: M={m_nets} networks -> K={int(k_blocks)} blocks, "
+            f"minimum attainable p-value K/(n_permutations+1) = {min_p:.4g} > alpha ({alpha}); "
+            "increase n_permutations or use cnbs_correction='bh'."
+        )
+    return None
+
+
 # ---------------------------------------------------------------------------
 # run / info
 # ---------------------------------------------------------------------------
@@ -747,6 +832,10 @@ def run(
         lut_spec=cfg.get("atlas_lut"),
     )
     alpha = float(cfg.get("alpha", 0.05))
+    resolved_nl, _ = _resolve_cli_net_labels(
+        inference, atlas, cfg, base, int(summary["n_regions"])
+    )
+    cnbs_warn = _cnbs_bonferroni_warning(inference, resolved_nl, alpha)
     motion_qc_spec = _motion_qc_spec(dataset, cfg, kwargs=kwargs, enabled=motion_qc)
     if motion_qc_spec is not None:
         kwargs = {**kwargs, "motion_qc": motion_qc_spec}
@@ -800,6 +889,8 @@ def run(
         print(f"  seed:          {inference.get('rng', 'none')}")
         print(f"  design_diag:   {dd_line}")
         print(f"  output_dir:    {out}")
+        if cnbs_warn is not None:
+            print(f"  WARNING:       {cnbs_warn}")
         return {}
 
     t0 = time.perf_counter()
@@ -811,16 +902,59 @@ def run(
     per_result: Dict[str, Any] = {}
     for name, res in results.items():
         suffix = f"_{name}" if name else ""
-        edges_path = out / f"edges{suffix}.csv"
-        res.to_csv(edges_path, atlas=atlas, alpha=alpha)
         inf = res.inference
         if getattr(inf, "design", None) is not None and cfg["design"]["type"] in ("glm", "paired"):
             # Keep the original field roles and categorical reference levels in
             # the self-contained bundle, without retaining phenotype rows.
             inf.design["input_design"] = dict(cfg["design"])
             inf.design["categorical_coding"] = summary["categorical_coding"]
+        is_grid = bool(getattr(inf, "is_grid", False))
+        e_arr = None
+        h_arr = None
+        k_grid = 0
+        if is_grid:
+            k_grid = int(inf["positive"].shape[2])
+            e_grid = getattr(inf, "e_grid", None)
+            h_grid = getattr(inf, "h_grid", None)
+            e_arr = np.asarray(e_grid, dtype=np.float64).ravel() if e_grid is not None else None
+            h_arr = np.asarray(h_grid, dtype=np.float64).ravel() if h_grid is not None else None
+            iu, ju = np.triu_indices(inf["positive"].shape[0], k=1)
+            sig_pos0 = inf["positive"][iu, ju, 0] <= alpha
+            sig_neg0 = inf["negative"][iu, ju, 0] <= alpha
+            grid_rows = []
+            for idx in range(k_grid):
+                cell_path = out / f"edges{suffix}_cell{idx}.csv"
+                res.to_csv(cell_path, atlas=atlas, alpha=alpha, param_idx=idx)
+                written[f"edges{suffix}_cell{idx}"] = cell_path
+                sig_pos_i = inf["positive"][iu, ju, idx] <= alpha
+                sig_neg_i = inf["negative"][iu, ju, idx] <= alpha
+                u_pos = int(np.sum(sig_pos0 | sig_pos_i))
+                u_neg = int(np.sum(sig_neg0 | sig_neg_i))
+                j_pos = float(np.sum(sig_pos0 & sig_pos_i) / u_pos) if u_pos > 0 else float("nan")
+                j_neg = float(np.sum(sig_neg0 & sig_neg_i) / u_neg) if u_neg > 0 else float("nan")
+                grid_rows.append({
+                    "param_idx": idx,
+                    "E": float(e_arr[idx]) if e_arr is not None else float("nan"),
+                    "H": float(h_arr[idx]) if h_arr is not None else float("nan"),
+                    "n_sig_pos": int(np.sum(sig_pos_i)),
+                    "n_sig_neg": int(np.sum(sig_neg_i)),
+                    "jaccard_pos_vs_cell0": j_pos,
+                    "jaccard_neg_vs_cell0": j_neg,
+                })
+            grid_summary_path = out / f"grid_summary{suffix}.csv"
+            pd.DataFrame(grid_rows).to_csv(grid_summary_path, index=False)
+            written[f"grid_summary{suffix}"] = grid_summary_path
+        else:
+            edges_path = out / f"edges{suffix}.csv"
+            res.to_csv(edges_path, atlas=atlas, alpha=alpha)
+            written[f"edges{suffix}"] = edges_path
         pvals_path = out / f"pvals{suffix}.npz"
         arrays = {"positive": inf.positive, "negative": inf.negative}
+        if is_grid:
+            if e_arr is not None:
+                arrays["e_grid"] = e_arr
+            if h_arr is not None:
+                arrays["h_grid"] = h_arr
         if getattr(inf, "stat_signed", None) is not None:
             arrays["stat_signed"] = inf.stat_signed
         design = getattr(inf, "design", None)
@@ -833,7 +967,6 @@ def run(
             for label in design.get("comparison") or []:
                 arrays[f"fc[{label}]"] = inf.predicted(label)
         np.savez_compressed(pvals_path, **arrays)
-        written[f"edges{suffix}"] = edges_path
         written[f"pvals{suffix}"] = pvals_path
         bundle_path = out / f"bundle{suffix}.pkl"
         res.to_bundle().save(bundle_path)
@@ -851,8 +984,9 @@ def run(
             if isinstance(mr, dict)
             else None
         )
-        per_result[name or "result"] = {
+        entry: Dict[str, Any] = {
             "n_significant": inf.n_significant(alpha),
+            "is_grid": is_grid,
             "method": inf.method,
             "tail_policy": inf.tail_policy,
             "tested_tail": getattr(inf, "tested_tail", None),
@@ -878,6 +1012,18 @@ def run(
                                            "enhancement", "paired_alignment")
             },
         }
+        if is_grid:
+            entry["param_grid"] = [
+                {
+                    "param_idx": idx,
+                    "E": float(e_arr[idx]) if e_arr is not None else None,
+                    "H": float(h_arr[idx]) if h_arr is not None else None,
+                }
+                for idx in range(k_grid)
+            ]
+        if isinstance(getattr(inf, "analysis_provenance", None), dict) and "net_labels_mapping" in inf.analysis_provenance:
+            entry["net_labels_mapping"] = inf.analysis_provenance["net_labels_mapping"]
+        per_result[name or "result"] = entry
 
     provenance = {
         "conninfpy_version": __version__,
@@ -916,6 +1062,7 @@ def run(
             dpi=int(opts.get("dpi", 300)),
             methods=bool(opts.get("methods", False)),
             export_brainnet=bool(opts.get("export_brainnet", False)),
+            param_idx=opts.get("param_idx"),
         )
         for k, v in interp_written.items():
             written[f"interpret_{k}"] = v
@@ -1163,6 +1310,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="export BrainNet Viewer .node and .edge files",
     )
+    p_interp.add_argument(
+        "--param-idx",
+        type=int,
+        default=None,
+        help="cell index for (E, H) grid results (0..K-1)",
+    )
 
     p_infl = sub.add_parser(
         "influence",
@@ -1253,6 +1406,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 dpi=args.dpi,
                 methods=args.methods,
                 export_brainnet=args.export_brainnet,
+                param_idx=args.param_idx,
             )
             return 0
         if args.command == "influence":

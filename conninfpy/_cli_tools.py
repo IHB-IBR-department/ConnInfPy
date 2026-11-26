@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import time
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -144,8 +145,10 @@ def run_qc(
     )
     from conninfpy.cli import (
         _atlas,
+        _cnbs_bonferroni_warning,
         _jsonable,
         _motion_qc_spec,
+        _resolve_cli_net_labels,
         build_analysis,
         load_config,
     )
@@ -171,6 +174,18 @@ def run_qc(
 
     warnings_list: List[str] = list(val_report.warnings) + list(summary.get("loader_warnings") or [])
     errors_list: List[str] = list(val_report.errors)
+
+    qc_inference = dict(cfg.get("inference") or {})
+    qc_alpha = float(cfg.get("alpha", 0.05))
+    try:
+        qc_nl, _ = _resolve_cli_net_labels(
+            qc_inference, atlas, cfg, base, int(summary["n_regions"])
+        )
+        cnbs_warn = _cnbs_bonferroni_warning(qc_inference, qc_nl, qc_alpha)
+        if cnbs_warn is not None:
+            warnings_list.append(cnbs_warn)
+    except Exception as exc:
+        errors_list.append(str(exc))
 
     if summary["design"] == "paired":
         n_dropped = int(summary["n_dropped"])
@@ -759,21 +774,32 @@ def _reconstruct_inference_result(bundle: Any, pvals_path: Optional[Path]) -> An
     """Build an ``InferenceResult`` from ``pvals.npz`` + ``ResultBundle`` for summaries/plots."""
     from conninfpy.results import InferenceResult
 
+    e_grid = None
+    h_grid = None
     if pvals_path is not None and pvals_path.is_file():
         with np.load(pvals_path, allow_pickle=False) as z:
             pos = np.array(z["positive"]) if "positive" in z else np.array(bundle.corrected_p["positive"])
             neg = np.array(z["negative"]) if "negative" in z else np.array(bundle.corrected_p["negative"])
             stat_signed = np.array(z["stat_signed"]) if "stat_signed" in z else None
             beta = np.array(z["beta"]) if "beta" in z else None
+            if "e_grid" in z:
+                e_grid = np.array(z["e_grid"], dtype=np.float64)
+            if "h_grid" in z:
+                h_grid = np.array(z["h_grid"], dtype=np.float64)
     else:
         pos = np.array(bundle.corrected_p["positive"])
         neg = np.array(bundle.corrected_p["negative"])
         stat_signed = None
         beta = None
 
+    meta = bundle.metadata
+    if e_grid is None and meta.get("e_grid") is not None:
+        e_grid = np.asarray(meta["e_grid"], dtype=np.float64)
+    if h_grid is None and meta.get("h_grid") is not None:
+        h_grid = np.asarray(meta["h_grid"], dtype=np.float64)
+
     stat_pos = np.maximum(stat_signed, 0.0) if stat_signed is not None else None
     stat_neg = np.maximum(-stat_signed, 0.0) if stat_signed is not None else None
-    meta = bundle.metadata
     native = meta.get("native_report")
     unit = meta.get("inference_unit", "edge")
     return InferenceResult(
@@ -789,6 +815,8 @@ def _reconstruct_inference_result(bundle: Any, pvals_path: Optional[Path]) -> An
         tail_selection=meta.get("tail_selection"),
         beta=beta,
         design=meta.get("design"),
+        e_grid=e_grid,
+        h_grid=h_grid,
         analysis_provenance={
             "estimable": bundle.estimable,
             "tested": bundle.tested,
@@ -820,6 +848,7 @@ def interpret_outputs(
     dpi: int = 300,
     methods: bool = False,
     export_brainnet: bool = False,
+    param_idx: Optional[int] = None,
 ) -> Dict[str, Path]:
     """Export post-analysis summaries, node/network tables, BNA annotations, and figures."""
     from conninfpy.atlas.brainnetome import BrainnetomeReference
@@ -884,13 +913,40 @@ def interpret_outputs(
         pvals_path = base_dir / f"pvals{suffix}.npz"
         inf_res = _reconstruct_inference_result(bundle, pvals_path if pvals_path.is_file() else None)
         is_grid = getattr(inf_res, "is_grid", False)
-        param_idx = 0 if is_grid else None
+        if is_grid:
+            k_grid = int(inf_res["positive"].shape[2])
+            if param_idx is None:
+                eff_param_idx: Optional[int] = 0
+                e_grid = getattr(inf_res, "e_grid", None)
+                h_grid = getattr(inf_res, "h_grid", None)
+                e_str = f"{float(e_grid[0]):.4g}" if e_grid is not None and len(e_grid) > 0 else "unknown"
+                h_str = f"{float(h_grid[0]):.4g}" if h_grid is not None and len(h_grid) > 0 else "unknown"
+                grid_msg = (
+                    f"conninfpy interpret: {bp.name} holds an (E, H) grid ({k_grid} cells); "
+                    f"defaulting to cell idx=0 (E={e_str}, H={h_str}). "
+                    f"Pass --param-idx <0..{k_grid - 1}> to select another cell."
+                )
+                warnings.warn(grid_msg, UserWarning, stacklevel=2)
+                print(grid_msg, file=sys.stderr)
+            else:
+                if not (0 <= int(param_idx) < k_grid):
+                    raise ValueError(
+                        f"--param-idx={param_idx} is out of range for grid of size {k_grid} "
+                        f"(valid: 0..{k_grid - 1})."
+                    )
+                eff_param_idx = int(param_idx)
+        else:
+            if param_idx is not None and int(param_idx) != 0:
+                raise ValueError(
+                    f"--param-idx={param_idx} is only valid for an (E, H) grid result."
+                )
+            eff_param_idx = None
 
         # 1. Bundle summaries for available groupings & tails
         contrast_id = bundle.metadata.get("contrast_id")
         measure_name = (bundle.effect_spec or {}).get("name")
         for tail in sorted(bundle.corrected_p.keys()):
-            pairs_df = bundle.detected_pairs(tail=tail, param_idx=param_idx, alpha=eff_alpha)
+            pairs_df = bundle.detected_pairs(tail=tail, param_idx=eff_param_idx, alpha=eff_alpha)
             pairs_path = dest / f"detected_pairs{suffix}_{tail}.csv"
             pairs_df.to_csv(pairs_path, index=False)
             written[f"detected_pairs{suffix}_{tail}"] = pairs_path
@@ -902,7 +958,7 @@ def interpret_outputs(
                         measure=measure_name,
                         contrast_id=contrast_id,
                         tail=tail,
-                        param_idx=param_idx,
+                        param_idx=eff_param_idx,
                         alpha=eff_alpha,
                     )
                     s_path = dest / f"bundle_summary{suffix}_{grp_name}_{tail}.csv"
@@ -911,7 +967,7 @@ def interpret_outputs(
 
         # 2. Node / Network / Component summaries
         try:
-            node_df = inf_res.node_summary(atlas=atlas, alpha=eff_alpha, param_idx=param_idx)
+            node_df = inf_res.node_summary(atlas=atlas, alpha=eff_alpha, param_idx=eff_param_idx)
             node_path = dest / f"node_summary{suffix}.csv"
             node_df.to_csv(node_path, index=False)
             written[f"node_summary{suffix}"] = node_path
@@ -919,7 +975,7 @@ def interpret_outputs(
             pass
 
         if atlas is not None and getattr(atlas, "networks", None) is not None:
-            net_df = inf_res.network_summary(atlas, alpha=eff_alpha, param_idx=param_idx)
+            net_df = inf_res.network_summary(atlas, alpha=eff_alpha, param_idx=eff_param_idx)
             net_path = dest / f"network_summary{suffix}.csv"
             net_df.to_csv(net_path, index=False)
             written[f"network_summary{suffix}"] = net_path
@@ -981,12 +1037,12 @@ def interpret_outputs(
                 )
 
         if rois is not None:
-            ann_edges = inf_res.annotated_edges(rois, alpha=eff_alpha, param_idx=param_idx)
+            ann_edges = inf_res.annotated_edges(rois, alpha=eff_alpha, param_idx=eff_param_idx)
             ann_path = dest / f"annotated_edges{suffix}.csv"
             ann_edges.to_csv(ann_path, index=False)
             written[f"annotated_edges{suffix}"] = ann_path
 
-            ann_sum = summarize_annotation(inf_res, rois, alpha=eff_alpha, param_idx=param_idx)
+            ann_sum = summarize_annotation(inf_res, rois, alpha=eff_alpha, param_idx=eff_param_idx)
             for key in ("relations", "regions", "domains", "distance_qc"):
                 if key in ann_sum and isinstance(ann_sum[key], pd.DataFrame):
                     kp = dest / f"annotation_{key}{suffix}.csv"
@@ -1000,7 +1056,8 @@ def interpret_outputs(
             import matplotlib.pyplot as plt
             from conninfpy.plot import plot_connectogram, plot_coupling_classes, summary_figure
 
-            fig = summary_figure(inf_res, atlas=atlas, alpha=eff_alpha)
+            plot_res = inf_res.select(eff_param_idx) if is_grid else inf_res
+            fig = summary_figure(plot_res, atlas=atlas, alpha=eff_alpha)
             fig_path = dest / f"summary_figure{suffix}.{fig_format}"
             fig.savefig(fig_path, dpi=dpi, bbox_inches="tight", facecolor="white")
             plt.close(fig)
@@ -1009,18 +1066,18 @@ def interpret_outputs(
             design_dict = getattr(inf_res, "design", None) or {}
             if inf_res.beta is not None and design_dict.get("comparison"):
                 fig_c, ax_c = plt.subplots(figsize=(6.5, 5.5))
-                plot_coupling_classes(inf_res, atlas=atlas, alpha=eff_alpha, ax=ax_c)
+                plot_coupling_classes(plot_res, atlas=atlas, alpha=eff_alpha, ax=ax_c)
                 c_path = dest / f"coupling_classes{suffix}.{fig_format}"
                 fig_c.savefig(c_path, dpi=dpi, bbox_inches="tight", facecolor="white")
                 plt.close(fig_c)
                 written[f"coupling_classes{suffix}"] = c_path
 
             if rois is not None:
-                nsig = inf_res.n_significant(eff_alpha, param_idx=param_idx)
+                nsig = inf_res.n_significant(eff_alpha, param_idx=eff_param_idx)
                 for tail in ("positive", "negative"):
                     if nsig.get(tail, 0) > 0:
                         fig_g, ax_g = plt.subplots(figsize=(7.5, 7.5))
-                        plot_connectogram(inf_res, rois, tail=tail, alpha=eff_alpha, param_idx=param_idx, ax=ax_g)
+                        plot_connectogram(inf_res, rois, tail=tail, alpha=eff_alpha, param_idx=eff_param_idx, ax=ax_g)
                         g_path = dest / f"connectogram{suffix}_{tail}.{fig_format}"
                         fig_g.savefig(g_path, dpi=dpi, bbox_inches="tight", facecolor="white")
                         plt.close(fig_g)
@@ -1058,7 +1115,7 @@ def interpret_outputs(
                     atlas,
                     dest / f"brainnet{suffix}",
                     alpha=eff_alpha,
-                    param_idx=param_idx,
+                    param_idx=eff_param_idx,
                 )
                 written[f"brainnet_node{suffix}"] = bn_paths["node"]
                 written[f"brainnet_edge{suffix}"] = bn_paths["edge"]

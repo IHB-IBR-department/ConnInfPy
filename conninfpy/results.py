@@ -852,6 +852,21 @@ class InferenceResult(TailResult):
             if ``sort='network_pair'`` without an atlas.
         """
         report = getattr(self, "component_report", None)
+        eff = self.effect_map()
+        design = getattr(self, "design", None)
+        scale = design.get("scale") if (eff is not None and isinstance(design, dict)) else None
+        predicted_maps = None
+        if isinstance(design, dict) and getattr(self, "beta", None) is not None:
+            comp = design.get("comparison") or []
+            profiles = design.get("profiles") or {}
+            if comp and profiles:
+                predicted_maps = {
+                    str(label): self.predicted(label)
+                    for label in comp
+                    if label in profiles
+                }
+                if not predicted_maps:
+                    predicted_maps = None
         df = build_tailed_dataframe(
             self._project_2d(self["positive"], param_idx),
             self._project_2d(self["negative"], param_idx),
@@ -864,11 +879,10 @@ class InferenceResult(TailResult):
             top_k=top_k,
             component_labels=None if report is None else report["labels"],
             n_effective=_extract_edge_n(self),
+            effect_map=eff,
+            scale=scale,
+            predicted_maps=predicted_maps,
         )
-        eff = self.effect_map()
-        if eff is not None and not df.empty:
-            col = list(df.columns).index("t_signed") + 1 if "t_signed" in df.columns else len(df.columns)
-            df.insert(col, "effect", eff[df["roi_i"].to_numpy(int), df["roi_j"].to_numpy(int)])
         return df
 
     def component_table(

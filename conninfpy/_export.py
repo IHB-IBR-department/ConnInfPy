@@ -19,7 +19,7 @@ conventions.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 import warnings
 
 import numpy as np
@@ -176,6 +176,9 @@ def build_tailed_dataframe(
     top_k: Optional[int] = None,
     component_labels: Optional[dict] = None,
     n_effective: Optional[npt.NDArray] = None,
+    effect_map: Optional[npt.NDArray[np.float64]] = None,
+    scale: Optional[str] = None,
+    predicted_maps: Optional[Dict[str, npt.NDArray[np.float64]]] = None,
 ) -> pd.DataFrame:
     """Build the significant-edges table for a t / β inference result.
 
@@ -269,12 +272,36 @@ def build_tailed_dataframe(
     if atlas is not None:
         df = _annotate_with_atlas(df, atlas, n_nodes=N)
 
+    extra_effect_cols: list[str] = []
+    if effect_map is not None:
+        _check_square(effect_map, "effect_map")
+        if effect_map.shape != p_positive.shape:
+            raise ValueError("effect_map must match p_positive shape.")
+        df["effect"] = effect_map[iu, ju][keep]
+        extra_effect_cols.append("effect")
+        if scale is not None:
+            df["scale"] = pd.Series([str(scale)] * len(df), index=df.index, dtype=object)
+            extra_effect_cols.append("scale")
+    if predicted_maps:
+        for label, pmap in predicted_maps.items():
+            _check_square(pmap, f"predicted_maps[{label!r}]")
+            if pmap.shape != p_positive.shape:
+                raise ValueError(f"predicted_maps[{label!r}] must match p_positive shape.")
+            col_name = f"fc_{label}"
+            df[col_name] = pmap[iu, ju][keep]
+            extra_effect_cols.append(col_name)
+
     df = _sort_dataframe(df, sort, by="p_min")
 
     if top_k is not None:
         df = df.head(int(top_k))
 
-    cols = [c for c in _column_order_tailed(with_atlas) if c in df.columns]
+    base_cols = [c for c in _column_order_tailed(with_atlas) if c in df.columns]
+    if extra_effect_cols:
+        pos = base_cols.index("t_signed") + 1 if "t_signed" in base_cols else len(base_cols)
+        cols = base_cols[:pos] + extra_effect_cols + base_cols[pos:]
+    else:
+        cols = base_cols
     return df[cols].reset_index(drop=True)
 
 

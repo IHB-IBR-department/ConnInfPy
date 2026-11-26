@@ -521,6 +521,18 @@ def _motion_qc_flag(diag: Mapping[str, Any]) -> str:
     )
 
 
+def _encode_net_labels(networks: Sequence[Any]) -> tuple[npt.NDArray[np.int_], Dict[str, int]]:
+    """Deterministically encode network labels to 0..M-1 in matrix row order."""
+    seen: Dict[str, int] = {}
+    codes = np.empty(len(networks), dtype=np.int_)
+    for idx, net in enumerate(networks):
+        key = str(net)
+        if key not in seen:
+            seen[key] = len(seen)
+        codes[idx] = seen[key]
+    return codes, seen
+
+
 def analyze(
     Y: Optional[npt.NDArray[np.float64]] = None,
     *,
@@ -1145,6 +1157,39 @@ def analyze(
             "analyze() requires Y when using the GLM path (interest=, "
             "[confounds=]). Pass Y as the first positional argument."
         )
+    method_name = str(getattr(method, "value", method)).lower()
+    net_labels_mapping: Optional[Dict[str, int]] = None
+    if method_name in ("cnbs", "ni_tfnbs", "fbc_tfnbs"):
+        if method_kwargs.get("net_labels") is None and atlas is not None and getattr(atlas, "networks", None) is not None:
+            n_nodes_data = int(Y.shape[-1]) if Y is not None else int(np.asarray(group1).shape[-1])
+            if len(atlas.networks) != n_nodes_data:
+                raise ValueError(
+                    f"atlas has {len(atlas.networks)} networks but data has {n_nodes_data} regions."
+                )
+            encoded_labels, net_labels_mapping = _encode_net_labels(atlas.networks)
+            method_kwargs["net_labels"] = encoded_labels
+        elif isinstance(method_kwargs.get("net_labels_mapping"), Mapping):
+            net_labels_mapping = dict(method_kwargs.pop("net_labels_mapping"))
+        else:
+            method_kwargs.pop("net_labels_mapping", None)
+    else:
+        method_kwargs.pop("net_labels_mapping", None)
+
+    if method_name == "cnbs":
+        cnbs_corr = str(method_kwargs.get("cnbs_correction", "bonferroni")).lower()
+        nl_arr = method_kwargs.get("net_labels")
+        if cnbs_corr == "bonferroni" and nl_arr is not None:
+            m_nets = int(len(np.unique(np.asarray(nl_arr))))
+            k_blocks = m_nets * (m_nets + 1) / 2
+            min_p = k_blocks / (int(n_permutations) + 1)
+            if min_p > 0.05:
+                cnbs_warn = (
+                    f"cNBS with Bonferroni correction: M={m_nets} networks -> K={int(k_blocks)} blocks, "
+                    f"minimum attainable p-value K/(n_permutations+1) = {min_p:.4g} > 0.05; "
+                    "increase n_permutations or use cnbs_correction='bh'."
+                )
+                warnings.warn(cnbs_warn, RuntimeWarning, stacklevel=2)
+                flags.append(cnbs_warn)
     if var_equal and not (ttest_mode and test_type == "two-sample"):
         raise ValueError(
             "var_equal applies to the two-sample t-test (group1=, group2=, "
@@ -1585,6 +1630,11 @@ def analyze(
             res.resolved_strategy = backend_resolved_strategy
             res.design_diagnostics = design_diag
             res.flags = list(res_flags)
+            if net_labels_mapping is not None:
+                if getattr(res, "analysis_provenance", None) is None:
+                    res.analysis_provenance = {}
+                if isinstance(res.analysis_provenance, dict):
+                    res.analysis_provenance["net_labels_mapping"] = dict(net_labels_mapping)
             if motion_qc_diag is not None:
                 res.motion_qc = motion_qc_diag
             out[nm] = AnalyzeResult(
@@ -1790,6 +1840,11 @@ def analyze(
         result_prov = getattr(result, "analysis_provenance", None)
         if isinstance(result_prov, dict):
             result_prov["paired_alignment"] = deepcopy(paired_alignment)
+    if net_labels_mapping is not None:
+        if getattr(result, "analysis_provenance", None) is None:
+            result.analysis_provenance = {}
+        if isinstance(result.analysis_provenance, dict):
+            result.analysis_provenance["net_labels_mapping"] = dict(net_labels_mapping)
     # A prespecified direction restricts the finished result after the
     # provenance threading above, so the restriction itself is recorded in
     # provenance and exports ('prespecified', never a post hoc relabelling).
