@@ -14,7 +14,7 @@ used to audit interpretation; they do not select inputs to the classifiers.
 
 ## Data, fitting and participant bootstrap
 
-Use the existing `datasets/open_close/` Schaefer-200 `strategy-4_GSR` time
+Use the existing `datasets/demo/open_close/` Schaefer-200 `strategy-4_GSR` time
 series and loader. Each participant contributes one EO=0 and one EC=1 scan.
 Connectivity is Pearson correlation followed by Fisher z; GSR is already
 applied. IHB has 84 participants. China uses the same 47 complete participants

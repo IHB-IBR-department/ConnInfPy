@@ -101,7 +101,7 @@ class TestOpenCloseLoader(unittest.TestCase):
         self.assertTrue(np.all(ds.retest_subject_mask()))
 
 
-_BNA_FILES = [Path(__file__).resolve().parents[1] / "datasets" / "open_close" / f"{e}_{c}_Brainnetome_strategy-4_{g}.npy"
+_BNA_FILES = [Path(__file__).resolve().parents[1] / "datasets" / "demo" / "open_close" / f"{e}_{c}_Brainnetome_strategy-4_{g}.npy"
               for e in ("ihb", "china") for c in ("open", "close") for g in ("GSR", "noGSR")]
 
 

@@ -8,7 +8,7 @@ Three ABIDE variants are referenced across the repository:
 
 | Dataset | Atlas / Size | Where it lives | Used by |
 |---|---|---|---|
-| **ABIDE I CC200** *(primary manuscript)* | Craddock-200 (`rois_cc200`) | External download via `nilearn` (`~/nilearn_data/ABIDE_pcp/`) | `prepare_cc200.py` → `age/` & `diagnosis/` (`--prepared-npz`) |
+| **ABIDE I CC200** *(primary manuscript)* | Craddock-200 (`rois_cc200`) | External (`../local_datasets/ABIDE_pcp/` or `~/nilearn_data/ABIDE_pcp/`) | `prepare_cc200.py` → `age/` & `diagnosis/` (`--prepared-npz`) |
 | **ABIDE-mini** *(bundled demo)* | Schaefer-100 (204 subjects, 5 sites) | Tracked in `datasets/demo/ABIDE_mini/` | `datasets/abide_mini.yaml`, Streamlit demo, `configs/abide_mini_age.yaml` |
 | **Legacy Schaefer-100** | Schaefer-100 (full cohort) | External `ABIDE_TS_DIR` (outside repo) | `prepare_data.py` → `results/abide_prepared.npz` |
 
@@ -24,7 +24,7 @@ Three ABIDE variants are referenced across the repository:
 
 ## Primary ABIDE I CC200 workflow
 
-By default, `prepare_cc200.py` reads the ABIDE Preprocessed Connectomes Project (CPAC `cpac/filt_global` strategy) files from `~/nilearn_data/ABIDE_pcp/`:
+By default, `prepare_cc200.py` checks `../local_datasets/ABIDE_pcp/` (if present) and otherwise falls back to `~/nilearn_data/ABIDE_pcp/`, reading the ABIDE Preprocessed Connectomes Project (CPAC `cpac/filt_global` strategy) files (with `--roi-dir`, `--pheno`, `--atlas`, and `--roi-table` overrides):
 
 - `cpac/filt_global/*_rois_cc200.1D` (ROI time series)
 - `Phenotypic_V1_0b_preprocessed1.csv`

@@ -37,7 +37,7 @@ from examples.open_close._shared.data import BNA_DROPOUT_IDS, MISSED_ROI_IDS, Op
 SCHAEFER_IMG = Path.home() / "nilearn_data" / "schaefer_2018" / "Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm.nii.gz"
 @dataclass(frozen=True)
 class StudyInputs:
-    data_dir: Path = ROOT / "datasets" / "open_close"
+    data_dir: Path = ROOT / "datasets" / "demo" / "open_close"
     reference_dir: Path = field(default_factory=brainnetome_data_dir)
     schaefer_image: Path = SCHAEFER_IMG
 

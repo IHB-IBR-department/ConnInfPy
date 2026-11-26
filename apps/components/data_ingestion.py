@@ -559,35 +559,35 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                         )
                         ihb_open_path = st.text_input(
                             "IHB Open Condition Path (.npy)",
-                            value="datasets/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy",
+                            value="datasets/demo/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:ihb_open_condition_path_npy', scope='data'),
                         )
                         ihb_close_path = st.text_input(
                             "IHB Close Condition Path (.npy)",
-                            value="datasets/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy",
+                            value="datasets/demo/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:ihb_close_condition_path_npy', scope='data'),
                         )
                         ihb_sub_list = st.text_input(
                             "IHB Subject Order file (.txt)",
-                            value="datasets/open_close/subject_order_ihb.txt",
+                            value="datasets/demo/open_close/subject_order_ihb.txt",
                             key=persistent_key('data:ihb_subject_order_file_txt', scope='data'),
                         )
                         china_open_path = st.text_input(
                             "China Open Condition Path (.npy)",
-                            value="datasets/open_close/china_open_Schaefer200_strategy-4_GSR.npy",
+                            value="datasets/demo/open_close/china_open_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:china_open_condition_path_npy', scope='data'),
                         )
                         china_close_path = st.text_input(
                             "China Close Condition Path (.npy)",
-                            value="datasets/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
+                            value="datasets/demo/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:china_close_condition_path_npy', scope='data'),
                         )
                         china_sub_list = st.text_input(
                             "China Subject Order file (.txt)",
-                            value="datasets/open_close/subject_order_china.txt",
+                            value="datasets/demo/open_close/subject_order_china.txt",
                             key=persistent_key('data:china_subject_order_file_txt', scope='data'),
                         )
-                        atlas = "datasets/open_close/schaefer_labels.csv"
+                        atlas = "datasets/demo/open_close/schaefer_labels.csv"
                         loader_instance = MultiSiteOpenCloseLoader(
                             {
                                 "IHB": {
@@ -607,38 +607,38 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                     elif cohort == "IHB":
                         open_path = st.text_input(
                             "Open Condition Path (.npy)",
-                            value="datasets/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy",
+                            value="datasets/demo/open_close/ihb_open_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:open_condition_path_npy', scope='data'),
                         )
                         close_path = st.text_input(
                             "Close Condition Path (.npy)",
-                            value="datasets/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy",
+                            value="datasets/demo/open_close/ihb_close_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:close_condition_path_npy_2', scope='data'),
                         )
                         sub_list = st.text_input(
                             "Subject Order file (.txt)",
-                            value="datasets/open_close/subject_order_ihb.txt",
+                            value="datasets/demo/open_close/subject_order_ihb.txt",
                             key=persistent_key('data:subject_order_file_txt_2', scope='data'),
                         )
                     else:
                         open_path = st.text_input(
                             "Open Condition Path (.npy)",
-                            value="datasets/open_close/china_open_Schaefer200_strategy-4_GSR.npy",
+                            value="datasets/demo/open_close/china_open_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:open_condition_path_npy_2', scope='data'),
                         )
                         close_path = st.text_input(
                             "Close Condition Path (.npy)",
-                            value="datasets/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
+                            value="datasets/demo/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
                             key=persistent_key('data:close_condition_path_npy_3', scope='data'),
                         )
                         sub_list = st.text_input(
                             "Subject Order file (.txt)",
-                            value="datasets/open_close/subject_order_china.txt",
+                            value="datasets/demo/open_close/subject_order_china.txt",
                             key=persistent_key('data:subject_order_file_txt_3', scope='data'),
                         )
                         
                     if cohort != "Both sites (IHB + China)":
-                        atlas = "datasets/open_close/schaefer_labels.csv"
+                        atlas = "datasets/demo/open_close/schaefer_labels.csv"
                     if cohort != "Both sites (IHB + China)" and open_path and close_path:
                         loader_instance = OpenCloseLoader(
                             open_path,
@@ -656,15 +656,15 @@ def render_data_ingestion_view(base_atlas, atlas_choice, tabs_list):
                         render_help("china_close_close")
                     close_path = st.text_input(
                         "Close Condition Path (.npy)",
-                        value="datasets/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
+                        value="datasets/demo/open_close/china_close_Schaefer200_strategy-4_GSR.npy",
                         key=persistent_key('data:close_condition_path_npy', scope='data'),
                     )
                     sub_list = st.text_input(
                         "Subject Order file (.txt)",
-                        value="datasets/open_close/subject_order_china.txt",
+                        value="datasets/demo/open_close/subject_order_china.txt",
                         key=persistent_key('data:subject_order_file_txt', scope='data'),
                     )
-                    atlas = "datasets/open_close/schaefer_labels.csv"
+                    atlas = "datasets/demo/open_close/schaefer_labels.csv"
                     
                     if close_path:
                         loader_instance = ChinaCloseCloseLoader(

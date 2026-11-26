@@ -8,7 +8,7 @@ bioRxiv 10.1101/2025.10.20.683049).
 
 Data layout on disk
 -------------------
-``datasets/open_close/``:
+``datasets/demo/open_close/``:
 
 - ``ihb_{open,close}_Schaefer200_strategy-4_GSR.npy`` — shape (84, 120, 200) each
 - ``china_open_Schaefer200_strategy-4_GSR.npy``       — shape (48, 240, 200)
@@ -156,7 +156,7 @@ class OpenCloseDataset:
         drop_missing_rois : if True (default), drop the low-coverage ROIs: the
             18 Schaefer parcels (182 kept, both cohorts index-aligned) or the
             4 BNA dropout regions (242 kept).
-        data_dir : override the default ``datasets/open_close/`` path.
+        data_dir : override the default ``datasets/demo/open_close/`` path.
         atlas : "schaefer200" (default) or "brainnetome" (BNA-246).
         gsr : global-signal-regressed products (default). No-GSR series exist
             for Brainnetome only.

@@ -2,7 +2,7 @@
 from examples._shared.paths import ROOT, DATASETS
 
 STUDY = ROOT / "examples" / "open_close"
-DATA_DIR = DATASETS / "open_close"
+DATA_DIR = DATASETS / "demo" / "open_close"
 RESULTS = STUDY / "results"
 PLOTS = RESULTS / "plots"                                # publication figures
 PAPER = RESULTS / "paper_validation"                     # paired maps, controls, sensitivity, audit

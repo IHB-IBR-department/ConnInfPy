@@ -28,7 +28,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--parcel-image", type=Path, default=Path.home() / "nilearn_data/schaefer_2018/Schaefer2018_200Parcels_7Networks_order_FSLMNI152_2mm.nii.gz")
     parser.add_argument("--reference-dir", type=Path, default=brainnetome_data_dir())
-    parser.add_argument("--labels", type=Path, default=ROOT / "datasets/open_close/schaefer_labels.csv")
+    parser.add_argument("--labels", type=Path, default=ROOT / "datasets/demo/open_close/schaefer_labels.csv")
     parser.add_argument("--output", type=Path, default=HERE / "roi_groups.csv")
     args = parser.parse_args()
     labels = pd.read_csv(args.labels)

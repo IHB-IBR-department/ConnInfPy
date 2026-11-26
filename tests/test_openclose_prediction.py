@@ -67,7 +67,7 @@ def test_block_means_use_all_edges_and_one_shared_mask():
 
 def test_shipped_crosswalk_counts():
     root = Path(__file__).resolve().parents[1]
-    atlas = pd.read_csv(root / "datasets/open_close/schaefer_labels.csv")
+    atlas = pd.read_csv(root / "datasets/demo/open_close/schaefer_labels.csv")
     annotations = pd.read_csv(prediction.HERE / "roi_groups.csv")
     for level, count, n_edges, n_anatomical in (("lobe", 178, 15753, 78), ("gyrus", 165, 13530, 733)):
         rois, _, spaces = inputs.feature_spaces(atlas, annotations, level)

@@ -13,7 +13,7 @@ The IHB and Beijing cohorts contain paired eyes-open (EO) and eyes-closed (EC) s
 
 The atlas-stability workflow contains no classifiers. Feature stability and ML transfer are independent existing studies with different questions; running the atlas study does not invoke them.
 
-`_shared/` holds the common study adapter (`data.py`), selector inference, agreement metrics and `paths.py`, which defines the results layout below. Defaults read `datasets/open_close/`: Schaefer-200 `strategy-4_GSR` arrays, ROI labels and subject order; native Brainnetome workflows additionally need the corresponding BNA arrays and atlas resources. The retained Schaefer set has 182 ROIs; native BNA uses 242 after the documented provisional dropout exclusions. China has 48 participants; workflows requiring both EC runs use 47 complete participants. Each workflow states its run choice.
+`_shared/` holds the common study adapter (`data.py`), selector inference, agreement metrics and `paths.py`, which defines the results layout below. Defaults read `datasets/demo/open_close/`: Schaefer-200 `strategy-4_GSR` arrays, ROI labels and subject order; native Brainnetome workflows additionally need the corresponding BNA arrays and atlas resources. The retained Schaefer set has 182 ROIs; native BNA uses 242 after the documented provisional dropout exclusions. China has 48 participants; workflows requiring both EC runs use 47 complete participants. Each workflow states its run choice.
 
 ## Results layout
 

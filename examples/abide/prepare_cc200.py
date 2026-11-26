@@ -64,11 +64,13 @@ from conninfpy.interpret.annotate import annotate_rois
 from examples.abide._shared.data import load_prepared
 
 HERE = Path(__file__).resolve().parent
-NILEARN_DIR = Path.home() / "nilearn_data"
-DEFAULT_ROI_DIR = NILEARN_DIR / "ABIDE_pcp" / "cpac" / "filt_global"
-DEFAULT_PHENO = NILEARN_DIR / "ABIDE_pcp" / "Phenotypic_V1_0b_preprocessed1.csv"
-DEFAULT_ATLAS = NILEARN_DIR / "ABIDE_pcp" / "cc200_roi_atlas.nii.gz"
-DEFAULT_ROI_TABLE = NILEARN_DIR / "ABIDE_pcp" / "CC200_ROI_labels.csv"
+REPO_ROOT = HERE.parents[1]
+_LOCAL_ABIDE_PCP = REPO_ROOT.parent / "local_datasets" / "ABIDE_pcp"
+DEFAULT_ABIDE_PCP_DIR = _LOCAL_ABIDE_PCP if _LOCAL_ABIDE_PCP.exists() else (Path.home() / "nilearn_data" / "ABIDE_pcp")
+DEFAULT_ROI_DIR = DEFAULT_ABIDE_PCP_DIR / "cpac" / "filt_global"
+DEFAULT_PHENO = DEFAULT_ABIDE_PCP_DIR / "Phenotypic_V1_0b_preprocessed1.csv"
+DEFAULT_ATLAS = DEFAULT_ABIDE_PCP_DIR / "cc200_roi_atlas.nii.gz"
+DEFAULT_ROI_TABLE = DEFAULT_ABIDE_PCP_DIR / "CC200_ROI_labels.csv"
 
 # QC thresholds mirror examples/abide/prepare_data.py (Schaefer-100) for comparability.
 MIN_TS_LENGTH = 100          # minimum time points

@@ -6,9 +6,9 @@ This directory holds **public demo** study inputs and manifests tracked in the r
 |---|---|
 | `demo/ABIDE_mini/` + `abide_mini.yaml` | 204-subject, 5-site Schaefer-100 ABIDE subset for CLI, Streamlit, and README demos |
 | `demo/NBS_schizophrenia/` + `nbs_schizophrenia.yaml` | MATLAB NBS v1.2 example (27 subjects, 74 AAL regions, GPL v3+) |
-| `demo/open_close/` + `open_close/` (Schaefer-200) + `open_close.yaml` | Eyes-Open vs. Eyes-Closed Schaefer-200 arrays, labels, and subject lists |
+| `demo/open_close/` + `open_close.yaml` | Eyes-Open vs. Eyes-Closed Schaefer-200 arrays, labels, and subject lists |
 
-Full external datasets — ABIDE I PCP CC200 (`~/nilearn_data/ABIDE_pcp/`), local Brainnetome Open-Close series, and personal fMRIPrep or clinical cohorts — are stored **outside** the repository (e.g., under `$CONNINFPY_DATA` or an external study directory) and passed via CLI flags (`--data-dir`) or a manifest YAML.
+Full external datasets — ABIDE I PCP CC200 (`../local_datasets/ABIDE_pcp/` or `~/nilearn_data/ABIDE_pcp/`), local Brainnetome Open-Close series, and personal fMRIPrep or clinical cohorts — are stored **outside** the repository (e.g., under `$CONNINFPY_DATA` or an external study directory) and passed via CLI flags (`--data-dir`) or a manifest YAML.
 
 Atlas resources have separate owners:
 
