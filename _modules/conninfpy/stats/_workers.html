@@ -1,0 +1,1114 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.stats._workers &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.stats._workers</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.stats._workers</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Process execution and progress reporting for permutation pipelines.</span>
+
+<span class="sd">Wraps the permutation pool with an optional progress bar. Uses</span>
+<span class="sd">``tqdm.auto`` if available; otherwise prints a plain-text update every</span>
+<span class="sd">``log_every`` permutations. Pass ``verbose=False`` (the default) to</span>
+<span class="sd">keep the previous silent behaviour.</span>
+
+<span class="sd">The helper handles the multiprocessing decision internally so call</span>
+<span class="sd">sites collapse from ten lines to one.</span>
+
+<span class="sd">``run_permutations_reduce`` is a streaming variant for permutation</span>
+<span class="sd">p-value counting: workers fold a chunk of per-seed results into a partial</span>
+<span class="sd">sum (e.g. per-edge exceedance counts) and only that partial travels back</span>
+<span class="sd">to the parent, so the parent never holds ``B`` per-seed results. The</span>
+<span class="sd">number of issued-but-unfolded chunks is bounded by construction at</span>
+<span class="sd">``2 * workers`` (bounded ``apply_async`` issuance: a new chunk is issued</span>
+<span class="sd">only after a previous one has been folded), and inside a chunk workers</span>
+<span class="sd">fold in batches of ``_FOLD_BATCH`` seeds. Because every per-seed</span>
+<span class="sd">contribution is a 0/1 indicator summed as float64 (exact below 2**53)</span>
+<span class="sd">and chunks fold in seed order, the totals are bitwise identical to a</span>
+<span class="sd">serial fold over the same seeds.</span>
+
+<span class="sd">Progress and cancellation (NETSTAT-27) are parent-side only: the parent</span>
+<span class="sd">reports ``(done, total)`` at chunk boundaries for permutations that were</span>
+<span class="sd">actually folded, and checks a parent-side cancel callable before handing</span>
+<span class="sd">out the next chunk. Nothing but ordinary per-seed / per-chunk results</span>
+<span class="sd">crosses back from the workers, and no callback, event or UI object is ever</span>
+<span class="sd">serialized into a worker (see :class:`ProgressSession` and</span>
+<span class="sd">:func:`prepare_run`).</span>
+
+<span class="sd">The data-bearing task is serialized once into a private temporary file and</span>
+<span class="sd">each worker loads it from there when it starts. Pool initializer arguments</span>
+<span class="sd">travel through each worker's start-up channel one worker at a time (spawn /</span>
+<span class="sd">forkserver), so a large task passed there serialized worker start-up: about</span>
+<span class="sd">0.8 s per worker for an 11.5 MB task, roughly 15 s for 18 workers. A path is</span>
+<span class="sd">a few bytes, and the workers read the file from the page cache in parallel.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">multiprocessing</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">multiprocessing.reduction</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">operator</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">deque</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">TypeVar</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.stats._engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">_is_worker_process</span><span class="p">,</span> <span class="n">get_available_cores</span>
+
+<span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">"T"</span><span class="p">)</span>
+<span class="n">_logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">_main_script_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
+<span class="n">_worker_task</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">],</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">_worker_thread_limiter</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+<span class="c1"># Per-seed results inside a chunk fold are processed in batches of this many</span>
+<span class="c1"># seeds: peak live memory stays at O(batch * per-seed result) in the worker</span>
+<span class="c1"># (and in the parent's serial path) instead of O(chunk * per-seed result).</span>
+<span class="c1"># Summed 0/1 contributions are exact regardless of batch grouping.</span>
+<span class="n">_FOLD_BATCH</span> <span class="o">=</span> <span class="mi">32</span>
+
+<span class="c1"># Parent-side poll interval while waiting for a worker result. Waiting is</span>
+<span class="c1"># bounded so a cancellation request is rechecked even when every worker is</span>
+<span class="c1"># stuck inside a long computation; it changes no result and no ordering.</span>
+<span class="n">_POLL_INTERVAL_S</span> <span class="o">=</span> <span class="mf">0.25</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">tqdm.auto</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
+
+    <span class="n">_HAS_TQDM</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>  <span class="c1"># pragma: no cover (env-specific)</span>
+    <span class="n">_HAS_TQDM</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_limit_worker_threads</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Pool initializer: one BLAS/OpenMP thread per worker process.</span>
+
+<span class="sd">    Pool workers provide the parallelism. Keep native libraries from</span>
+<span class="sd">    independently starting a full thread pool in each worker. The parent</span>
+<span class="sd">    process's thread settings are left unchanged.</span>
+<span class="sd">    """</span>
+    <span class="k">global</span> <span class="n">_worker_thread_limiter</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span>  <span class="c1"># noqa: F401  (load BLAS first so threadpoolctl sees it)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">threadpoolctl</span><span class="w"> </span><span class="kn">import</span> <span class="n">threadpool_limits</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>  <span class="c1"># pragma: no cover (threadpoolctl is a core dep)</span>
+        <span class="k">return</span>
+    <span class="n">_worker_thread_limiter</span> <span class="o">=</span> <span class="n">threadpool_limits</span><span class="p">(</span><span class="n">limits</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_initialize_worker_task</span><span class="p">(</span><span class="n">task_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Load the data-bearing task once per worker from the parent's task file."""</span>
+    <span class="k">global</span> <span class="n">_worker_task</span>
+    <span class="n">_limit_worker_threads</span><span class="p">()</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">task_path</span><span class="p">,</span> <span class="s2">"rb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
+        <span class="n">_worker_task</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
+
+
+<span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_task_file</span><span class="p">(</span><span class="n">task_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Serialize the task once into a private temporary file; yield its path.</span>
+
+<span class="sd">    The file (mode 0600, in ``tempfile.gettempdir()``) is removed when the</span>
+<span class="sd">    block exits, after the pool has been shut down, on success or failure.</span>
+<span class="sd">    ``ForkingPickler`` keeps multiprocessing's own reducers, as for initargs.</span>
+<span class="sd">    """</span>
+    <span class="n">fd</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkstemp</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">"conninfpy-task-"</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s2">".pkl"</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">os</span><span class="o">.</span><span class="n">fdopen</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
+            <span class="n">multiprocessing</span><span class="o">.</span><span class="n">reduction</span><span class="o">.</span><span class="n">ForkingPickler</span><span class="p">(</span><span class="n">stream</span><span class="p">,</span> <span class="n">pickle</span><span class="o">.</span><span class="n">HIGHEST_PROTOCOL</span><span class="p">)</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">task_func</span><span class="p">)</span>
+        <span class="k">yield</span> <span class="n">path</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">OSError</span><span class="p">):</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">unlink</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_run_worker_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">assert</span> <span class="n">_worker_task</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">_worker_task</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_run_worker_chunk_seeds</span><span class="p">(</span><span class="n">chunk_seeds</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Apply the task to one chunk of seeds, in seed order (one IPC message).</span>
+
+<span class="sd">    Used by the parent to keep per-chunk results (preserving ``imap``'s</span>
+<span class="sd">    chunking and order) while still polling for cancellation between chunks.</span>
+<span class="sd">    """</span>
+    <span class="k">assert</span> <span class="n">_worker_task</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">_worker_task</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span> <span class="k">for</span> <span class="n">seed</span> <span class="ow">in</span> <span class="n">chunk_seeds</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_fold_seeds_in_batches</span><span class="p">(</span>
+    <span class="n">task</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">],</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">chunk_seeds</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="n">reduce_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]],</span> <span class="n">Any</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Fold a chunk's seeds in order, in batches of ``_FOLD_BATCH`` seeds.</span>
+
+<span class="sd">    The batch of per-seed results is dropped (``del``) right after it is</span>
+<span class="sd">    reduced, before the next batch is built, so at most ``_FOLD_BATCH``</span>
+<span class="sd">    per-seed results are alive at once. The only other transient is the</span>
+<span class="sd">    accumulator fold ``total + partial`` — two ``O(E)`` reduction-size</span>
+<span class="sd">    arrays, never per-seed data.</span>
+<span class="sd">    """</span>
+    <span class="n">total</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk_seeds</span><span class="p">),</span> <span class="n">_FOLD_BATCH</span><span class="p">):</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="p">[</span><span class="n">task</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span> <span class="k">for</span> <span class="n">seed</span> <span class="ow">in</span> <span class="n">chunk_seeds</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">_FOLD_BATCH</span><span class="p">]]</span>
+        <span class="n">partial</span> <span class="o">=</span> <span class="n">reduce_func</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+        <span class="k">del</span> <span class="n">batch</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="n">partial</span> <span class="k">if</span> <span class="n">total</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">total</span> <span class="o">+</span> <span class="n">partial</span>
+    <span class="k">return</span> <span class="n">total</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_run_worker_chunk_reduce</span><span class="p">(</span>
+    <span class="n">chunk_seeds</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">reduce_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]],</span> <span class="n">Any</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Fold one chunk of seeds inside the worker; return only the partial sum.</span>
+
+<span class="sd">    The per-seed results never leave the worker process, and they are folded</span>
+<span class="sd">    in batches of ``_FOLD_BATCH`` seeds, so the worker never holds a whole</span>
+<span class="sd">    chunk of per-seed results either. The returned value is a ``reduce_func``</span>
+<span class="sd">    partial reduction over the chunk's seeds (in order).</span>
+<span class="sd">    """</span>
+    <span class="k">assert</span> <span class="n">_worker_task</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">_fold_seeds_in_batches</span><span class="p">(</span><span class="n">_worker_task</span><span class="p">,</span> <span class="n">chunk_seeds</span><span class="p">,</span> <span class="n">reduce_func</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_result_nbytes</span><span class="p">(</span><span class="n">partial</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Approximate parent-side footprint of one chunk reduction."""</span>
+    <span class="n">nbytes</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">partial</span><span class="p">,</span> <span class="s2">"nbytes"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">nbytes</span><span class="p">)</span> <span class="k">if</span> <span class="n">nbytes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">0</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_ReductionStats</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Counters proving the structural bound on unreduced chunk results.</span>
+
+<span class="sd">    ``issued`` counts chunks handed to the pool (or the serial loop) whose</span>
+<span class="sd">    result has not been folded yet; ``arrived``/``arrived_bytes`` count</span>
+<span class="sd">    results that have reached the parent but are not folded yet (mp only,</span>
+<span class="sd">    tracked from the pool's result-handler thread). ``limit`` is the</span>
+<span class="sd">    structural bound the implementation must never exceed.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">limit</span> <span class="o">=</span> <span class="n">limit</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">issued</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">arrived</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">arrived_bytes</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_issued</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_arrived</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_arrived_bytes</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_result_bytes</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chunks_issued</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chunks_folded</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_issue</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">issued</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">chunks_issued</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">max_issued</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_issued</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">issued</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">issued</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">limit</span><span class="p">,</span> <span class="s2">"bounded issuance exceeded"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_arrival</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nbytes</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">arrived</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">arrived_bytes</span> <span class="o">+=</span> <span class="n">nbytes</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">max_result_bytes</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_result_bytes</span><span class="p">,</span> <span class="n">nbytes</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">max_arrived</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_arrived</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">arrived</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">max_arrived_bytes</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_arrived_bytes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">arrived_bytes</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">arrived</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">limit</span><span class="p">,</span> <span class="s2">"bounded buffer exceeded"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">on_fold</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nbytes</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">issued</span> <span class="o">-=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">arrived</span> <span class="o">-=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">arrived_bytes</span> <span class="o">-=</span> <span class="n">nbytes</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">chunks_folded</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">snapshot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">workers</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_chunks</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">"mode"</span><span class="p">:</span> <span class="n">mode</span><span class="p">,</span>
+                <span class="s2">"workers"</span><span class="p">:</span> <span class="n">workers</span><span class="p">,</span>
+                <span class="s2">"chunk_size"</span><span class="p">:</span> <span class="n">chunk_size</span><span class="p">,</span>
+                <span class="s2">"n_chunks"</span><span class="p">:</span> <span class="n">n_chunks</span><span class="p">,</span>
+                <span class="s2">"issued_outstanding_limit"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">limit</span><span class="p">,</span>
+                <span class="s2">"max_issued_outstanding"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_issued</span><span class="p">,</span>
+                <span class="s2">"max_arrived_outstanding"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_arrived</span><span class="p">,</span>
+                <span class="s2">"max_arrived_outstanding_bytes"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_arrived_bytes</span><span class="p">,</span>
+                <span class="s2">"max_chunk_result_bytes"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_result_bytes</span><span class="p">,</span>
+                <span class="s2">"chunks_issued"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">chunks_issued</span><span class="p">,</span>
+                <span class="s2">"chunks_folded"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">chunks_folded</span><span class="p">,</span>
+            <span class="p">}</span>
+
+
+<div class="viewcode-block" id="InferenceCancelled">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.InferenceCancelled">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">InferenceCancelled</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A permutation pipeline was cancelled cooperatively by its caller.</span>
+
+<span class="sd">    Raised by the engine at a permutation chunk boundary (never from inside</span>
+<span class="sd">    a worker), so no partial reduction, no valid</span>
+<span class="sd">    :class:`~conninfpy.results.InferenceResult` and no p-values are produced</span>
+<span class="sd">    from an incomplete null distribution.</span>
+<span class="sd">    """</span></div>
+
+
+
+<span class="n">ProgressCallback</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span>
+<span class="n">CancelCallback</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="nb">bool</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="ProgressSession">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.ProgressSession">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ProgressSession</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Parent-side progress/cancel aggregator for one analysis call.</span>
+
+<span class="sd">    A session is created by the caller (``analyze()`` or a UI job) and</span>
+<span class="sd">    passed down through the pipelines as ``progress=session`` and</span>
+<span class="sd">    ``cancel=&lt;callable&gt;``. Each permutation loop announces itself to the</span>
+<span class="sd">    session before it runs (see :func:`prepare_run`), so the ``total`` the</span>
+<span class="sd">    session reports is the number of permutation executions planned so far</span>
+<span class="sd">    across every loop/stage of the call — never an invented figure.</span>
+
+<span class="sd">    Contract</span>
+<span class="sd">    --------</span>
+<span class="sd">    ``callback(done, total)`` is called in the parent process only, at chunk</span>
+<span class="sd">    boundaries for permutations that were actually folded:</span>
+
+<span class="sd">    * ``done`` is monotonic and never exceeds ``total``;</span>
+<span class="sd">    * ``total`` is monotonic non-decreasing and equals the sum of the</span>
+<span class="sd">      permutation executions announced so far. For every current pipeline</span>
+<span class="sd">      a single permutation loop of ``n_permutations`` seeds is run per</span>
+<span class="sd">      ``analyze()`` call, and that loop is announced before its first seed,</span>
+<span class="sd">      so ``total`` is exact from the first callback. Pipelines that run</span>
+<span class="sd">      several loops (e.g. the available-case multi-contrast route, which</span>
+<span class="sd">      runs one loop per contrast) grow ``total`` as each loop starts;</span>
+<span class="sd">      ``done == total`` is only reported when all planned work has been</span>
+<span class="sd">      redeemed and fully reduced;</span>
+<span class="sd">    * the last callback of a successful call has ``done == total``.</span>
+
+<span class="sd">    Cancellation is a parent-side decision: ``cancel`` is a zero-argument</span>
+<span class="sd">    callable evaluated in the parent process at chunk boundaries. A</span>
+<span class="sd">    :class:`threading.Event` (or any UI callback) is therefore never</span>
+<span class="sd">    pickled into a worker task payload. When it returns true the engine</span>
+<span class="sd">    stops issuing chunks, terminates and joins the pool, removes its</span>
+<span class="sd">    private task file and raises :class:`InferenceCancelled`; the last</span>
+<span class="sd">    ``done`` is not forced to ``total``.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">callback</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProgressCallback</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">cancel</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CancelCallback</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span> <span class="o">=</span> <span class="n">callback</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span> <span class="o">=</span> <span class="n">cancel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_total</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_done</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stage</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_run_offset</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_run_size</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cancelled_early</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">unused_plan</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="c1"># -- planning ------------------------------------------------------</span>
+<div class="viewcode-block" id="ProgressSession.expect">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.ProgressSession.expect">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">expect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Announce an upcoming loop of ``n`` executions before it starts.</span>
+
+<span class="sd">        Used by callers that know a later stage will run (a sensitivity</span>
+<span class="sd">        companion) so the reported ``total`` is exact from the first</span>
+<span class="sd">        callback instead of growing when that stage starts. The next</span>
+<span class="sd">        :func:`prepare_run` of the same size redeems the announcement</span>
+<span class="sd">        instead of adding it twice.</span>
+<span class="sd">        """</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_total</span> <span class="o">+=</span> <span class="n">n</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">label</span><span class="p">))</span>
+            <span class="n">done</span><span class="p">,</span> <span class="n">total</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_done</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_total</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_emit</span><span class="p">(</span><span class="n">done</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_plan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Start a loop of ``n`` executions, redeeming an announcement if any."""</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="n">announced</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">lab</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">size</span> <span class="o">==</span> <span class="n">n</span><span class="p">:</span>
+                    <span class="n">_</span><span class="p">,</span> <span class="n">announced</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+                    <span class="k">break</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_total</span> <span class="o">+=</span> <span class="n">n</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_run_offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_done</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_run_size</span> <span class="o">=</span> <span class="n">n</span>
+            <span class="n">stage</span> <span class="o">=</span> <span class="n">label</span> <span class="ow">or</span> <span class="n">announced</span>
+            <span class="k">if</span> <span class="n">stage</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_stage</span> <span class="o">=</span> <span class="n">stage</span>
+            <span class="n">done</span><span class="p">,</span> <span class="n">total</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_done</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_total</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_emit</span><span class="p">(</span><span class="n">done</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_advance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">done_local</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_offset</span> <span class="o">+</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">done_local</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_size</span><span class="p">))</span>
+            <span class="c1"># Persist the high-water mark so a later finalize() (e.g. on</span>
+            <span class="c1"># cancellation) reports the actually folded count, not a stale 0.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_done</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_done</span><span class="p">,</span> <span class="n">done</span><span class="p">)</span>
+            <span class="n">total</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_total</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_emit</span><span class="p">(</span><span class="n">done</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_finish_run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_offset</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_size</span>
+            <span class="n">done</span><span class="p">,</span> <span class="n">total</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_done</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_total</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_emit</span><span class="p">(</span><span class="n">done</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ProgressSession.finalize">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.ProgressSession.finalize">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finalize</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Drop announcements that were never redeemed, then report.</span>
+
+<span class="sd">        Honest final state: an announced stage that did not run is removed</span>
+<span class="sd">        from ``total`` (recorded in ``unused_plan``) rather than being left</span>
+<span class="sd">        as a permanent shortfall.</span>
+<span class="sd">        """</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="p">:</span>
+                <span class="n">dropped</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">size</span> <span class="k">for</span> <span class="n">size</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_pending</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">unused_plan</span> <span class="o">+=</span> <span class="n">dropped</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_total</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_done</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_total</span> <span class="o">-</span> <span class="n">dropped</span><span class="p">)</span>
+            <span class="n">done</span><span class="p">,</span> <span class="n">total</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_done</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_total</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_emit</span><span class="p">(</span><span class="n">done</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span></div>
+
+
+    <span class="c1"># -- state ----------------------------------------------------------</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">done</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_done</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">total</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_total</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">stage</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stage</span>
+
+<div class="viewcode-block" id="ProgressSession.snapshot">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.ProgressSession.snapshot">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">snapshot</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Plain-data view for run plans and tests (no callables)."""</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">"done"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_done</span><span class="p">,</span>
+                <span class="s2">"total"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_total</span><span class="p">,</span>
+                <span class="s2">"stage"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stage</span><span class="p">,</span>
+                <span class="s2">"unused_plan"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">unused_plan</span><span class="p">,</span>
+            <span class="p">}</span></div>
+
+
+    <span class="c1"># -- cancellation ---------------------------------------------------</span>
+<div class="viewcode-block" id="ProgressSession.cancelled">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.ProgressSession.cancelled">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cancelled</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""True if the caller asked to cancel (parent-side check)."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span><span class="p">())</span></div>
+
+
+<div class="viewcode-block" id="ProgressSession.check_cancel">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.ProgressSession.check_cancel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_cancel</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Raise :class:`InferenceCancelled` if cancellation was requested."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cancelled</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="n">InferenceCancelled</span><span class="p">(</span>
+                <span class="s2">"inference cancelled by the caller at a permutation chunk boundary"</span>
+            <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_emit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">done</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last</span> <span class="o">=</span> <span class="p">(</span><span class="n">done</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="c1"># Never call user code (Streamlit, tqdm, ...) while holding our lock.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span><span class="p">(</span><span class="n">done</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">RunProgress</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Per-run progress/cancel channel handed to the permutation leaves."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">session</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProgressSession</span><span class="p">],</span>
+        <span class="n">callback</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProgressCallback</span><span class="p">],</span>
+        <span class="n">cancel</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CancelCallback</span><span class="p">],</span>
+        <span class="n">total</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_session</span> <span class="o">=</span> <span class="n">session</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span> <span class="o">=</span> <span class="n">callback</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span> <span class="o">=</span> <span class="n">cancel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">total</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">total</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">done</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_session</span><span class="o">.</span><span class="n">_advance</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">done</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">total</span> <span class="k">if</span> <span class="n">total</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">total</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">cancelled</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span><span class="p">())</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cancel</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_cancel</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cancelled</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="n">InferenceCancelled</span><span class="p">(</span>
+                <span class="s2">"inference cancelled by the caller at a permutation chunk boundary"</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Mark this loop fully reduced (only called after a clean return)."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_session</span><span class="o">.</span><span class="n">_finish_run</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">total</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">total</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">prepare_run</span><span class="p">(</span>
+    <span class="n">progress</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">cancel</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CancelCallback</span><span class="p">],</span>
+    <span class="n">total</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunProgress</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Build the per-run progress/cancel channel used by the permutation leaves.</span>
+
+<span class="sd">    ``progress`` may be a :class:`ProgressSession` (aggregated over all</span>
+<span class="sd">    loops of one call), a plain ``(done, total)`` callable (reported per</span>
+<span class="sd">    loop), or ``None``. ``cancel`` is only consulted in the parent process;</span>
+<span class="sd">    it is never serialized.</span>
+<span class="sd">    """</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">total</span><span class="p">)</span>
+    <span class="n">session</span> <span class="o">=</span> <span class="n">progress</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">progress</span><span class="p">,</span> <span class="n">ProgressSession</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">callback</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">session</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">total</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">session</span><span class="o">.</span><span class="n">_plan</span><span class="p">(</span><span class="n">total</span><span class="p">,</span> <span class="n">label</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">callback</span> <span class="o">=</span> <span class="n">progress</span> <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">progress</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="c1"># Both cancellation sources are honoured: the session's own predicate and</span>
+    <span class="c1"># a separately supplied ``cancel``. Neither replaces the other (a caller</span>
+    <span class="c1"># that passes an explicit external cancel must never be ignored).</span>
+    <span class="n">explicit_cancel</span> <span class="o">=</span> <span class="n">cancel</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_combined_cancel</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">explicit_cancel</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">explicit_cancel</span><span class="p">():</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="n">session</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">session</span><span class="o">.</span><span class="n">cancelled</span><span class="p">()</span>
+
+    <span class="n">cancel_fn</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CancelCallback</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_combined_cancel</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">session</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">explicit_cancel</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">else</span> <span class="kc">None</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">RunProgress</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">callback</span><span class="p">,</span> <span class="n">cancel_fn</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_shutdown_pool</span><span class="p">(</span><span class="n">pool</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Terminate and join a pool; cleanup failures are logged, never hidden."""</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">pool</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover - defensive</span>
+        <span class="n">_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"pool terminate failed during cleanup: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">pool</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover - defensive</span>
+        <span class="n">_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"pool join failed during cleanup: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">exc</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_worker_count</span><span class="p">(</span><span class="n">n_processes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">n_jobs</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Resolve pool size once for every inference path."""</span>
+    <span class="k">if</span> <span class="n">n_processes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="n">get_available_cores</span><span class="p">(),</span> <span class="n">n_jobs</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="n">operator</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">n_processes</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"n_processes must be a positive integer or None."</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">n_processes</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="n">count</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"n_processes must be a positive integer or None."</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">n_jobs</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">describe_worker_policy</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">use_mp</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">n_processes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_permutations</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Requested vs resolved worker/thread facts, with honest unknowns.</span>
+
+<span class="sd">    Single source of truth for the run plan and ``conninfpy info``. The</span>
+<span class="sd">    requested values are what the caller asked for; the effective worker</span>
+<span class="sd">    count is what the engine would resolve for ``n_permutations`` jobs</span>
+<span class="sd">    (``None`` when the number of jobs is unknown, so the cap cannot be</span>
+<span class="sd">    applied). Which BLAS/OpenMP library and how many native threads the</span>
+<span class="sd">    parent process actually runs are *not* measured here and are reported</span>
+<span class="sd">    as ``unknown/not measured`` rather than guessed.</span>
+<span class="sd">    """</span>
+    <span class="n">available</span> <span class="o">=</span> <span class="n">get_available_cores</span><span class="p">()</span>
+    <span class="n">workers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="n">error</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">use_mp</span><span class="p">:</span>
+        <span class="n">workers</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">elif</span> <span class="n">n_permutations</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">workers</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">workers</span> <span class="o">=</span> <span class="n">_worker_count</span><span class="p">(</span><span class="n">n_processes</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_permutations</span><span class="p">)))</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="n">workers</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">error</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">start_method</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">"forkserver"</span><span class="p">)</span><span class="o">.</span><span class="n">get_start_method</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>  <span class="c1"># pragma: no cover (platform-specific)</span>
+        <span class="n">start_method</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">"spawn"</span><span class="p">)</span><span class="o">.</span><span class="n">get_start_method</span><span class="p">()</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">"use_mp_requested"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">use_mp</span><span class="p">),</span>
+        <span class="s2">"n_processes_requested"</span><span class="p">:</span> <span class="n">n_processes</span><span class="p">,</span>
+        <span class="s2">"n_permutations"</span><span class="p">:</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">n_permutations</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_permutations</span><span class="p">),</span>
+        <span class="s2">"workers_effective"</span><span class="p">:</span> <span class="n">workers</span><span class="p">,</span>
+        <span class="s2">"workers_default_budget"</span><span class="p">:</span> <span class="n">available</span><span class="p">,</span>
+        <span class="s2">"worker_start_method"</span><span class="p">:</span> <span class="n">start_method</span><span class="p">,</span>
+        <span class="s2">"blas_threads_per_worker"</span><span class="p">:</span> <span class="mi">1</span> <span class="k">if</span> <span class="p">(</span><span class="n">workers</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">workers</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span> <span class="k">else</span> <span class="s2">"parent default (unchanged)"</span><span class="p">,</span>
+        <span class="s2">"thread_limiter"</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">"threadpoolctl limits=1 in each worker"</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">workers</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">workers</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">else</span> <span class="s2">"not applied (no pool)"</span>
+        <span class="p">),</span>
+        <span class="s2">"blas_library"</span><span class="p">:</span> <span class="s2">"unknown/not measured"</span><span class="p">,</span>
+        <span class="s2">"enhancement_backend"</span><span class="p">:</span> <span class="s2">"unknown/not measured"</span><span class="p">,</span>
+        <span class="s2">"request_error"</span><span class="p">:</span> <span class="n">error</span><span class="p">,</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_references_main</span><span class="p">(</span><span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">_depth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""True if ``obj`` (a task, its arguments, ...) needs the ``__main__`` module.</span>
+
+<span class="sd">    Pickled functions and classes are looked up by module name in the</span>
+<span class="sd">    worker; anything defined in the caller's script lives in ``__main__``.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">_depth</span> <span class="o">&gt;</span> <span class="mi">4</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">):</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span><span class="n">obj</span><span class="o">.</span><span class="n">func</span><span class="p">,</span> <span class="o">*</span><span class="n">obj</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">keywords</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">_references_main</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">_depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">,</span> <span class="nb">set</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">_references_main</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">_depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">obj</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">_references_main</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">_depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+    <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"__module__"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span><span class="o">.</span><span class="vm">__module__</span> <span class="o">==</span> <span class="s2">"__main__"</span>
+
+
+<span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_workers_skip_main_script</span><span class="p">(</span><span class="n">task_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Start pool workers without re-running the caller's script.</span>
+
+<span class="sd">    With the spawn / forkserver start methods every new worker imports the</span>
+<span class="sd">    main script so it can unpickle functions defined there, which re-runs</span>
+<span class="sd">    the script's top-level code (the whole analysis) once per worker unless</span>
+<span class="sd">    the script has an ``if __name__ == "__main__":`` guard. Permutation</span>
+<span class="sd">    tasks are conninfpy functions and never need the script, so while the</span>
+<span class="sd">    workers start we hide the script's path from multiprocessing; workers</span>
+<span class="sd">    then import only conninfpy. Tasks that do reference ``__main__`` (a</span>
+<span class="sd">    user function passed to ``compute_null_dist``) keep the standard</span>
+<span class="sd">    behaviour.</span>
+<span class="sd">    """</span>
+    <span class="c1"># Background UI threads can start analyses concurrently. Serialize only</span>
+    <span class="c1"># pool startup so their temporary changes to __main__ cannot interleave.</span>
+    <span class="k">with</span> <span class="n">_main_script_lock</span><span class="p">:</span>
+        <span class="n">main</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"__main__"</span><span class="p">)</span>
+        <span class="n">saved</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">main</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"__file__"</span><span class="p">,</span> <span class="s2">"__spec__"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">main</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">main</span><span class="o">.</span><span class="vm">__dict__</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">saved</span> <span class="ow">or</span> <span class="n">_references_main</span><span class="p">(</span><span class="n">task_func</span><span class="p">):</span>
+            <span class="k">yield</span>
+            <span class="k">return</span>
+        <span class="k">assert</span> <span class="n">main</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># a non-empty ``saved`` implies a __main__ module</span>
+        <span class="n">main</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"__file__"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">"__spec__"</span> <span class="ow">in</span> <span class="n">saved</span><span class="p">:</span>
+            <span class="n">main</span><span class="o">.</span><span class="n">__spec__</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">yield</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">main</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">saved</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run_permutations</span><span class="p">(</span>
+    <span class="n">task_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">],</span> <span class="n">T</span><span class="p">],</span>
+    <span class="n">seeds</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">use_mp</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">n_processes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">desc</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"perm"</span><span class="p">,</span>
+    <span class="n">log_every</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span>
+    <span class="n">progress</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProgressCallback</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">cancel</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CancelCallback</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">T</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Apply ``task_func`` to each seed; optionally show a progress bar.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    task_func : callable</span>
+<span class="sd">        Single-permutation worker, taking an int seed and returning</span>
+<span class="sd">        whatever the caller's pipeline needs. The task is reused across</span>
+<span class="sd">        seeds in each process and must not mutate its fixed input data.</span>
+<span class="sd">    seeds : sequence of int</span>
+<span class="sd">        Per-permutation seeds (length = n_permutations).</span>
+<span class="sd">    use_mp : bool, default ``True``</span>
+<span class="sd">        Use a multiprocessing :class:`Pool`. Disabled automatically</span>
+<span class="sd">        inside child processes, with one worker, or with fewer than two jobs.</span>
+<span class="sd">    n_processes : int, optional</span>
+<span class="sd">        Positive pool size, capped at the number of jobs. ``None`` uses the</span>
+<span class="sd">        available logical CPU count. Each worker uses one BLAS/OpenMP thread.</span>
+<span class="sd">    verbose : bool, default ``False``</span>
+<span class="sd">        Show a progress bar (tqdm) or plain-text update.</span>
+<span class="sd">    desc : str</span>
+<span class="sd">        Progress-bar prefix.</span>
+<span class="sd">    log_every : int</span>
+<span class="sd">        Plain-text fallback log frequency (only used when tqdm absent).</span>
+<span class="sd">    progress : callable, optional</span>
+<span class="sd">        Parent-side ``progress(done, total)`` callback, invoked in the parent</span>
+<span class="sd">        process only, at chunk boundaries, for permutations already</span>
+<span class="sd">        completed. ``total`` is this run's ``len(seeds)``; pass a</span>
+<span class="sd">        :class:`ProgressSession` through :func:`prepare_run` to aggregate</span>
+<span class="sd">        several loops. Nothing is sent to or called inside the workers.</span>
+<span class="sd">    cancel : callable, optional</span>
+<span class="sd">        Zero-argument parent-side predicate. Evaluated before each chunk is</span>
+<span class="sd">        handed out; when it returns true the engine stops issuing chunks,</span>
+<span class="sd">        joins the pool and raises :class:`InferenceCancelled`. Cancellation</span>
+<span class="sd">        is cooperative: at most one in-flight chunk per worker is allowed to</span>
+<span class="sd">        finish before the pool is terminated.</span>
+<span class="sd">    """</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">seeds</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">n</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_cancel</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">cancel</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">cancel</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="n">InferenceCancelled</span><span class="p">(</span>
+                <span class="s2">"inference cancelled by the caller at a permutation chunk boundary"</span>
+            <span class="p">)</span>
+
+    <span class="n">_check_cancel</span><span class="p">()</span>
+    <span class="n">use_mp</span> <span class="o">=</span> <span class="n">use_mp</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_is_worker_process</span><span class="p">()</span>
+    <span class="n">workers</span> <span class="o">=</span> <span class="n">_worker_count</span><span class="p">(</span><span class="n">n_processes</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="k">if</span> <span class="n">use_mp</span> <span class="k">else</span> <span class="mi">1</span>
+    <span class="n">bar</span> <span class="o">=</span> <span class="n">_make_chunk_progress</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">verbose</span><span class="p">,</span> <span class="n">desc</span><span class="p">,</span> <span class="n">log_every</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_emit</span><span class="p">(</span><span class="n">done</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">bar</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">progress</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">progress</span><span class="p">(</span><span class="n">done</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">workers</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">out</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">T</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">seeds</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+            <span class="n">_check_cancel</span><span class="p">()</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">task_func</span><span class="p">(</span><span class="n">s</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">verbose</span> <span class="ow">or</span> <span class="n">progress</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_emit</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="c1"># Multiprocessing path. Use forkserver (spawn on platforms without it)</span>
+    <span class="c1"># instead of the default fork start method: the parent process may be</span>
+    <span class="c1"># multi-threaded (numba JIT threads), and forking a threaded process</span>
+    <span class="c1"># can deadlock the child (DeprecationWarning since Python 3.12).</span>
+    <span class="n">ctx</span><span class="p">:</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">BaseContext</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">"forkserver"</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>  <span class="c1"># pragma: no cover (platform-specific)</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">"spawn"</span><span class="p">)</span>
+    <span class="c1"># Only seeds go through the task queue; the partial's data/design arrays</span>
+    <span class="c1"># are copied once per worker at startup. Balanced chunks also avoid one</span>
+    <span class="c1"># queue message per permutation when progress reporting is enabled.</span>
+    <span class="n">chunksize</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">workers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="p">(</span><span class="mi">4</span> <span class="o">*</span> <span class="n">workers</span><span class="p">))</span>
+    <span class="k">with</span> <span class="n">_task_file</span><span class="p">(</span><span class="n">task_func</span><span class="p">)</span> <span class="k">as</span> <span class="n">task_path</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">_workers_skip_main_script</span><span class="p">(</span><span class="n">task_func</span><span class="p">):</span>
+            <span class="n">pool</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span>
+                <span class="n">processes</span><span class="o">=</span><span class="n">workers</span><span class="p">,</span>
+                <span class="n">initializer</span><span class="o">=</span><span class="n">_initialize_worker_task</span><span class="p">,</span>
+                <span class="n">initargs</span><span class="o">=</span><span class="p">(</span><span class="n">task_path</span><span class="p">,),</span>
+            <span class="p">)</span>
+        <span class="n">out2</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">T</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Same chunk partition and result order as ``imap`` with this</span>
+            <span class="c1"># chunksize, but issued as explicit chunk tasks so the parent can</span>
+            <span class="c1"># wait with a bounded timeout and recheck cancellation even when</span>
+            <span class="c1"># every worker is stuck inside a long computation.</span>
+            <span class="n">chunk_seeds</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="nb">list</span><span class="p">(</span><span class="n">seeds</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">chunksize</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">chunksize</span><span class="p">)</span>
+            <span class="p">]</span>
+            <span class="n">pending</span><span class="p">:</span> <span class="n">deque</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+            <span class="n">next_chunk</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">worker_limit</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">workers</span><span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">_issue</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">nonlocal</span> <span class="n">next_chunk</span>
+                <span class="k">while</span> <span class="n">next_chunk</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk_seeds</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">pending</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">worker_limit</span><span class="p">:</span>
+                    <span class="n">pending</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="n">pool</span><span class="o">.</span><span class="n">apply_async</span><span class="p">(</span>
+                            <span class="n">_run_worker_chunk_seeds</span><span class="p">,</span> <span class="p">(</span><span class="n">chunk_seeds</span><span class="p">[</span><span class="n">next_chunk</span><span class="p">],)</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="n">next_chunk</span> <span class="o">+=</span> <span class="mi">1</span>
+
+            <span class="n">done</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">while</span> <span class="n">pending</span> <span class="ow">or</span> <span class="n">next_chunk</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk_seeds</span><span class="p">):</span>
+                <span class="n">_issue</span><span class="p">()</span>
+                <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                    <span class="n">_check_cancel</span><span class="p">()</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">chunk_results</span> <span class="o">=</span> <span class="n">pending</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">_POLL_INTERVAL_S</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="k">break</span>
+                <span class="n">pending</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">chunk_results</span><span class="p">:</span>  <span class="c1"># worker errors already propagated</span>
+                    <span class="n">out2</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+                    <span class="n">done</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">_emit</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="c1"># Always terminate + join, on success, error and cancellation:</span>
+            <span class="c1"># no worker process or result-handler thread is left behind.</span>
+            <span class="n">_shutdown_pool</span><span class="p">(</span><span class="n">pool</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out2</span>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_make_chunk_progress</span><span class="p">(</span>
+    <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">desc</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">log_every</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">],</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Per-permutation progress advanced once per folded chunk."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="k">return</span> <span class="k">lambda</span> <span class="n">done</span><span class="p">:</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">_HAS_TQDM</span><span class="p">:</span>
+        <span class="n">bar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="n">desc</span><span class="p">,</span> <span class="n">leave</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"done"</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="n">done</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">bar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">done</span> <span class="o">-</span> <span class="n">state</span><span class="p">[</span><span class="s2">"done"</span><span class="p">])</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">"done"</span><span class="p">]</span> <span class="o">=</span> <span class="n">done</span>
+
+        <span class="k">return</span> <span class="n">update</span>
+
+    <span class="n">state</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"next"</span><span class="p">:</span> <span class="nb">min</span><span class="p">(</span><span class="n">log_every</span><span class="p">,</span> <span class="n">n</span><span class="p">)}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update_logged</span><span class="p">(</span><span class="n">done</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">done</span> <span class="o">&gt;=</span> <span class="n">state</span><span class="p">[</span><span class="s2">"next"</span><span class="p">]</span> <span class="ow">or</span> <span class="n">done</span> <span class="o">==</span> <span class="n">n</span><span class="p">:</span>
+            <span class="n">_print_progress</span><span class="p">(</span><span class="n">done</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">desc</span><span class="p">)</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">"next"</span><span class="p">]</span> <span class="o">=</span> <span class="n">done</span> <span class="o">+</span> <span class="n">log_every</span>
+
+    <span class="k">return</span> <span class="n">update_logged</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run_permutations_reduce</span><span class="p">(</span>
+    <span class="n">task_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">],</span> <span class="n">T</span><span class="p">],</span>
+    <span class="n">seeds</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">reduce_func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">List</span><span class="p">[</span><span class="n">T</span><span class="p">]],</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">use_mp</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">n_processes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">desc</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"perm"</span><span class="p">,</span>
+    <span class="n">log_every</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span>
+    <span class="n">stats_out</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">progress</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ProgressCallback</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">cancel</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CancelCallback</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Map ``task_func`` over seeds with worker-side chunk reduction.</span>
+
+<span class="sd">    Instead of returning one result per seed, seeds are processed in chunks;</span>
+<span class="sd">    each worker folds its chunk's per-seed results with ``reduce_func`` and</span>
+<span class="sd">    returns only the partial reduction (e.g. a per-edge count vector). The</span>
+<span class="sd">    parent sums the partials in seed order. This keeps ``B`` per-seed</span>
+<span class="sd">    results out of the parent: peak parent memory is ``O(reduction size)``</span>
+<span class="sd">    plus at most ``2 * workers`` outstanding chunk results.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    task_func : callable</span>
+<span class="sd">        Single-permutation worker, as in :func:`run_permutations`. The task</span>
+<span class="sd">        still travels through the private task file, once per worker.</span>
+<span class="sd">    seeds : sequence of int</span>
+<span class="sd">        Per-permutation seeds (length = n_permutations).</span>
+<span class="sd">    reduce_func : callable</span>
+<span class="sd">        ``list_of_per_seed_results -&gt; partial reduction`` (an ndarray, or</span>
+<span class="sd">        something supporting in-place ``+=`` with other chunk reductions).</span>
+<span class="sd">        Must be defined at module level so pool workers can unpickle it by</span>
+<span class="sd">        reference (spawn / forkserver). Called once per chunk, in seed order.</span>
+<span class="sd">        With per-seed 0/1 float64 contributions the summed counts are exact</span>
+<span class="sd">        (well below 2**53), hence bitwise identical to a serial fold.</span>
+<span class="sd">    use_mp, n_processes, verbose, desc, log_every</span>
+<span class="sd">        As in :func:`run_permutations`. Progress counts permutations, not</span>
+<span class="sd">        chunks; it advances as each chunk completes.</span>
+<span class="sd">    stats_out : dict, optional</span>
+<span class="sd">        Written with instrumentation counters: ``max_issued_outstanding``</span>
+<span class="sd">        (peak chunks issued but not folded; structurally ≤</span>
+<span class="sd">        ``issued_outstanding_limit`` = ``2 * workers``, or 1 serial),</span>
+<span class="sd">        ``max_arrived_outstanding`` / ``max_arrived_outstanding_bytes``</span>
+<span class="sd">        (peak parent-held unreduced results and their bytes), chunking</span>
+<span class="sd">        details. Intended for tests and memory audits.</span>
+<span class="sd">    progress, cancel</span>
+<span class="sd">        Parent-side ``progress(done, total)`` callback at folded-chunk</span>
+<span class="sd">        boundaries and a zero-argument cancel predicate, exactly as in</span>
+<span class="sd">        :func:`run_permutations`. Cancellation stops issuing chunks, drops</span>
+<span class="sd">        the in-flight partials (no partial reduction is returned or</span>
+<span class="sd">        published), terminates and joins the pool and raises</span>
+<span class="sd">        :class:`InferenceCancelled`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    The accumulated reduction over all seeds (``None`` for empty ``seeds``).</span>
+<span class="sd">    Worker exceptions propagate; the pool and task file are cleaned up on</span>
+<span class="sd">    success, failure and cancellation exactly as in :func:`run_permutations`.</span>
+<span class="sd">    """</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">seeds</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">n</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_cancel</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">cancel</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">cancel</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="n">InferenceCancelled</span><span class="p">(</span>
+                <span class="s2">"inference cancelled by the caller at a permutation chunk boundary"</span>
+            <span class="p">)</span>
+
+    <span class="n">_check_cancel</span><span class="p">()</span>
+    <span class="n">use_mp</span> <span class="o">=</span> <span class="n">use_mp</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_is_worker_process</span><span class="p">()</span>
+    <span class="n">workers</span> <span class="o">=</span> <span class="n">_worker_count</span><span class="p">(</span><span class="n">n_processes</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="k">if</span> <span class="n">use_mp</span> <span class="k">else</span> <span class="mi">1</span>
+    <span class="c1"># Same chunk shape as run_permutations' balanced pool chunks.</span>
+    <span class="n">chunk_size</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">workers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="p">(</span><span class="mi">4</span> <span class="o">*</span> <span class="n">workers</span><span class="p">))</span>
+    <span class="n">chunks</span> <span class="o">=</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">seeds</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">chunk_size</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)]</span>
+    <span class="n">bar</span> <span class="o">=</span> <span class="n">_make_chunk_progress</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">verbose</span><span class="p">,</span> <span class="n">desc</span><span class="p">,</span> <span class="n">log_every</span><span class="p">)</span>
+    <span class="n">total</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_emit</span><span class="p">(</span><span class="n">done</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">bar</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">progress</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">progress</span><span class="p">(</span><span class="n">done</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">workers</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">stats</span> <span class="o">=</span> <span class="n">_ReductionStats</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span><span class="p">:</span>
+            <span class="n">_check_cancel</span><span class="p">()</span>
+            <span class="n">stats</span><span class="o">.</span><span class="n">on_issue</span><span class="p">()</span>
+            <span class="n">partial</span> <span class="o">=</span> <span class="n">_fold_seeds_in_batches</span><span class="p">(</span><span class="n">task_func</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">chunk</span><span class="p">),</span> <span class="n">reduce_func</span><span class="p">)</span>
+            <span class="n">stats</span><span class="o">.</span><span class="n">on_arrival</span><span class="p">(</span><span class="n">_result_nbytes</span><span class="p">(</span><span class="n">partial</span><span class="p">))</span>
+            <span class="n">total</span> <span class="o">=</span> <span class="n">partial</span> <span class="k">if</span> <span class="n">total</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">total</span> <span class="o">+</span> <span class="n">partial</span>
+            <span class="n">stats</span><span class="o">.</span><span class="n">on_fold</span><span class="p">(</span><span class="n">_result_nbytes</span><span class="p">(</span><span class="n">partial</span><span class="p">))</span>
+            <span class="n">done</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+            <span class="n">_emit</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">stats_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">stats_out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">snapshot</span><span class="p">(</span><span class="s2">"serial"</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">)))</span>
+        <span class="k">return</span> <span class="n">total</span>
+
+    <span class="c1"># Multiprocessing path: identical pool setup and start-method policy as</span>
+    <span class="c1"># run_permutations. Structural memory bound: a chunk is issued only</span>
+    <span class="c1"># while fewer than 2 * workers issued-but-unfolded chunks exist, so at</span>
+    <span class="c1"># most that many partial reductions can ever sit in the parent.</span>
+    <span class="n">ctx</span><span class="p">:</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">BaseContext</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">"forkserver"</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>  <span class="c1"># pragma: no cover (platform-specific)</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">"spawn"</span><span class="p">)</span>
+    <span class="n">chunk_limit</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">workers</span>
+    <span class="n">stats</span> <span class="o">=</span> <span class="n">_ReductionStats</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="n">chunk_limit</span><span class="p">)</span>
+    <span class="n">pending</span><span class="p">:</span> <span class="n">deque</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">_task_file</span><span class="p">(</span><span class="n">task_func</span><span class="p">)</span> <span class="k">as</span> <span class="n">task_path</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">_workers_skip_main_script</span><span class="p">(</span><span class="n">task_func</span><span class="p">):</span>
+            <span class="n">pool</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span>
+                <span class="n">processes</span><span class="o">=</span><span class="n">workers</span><span class="p">,</span>
+                <span class="n">initializer</span><span class="o">=</span><span class="n">_initialize_worker_task</span><span class="p">,</span>
+                <span class="n">initargs</span><span class="o">=</span><span class="p">(</span><span class="n">task_path</span><span class="p">,),</span>
+            <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">next_chunk</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">done</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">_issue</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">nonlocal</span> <span class="n">next_chunk</span>
+                <span class="n">stats</span><span class="o">.</span><span class="n">on_issue</span><span class="p">()</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">pool</span><span class="o">.</span><span class="n">apply_async</span><span class="p">(</span>
+                    <span class="n">_run_worker_chunk_reduce</span><span class="p">,</span>
+                    <span class="p">(</span><span class="n">chunks</span><span class="p">[</span><span class="n">next_chunk</span><span class="p">],</span> <span class="n">reduce_func</span><span class="p">),</span>
+                    <span class="n">callback</span><span class="o">=</span><span class="k">lambda</span> <span class="n">partial</span><span class="p">:</span> <span class="n">stats</span><span class="o">.</span><span class="n">on_arrival</span><span class="p">(</span><span class="n">_result_nbytes</span><span class="p">(</span><span class="n">partial</span><span class="p">)),</span>
+                <span class="p">)</span>
+                <span class="n">next_chunk</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">pending</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">)):</span>
+                <span class="n">_check_cancel</span><span class="p">()</span>
+                <span class="k">while</span> <span class="n">next_chunk</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">pending</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">chunk_limit</span><span class="p">:</span>
+                    <span class="n">_issue</span><span class="p">()</span>
+                <span class="n">_check_cancel</span><span class="p">()</span>
+                <span class="c1"># Peek first: a timed-out wait must not drop a partial.</span>
+                <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                    <span class="n">_check_cancel</span><span class="p">()</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">partial</span> <span class="o">=</span> <span class="n">pending</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">_POLL_INTERVAL_S</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="k">break</span>
+                <span class="n">pending</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>  <span class="c1"># propagates worker errors before this line</span>
+                <span class="n">stats</span><span class="o">.</span><span class="n">on_fold</span><span class="p">(</span><span class="n">_result_nbytes</span><span class="p">(</span><span class="n">partial</span><span class="p">))</span>
+                <span class="n">total</span> <span class="o">=</span> <span class="n">partial</span> <span class="k">if</span> <span class="n">total</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">total</span> <span class="o">+</span> <span class="n">partial</span>
+                <span class="n">done</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">[</span><span class="n">stats</span><span class="o">.</span><span class="n">chunks_folded</span> <span class="o">-</span> <span class="mi">1</span><span class="p">])</span>
+                <span class="n">_emit</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">_shutdown_pool</span><span class="p">(</span><span class="n">pool</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">stats_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">stats_out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">stats</span><span class="o">.</span><span class="n">snapshot</span><span class="p">(</span><span class="s2">"mp"</span><span class="p">,</span> <span class="n">workers</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">total</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_print_progress</span><span class="p">(</span><span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">desc</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Print an inline ``i/n`` progress line."""</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\r</span><span class="si">{</span><span class="n">desc</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="mi">100</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">n</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">%)"</span><span class="p">)</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="n">n</span><span class="p">:</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"run_permutations"</span><span class="p">,</span>
+    <span class="s2">"run_permutations_reduce"</span><span class="p">,</span>
+    <span class="s2">"InferenceCancelled"</span><span class="p">,</span>
+    <span class="s2">"ProgressSession"</span><span class="p">,</span>
+    <span class="s2">"RunProgress"</span><span class="p">,</span>
+    <span class="s2">"prepare_run"</span><span class="p">,</span>
+    <span class="s2">"describe_worker_policy"</span><span class="p">,</span>
+<span class="p">]</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

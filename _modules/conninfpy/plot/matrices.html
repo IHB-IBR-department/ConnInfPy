@@ -1,0 +1,435 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.plot.matrices &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.plot.matrices</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.plot.matrices</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Matrices plotting helpers."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.axes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axes</span>
+<span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover (env-specific)</span>
+    <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+        <span class="s2">"conninfpy.plot requires matplotlib; install via `pip install matplotlib`."</span>
+    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.results</span><span class="w"> </span><span class="kn">import</span> <span class="n">InferenceResult</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>  <span class="c1"># pragma: no cover - typing only</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtlasInfo</span>
+
+
+<div class="viewcode-block" id="plot_p_map">
+<a class="viewcode-back" href="../../../conninfpy.plot.html#conninfpy.plot.plot_p_map">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_p_map</span><span class="p">(</span>
+    <span class="n">p_map</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">ax</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Axes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">cmap</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"viridis_r"</span><span class="p">,</span>
+    <span class="n">log_scale</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">title</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">show_significant</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Axes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Edge-level p-value heatmap with optional log-scale and sig-mask.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    p_map : ndarray of shape (N, N)</span>
+<span class="sd">        Edge-level p-values.</span>
+<span class="sd">    alpha : float, default 0.05</span>
+<span class="sd">        Threshold for the optional significance mask.</span>
+<span class="sd">    ax : matplotlib Axes, optional</span>
+<span class="sd">        Plot into this axis; otherwise a new figure is created.</span>
+<span class="sd">    cmap : str, default "viridis_r"</span>
+<span class="sd">        Reverse viridis (so darker = more significant).</span>
+<span class="sd">    log_scale : bool, default True</span>
+<span class="sd">        Plot ``-log10(p)`` rather than raw ``p``.</span>
+<span class="sd">    title : str, optional</span>
+<span class="sd">        Axis title.</span>
+<span class="sd">    show_significant : bool, default True</span>
+<span class="sd">        Draw a red contour around edges with ``p &lt;= alpha``.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">4.5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">log_scale</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span><span class="n">divide</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">p_map</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">1e-300</span><span class="p">,</span> <span class="n">p_map</span><span class="p">))</span>
+        <span class="n">cbar_label</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"$-\log_</span><span class="si">{10}</span><span class="s2">(p)$"</span>
+        <span class="n">ref_line</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">p_map</span>
+        <span class="n">cbar_label</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">"$p$"</span>
+        <span class="n">ref_line</span> <span class="o">=</span> <span class="n">alpha</span>
+    <span class="n">im</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cmap</span><span class="p">)</span>
+    <span class="n">cbar</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">figure</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">fraction</span><span class="o">=</span><span class="mf">0.04</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mf">0.02</span><span class="p">)</span>
+    <span class="n">cbar</span><span class="o">.</span><span class="n">set_label</span><span class="p">(</span><span class="n">cbar_label</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">log_scale</span><span class="p">:</span>
+        <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">ref_line</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"red"</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">show_significant</span><span class="p">:</span>
+        <span class="n">sig</span> <span class="o">=</span> <span class="p">(</span><span class="n">p_map</span> <span class="o">&lt;=</span> <span class="n">alpha</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">p_map</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">fill_diagonal</span><span class="p">(</span><span class="n">sig</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sig</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">contour</span><span class="p">(</span><span class="n">sig</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">),</span> <span class="n">levels</span><span class="o">=</span><span class="p">[</span><span class="mf">0.5</span><span class="p">],</span> <span class="n">colors</span><span class="o">=</span><span class="s2">"red"</span><span class="p">,</span> <span class="n">linewidths</span><span class="o">=</span><span class="mf">0.4</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"node"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"node"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">title</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">9</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ax</span></div>
+
+
+
+<div class="viewcode-block" id="plot_null_max_distribution">
+<a class="viewcode-back" href="../../../conninfpy.plot.html#conninfpy.plot.plot_null_max_distribution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_null_max_distribution</span><span class="p">(</span>
+    <span class="n">null_max</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">observed_max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">gpd_tail</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">threshold_quantile</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.75</span><span class="p">,</span>
+    <span class="n">ax</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Axes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">bins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">40</span><span class="p">,</span>
+    <span class="n">title</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Axes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Max-statistic null histogram with optional GPD-tail overlay.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    null_max : ndarray of shape (J,)</span>
+<span class="sd">        Per-permutation maximum statistic.</span>
+<span class="sd">    observed_max : float, optional</span>
+<span class="sd">        Observed max statistic, drawn as a red vertical line for</span>
+<span class="sd">        eyeballing FWER significance.</span>
+<span class="sd">    gpd_tail : tuple ``(u, sigma, xi)``, optional</span>
+<span class="sd">        GPD parameters from :func:`conninfpy.fit_gpd_tail`. If supplied,</span>
+<span class="sd">        the GPD survival function is overlaid as a smooth red curve on</span>
+<span class="sd">        the upper tail.</span>
+<span class="sd">    threshold_quantile : float, default 0.75</span>
+<span class="sd">        Empirical quantile at which the GPD tail is anchored — only</span>
+<span class="sd">        used to position the dashed grey reference line; should match</span>
+<span class="sd">        the value passed to ``fit_gpd_tail``.</span>
+<span class="sd">    ax : matplotlib Axes, optional</span>
+<span class="sd">        Plot into this axis; otherwise a new figure is created.</span>
+<span class="sd">    bins : int, default 40</span>
+<span class="sd">        Histogram bin count.</span>
+<span class="sd">    title : str, optional</span>
+<span class="sd">        Axis title.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">4.5</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span>
+        <span class="n">null_max</span><span class="p">,</span>
+        <span class="n">bins</span><span class="o">=</span><span class="n">bins</span><span class="p">,</span>
+        <span class="n">density</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="mf">0.55</span><span class="p">,</span>
+        <span class="n">edgecolor</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span>
+        <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"empirical null (J=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">null_max</span><span class="p">)</span><span class="si">}</span><span class="s2">)"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">u_emp</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">null_max</span><span class="p">,</span> <span class="n">threshold_quantile</span><span class="p">))</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span>
+        <span class="n">u_emp</span><span class="p">,</span>
+        <span class="n">color</span><span class="o">=</span><span class="s2">"grey"</span><span class="p">,</span>
+        <span class="n">linestyle</span><span class="o">=</span><span class="s2">"--"</span><span class="p">,</span>
+        <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span>
+        <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"u = </span><span class="si">{</span><span class="n">threshold_quantile</span><span class="si">:</span><span class="s2">.0%</span><span class="si">}</span><span class="s2">-tile"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">gpd_tail</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">u</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">xi</span> <span class="o">=</span> <span class="n">gpd_tail</span>
+        <span class="n">xs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">null_max</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">*</span> <span class="mf">1.02</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="p">(</span><span class="n">xs</span> <span class="o">-</span> <span class="n">u</span><span class="p">)</span> <span class="o">/</span> <span class="n">sigma</span>
+        <span class="c1"># Differentiate the survival function: f(x) = (1/σ) (1 + ξ z)^{-1 - 1/ξ}</span>
+        <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">xi</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">1e-8</span><span class="p">:</span>
+            <span class="n">pdf</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">sigma</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">z</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">base</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">xi</span> <span class="o">*</span> <span class="n">z</span><span class="p">)</span>
+            <span class="n">pdf</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">sigma</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">power</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">-</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">xi</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xs</span><span class="p">,</span> <span class="n">pdf</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"red"</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.3</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"GPD tail (ξ=</span><span class="si">{</span><span class="n">xi</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">observed_max</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span>
+            <span class="n">observed_max</span><span class="p">,</span>
+            <span class="n">color</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span>
+            <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"observed max = </span><span class="si">{</span><span class="n">observed_max</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"max statistic across edges"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"density"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">title</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">9</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ax</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_effect_and_pmin_from_result</span><span class="p">(</span>
+    <span class="n">result</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Extract a signed effect map and per-edge p-min from a result.</span>
+
+<span class="sd">    Returns ``(effect, p_min, label)`` where ``label`` is the colorbar</span>
+<span class="sd">    label (``"t"``, ``"β"``, or ``"F"`` for the omnibus path).</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">stat_omnibus</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"stat_omnibus is None — results without stat maps "</span>
+                <span class="s2">"cannot be plotted with plot_effect_matrix; rerun the "</span>
+                <span class="s2">"pipeline."</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">stat_omnibus</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"omnibus"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="s2">"F"</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">InferenceResult</span><span class="p">):</span>
+        <span class="n">signed</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">stat_signed</span>
+        <span class="k">if</span> <span class="n">signed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"stat_positive / stat_negative are None — results "</span>
+                <span class="s2">"without stat maps cannot be plotted with "</span>
+                <span class="s2">"plot_effect_matrix; rerun the pipeline."</span>
+            <span class="p">)</span>
+        <span class="n">p_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"positive"</span><span class="p">],</span> <span class="n">result</span><span class="p">[</span><span class="s2">"negative"</span><span class="p">])</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="s2">"β"</span> <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">stat_type</span> <span class="o">==</span> <span class="s2">"beta"</span> <span class="k">else</span> <span class="s2">"t"</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">signed</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">p_min</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">label</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"Unsupported result type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">; expected "</span>
+        <span class="s2">"InferenceResult or OmnibusInferenceResult."</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_network_order</span><span class="p">(</span>
+    <span class="n">atlas</span><span class="p">:</span> <span class="s2">"AtlasInfo"</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">],</span> <span class="nb">list</span><span class="p">,</span> <span class="nb">list</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return ``(perm, block_starts, block_names)`` for atlas-ordered plots.</span>
+
+<span class="sd">    ``perm`` is the row/column permutation that groups ROIs by network</span>
+<span class="sd">    in their first-appearance order. ``block_starts`` lists the first</span>
+<span class="sd">    index of each network block (length K) and ``block_names`` the</span>
+<span class="sd">    network labels in the same order.</span>
+<span class="sd">    """</span>
+    <span class="n">networks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">atlas</span><span class="o">.</span><span class="n">networks</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">)</span>
+    <span class="n">seen_order</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">networks</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen_order</span><span class="p">:</span>
+            <span class="n">seen_order</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">perm_parts</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">networks</span> <span class="o">==</span> <span class="n">name</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">seen_order</span><span class="p">]</span>
+    <span class="n">perm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">perm_parts</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">block_starts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">perm_parts</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+        <span class="n">block_starts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">block_starts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">part</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">perm</span><span class="p">,</span> <span class="n">block_starts</span><span class="p">,</span> <span class="n">seen_order</span>
+
+
+<div class="viewcode-block" id="plot_effect_matrix">
+<a class="viewcode-back" href="../../../conninfpy.plot.html#conninfpy.plot.plot_effect_matrix">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_effect_matrix</span><span class="p">(</span>
+    <span class="n">result</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">vmax</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">atlas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="s2">"AtlasInfo"</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">ax</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Axes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">order_by_network</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">show_network_lines</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">title</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Axes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Signed effect heatmap with significant edges outlined.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    result : InferenceResult or OmnibusInferenceResult</span>
+<span class="sd">        Inference output. The signed observed statistic is read from</span>
+<span class="sd">        ``result.stat_signed`` (t / β path) or ``result.stat_omnibus``</span>
+<span class="sd">        (F path, unsigned).</span>
+<span class="sd">    alpha : float, default 0.05</span>
+<span class="sd">        Significance threshold for the edge-outline overlay</span>
+<span class="sd">        (``min(p_positive, p_negative) &lt;= alpha`` on the tail path;</span>
+<span class="sd">        ``p_omnibus &lt;= alpha`` on the F path).</span>
+<span class="sd">    vmax : float, optional</span>
+<span class="sd">        Symmetric color bound. Defaults to the 98th percentile of the</span>
+<span class="sd">        absolute observed statistic.</span>
+<span class="sd">    atlas : :class:`AtlasInfo`, optional</span>
+<span class="sd">        When supplied (and ``order_by_network=True``), rows and columns</span>
+<span class="sd">        are reordered so that same-network ROIs are contiguous; thin</span>
+<span class="sd">        lines mark the network blocks if ``show_network_lines=True``.</span>
+<span class="sd">    ax : matplotlib Axes, optional</span>
+<span class="sd">        Plot into this axis; otherwise a new figure is created.</span>
+<span class="sd">    order_by_network : bool, default True</span>
+<span class="sd">        Permute rows/columns to group by network. Ignored without an</span>
+<span class="sd">        atlas.</span>
+<span class="sd">    show_network_lines : bool, default True</span>
+<span class="sd">        Draw light separator lines between network blocks. Ignored</span>
+<span class="sd">        without an atlas or when ``order_by_network=False``.</span>
+<span class="sd">    title : str, optional</span>
+<span class="sd">        Axis title.</span>
+<span class="sd">    """</span>
+    <span class="n">effect</span><span class="p">,</span> <span class="n">p_min</span><span class="p">,</span> <span class="n">stat_label</span> <span class="o">=</span> <span class="n">_effect_and_pmin_from_result</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">effect</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">effect</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">effect</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"effect matrix must be square; got </span><span class="si">{</span><span class="n">effect</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+    <span class="n">N</span> <span class="o">=</span> <span class="n">effect</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">perm</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">block_starts</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">atlas</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">order_by_network</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span> <span class="o">!=</span> <span class="n">N</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"atlas has </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span><span class="si">}</span><span class="s2"> ROIs but the result is on "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">N</span><span class="si">}</span><span class="s2"> nodes; cannot reorder."</span>
+            <span class="p">)</span>
+        <span class="n">perm</span><span class="p">,</span> <span class="n">block_starts</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_network_order</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span>
+        <span class="n">effect</span> <span class="o">=</span> <span class="n">effect</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ix_</span><span class="p">(</span><span class="n">perm</span><span class="p">,</span> <span class="n">perm</span><span class="p">)]</span>
+        <span class="n">p_min</span> <span class="o">=</span> <span class="n">p_min</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ix_</span><span class="p">(</span><span class="n">perm</span><span class="p">,</span> <span class="n">perm</span><span class="p">)]</span>
+
+    <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mf">4.5</span><span class="p">))</span>
+
+    <span class="c1"># Symmetric color bound.</span>
+    <span class="k">if</span> <span class="n">vmax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">finite</span> <span class="o">=</span> <span class="n">effect</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">effect</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="n">finite</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+            <span class="n">vmax</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">finite</span><span class="p">),</span> <span class="mf">0.98</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">vmax</span> <span class="ow">or</span> <span class="n">vmax</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">vmax</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">is_unsigned</span> <span class="o">=</span> <span class="n">stat_label</span> <span class="o">==</span> <span class="s2">"F"</span>
+    <span class="k">if</span> <span class="n">is_unsigned</span><span class="p">:</span>
+        <span class="n">im</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">effect</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s2">"magma"</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">im</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">effect</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s2">"RdBu_r"</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=-</span><span class="n">vmax</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">)</span>
+    <span class="n">cbar</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">figure</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">fraction</span><span class="o">=</span><span class="mf">0.04</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mf">0.02</span><span class="p">)</span>
+    <span class="n">cbar</span><span class="o">.</span><span class="n">set_label</span><span class="p">(</span><span class="n">stat_label</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+
+    <span class="c1"># Significant-edge contour</span>
+    <span class="n">sig</span> <span class="o">=</span> <span class="p">(</span><span class="n">p_min</span> <span class="o">&lt;=</span> <span class="n">alpha</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">p_min</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">fill_diagonal</span><span class="p">(</span><span class="n">sig</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sig</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">contour</span><span class="p">(</span><span class="n">sig</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">),</span> <span class="n">levels</span><span class="o">=</span><span class="p">[</span><span class="mf">0.5</span><span class="p">],</span> <span class="n">colors</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span> <span class="n">linewidths</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+    <span class="c1"># Network block separators</span>
+    <span class="k">if</span> <span class="n">atlas</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">order_by_network</span> <span class="ow">and</span> <span class="n">show_network_lines</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">block_starts</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">s</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"grey"</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">s</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"grey"</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"node"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">"node"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">title</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">9</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">atlas</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">order_by_network</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">"effect matrix (network-ordered)"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">9</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ax</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

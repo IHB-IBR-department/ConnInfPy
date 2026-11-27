@@ -1,0 +1,284 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.preprocessing &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2943afd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="References" href="references.html" />
+    <link rel="prev" title="conninfpy.defaults" href="conninfpy.defaults.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="conninfpy.html">conninfpy</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.analysis.html">conninfpy.analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.results.html">conninfpy.results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.atlas.html">conninfpy.atlas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.interpret.html">conninfpy.interpret</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.plot.html">conninfpy.plot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.stats.html">conninfpy.stats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.influence.html">conninfpy.influence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.enhance.html">conninfpy.enhance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.harmonize.html">conninfpy.harmonize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.sim.html">conninfpy.sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.defaults.html">conninfpy.defaults</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">conninfpy.preprocessing</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.KNOWN_CONNECTIVITY_METHODS"><code class="docutils literal notranslate"><span class="pre">KNOWN_CONNECTIVITY_METHODS</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.fact"><code class="docutils literal notranslate"><span class="pre">fact()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.connectivity_method_from_kind"><code class="docutils literal notranslate"><span class="pre">connectivity_method_from_kind()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.gsr_from_file_token"><code class="docutils literal notranslate"><span class="pre">gsr_from_file_token()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.gsr_from_file_name"><code class="docutils literal notranslate"><span class="pre">gsr_from_file_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.empty_record"><code class="docutils literal notranslate"><span class="pre">empty_record()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.normalize_preprocessing_record"><code class="docutils literal notranslate"><span class="pre">normalize_preprocessing_record()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.merge_preprocessing_records"><code class="docutils literal notranslate"><span class="pre">merge_preprocessing_records()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.aggregate_preprocessing_records"><code class="docutils literal notranslate"><span class="pre">aggregate_preprocessing_records()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.attach_preprocessing"><code class="docutils literal notranslate"><span class="pre">attach_preprocessing()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.set_preprocessing_facts"><code class="docutils literal notranslate"><span class="pre">set_preprocessing_facts()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.preprocessing.record_from_manifest_applied"><code class="docutils literal notranslate"><span class="pre">record_from_manifest_applied()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.html#shared-array-helpers">Shared array helpers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="conninfpy.html">conninfpy</a></li>
+      <li class="breadcrumb-item active">conninfpy.preprocessing</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/conninfpy.preprocessing.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-conninfpy.preprocessing">
+<span id="conninfpy-preprocessing"></span><h1>conninfpy.preprocessing<a class="headerlink" href="#module-conninfpy.preprocessing" title="Link to this heading"></a></h1>
+<p>Three-state preprocessing facts carried with a dataset and its results.</p>
+<p>Every fact is either <strong>unknown</strong> (absent / <code class="docutils literal notranslate"><span class="pre">None</span></code>) or known with an
+explicit <em>source</em> that separates what ConnInfPy itself did from what an
+input manifest or file name merely declares:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;computed_by_conninfpy&quot;</span></code> — the connectivity backend
+(<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_connectivity()</span></code>) estimated the matrices.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;loader_denoising_pipeline&quot;</span></code> — the loader’s own denoising (e.g.
+fMRIPrep confound regression incl. its global-signal option).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;input_file_name_token&quot;</span></code> — a declaration encoded in the input file
+naming convention (e.g. <code class="docutils literal notranslate"><span class="pre">..._GSR.npy</span></code>); not performed by this library.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;input_manifest_declared&quot;</span></code> — declared in the dataset manifest’s
+<code class="docutils literal notranslate"><span class="pre">preprocessing.applied</span></code> block about upstream processing.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;app_rank_correlation_pipeline&quot;</span></code> — the app ranked the series and the
+backend correlated the ranks (Spearman).</p></li>
+</ul>
+<p>A missing key or a <code class="docutils literal notranslate"><span class="pre">None</span></code> fact means <em>unknown</em>, never “not applied”:
+an explicit <code class="docutils literal notranslate"><span class="pre">False</span></code> (e.g. global-signal regression known to be off) is
+kept as <code class="docutils literal notranslate"><span class="pre">{&quot;value&quot;:</span> <span class="pre">False,</span> <span class="pre">&quot;source&quot;:</span> <span class="pre">...}</span></code> and must not collapse to
+missing. Known facts are never inferred from the connectivity values
+themselves (GSR is not guessed from negative edges).</p>
+<p>Per-observation diagnostics live in the phenotype table, not here:
+<code class="docutils literal notranslate"><span class="pre">n_valid_tr</span></code> counts retained frames and <code class="docutils literal notranslate"><span class="pre">delta_s</span></code> is a per-subject
+shrinkage intensity in [0, 1] — neither is a repetition time.
+<code class="docutils literal notranslate"><span class="pre">tr_seconds</span></code> is only ever recorded from an explicit source; absent
+means unknown, not 1 or any other default.</p>
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.KNOWN_CONNECTIVITY_METHODS">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">KNOWN_CONNECTIVITY_METHODS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('pearson',</span> <span class="pre">'partial',</span> <span class="pre">'spearman')</span></span><a class="headerlink" href="#conninfpy.preprocessing.KNOWN_CONNECTIVITY_METHODS" title="Link to this definition"></a></dt>
+<dd><p>Connectivity estimators that can be stated as known facts.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.fact">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">fact</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#fact"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.fact" title="Link to this definition"></a></dt>
+<dd><p>Build one known fact: <code class="docutils literal notranslate"><span class="pre">{&quot;value&quot;:</span> <span class="pre">...,</span> <span class="pre">&quot;source&quot;:</span> <span class="pre">...}</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.connectivity_method_from_kind">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">connectivity_method_from_kind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kind</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#connectivity_method_from_kind"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.connectivity_method_from_kind" title="Link to this definition"></a></dt>
+<dd><p>Map backend <code class="docutils literal notranslate"><span class="pre">kind</span></code> names onto fact values (<code class="docutils literal notranslate"><span class="pre">spearman</span></code> passes through).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.gsr_from_file_token">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">gsr_from_file_token</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">token</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#gsr_from_file_token"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.gsr_from_file_token" title="Link to this definition"></a></dt>
+<dd><p>Global-signal status declared by a file-name token, or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;GSR&quot;</span></code> (case-insensitive, punctuation ignored) declares that
+global-signal regression was applied upstream; <code class="docutils literal notranslate"><span class="pre">&quot;noGSR&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;no_GSR&quot;</span></code>
+/ <code class="docutils literal notranslate"><span class="pre">&quot;no-GSR&quot;</span></code> declare that it was not. Any other token declares
+nothing (<code class="docutils literal notranslate"><span class="pre">None</span></code> = unknown).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.gsr_from_file_name">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">gsr_from_file_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#gsr_from_file_name"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.gsr_from_file_name" title="Link to this definition"></a></dt>
+<dd><p>Global-signal status declared by a file <em>name</em> (not its contents).</p>
+<p>Scans the base name for the <code class="docutils literal notranslate"><span class="pre">GSR</span></code> / negated-<code class="docutils literal notranslate"><span class="pre">GSR</span></code> tokens only; a
+name without a supported token declares nothing. Negation survives
+underscores, hyphens, dots and case (<code class="docutils literal notranslate"><span class="pre">no_GSR</span></code>, <code class="docutils literal notranslate"><span class="pre">no-GSR</span></code>, <code class="docutils literal notranslate"><span class="pre">noGSR</span></code>,
+<code class="docutils literal notranslate"><span class="pre">no.gsr</span></code>), and a negated token never reads as a plain <code class="docutils literal notranslate"><span class="pre">GSR</span></code> token;
+a <code class="docutils literal notranslate"><span class="pre">GSR</span></code> embedded in a larger word (e.g. <code class="docutils literal notranslate"><span class="pre">xgsr</span></code>) declares nothing.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.empty_record">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">empty_record</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#empty_record"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.empty_record" title="Link to this definition"></a></dt>
+<dd><p>A record with every fact unknown.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.normalize_preprocessing_record">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">normalize_preprocessing_record</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">record</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#normalize_preprocessing_record"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.normalize_preprocessing_record" title="Link to this definition"></a></dt>
+<dd><p>Validate (or accept <code class="docutils literal notranslate"><span class="pre">None</span></code> for) a preprocessing record; return a copy.</p>
+<p>Unknown keys are rejected so typos cannot silently hide facts; every
+known fact must carry a value and a source. An explicit <code class="docutils literal notranslate"><span class="pre">schema_version</span></code>
+other than the supported one is rejected rather than silently rewritten
+(a future schema may mean something different); an absent version reads
+as the current one, as loaders building records programmatically do.
+The optional <code class="docutils literal notranslate"><span class="pre">per_site</span></code> mapping carries per-constituent records (e.g.
+per-site facts of a combined multi-site dataset) alongside the global
+facts; site records may not nest <code class="docutils literal notranslate"><span class="pre">per_site</span></code> again.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.merge_preprocessing_records">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">merge_preprocessing_records</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">records</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#merge_preprocessing_records"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.merge_preprocessing_records" title="Link to this definition"></a></dt>
+<dd><p>Merge records; earlier arguments win (library-computed beats declared).</p>
+<p>Only facts missing from the higher-precedence record are filled in, so
+an explicit <code class="docutils literal notranslate"><span class="pre">False</span></code> from a performed pipeline is never overwritten by
+a manifest declaration.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.aggregate_preprocessing_records">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">aggregate_preprocessing_records</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">records</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#aggregate_preprocessing_records"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.aggregate_preprocessing_records" title="Link to this definition"></a></dt>
+<dd><p>Aggregate per-constituent records (e.g. per-site) into one record.</p>
+<p>A fact is asserted globally only when <strong>every</strong> constituent states it
+with the same value: differing values, or a mix of known and unknown,
+leave the global fact unknown — never an invented common True/False.
+The aggregated source is the constituents’ shared source, or a
+<code class="docutils literal notranslate"><span class="pre">mixed_sources(...)</span></code> description when the agreeing facts arrived via
+different sources. Per-constituent records stay available to the caller
+(e.g. as <code class="docutils literal notranslate"><span class="pre">provenance['preprocessing_per_site']</span></code>) so heterogeneity is
+inspectable; <code class="docutils literal notranslate"><span class="pre">names</span></code> only labels the constituents.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.attach_preprocessing">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">attach_preprocessing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">facts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#attach_preprocessing"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.attach_preprocessing" title="Link to this definition"></a></dt>
+<dd><p>Attach/extend <code class="docutils literal notranslate"><span class="pre">dataset.provenance['preprocessing']</span></code> in place.</p>
+<p>Each keyword is one fact value paired with its source either directly
+as a <code class="docutils literal notranslate"><span class="pre">('value',</span> <span class="pre">'source')</span></code> tuple or via <code class="docutils literal notranslate"><span class="pre">fact(value,</span> <span class="pre">source)</span></code>;
+<code class="docutils literal notranslate"><span class="pre">None</span></code> facts are ignored. Facts already recorded on the dataset win
+(they were set by the component that actually did the work).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.set_preprocessing_facts">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">set_preprocessing_facts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">facts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#set_preprocessing_facts"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.set_preprocessing_facts" title="Link to this definition"></a></dt>
+<dd><p>Overwrite facts recorded on a dataset (e.g. Spearman rank correlation).</p>
+<p>Same calling convention as <a class="reference internal" href="#conninfpy.preprocessing.attach_preprocessing" title="conninfpy.preprocessing.attach_preprocessing"><code class="xref py py-func docutils literal notranslate"><span class="pre">attach_preprocessing()</span></code></a>, but the given
+facts replace whatever was recorded before, because the caller states
+what the data actually are after its own processing step.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.preprocessing.record_from_manifest_applied">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.preprocessing.</span></span><span class="sig-name descname"><span class="pre">record_from_manifest_applied</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">applied</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a></span></span><a class="reference internal" href="_modules/conninfpy/preprocessing.html#record_from_manifest_applied"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.preprocessing.record_from_manifest_applied" title="Link to this definition"></a></dt>
+<dd><p>Facts declared by a manifest <code class="docutils literal notranslate"><span class="pre">preprocessing.applied</span></code> block.</p>
+<p>Recognised keys (everything else in the block is left alone, it stays
+available in the manifest itself): <code class="docutils literal notranslate"><span class="pre">use_GSR</span></code>/<code class="docutils literal notranslate"><span class="pre">gsr</span></code> (bool),
+<code class="docutils literal notranslate"><span class="pre">correlation</span></code>/<code class="docutils literal notranslate"><span class="pre">connectivity_method</span></code> (pearson/partial/spearman),
+<code class="docutils literal notranslate"><span class="pre">standardize</span></code> (bool), <code class="docutils literal notranslate"><span class="pre">shrinkage</span></code> (null/’ledoit_wolf’/’oas’/float),
+<code class="docutils literal notranslate"><span class="pre">tr_seconds</span></code> (positive number). Only declarations the block actually
+makes become facts; nothing is defaulted.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="conninfpy.defaults.html" class="btn btn-neutral float-left" title="conninfpy.defaults" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="references.html" class="btn btn-neutral float-right" title="References" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

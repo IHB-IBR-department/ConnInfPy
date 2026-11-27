@@ -1,0 +1,1079 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recommended Workflows &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2943afd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="conninfpy" href="conninfpy.html" />
+    <link rel="prev" title="How Inference Works" href="approach.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">How Inference Works</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Recommended Workflows</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#selecting-a-workflow">Selecting a workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#input-conventions">Input conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#two-independent-groups">Two independent groups</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#continuous-predictor-with-confounds">Continuous predictor with confounds</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#several-predictors-in-one-pass">Several predictors in one pass</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#multi-site-glm-with-combat-harmonization">Multi-site GLM with ComBat harmonization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#choosing-a-harmonization-strategy">Choosing a harmonization strategy</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#paired-repeated-conditions">Paired / repeated conditions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#repeated-measures-glm-condition-varying-confounds">Repeated-measures GLM (condition-varying confounds)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#between-subject-predictor-on-a-within-subject-change-group-condition">Between-subject predictor on a within-subject change (Group × Condition)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#interactions-between-predictors">Interactions between predictors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#custom-contrasts-and-omnibus-f-tests">Custom contrasts and omnibus F-tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#three-or-more-repeated-sessions-within-subject-omnibus-f">Three or more repeated sessions (within-subject omnibus F)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inference-stability-sweep-e-h-in-one-call">Inference stability: sweep <code class="docutils literal notranslate"><span class="pre">(E,</span> <span class="pre">H)</span></code> in one call</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#interpreting-and-exporting-results">Interpreting and exporting results</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#brainnet-viewer-export-and-headless-rendering">BrainNet Viewer export and headless rendering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#speed-vs-publication-runs">Speed vs. publication runs</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#from-fmriprep-derivatives-and-on-demand-nilearn-atlases">From fMRIPrep derivatives and on-demand nilearn atlases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#custom-atlases">Custom atlases</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Recommended Workflows</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/workflows.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="recommended-workflows">
+<h1>Recommended Workflows<a class="headerlink" href="#recommended-workflows" title="Link to this heading"></a></h1>
+<p>This page describes the <strong>recommended end-to-end recipes</strong> for the most
+common connectivity-inference designs. Where the <a class="reference internal" href="usage.html"><span class="doc">Usage</span></a> page is a
+function-by-function reference, this page is task-oriented: pick the row in
+the decision table that matches your study, then copy the recipe.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>For the conceptual background to these recipes — the per-edge statistic,
+network enhancement, the permutation null, and family-wise error control —
+see <a class="reference internal" href="approach.html"><span class="doc">How Inference Works</span></a>. Each recipe below is a particular configuration of that
+common four-step pipeline.</p>
+</div>
+<p>The recommended entry point is <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.analyze()</span></code>. It wraps the
+standard pipeline —</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Fisher r→z  →  optional ComBat  →  optional site-stratified permutation
+           →  network enhancement  →  permutation-corrected p-value maps
+</pre></div>
+</div>
+<p>— in a single call, and dispatches to the appropriate lower-level pipeline
+based on the arguments supplied. The lower-level entry points
+<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val()</span></code>, <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val_glm()</span></code>, and
+<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val_paired_glm()</span></code> are needed only when full control
+over the design matrix or contrast is required.</p>
+<section id="selecting-a-workflow">
+<h2>Selecting a workflow<a class="headerlink" href="#selecting-a-workflow" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 40.0%" />
+<col style="width: 35.0%" />
+<col style="width: 25.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Study design</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">analyze()</span></code> arguments</p></th>
+<th class="head"><p>Section</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Two independent groups (patients vs controls)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">group1=</span></code>, <code class="docutils literal notranslate"><span class="pre">group2=</span></code></p></td>
+<td><p><a class="reference internal" href="#wf-two-sample"><span class="std std-ref">Two independent groups</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>Continuous predictor + nuisance covariates</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Y=</span></code>, <code class="docutils literal notranslate"><span class="pre">interest=</span></code>, <code class="docutils literal notranslate"><span class="pre">confounds=</span></code></p></td>
+<td><p><a class="reference internal" href="#wf-continuous"><span class="std std-ref">Continuous predictor with confounds</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p>Several predictors, tested separately, one pass</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Y=</span></code>, <code class="docutils literal notranslate"><span class="pre">interest={name:</span> <span class="pre">vec}</span></code></p></td>
+<td><p><a class="reference internal" href="#wf-multi-interest"><span class="std std-ref">Several predictors in one pass</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>Multi-site continuous / group predictor</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">...</span> <span class="pre">+</span> <span class="pre">sites=</span></code>, <code class="docutils literal notranslate"><span class="pre">harmonize=</span></code></p></td>
+<td><p><a class="reference internal" href="#wf-glm-sites"><span class="std std-ref">Multi-site GLM with ComBat harmonization</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p>Paired / repeated conditions (no condition confounds)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">group1=</span></code>, <code class="docutils literal notranslate"><span class="pre">group2=</span></code>, <code class="docutils literal notranslate"><span class="pre">test_type='paired'</span></code></p></td>
+<td><p><a class="reference internal" href="#wf-paired"><span class="std std-ref">Paired / repeated conditions</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>Paired / repeated conditions + condition-varying confound</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">...</span> <span class="pre">+</span> <span class="pre">confounds_group1=</span></code>, <code class="docutils literal notranslate"><span class="pre">confounds_group2=</span></code></p></td>
+<td><p><a class="reference internal" href="#wf-repeated-glm"><span class="std std-ref">Repeated-measures GLM (condition-varying confounds)</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p>Between-subject predictor on a within-subject change (Group × Condition)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">group1=</span></code>, <code class="docutils literal notranslate"><span class="pre">group2=</span></code>, <code class="docutils literal notranslate"><span class="pre">test_type='paired'</span></code>, <code class="docutils literal notranslate"><span class="pre">interest=</span></code></p></td>
+<td><p><a class="reference internal" href="#wf-paired-interest"><span class="std std-ref">Between-subject predictor on a within-subject change (Group × Condition)</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>Interaction between predictors (e.g. group × age)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">interest={...}</span></code>, <code class="docutils literal notranslate"><span class="pre">interactions=[...]</span></code></p></td>
+<td><p><a class="reference internal" href="#wf-interactions"><span class="std std-ref">Interactions between predictors</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p>Custom contrast or multi-row omnibus F-test</p></td>
+<td><p>drop to <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val_glm()</span></code></p></td>
+<td><p><a class="reference internal" href="#wf-custom"><span class="std std-ref">Custom contrasts and omnibus F-tests</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>Three or more repeated sessions (within-subject omnibus F)</p></td>
+<td><p>drop to <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val_glm()</span></code> (advanced API)</p></td>
+<td><p><a class="reference internal" href="#wf-repeated-sessions"><span class="std std-ref">Three or more repeated sessions (within-subject omnibus F)</span></a></p></td>
+</tr>
+</tbody>
+</table>
+<p>All paths share the same output contract: a dict-like
+<code class="xref py py-class docutils literal notranslate"><span class="pre">InferenceResult</span></code> with canonical keys <code class="docutils literal notranslate"><span class="pre">'positive'</span></code> and
+<code class="docutils literal notranslate"><span class="pre">'negative'</span></code> (or <code class="docutils literal notranslate"><span class="pre">'omnibus'</span></code> for F-tests). Positive and negative effects
+are <strong>always tested separately</strong>. For directional designs the orientation is
+fixed:</p>
+<ul class="simple">
+<li><p>two-sample / paired: <code class="docutils literal notranslate"><span class="pre">positive</span></code> = <code class="docutils literal notranslate"><span class="pre">group2</span> <span class="pre">&gt;</span> <span class="pre">group1</span></code>;</p></li>
+<li><p>GLM: <code class="docutils literal notranslate"><span class="pre">positive</span></code> = predictor ↑ → connectivity ↑.</p></li>
+</ul>
+</section>
+<section id="input-conventions">
+<h2>Input conventions<a class="headerlink" href="#input-conventions" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Connectivity tensors are shape <code class="docutils literal notranslate"><span class="pre">(n_subjects,</span> <span class="pre">N,</span> <span class="pre">N)</span></code>. The diagonal is
+zeroed automatically (on a copy) by every entry point.</p></li>
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">analyze()</span></code> takes <code class="docutils literal notranslate"><span class="pre">input='r'</span></code> for <strong>raw correlation matrices</strong>
+(Fisher r→z is applied once) or <code class="docutils literal notranslate"><span class="pre">input='z'</span></code> for data already on the
+z-scale. Left as <code class="docutils literal notranslate"><span class="pre">None</span></code> it detects the scale from a unit diagonal or
+values beyond ±1, and raises when the data could be either;
+<code class="docutils literal notranslate"><span class="pre">r_to_z=False</span></code> keeps correlations untransformed. The lower-level
+functions in <a class="reference internal" href="conninfpy.stats.html#module-conninfpy.stats" title="conninfpy.stats"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.stats</span></code></a> never transform — call
+<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.fisher_r_to_z()</span></code> first.</p></li>
+<li><p>Predictors, confounds, and <code class="docutils literal notranslate"><span class="pre">sites</span></code> must be row-aligned to the subject
+axis of the connectivity tensor.</p></li>
+</ul>
+</section>
+<section id="two-independent-groups">
+<span id="wf-two-sample"></span><h2>Two independent groups<a class="headerlink" href="#two-independent-groups" title="Link to this heading"></a></h2>
+<p>The simplest design — two groups of subjects, no covariates.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">group1</span><span class="o">=</span><span class="n">controls_corr</span><span class="p">,</span>        <span class="c1"># (n1, N, N) raw correlations</span>
+    <span class="n">group2</span><span class="o">=</span><span class="n">patients_corr</span><span class="p">,</span>        <span class="c1"># (n2, N, N)</span>
+    <span class="n">test_type</span><span class="o">=</span><span class="s1">'two-sample'</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span>
+    <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>         <span class="c1"># exact integration (the default)</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="n">acceleration</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>           <span class="c1"># empirical permutation p-values (the default)</span>
+    <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">p_patients_higher</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'positive'</span><span class="p">]</span>   <span class="c1"># patients &gt; controls</span>
+<span class="n">p_controls_higher</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'negative'</span><span class="p">]</span>   <span class="c1"># controls &gt; patients</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">n_significant</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="mf">0.05</span><span class="p">))</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">n</span></code> is the TFNBS integration setting. <code class="docutils literal notranslate"><span class="pre">n=None</span></code> (the default) integrates
+the piecewise support exactly, independently for each tail. An explicit
+positive integer such as <code class="docutils literal notranslate"><span class="pre">n=10</span></code> selects the <strong>legacy right-endpoint
+threshold grid</strong> (levels <code class="docutils literal notranslate"><span class="pre">start_thres</span> <span class="pre">+</span> <span class="pre">i</span> <span class="pre">*</span> <span class="pre">(max</span> <span class="pre">-</span> <span class="pre">start_thres)</span> <span class="pre">/</span> <span class="pre">n</span></code>), kept
+only to reproduce historical grid-based results; legacy grid scores and the
+exact integral need not be equal, so record <code class="docutils literal notranslate"><span class="pre">E</span></code>, <code class="docutils literal notranslate"><span class="pre">H</span></code>, <code class="docutils literal notranslate"><span class="pre">n</span></code> and
+<code class="docutils literal notranslate"><span class="pre">start_thres</span></code> explicitly when reproducing such results. Every recipe on
+this page uses the exact integral.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code class="docutils literal notranslate"><span class="pre">compute_p_val(test_type='two-sample')</span></code> uses <strong>Welch’s</strong> (unequal
+variance) t-statistic by default and <strong>Student’s</strong> (pooled variance) with
+<code class="docutils literal notranslate"><span class="pre">var_equal=True</span></code>; <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> takes the same <code class="docutils literal notranslate"><span class="pre">var_equal</span></code>. The
+permutation is the same group-label shuffle for both. Under unequal
+variances <em>combined with</em> unbalanced group sizes the exchangeability
+assumption behind the permutation null weakens and Type-I error can
+inflate (Anderson &amp; Robinson 2001), whichever statistic is used. Treat such
+results with caution; for publication-grade multi-site work prefer the
+GLM recipe below with a binary <code class="docutils literal notranslate"><span class="pre">interest</span></code> indicator.</p>
+</div>
+</section>
+<section id="continuous-predictor-with-confounds">
+<span id="wf-continuous"></span><h2>Continuous predictor with confounds<a class="headerlink" href="#continuous-predictor-with-confounds" title="Link to this heading"></a></h2>
+<p>Question: <em>does connectivity vary with age after controlling for sex and
+head motion?</em> This is the GLM path (Freedman–Lane permutation), triggered by
+passing <code class="docutils literal notranslate"><span class="pre">Y=</span></code> and <code class="docutils literal notranslate"><span class="pre">interest=</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+
+<span class="n">confounds</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">sex</span><span class="p">,</span> <span class="n">mean_fd</span><span class="p">])</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span>                            <span class="c1"># (n, N, N) raw correlations</span>
+    <span class="n">interest</span><span class="o">=</span><span class="n">age</span><span class="p">,</span>                 <span class="c1"># continuous predictor</span>
+    <span class="n">confounds</span><span class="o">=</span><span class="n">confounds</span><span class="p">,</span>          <span class="c1"># nuisance regressors</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span>
+    <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">p_age_pos</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'positive'</span><span class="p">]</span>   <span class="c1"># older → higher connectivity</span>
+<span class="n">p_age_neg</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'negative'</span><span class="p">]</span>   <span class="c1"># older → lower connectivity</span>
+</pre></div>
+</div>
+<p>A binary 0/1 <code class="docutils literal notranslate"><span class="pre">interest</span></code> column turns this into a confound-adjusted group
+comparison — the preferred form of the two-sample test when covariates or
+multiple sites are involved.</p>
+<p>A single array <code class="docutils literal notranslate"><span class="pre">interest</span></code> tests one effect and returns one result. To
+test <strong>several predictors at once</strong>, pass a dict — see
+<a class="reference internal" href="#wf-multi-interest"><span class="std std-ref">Several predictors in one pass</span></a>.</p>
+</section>
+<section id="several-predictors-in-one-pass">
+<span id="wf-multi-interest"></span><h2>Several predictors in one pass<a class="headerlink" href="#several-predictors-in-one-pass" title="Link to this heading"></a></h2>
+<p>To test several predictors <strong>separately</strong> in one design — e.g. <code class="docutils literal notranslate"><span class="pre">age</span></code>,
+<code class="docutils literal notranslate"><span class="pre">sex</span></code>, and <code class="docutils literal notranslate"><span class="pre">mean_fd</span></code> each as an effect of interest while the others are
+controlled — pass <code class="docutils literal notranslate"><span class="pre">interest</span></code> as a <strong>dict</strong> <code class="docutils literal notranslate"><span class="pre">{name:</span> <span class="pre">vector}</span></code>. <code class="docutils literal notranslate"><span class="pre">analyze()</span></code>
+builds one design matrix, tests each predictor against its own Freedman–Lane
+null with permutations shared across predictors
+(<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val_glm_multi()</span></code>), and returns a <strong>dict</strong> mapping
+each name to its own <code class="xref py py-class docutils literal notranslate"><span class="pre">InferenceResult</span></code>. Each result equals a
+separate single-predictor run with the same seed; the cost still grows with
+the number of predictors. Each predictor is its own correction family: picking
+the most significant one afterwards needs an extra correction.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span>
+    <span class="n">interest</span><span class="o">=</span><span class="p">{</span><span class="s1">'age'</span><span class="p">:</span> <span class="n">age</span><span class="p">,</span> <span class="s1">'sex'</span><span class="p">:</span> <span class="n">sex</span><span class="p">,</span> <span class="s1">'mean_fd'</span><span class="p">:</span> <span class="n">mean_fd</span><span class="p">},</span>
+    <span class="n">confounds</span><span class="o">=</span><span class="n">motion</span><span class="p">,</span>          <span class="c1"># extra nuisance, shared by all predictors</span>
+    <span class="n">sites</span><span class="o">=</span><span class="n">site</span><span class="p">,</span>                <span class="c1"># ComBat + site-stratified permutation</span>
+    <span class="n">harmonize</span><span class="o">=</span><span class="s1">'combat_site_dummies_glm'</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span> <span class="n">acceleration</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">out</span><span class="p">[</span><span class="s1">'age'</span><span class="p">]</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'positive'</span><span class="p">]</span>        <span class="c1"># edges where age ↑ → connectivity ↑</span>
+<span class="n">out</span><span class="p">[</span><span class="s1">'sex'</span><span class="p">]</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">n_significant</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="n">out</span><span class="p">[</span><span class="s1">'mean_fd'</span><span class="p">]</span><span class="o">.</span><span class="n">significant_edges</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span>  <span class="c1"># AnalyzeResult per predictor</span>
+</pre></div>
+</div>
+<p>Notes:</p>
+<ul class="simple">
+<li><p>Each predictor is tested adjusting for the intercept, every <code class="docutils literal notranslate"><span class="pre">confounds</span></code>
+column, <strong>and the other interest predictors</strong> (they all sit in the shared
+design). The shared ComBat diagnostics and warning flags are attached to
+every entry of the returned dict.</p></li>
+<li><p>Each dict <strong>value</strong> is a single 1-D regressor of shape <code class="docutils literal notranslate"><span class="pre">(n_subjects,)</span></code>;
+the <strong>key</strong> names that predictor’s result. An empty dict, or a value that
+is not 1-D, raises.</p></li>
+<li><p>Under the ComBat arms (<code class="docutils literal notranslate"><span class="pre">combat_only</span></code> and <code class="docutils literal notranslate"><span class="pre">combat_site_dummies_glm</span></code>), ComBat
+preserves only <code class="docutils literal notranslate"><span class="pre">confounds</span></code> and excludes <strong>all</strong> tested predictors — the
+same label-leak avoidance as the single-predictor case.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">(E,</span> <span class="pre">H)</span></code> grid sweep (<a class="reference internal" href="#wf-eh-stability"><span class="std std-ref">Inference stability: sweep (E, H) in one call</span></a>) composes: pass sequences
+for <code class="docutils literal notranslate"><span class="pre">e</span></code> / <code class="docutils literal notranslate"><span class="pre">h</span></code> and every predictor’s result carries the parameter axis.</p></li>
+<li><p>This path is for <strong>separate</strong> per-predictor tests. For a <strong>joint</strong>
+(omnibus) test of several predictors, use a multi-row F-contrast instead
+(<a class="reference internal" href="#wf-custom"><span class="std std-ref">Custom contrasts and omnibus F-tests</span></a>).</p></li>
+</ul>
+</section>
+<section id="multi-site-glm-with-combat-harmonization">
+<span id="wf-glm-sites"></span><h2>Multi-site GLM with ComBat harmonization<a class="headerlink" href="#multi-site-glm-with-combat-harmonization" title="Link to this heading"></a></h2>
+<p>The recommended pattern for most real fMRI analyses: a scientific predictor,
+subject-level confounds, and multi-site data. Adding <code class="docutils literal notranslate"><span class="pre">sites=</span></code> engages two
+coupled mechanisms — ComBat batch harmonization, and site-stratified
+permutation (PALM <code class="docutils literal notranslate"><span class="pre">-eb</span></code> semantics, auto-set via <code class="docutils literal notranslate"><span class="pre">strata=sites</span></code>).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+
+<span class="n">confounds</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">age</span><span class="p">,</span> <span class="n">sex</span><span class="p">,</span> <span class="n">mean_fd</span><span class="p">])</span>
+
+<span class="n">out_primary</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span>
+    <span class="n">interest</span><span class="o">=</span><span class="n">diagnosis</span><span class="p">,</span>           <span class="c1"># 0 = control, 1 = patient</span>
+    <span class="n">confounds</span><span class="o">=</span><span class="n">confounds</span><span class="p">,</span>
+    <span class="n">sites</span><span class="o">=</span><span class="n">site</span><span class="p">,</span>                   <span class="c1"># per-subject scanner / site label</span>
+    <span class="n">harmonize</span><span class="o">=</span><span class="s1">'combat_site_dummies_glm'</span><span class="p">,</span>  <span class="c1"># primary paper recipe</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span>
+    <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span>
+    <span class="n">acceleration</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>           <span class="c1"># empirical permutation p-values for a reported result</span>
+    <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">out_primary</span><span class="o">.</span><span class="n">inference</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">out_primary</span><span class="o">.</span><span class="n">flags</span><span class="p">)</span>                <span class="c1"># plain-English provenance warnings</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">out_primary</span><span class="o">.</span><span class="n">combat_diagnostics</span><span class="p">)</span>   <span class="c1"># includes 'strategy': 'combat_site_dummies_glm'</span>
+</pre></div>
+</div>
+<p><strong>What the call does, step by step:</strong></p>
+<ul class="simple">
+<li><p>ComBat fits with <code class="docutils literal notranslate"><span class="pre">preserve</span> <span class="pre">=</span> <span class="pre">confounds</span></code> (age, sex, motion). The tested
+variable — diagnosis — is <em>deliberately excluded</em> so the harmonization fit
+does not incorporate the labels the permutation will reshuffle (Nygaard 2016
+label-leak avoidance).</p></li>
+<li><p>The downstream GLM tests diagnosis with <code class="docutils literal notranslate"><span class="pre">age</span> <span class="pre">+</span> <span class="pre">sex</span> <span class="pre">+</span> <span class="pre">mean_fd</span> <span class="pre">+</span>
+<span class="pre">site_dummies</span></code> as nuisance. Site dummies absorb any additive shifts ComBat
+did not fully remove.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sites=site</span></code> auto-sets <code class="docutils literal notranslate"><span class="pre">strata=site</span></code>, so the permutation respects
+site exchangeability blocks.</p></li>
+</ul>
+<section id="choosing-a-harmonization-strategy">
+<h3>Choosing a harmonization strategy<a class="headerlink" href="#choosing-a-harmonization-strategy" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">analyze()</span></code> ships the three multi-site strategies used in the paper:
+ComBat-only, ComBat plus site dummies in the GLM, and site dummies in the GLM
+without ComBat. For paper-grade work, report the primary
+<code class="docutils literal notranslate"><span class="pre">combat_site_dummies_glm</span></code> result with <code class="docutils literal notranslate"><span class="pre">combat_only</span></code> and/or <code class="docutils literal notranslate"><span class="pre">site_dummies_glm</span></code> as
+sensitivity arms, depending on the question.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 18.0%" />
+<col style="width: 14.0%" />
+<col style="width: 24.0%" />
+<col style="width: 22.0%" />
+<col style="width: 22.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">harmonize=</span></code></p></th>
+<th class="head"><p>Strategy</p></th>
+<th class="head"><p>What ComBat does</p></th>
+<th class="head"><p>GLM nuisance design</p></th>
+<th class="head"><p>When to use</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">'combat_only'</span></code></p></td>
+<td><p>ComBat only</p></td>
+<td><p>Fits with <code class="docutils literal notranslate"><span class="pre">preserve</span> <span class="pre">=</span> <span class="pre">confounds</span></code>; tested variable excluded</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">confounds</span></code></p></td>
+<td><p>Isolates what the ComBat transform contributes, without residual
+site fixed effects in the inferential GLM.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">'combat_site_dummies_glm'</span></code></p></td>
+<td><p>ComBat + site GLM</p></td>
+<td><p>Fits with <code class="docutils literal notranslate"><span class="pre">preserve</span> <span class="pre">=</span> <span class="pre">confounds</span></code>; tested variable excluded</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">confounds</span> <span class="pre">+</span> <span class="pre">site</span> <span class="pre">dummies</span></code></p></td>
+<td><p>Primary recipe. Removes the Nygaard 2016 label leak and keeps residual
+site control in the inferential GLM. Requires <code class="docutils literal notranslate"><span class="pre">sites=</span></code> and
+<code class="docutils literal notranslate"><span class="pre">confounds=</span></code>; GLM mode only.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">'site_dummies_glm'</span></code> / <code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>Site GLM</p></td>
+<td><p>Skipped</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">confounds</span> <span class="pre">+</span> <span class="pre">site</span> <span class="pre">dummies</span></code></p></td>
+<td><p>No-ComBat sensitivity arm; useful when the inference result is the only
+deliverable or ComBat assumptions are questionable.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">'auto'</span></code> (default)</p></td>
+<td><p>dispatcher</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">combat_site_dummies_glm</span></code> if <code class="docutils literal notranslate"><span class="pre">sites</span> <span class="pre">+</span> <span class="pre">confounds</span></code>; <code class="docutils literal notranslate"><span class="pre">site_dummies_glm</span></code> if only
+<code class="docutils literal notranslate"><span class="pre">sites</span></code>; none otherwise</p></td>
+<td><p>(whichever selected strategy uses)</p></td>
+<td><p>When the call shape unambiguously implies the recipe. Prefer
+explicit strategy names in paper scripts.</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Primary + sensitivity arms.</span>
+<span class="n">common</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">interest</span><span class="o">=</span><span class="n">diagnosis</span><span class="p">,</span> <span class="n">confounds</span><span class="o">=</span><span class="n">confounds</span><span class="p">,</span> <span class="n">sites</span><span class="o">=</span><span class="n">site</span><span class="p">,</span>
+              <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">out_combat</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="o">**</span><span class="n">common</span><span class="p">,</span> <span class="n">harmonize</span><span class="o">=</span><span class="s1">'combat_only'</span><span class="p">)</span>
+<span class="n">out_primary</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="o">**</span><span class="n">common</span><span class="p">,</span> <span class="n">harmonize</span><span class="o">=</span><span class="s1">'combat_site_dummies_glm'</span><span class="p">)</span>
+<span class="n">out_site</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="o">**</span><span class="n">common</span><span class="p">,</span> <span class="n">harmonize</span><span class="o">=</span><span class="s1">'site_dummies_glm'</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>Two-sample mode + ``sites=``</strong> has no defensible ComBat recipe (there is
+no interest column to preserve). <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> skips ComBat and emits a
+flag recommending promotion of the analysis to a GLM with a binary
+<code class="docutils literal notranslate"><span class="pre">interest</span></code> indicator, which is the appropriate form for any multi-site
+group comparison.</p>
+</div>
+</section>
+</section>
+<section id="paired-repeated-conditions">
+<span id="wf-paired"></span><h2>Paired / repeated conditions<a class="headerlink" href="#paired-repeated-conditions" title="Link to this heading"></a></h2>
+<p>Question: <em>does connectivity change between condition A and condition B in
+the same subjects?</em> Pass both conditions as <code class="docutils literal notranslate"><span class="pre">group1</span></code> / <code class="docutils literal notranslate"><span class="pre">group2</span></code> (row
+aligned: <code class="docutils literal notranslate"><span class="pre">group1[s]</span></code> and <code class="docutils literal notranslate"><span class="pre">group2[s]</span></code> are the same subject) with
+<code class="docutils literal notranslate"><span class="pre">test_type='paired'</span></code>. With no condition-varying confounds this uses the
+<strong>sign-flip</strong> permutation null on the per-subject differences <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">−</span> <span class="pre">A</span></code> (Fisher
+z of each condition first for <code class="docutils literal notranslate"><span class="pre">input='r'</span></code>). It is exact under its premise —
+the joint law of all subjects’ difference matrices is invariant under any
+pattern of per-subject sign flips, which independent subjects with centrally
+symmetric difference matrices give; unequal variances of A and B do not by
+themselves break it (see <a class="reference internal" href="approach.html"><span class="doc">How Inference Works</span></a>) — and exactness and Type-I control
+are not guaranteed without that premise. The engine samples sign patterns
+(Monte Carlo form); the hypothesis is about the <strong>mean</strong> difference, at the
+edge unit for <code class="docutils literal notranslate"><span class="pre">tstat</span></code> and the TFNBS family. A between-subject predictor of
+the change (Group × Condition) is a different design:
+<a class="reference internal" href="#wf-paired-interest"><span class="std std-ref">Between-subject predictor on a within-subject change (Group × Condition)</span></a>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">group1</span><span class="o">=</span><span class="n">rest_corr</span><span class="p">,</span>             <span class="c1"># condition A, (n, N, N)</span>
+    <span class="n">group2</span><span class="o">=</span><span class="n">task_corr</span><span class="p">,</span>             <span class="c1"># condition B, same subjects</span>
+    <span class="n">test_type</span><span class="o">=</span><span class="s1">'paired'</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span>
+    <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">p_task_higher</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'positive'</span><span class="p">]</span>   <span class="c1"># task &gt; rest</span>
+<span class="n">p_rest_higher</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'negative'</span><span class="p">]</span>   <span class="c1"># rest &gt; task</span>
+</pre></div>
+</div>
+</section>
+<section id="repeated-measures-glm-condition-varying-confounds">
+<span id="wf-repeated-glm"></span><h2>Repeated-measures GLM (condition-varying confounds)<a class="headerlink" href="#repeated-measures-glm-condition-varying-confounds" title="Link to this heading"></a></h2>
+<p>When a confound <em>differs between the two conditions for the same subject</em>
+(e.g. condition-level head motion, arousal, or reaction time), pass it
+through <code class="docutils literal notranslate"><span class="pre">confounds_group1</span></code> / <code class="docutils literal notranslate"><span class="pre">confounds_group2</span></code>. <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> then
+routes to the <strong>paired-difference GLM</strong>: it forms
+<span class="math notranslate nohighlight">\(\Delta_Y = \mathrm{group2} - \mathrm{group1}\)</span> and the per-subject
+confound difference, and tests the difference intercept with Freedman–Lane
+permutation (via <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val_paired_glm()</span></code>).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">group1</span><span class="o">=</span><span class="n">rest_corr</span><span class="p">,</span>             <span class="c1"># condition A, (n, N, N)</span>
+    <span class="n">group2</span><span class="o">=</span><span class="n">task_corr</span><span class="p">,</span>             <span class="c1"># condition B, same subjects</span>
+    <span class="n">test_type</span><span class="o">=</span><span class="s1">'paired'</span><span class="p">,</span>
+    <span class="n">confounds_group1</span><span class="o">=</span><span class="n">fd_rest</span><span class="p">,</span>     <span class="c1"># motion during condition A</span>
+    <span class="n">confounds_group2</span><span class="o">=</span><span class="n">fd_task</span><span class="p">,</span>     <span class="c1"># motion during condition B</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span>
+    <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="n">acceleration</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">p_task_higher</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'positive'</span><span class="p">]</span>   <span class="c1"># task &gt; rest, motion-adjusted</span>
+<span class="n">p_rest_higher</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'negative'</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Notes:</p>
+<ul class="simple">
+<li><p><strong>Orientation is identical</strong> to the no-confound paired path:
+<code class="docutils literal notranslate"><span class="pre">positive</span> <span class="pre">=</span> <span class="pre">group2</span> <span class="pre">&gt;</span> <span class="pre">group1</span></code>. (Internally the conditions are passed
+swapped so the tested intercept of <code class="docutils literal notranslate"><span class="pre">Δ</span> <span class="pre">=</span> <span class="pre">group2</span> <span class="pre">−</span> <span class="pre">group1</span></code> keeps that
+sign.)</p></li>
+<li><p>Pass <strong>both</strong> <code class="docutils literal notranslate"><span class="pre">confounds_group1</span></code> and <code class="docutils literal notranslate"><span class="pre">confounds_group2</span></code> or neither.
+They are only valid with <code class="docutils literal notranslate"><span class="pre">test_type='paired'</span></code>. Use <code class="docutils literal notranslate"><span class="pre">confounds=</span></code> (no
+suffix) only for the between-subject GLM path; passing it alongside
+<code class="docutils literal notranslate"><span class="pre">group1</span></code>/<code class="docutils literal notranslate"><span class="pre">group2</span></code> raises.</p></li>
+<li><p><strong>Subject-constant nuisances cancel</strong> in the within-subject difference and
+do not need to be supplied — including additive <strong>site</strong> effects. So
+<code class="docutils literal notranslate"><span class="pre">sites=</span></code> with a paired design skips ComBat (it is unnecessary) while
+still stratifying the permutation; <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> notes this in
+<code class="docutils literal notranslate"><span class="pre">out.flags</span></code>.</p></li>
+<li><p><strong>Power caveat.</strong> The paired GLM tests the difference <em>intercept</em>. When a
+single edge carries a very strong effect it dominates the max-statistic
+FWER null, and the GLM path is then <strong>less powerful</strong> than the no-confound
+sign-flip path. This is inherent to the intercept permutation test, not to
+the <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> implementation. When no condition-varying confounds are
+present, the plain paired path (<a class="reference internal" href="#wf-paired"><span class="std std-ref">Paired / repeated conditions</span></a>) is preferable.</p></li>
+</ul>
+</section>
+<section id="between-subject-predictor-on-a-within-subject-change-group-condition">
+<span id="wf-paired-interest"></span><h2>Between-subject predictor on a within-subject change (Group × Condition)<a class="headerlink" href="#between-subject-predictor-on-a-within-subject-change-group-condition" title="Link to this heading"></a></h2>
+<p>Question: <em>does the change between two conditions depend on a between-subject
+variable — patient group, age, genotype?</em> This is the Group × Condition
+term of a mixed design, estimated as a between-subject predictor of the
+within-subject difference. Pass both conditions as <code class="docutils literal notranslate"><span class="pre">group1</span></code> / <code class="docutils literal notranslate"><span class="pre">group2</span></code>
+with <code class="docutils literal notranslate"><span class="pre">test_type='paired'</span></code> <strong>and</strong> a named <code class="docutils literal notranslate"><span class="pre">interest</span></code> predictor;
+<code class="docutils literal notranslate"><span class="pre">analyze()</span></code> then routes to the paired-interest path.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">group1</span><span class="o">=</span><span class="n">rest_corr</span><span class="p">,</span>                 <span class="c1"># condition A, (n, N, N) raw correlations</span>
+    <span class="n">group2</span><span class="o">=</span><span class="n">task_corr</span><span class="p">,</span>                 <span class="c1"># condition B, same subject order as A</span>
+    <span class="n">test_type</span><span class="o">=</span><span class="s1">'paired'</span><span class="p">,</span>
+    <span class="n">interest</span><span class="o">=</span><span class="n">group_code</span><span class="p">,</span>              <span class="c1"># 0/1 (or numeric) between-subject variable</span>
+    <span class="n">confounds</span><span class="o">=</span><span class="n">age</span><span class="p">,</span>                    <span class="c1"># optional subject-level covariates, constant per subject</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span>                   <span class="c1"># n=None: exact integration</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">acceleration</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'positive'</span><span class="p">]</span>   <span class="c1"># positive coefficient of group on B − A: a larger change where group = 1</span>
+<span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'negative'</span><span class="p">]</span>   <span class="c1"># negative coefficient of group on B − A</span>
+</pre></div>
+</div>
+<p>Several predictors go in a dict (<code class="docutils literal notranslate"><span class="pre">interest={'group':</span> <span class="pre">...,</span> <span class="pre">'age':</span> <span class="pre">...}</span></code>),
+and the result is then a dict keyed by name, as in <a class="reference internal" href="#wf-multi-interest"><span class="std std-ref">Several predictors in one pass</span></a>.</p>
+<p>What the call does:</p>
+<ul class="simple">
+<li><p>Each condition is transformed to Fisher z separately (<code class="docutils literal notranslate"><span class="pre">input='r'</span></code>); the
+response is the per-subject difference <code class="docutils literal notranslate"><span class="pre">Δ</span> <span class="pre">=</span> <span class="pre">B</span> <span class="pre">−</span> <span class="pre">A</span></code> in Fisher-z units and
+the <code class="docutils literal notranslate"><span class="pre">interest</span></code> predictors are regressed on <code class="docutils literal notranslate"><span class="pre">Δ</span></code> across subjects with a
+Freedman–Lane permutation at the subject level (the design diagnostics
+record <code class="docutils literal notranslate"><span class="pre">unit_of_observation</span> <span class="pre">=</span> <span class="pre">'subject_pair_difference'</span></code>). The effect map
+is the native contrast estimate on that scale. This is the GLM route, not
+the sign-flip test of <a class="reference internal" href="#wf-paired"><span class="std std-ref">Paired / repeated conditions</span></a>: its p-values are approximate in
+the Freedman–Lane sense.</p></li>
+<li><p><strong>Sign of the maps.</strong> <code class="docutils literal notranslate"><span class="pre">positive</span></code> holds the p-values of edges where the
+predictor’s coefficient on <code class="docutils literal notranslate"><span class="pre">Δ</span> <span class="pre">=</span> <span class="pre">B</span> <span class="pre">−</span> <span class="pre">A</span></code> is positive (predictor ↑ → larger
+change), <code class="docutils literal notranslate"><span class="pre">negative</span></code> where it is negative; this is the sign of the
+contrast, not of <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">−</span> <span class="pre">A</span></code> itself. The condition main effect — whether
+<code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">−</span> <span class="pre">A</span></code> differs from zero on average — is <a class="reference internal" href="#wf-paired"><span class="std std-ref">Paired / repeated conditions</span></a>; a group <em>main
+effect</em> present identically in both conditions cancels in <code class="docutils literal notranslate"><span class="pre">Δ</span></code> and is not
+tested here.</p></li>
+<li><p><strong>What cancels.</strong> An additive effect that is identical in both conditions
+disappears in <code class="docutils literal notranslate"><span class="pre">Δ</span></code>; a covariate can still be <em>associated</em> with <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">−</span> <span class="pre">A</span></code>
+and then belongs in the subject-level <code class="docutils literal notranslate"><span class="pre">confounds</span></code>. <code class="docutils literal notranslate"><span class="pre">sites=</span></code> skips ComBat
+and only stratifies the permutation. Condition-<em>varying</em> confounds go in
+<code class="docutils literal notranslate"><span class="pre">confounds_group1</span></code> / <code class="docutils literal notranslate"><span class="pre">confounds_group2</span></code> and enter as B − A, alongside
+subject-level <code class="docutils literal notranslate"><span class="pre">confounds</span></code>.</p></li>
+<li><p><strong>Pairing by ID.</strong> With <code class="docutils literal notranslate"><span class="pre">ids_group1</span></code> / <code class="docutils literal notranslate"><span class="pre">ids_group2</span></code> the conditions are
+matched by subject ID and reordered once, before the transform and the
+difference (as in <a class="reference internal" href="#wf-repeated-glm"><span class="std std-ref">Repeated-measures GLM (condition-varying confounds)</span></a>); without IDs the rows must already
+be aligned.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">r_to_z=False</span></code> is rejected on this path (the difference of correlations
+is not the scale the model is written for), and so is any <code class="docutils literal notranslate"><span class="pre">harmonize=</span></code>
+other than <code class="docutils literal notranslate"><span class="pre">'auto'</span></code> / <code class="docutils literal notranslate"><span class="pre">None</span></code>: condition differences are not harmonized
+automatically.</p></li>
+</ul>
+<p>The same path accepts several named predictors and <code class="docutils literal notranslate"><span class="pre">interactions=</span></code>
+(<a class="reference internal" href="#wf-interactions"><span class="std std-ref">Interactions between predictors</span></a>), e.g. a group × age term on the difference. The CLI
+form is <code class="docutils literal notranslate"><span class="pre">design:</span> <span class="pre">type:</span> <span class="pre">paired</span></code> with <code class="docutils literal notranslate"><span class="pre">interest</span></code>, <code class="docutils literal notranslate"><span class="pre">interactions</span></code> and
+<code class="docutils literal notranslate"><span class="pre">subject_confounds</span></code> (<a class="reference internal" href="usage.html"><span class="doc">Usage</span></a>, “Paired condition differences and
+interactions”).</p>
+</section>
+<section id="interactions-between-predictors">
+<span id="wf-interactions"></span><h2>Interactions between predictors<a class="headerlink" href="#interactions-between-predictors" title="Link to this heading"></a></h2>
+<p>Question: <em>does the age effect on connectivity differ between patients and
+controls?</em> Pass the predictors as a <strong>dict</strong> and name the product terms with
+<code class="docutils literal notranslate"><span class="pre">interactions=</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span>
+    <span class="n">interest</span><span class="o">=</span><span class="p">{</span><span class="s1">'group'</span><span class="p">:</span> <span class="n">group_code</span><span class="p">,</span> <span class="s1">'age'</span><span class="p">:</span> <span class="n">age</span><span class="p">},</span>   <span class="c1"># numeric; encode categories as 0/1 yourself</span>
+    <span class="n">interactions</span><span class="o">=</span><span class="p">[(</span><span class="s1">'group'</span><span class="p">,</span> <span class="s1">'age'</span><span class="p">)],</span>
+    <span class="n">confounds</span><span class="o">=</span><span class="n">motion</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">n_permutations</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">acceleration</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">out</span><span class="p">[</span><span class="s1">'group:age'</span><span class="p">]</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'positive'</span><span class="p">]</span>   <span class="c1"># product term, adjusted for both main effects</span>
+<span class="n">out</span><span class="p">[</span><span class="s1">'age'</span><span class="p">]</span><span class="o">.</span><span class="n">inference</span>                      <span class="c1"># age effect adjusted for group and the product</span>
+</pre></div>
+</div>
+<p>Rules:</p>
+<ul class="simple">
+<li><p>Every named predictor is mean-centred by its sample mean; an interaction
+is the product of the centred columns, keyed <code class="docutils literal notranslate"><span class="pre">&quot;a:b&quot;</span></code> in the returned dict.
+Each effect — main effects and products alike — is tested with <strong>all other
+columns, including the other main effects, as nuisance</strong>, against its own
+Freedman–Lane null with the permutations shared across effects; each effect
+is its own correction family, as in <a class="reference internal" href="#wf-multi-interest"><span class="std std-ref">Several predictors in one pass</span></a>.</p></li>
+<li><p>Predictors must be finite 1-D numeric vectors; categories are encoded
+explicitly (e.g. 0/1). Through the CLI, text predictors must have exactly
+two levels, the sorted first level being the reference.</p></li>
+<li><p>The path composes with <code class="docutils literal notranslate"><span class="pre">sites=</span></code> / <code class="docutils literal notranslate"><span class="pre">harmonize=</span></code> (ComBat preserves only
+<code class="docutils literal notranslate"><span class="pre">confounds</span></code> and excludes every tested column) and with the <code class="docutils literal notranslate"><span class="pre">(E,</span> <span class="pre">H)</span></code>
+sweep. On the paired-interest path (<a class="reference internal" href="#wf-paired-interest"><span class="std std-ref">Between-subject predictor on a within-subject change (Group × Condition)</span></a>) the response
+is the within-subject difference and the product terms are between-subject
+predictors of it.</p></li>
+</ul>
+</section>
+<section id="custom-contrasts-and-omnibus-f-tests">
+<span id="wf-custom"></span><h2>Custom contrasts and omnibus F-tests<a class="headerlink" href="#custom-contrasts-and-omnibus-f-tests" title="Link to this heading"></a></h2>
+<p>For a custom contrast matrix, custom categorical coding, or a joint (omnibus)
+test, build the design matrix and contrast explicitly and call
+<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val_glm()</span></code> directly — see the
+<a class="reference internal" href="usage.html"><span class="doc">Usage</span></a> page for the advanced API, including <code class="docutils literal notranslate"><span class="pre">stat_type='fstat'</span></code> for
+multi-row contrasts (≥3-condition designs or jointly testing several
+predictors), which returns a single <code class="docutils literal notranslate"><span class="pre">'omnibus'</span></code> p-map. Interactions between
+named predictors do not need this: see <a class="reference internal" href="#wf-interactions"><span class="std std-ref">Interactions between predictors</span></a>.</p>
+</section>
+<section id="three-or-more-repeated-sessions-within-subject-omnibus-f">
+<span id="wf-repeated-sessions"></span><h2>Three or more repeated sessions (within-subject omnibus F)<a class="headerlink" href="#three-or-more-repeated-sessions-within-subject-omnibus-f" title="Link to this heading"></a></h2>
+<p>Question: <em>does connectivity differ between any of three or more sessions,
+tested jointly and averaged over subjects, when every subject contributes
+the same set of sessions?</em></p>
+<p><code class="docutils literal notranslate"><span class="pre">analyze()</span></code> has no path for three or more sessions; call
+<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val_glm()</span></code> with a hand-built design. The only
+verified recipe (design <strong>D1</strong>) is one balanced, complete within-subject
+session factor with <code class="docutils literal notranslate"><span class="pre">k</span> <span class="pre">&gt;=</span> <span class="pre">3</span></code> sessions and <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code> subjects, stacked
+subject-major: row <code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">s*k</span> <span class="pre">+</span> <span class="pre">j</span></code> holds subject <code class="docutils literal notranslate"><span class="pre">s</span></code>, session <code class="docutils literal notranslate"><span class="pre">j</span></code>, so
+<code class="docutils literal notranslate"><span class="pre">Y</span></code> has shape <code class="docutils literal notranslate"><span class="pre">(n*k,</span> <span class="pre">N,</span> <span class="pre">N)</span></code> on the Fisher-z scale, symmetric with a zero
+diagonal. Everything else in this section is explicitly not covered.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_p_val_glm</span>
+
+<span class="n">k</span> <span class="o">=</span> <span class="mi">3</span>                              <span class="c1"># sessions per subject (k &gt;= 3)</span>
+<span class="n">n</span> <span class="o">=</span> <span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">//</span> <span class="n">k</span>                <span class="c1"># subjects, from the stacked rows</span>
+<span class="n">subj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">k</span><span class="p">)</span>  <span class="c1"># subject code per stacked row</span>
+<span class="n">sess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">k</span><span class="p">),</span> <span class="n">n</span><span class="p">)</span>    <span class="c1"># session index per stacked row</span>
+
+<span class="n">S</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">n</span><span class="p">)[</span><span class="n">subj</span><span class="p">]</span>                                   <span class="c1"># subject dummies</span>
+<span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span>                                  <span class="c1"># session j vs 0</span>
+    <span class="p">[(</span><span class="n">sess</span> <span class="o">==</span> <span class="n">j</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">k</span><span class="p">)]</span>
+<span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">S</span><span class="p">,</span> <span class="n">T</span><span class="p">])</span>        <span class="c1"># full design, rank n + k - 1</span>
+<span class="n">C</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span>               <span class="c1"># jointly test the k-1 session columns</span>
+    <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">k</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">k</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
+<span class="p">)</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">compute_p_val_glm</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span>                             <span class="c1"># (n*k, N, N), Fisher-z, balanced complete</span>
+    <span class="n">design_matrix</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+    <span class="n">contrast</span><span class="o">=</span><span class="n">C</span><span class="p">,</span>
+    <span class="n">stat_type</span><span class="o">=</span><span class="s1">'fstat'</span><span class="p">,</span>             <span class="c1"># single 'omnibus' p-map</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tstat'</span><span class="p">,</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span>
+    <span class="n">acceleration</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>             <span class="c1"># keep the empirical p (no GPD/gamma)</span>
+    <span class="n">strata</span><span class="o">=</span><span class="n">subj</span><span class="p">,</span>                   <span class="c1"># permute within subject blocks only</span>
+    <span class="n">missing</span><span class="o">=</span><span class="s1">'raise'</span><span class="p">,</span>               <span class="c1"># balanced complete data required</span>
+    <span class="n">use_mp</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>                  <span class="c1"># serial route, as verified; copy-paste safe</span>
+    <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">p_omnibus</span> <span class="o">=</span> <span class="n">out</span><span class="p">[</span><span class="s1">'omnibus'</span><span class="p">]</span>         <span class="c1"># (N, N), joint session-effect p-values</span>
+</pre></div>
+</div>
+<p><strong>Estimand and degrees of freedom.</strong> <code class="docutils literal notranslate"><span class="pre">C</span> <span class="pre">=</span> <span class="pre">[0</span> <span class="pre">|</span> <span class="pre">I_{k-1}]</span></code> tests the joint
+equality of the session means, i.e. all differences <code class="docutils literal notranslate"><span class="pre">μ_j</span> <span class="pre">−</span> <span class="pre">μ_0</span></code> averaged
+over subjects; because the design is balanced the subject effects cancel.
+Numerator df is <code class="docutils literal notranslate"><span class="pre">k-1</span></code>, residual df is <code class="docutils literal notranslate"><span class="pre">(n-1)(k-1)</span></code>. Subject fixed
+effects must be in <strong>both</strong> the full and the reduced model: the reduced
+design <code class="docutils literal notranslate"><span class="pre">X</span> <span class="pre">null(C)</span></code> is exactly the span of the subject dummies, so its
+projector is the within-subject averaging operator and the reduced
+residuals sum to zero within each subject.</p>
+<p><strong>Permutation assumptions.</strong> <code class="docutils literal notranslate"><span class="pre">strata</span></code> carries the subject code per row
+(length <code class="docutils literal notranslate"><span class="pre">n*k</span></code>); the residuals are permuted <strong>within each subject block
+only</strong>, never as whole blocks, so there is no between-subject exchange
+anywhere in the engine. <code class="docutils literal notranslate"><span class="pre">scheme='auto'</span></code> resolves to <code class="docutils literal notranslate"><span class="pre">'permutation'</span></code>
+here because the reduced model spans the constant; sign flipping is not the
+scheme of this design.</p>
+<p>The premise is invariance of the <strong>joint distribution of the entire error
+array — all subjects and all edges — under the product of independent
+within-subject session permutations</strong>: each permuted row moves its whole
+edge vector together, and the subject blocks are permuted independently.
+A sufficient case is independent subjects whose session-indexed <strong>edge
+vectors</strong> are exchangeable within each subject (for example, i.i.d. across
+sessions within each independent subject); the laws of different subjects
+may differ. Exchangeability of a single edge within a subject, taken
+separately, is not enough for the max-F null across edges: with a common
+session shock shared by all subjects (one edge’s error <code class="docutils literal notranslate"><span class="pre">U_j</span> <span class="pre">+</span> <span class="pre">V_sj</span></code>,
+<code class="docutils literal notranslate"><span class="pre">U_j</span></code> common across subjects), every subject’s errors are i.i.d. across
+sessions, yet permuting one subject’s sessions changes which subjects
+share <code class="docutils literal notranslate"><span class="pre">U_j</span></code> and changes the joint law. Compound symmetry of the
+covariance is a second-moment property only and is <em>not</em> sufficient
+without further distributional assumptions.</p>
+<p><strong>Null reference: enumeration vs sampling.</strong> In this design the
+Freedman–Lane reconstruction is mathematically the within-block row
+permutation of the data itself: the reduced fit is the within-subject
+mean, constant inside each block, so <code class="docutils literal notranslate"><span class="pre">Y*</span> <span class="pre">=</span> <span class="pre">H0</span> <span class="pre">Y</span> <span class="pre">+</span> <span class="pre">P</span> <span class="pre">(I</span> <span class="pre">-</span> <span class="pre">H0)</span> <span class="pre">Y</span> <span class="pre">=</span> <span class="pre">P</span> <span class="pre">Y</span></code>
+in exact arithmetic. Under the joint-invariance premise, exhaustive
+enumeration of the <code class="docutils literal notranslate"><span class="pre">(k!)^n</span></code> within-block assignments is a finite-sample
+randomization test for the joint null; discreteness and included ties
+keep its level conservative. The number of assignments is <code class="docutils literal notranslate"><span class="pre">(k!)^n</span></code>;
+the number of distinct null values can be smaller — a session relabelling
+applied to every subject at once leaves every omnibus F unchanged, so
+<code class="docutils literal notranslate"><span class="pre">k!</span></code> assignments tie with the observed statistic in exact arithmetic
+for any data. The API does not enumerate: it samples <code class="docutils literal notranslate"><span class="pre">B</span></code> assignments
+with replacement and reports <code class="docutils literal notranslate"><span class="pre">p</span> <span class="pre">=</span> <span class="pre">(count</span> <span class="pre">+</span> <span class="pre">1)</span> <span class="pre">/</span> <span class="pre">(B</span> <span class="pre">+</span> <span class="pre">1)</span></code>, <code class="docutils literal notranslate"><span class="pre">count</span></code> the
+number of sampled null max-F values at least as large as the observed
+edge F (ties included); the +1 rule belongs to Monte Carlo sampling,
+while the exhaustive-enumeration reference is <code class="docutils literal notranslate"><span class="pre">count</span> <span class="pre">/</span> <span class="pre">(k!)^n</span></code>.
+The equivalence <code class="docutils literal notranslate"><span class="pre">Y*</span> <span class="pre">=</span> <span class="pre">P</span> <span class="pre">Y</span></code> is specific to D1’s reduced design; in
+general, Freedman–Lane is approximate. The floating-point implementation
+reconstructs <code class="docutils literal notranslate"><span class="pre">Yhat0</span> <span class="pre">+</span> <span class="pre">R0[perm]</span></code> instead of permuting rows of <code class="docutils literal notranslate"><span class="pre">Y</span></code>, so
+machine values can differ from the exact row permutation by rounding.</p>
+<p><strong>Near-tie sensitivity.</strong> The count rule <code class="docutils literal notranslate"><span class="pre">null</span> <span class="pre">&gt;=</span> <span class="pre">observed</span></code> is
+discontinuous at equality. Besides the structural <code class="docutils literal notranslate"><span class="pre">k!</span></code> ties above,
+data-dependent near-ties occur, and two algebraically equivalent F
+formulas (nested RSS differences vs the engine’s quadratic form over
+sigma2) differ by ~1e-14 in floating point, enough to land on opposite
+sides of a tie and move a count by one per affected draw. There is no
+universal bound on the resulting p difference; it depends on the design
+and the data. The regression test therefore checks the permutation
+mechanism with the engine’s own operation order (exact count/p equality)
+and the independent algebra with a tolerance.</p>
+<p><strong>Not covered by this recipe</strong> (use another path, or do not report under
+this heading):</p>
+<ul class="simple">
+<li><p><strong>Pairwise or single-session t contrasts on the stacked design.</strong> They are
+outside the verified recipe — the reduced-model nuisance can break null
+invariance. A separately pre-specified two-condition A/B comparison stays
+the NETSTAT-16/31 contract: without condition-varying confounds use
+<code class="docutils literal notranslate"><span class="pre">analyze(...,</span> <span class="pre">test_type='paired')</span></code> (<a class="reference internal" href="#wf-paired"><span class="std std-ref">Paired / repeated conditions</span></a>); with
+condition-varying confounds use
+<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val_paired_glm()</span></code> (<a class="reference internal" href="#wf-repeated-glm"><span class="std std-ref">Repeated-measures GLM (condition-varying confounds)</span></a>).</p></li>
+<li><p><strong>Between-subject effects</strong> (e.g. a group variable) on stacked repeated
+rows. Within-block permutation never exchanges subjects, and the subject
+dummies absorb any between-subject factor.</p></li>
+<li><p><strong>Group × session interaction</strong> on the stack — not verified here.</p></li>
+<li><p><strong>Longitudinal designs with temporally autocorrelated or otherwise
+structured within-subject errors.</strong></p></li>
+<li><p><strong>Mixed / random-effects / random-slope models.</strong> <code class="docutils literal notranslate"><span class="pre">strata=subject</span></code> is
+not a multilevel promise.</p></li>
+<li><p><strong>Unbalanced designs and missing sessions.</strong> <code class="docutils literal notranslate"><span class="pre">missing='available_case'</span></code>
+is not verified for D1; the recipe requires balanced complete data
+(<code class="docutils literal notranslate"><span class="pre">missing='raise'</span></code>, the default).</p></li>
+</ul>
+<p>The recipe is documented for the design above only: it makes no claim of
+FWER or power calibration, of validity outside the exchangeability premise,
+or of post-hoc inference.</p>
+</section>
+<section id="inference-stability-sweep-e-h-in-one-call">
+<span id="wf-eh-stability"></span><h2>Inference stability: sweep <code class="docutils literal notranslate"><span class="pre">(E,</span> <span class="pre">H)</span></code> in one call<a class="headerlink" href="#inference-stability-sweep-e-h-in-one-call" title="Link to this heading"></a></h2>
+<p>The TFNBS-family enhancement (<code class="docutils literal notranslate"><span class="pre">'tfnbs'</span></code>, <code class="docutils literal notranslate"><span class="pre">'ni_tfnbs'</span></code>, <code class="docutils literal notranslate"><span class="pre">'fbc_tfnbs'</span></code>)
+depends on two exponents — the extent exponent <code class="docutils literal notranslate"><span class="pre">E</span></code> and the height exponent
+<code class="docutils literal notranslate"><span class="pre">H</span></code>. Published defaults disagree (Hao 2024 <code class="docutils literal notranslate"><span class="pre">E=0.4,</span> <span class="pre">H=3.0</span></code>; Smith–Nichols
+2009 <code class="docutils literal notranslate"><span class="pre">E=0.5,</span> <span class="pre">H=2.0</span></code>; Baggio 2018 <code class="docutils literal notranslate"><span class="pre">E=0.75,</span> <span class="pre">H=3.0</span></code>), and Vinokur 2023
+reports up to 75-fold variation in edge counts across the <code class="docutils literal notranslate"><span class="pre">(E,</span> <span class="pre">H)</span></code> plane.
+A single <code class="docutils literal notranslate"><span class="pre">(E,</span> <span class="pre">H)</span></code> result is therefore of limited value on its own; a finding
+should be shown to be <strong>stable across the plausible parameter range</strong>.</p>
+<p>Pass <strong>equal-length sequences</strong> for <code class="docutils literal notranslate"><span class="pre">e</span></code> and <code class="docutils literal notranslate"><span class="pre">h</span></code> to evaluate the grid in
+<strong>one permutation pass</strong>. Exact integration evaluates each pair, so runtime
+increases with the number of pairs. The grid allows a stability assessment
+without running separate permutation pipelines.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+
+<span class="c1"># Three published-default (E, H) cells, zipped pairwise (not a cross</span>
+<span class="c1"># product): (0.4, 3.0), (0.5, 2.0), (0.75, 3.0).</span>
+<span class="n">e_grid</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">]</span>      <span class="c1"># Hao, Smith–Nichols, Baggio</span>
+<span class="n">h_grid</span> <span class="o">=</span> <span class="p">[</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span> <span class="n">interest</span><span class="o">=</span><span class="n">diagnosis</span><span class="p">,</span> <span class="n">confounds</span><span class="o">=</span><span class="n">confounds</span><span class="p">,</span> <span class="n">sites</span><span class="o">=</span><span class="n">site</span><span class="p">,</span>
+    <span class="n">harmonize</span><span class="o">=</span><span class="s1">'combat_site_dummies_glm'</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">e</span><span class="o">=</span><span class="n">e_grid</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="n">h_grid</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span> <span class="n">acceleration</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">r</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span>
+<span class="n">r</span><span class="o">.</span><span class="n">is_grid</span>                 <span class="c1"># True</span>
+<span class="n">r</span><span class="o">.</span><span class="n">positive</span><span class="o">.</span><span class="n">shape</span>          <span class="c1"># (N, N, 3) — one p-map per (E, H) cell</span>
+<span class="n">r</span><span class="o">.</span><span class="n">e_grid</span>                  <span class="c1"># array([0.4, 0.5, 0.75])</span>
+<span class="n">r</span><span class="o">.</span><span class="n">h_grid</span>                  <span class="c1"># array([3.0, 2.0, 3.0])</span>
+<span class="n">r</span><span class="o">.</span><span class="n">n_significant</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)</span>     <span class="c1"># per-cell counts:</span>
+                          <span class="c1"># {'positive': [k0, k1, k2], 'negative': [...]}</span>
+</pre></div>
+</div>
+<p>When the returned object is a grid (<code class="docutils literal notranslate"><span class="pre">is_grid</span> <span class="pre">==</span> <span class="pre">True</span></code>), the <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">N)</span></code>
+exporters require a cell to project to. Pass <code class="docutils literal notranslate"><span class="pre">param_idx=</span></code> (or call
+<code class="docutils literal notranslate"><span class="pre">.select()</span></code> first); omitting it on a grid raises an explicit error rather
+than selecting a cell implicitly:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">sub</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>                                  <span class="c1"># fresh 2D result for cell 0</span>
+<span class="n">df</span>  <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">significant_edges</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="n">param_idx</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>      <span class="c1"># export cell 2 directly</span>
+<span class="n">r</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s1">'edges_hao.csv'</span><span class="p">,</span> <span class="n">atlas</span><span class="o">=</span><span class="n">atlas</span><span class="p">,</span> <span class="n">param_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Use it to confirm a result is stable across the published-default cells
+before reporting, or to run a denser sensitivity grid (e.g. a 6 × 6 sweep) at
+the cost of a single inference call. The same <code class="docutils literal notranslate"><span class="pre">e</span></code> / <code class="docutils literal notranslate"><span class="pre">h</span></code> sequence syntax
+works on every TFNBS-family path — two-sample, GLM, and the repeated-measures
+GLM alike.</p>
+</section>
+<section id="interpreting-and-exporting-results">
+<h2>Interpreting and exporting results<a class="headerlink" href="#interpreting-and-exporting-results" title="Link to this heading"></a></h2>
+<p>Every result is dict-like and carries metadata and exporters:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">r</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span>
+<span class="n">r</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="n">r</span><span class="o">.</span><span class="n">n_permutations</span><span class="p">,</span> <span class="n">r</span><span class="o">.</span><span class="n">acceleration</span><span class="p">,</span> <span class="n">r</span><span class="o">.</span><span class="n">harmonized</span>
+<span class="n">r</span><span class="o">.</span><span class="n">n_significant</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>            <span class="c1"># {'positive': k, 'negative': k}</span>
+<span class="n">r</span><span class="o">.</span><span class="n">stat_signed</span>                          <span class="c1"># signed t / β effect map</span>
+
+<span class="c1"># ROI-aware edge table (needs an atlas)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtlasInfo</span>
+<span class="n">atlas</span> <span class="o">=</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">schaefer_200_yeo7</span><span class="p">()</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">significant_edges</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="n">sort</span><span class="o">=</span><span class="s1">'network_pair'</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+<span class="n">out</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s1">'edges.csv'</span><span class="p">,</span> <span class="n">atlas</span><span class="o">=</span><span class="n">atlas</span><span class="p">)</span>
+
+<span class="c1"># NBS (method='nbs'): the inference unit is the component, not the edge.</span>
+<span class="c1"># One row per observed component of each tail, with its component-level</span>
+<span class="c1"># p-value (max-statistic FWER over components, under the scheme's validity);</span>
+<span class="c1"># `component_id` also labels the rows of significant_edges() and the CSV.</span>
+<span class="n">comps</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">component_table</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span>     <span class="c1"># tail, component_id, n_edges, n_nodes,</span>
+                                       <span class="c1"># statistic, p_fwer, significant, ROI names,</span>
+                                       <span class="c1"># networks, network_pairs</span>
+<span class="n">out</span><span class="o">.</span><span class="n">component_report</span><span class="p">[</span><span class="s2">"threshold"</span><span class="p">]</span>      <span class="c1"># the dict behind the table (None for other methods)</span>
+
+<span class="c1"># Which ROIs gather the detections (descriptive; one row per ROI)</span>
+<span class="n">nodes</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">node_summary</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span>        <span class="c1"># edge-wise methods: n_sig_&lt;tail&gt;, n_tested, prop_sig,</span>
+                                       <span class="c1"># mean_effect_&lt;tail&gt; (c'beta), partner_networks, participation.</span>
+                                       <span class="c1"># nbs / cnbs: significant components / blocks containing the</span>
+                                       <span class="c1"># ROI and its edges in them (no p-value mass). The unit is</span>
+                                       <span class="c1"># out.inference.inference_unit.</span>
+
+<span class="c1"># One-call publication figure</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.plot</span><span class="w"> </span><span class="kn">import</span> <span class="n">summary_figure</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">summary_figure</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">atlas</span><span class="o">=</span><span class="n">atlas</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s1">'summary.pdf'</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">'tight'</span><span class="p">)</span>
+
+<span class="c1"># Brainnetome anatomy of the detected connections (descriptive)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.interpret</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotate_rois</span><span class="p">,</span> <span class="n">interpret_result</span>
+<span class="n">rois</span> <span class="o">=</span> <span class="n">annotate_rois</span><span class="p">(</span><span class="n">support</span><span class="o">=</span><span class="s1">'parcel'</span><span class="p">,</span> <span class="n">parcel_image</span><span class="o">=</span><span class="n">schaefer_200_img</span><span class="p">,</span>
+                     <span class="n">parcel_labels</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">201</span><span class="p">)),</span> <span class="n">networks</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">networks</span><span class="p">,</span>
+                     <span class="n">space</span><span class="o">=</span><span class="s1">'MNI152NLin2009cAsym'</span><span class="p">)</span>   <span class="c1"># the template the signals were extracted in</span>
+<span class="n">report</span> <span class="o">=</span> <span class="n">interpret_result</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">rois</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'contrast'</span><span class="p">,</span> <span class="n">source_atlas</span><span class="o">=</span><span class="s1">'Schaefer-200'</span><span class="p">)</span>
+<span class="n">report</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s1">'results/contrast'</span><span class="p">)</span>        <span class="c1"># tables, evidence.json, connectograms</span>
+</pre></div>
+</div>
+<p>The Brainnetome report describes where the detected connections lie (endpoint
+subregion, gyrus and lobe; hemispheric relation, circuit class, distance;
+BrainMap domains of the endpoints) next to what was tested. It adds no test:
+the p-values, their correction and the inference unit are unchanged. The
+connectograms place only ROIs with atlas support: <code class="docutils literal notranslate"><span class="pre">unassigned</span></code> ROIs
+(outside the atlas or below <code class="docutils literal notranslate"><span class="pre">min_coverage</span></code>) get no tissue on the rings, and
+each footer reports the placement counts and the detected connections that
+touch an unplaced ROI (<code class="docutils literal notranslate"><span class="pre">aggregate_connections(...).attrs[&quot;coverage&quot;]</span></code>).
+For data parcellated with the Brainnetome atlas itself use
+<code class="docutils literal notranslate"><span class="pre">annotate_bna_regions</span></code>.
+See <a class="reference internal" href="usage.html#usage-interpret"><span class="std std-ref">Anatomical interpretation — conninfpy.interpret</span></a> for the rules, and the ABIDE and Open-Close
+examples (<code class="docutils literal notranslate"><span class="pre">examples/abide/</span></code>, <code class="docutils literal notranslate"><span class="pre">examples/open_close/</span></code>) for complete runs.</p>
+<img alt="ABIDE I CC200 ASD vs HC connectogram with BNA-246 anatomical lobes and SUIT cerebellum" class="align-center" src="_images/connectogram_abide_asd_hc.png" />
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.brainnetome</span><span class="w"> </span><span class="kn">import</span> <span class="n">BrainnetomeReference</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.interpret</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotate_rois</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.plot</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_connectogram</span>
+
+<span class="n">ref</span> <span class="o">=</span> <span class="n">BrainnetomeReference</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">resolution_mm</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">cerebellum</span><span class="o">=</span><span class="s1">'anatom'</span><span class="p">)</span>
+<span class="n">rois</span> <span class="o">=</span> <span class="n">annotate_rois</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">reference</span><span class="o">=</span><span class="n">ref</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="n">names</span><span class="p">,</span>
+                     <span class="n">support</span><span class="o">=</span><span class="s1">'sphere'</span><span class="p">,</span> <span class="n">radius_mm</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="s1">'MNI152NLin2009cAsym'</span><span class="p">)</span>
+<span class="n">plot_connectogram</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">rois</span><span class="p">,</span> <span class="n">tail</span><span class="o">=</span><span class="s1">'positive'</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="s1">'gyrus'</span><span class="p">,</span> <span class="n">max_links</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="brainnet-viewer-export-and-headless-rendering">
+<h3>BrainNet Viewer export and headless rendering<a class="headerlink" href="#brainnet-viewer-export-and-headless-rendering" title="Link to this heading"></a></h3>
+<p>Results with 3D MNI coordinates can be exported to BrainNet Viewer <code class="docutils literal notranslate"><span class="pre">.node</span></code>
+and <code class="docutils literal notranslate"><span class="pre">.edge</span></code> files together with a <code class="docutils literal notranslate"><span class="pre">.scene.json</span></code> scene manifest
+(compatible with BrainNet Viewer Python 2.0.0):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.reporting</span><span class="w"> </span><span class="kn">import</span> <span class="n">export_brainnet</span><span class="p">,</span> <span class="n">render_brainnet</span>
+
+<span class="n">paths</span> <span class="o">=</span> <span class="n">export_brainnet</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">atlas</span><span class="p">,</span> <span class="s1">'results/brainnet'</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span> <span class="n">write_scene</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># Optional headless PNG rendering if brainnet-render is installed in a separate environment:</span>
+<span class="n">png</span> <span class="o">=</span> <span class="n">render_brainnet</span><span class="p">(</span><span class="n">paths</span><span class="p">[</span><span class="s1">'scene'</span><span class="p">],</span> <span class="s1">'results/brainnet.png'</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>From the CLI, <code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">interpret</span> <span class="pre">--cerebellum</span> <span class="pre">anatom</span> <span class="pre">--export-brainnet</span></code> writes <code class="docutils literal notranslate"><span class="pre">.node</span></code>,
+<code class="docutils literal notranslate"><span class="pre">.edge</span></code>, and <code class="docutils literal notranslate"><span class="pre">.scene.json</span></code>; adding <code class="docutils literal notranslate"><span class="pre">--brainnet-render</span></code> (and optionally
+<code class="docutils literal notranslate"><span class="pre">--brainnet-bin</span> <span class="pre">&lt;path&gt;</span></code>) invokes <code class="docutils literal notranslate"><span class="pre">brainnet-render</span></code> when available and warns
+without failing if the renderer is not installed.</p>
+<img alt="Open-Close IHB EC vs EO 3D BrainNet Viewer render on ICBM152" class="align-center" src="_images/brainnet_open_close_ihb.png" />
+<img alt="ABIDE I CC200 ASD vs HC 3D BrainNet Viewer render on Ch2withCerebellum" class="align-center" src="_images/brainnet_abide_asd_hc.png" />
+<p><em>Top: Open-Close IHB EC vs EO on ICBM152 (4-view). Bottom: ABIDE I CC200 ASD vs HC
+on BrainMesh_Ch2withCerebellum (6-view). Nodes are colored by BNA-246 anatomical
+lobes (Frontal, Insular, Limbic, Temporal, Parietal, Occipital, Subcortical,
+Cerebellum); edges are colored by effect sign (warm = positive, cool = negative)
+for the top 150 significant edges by |t|.</em></p>
+</section>
+<section id="speed-vs-publication-runs">
+<h3>Speed vs. publication runs<a class="headerlink" href="#speed-vs-publication-runs" title="Link to this heading"></a></h3>
+<p>Every entry point defaults to <code class="docutils literal notranslate"><span class="pre">n_permutations=1000</span></code> with empirical
+permutation p-values (<code class="docutils literal notranslate"><span class="pre">acceleration=None</span></code>). For fast exploration opt into GPD tail
+acceleration; for a final result use a larger empirical reference:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Exploration: few permutations with the opt-in GPD tail replacement.</span>
+<span class="c1"># Model-based tail estimates with known limits (see approach, Acceleration).</span>
+<span class="n">analyze</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">interest</span><span class="o">=</span><span class="n">age</span><span class="p">,</span> <span class="n">confounds</span><span class="o">=</span><span class="n">confounds</span><span class="p">,</span> <span class="n">n_permutations</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+        <span class="n">acceleration</span><span class="o">=</span><span class="s1">'gpd'</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+
+<span class="c1"># Publication (empirical permutation reference with many permutations)</span>
+<span class="n">analyze</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">interest</span><span class="o">=</span><span class="n">age</span><span class="p">,</span> <span class="n">confounds</span><span class="o">=</span><span class="n">confounds</span><span class="p">,</span> <span class="n">n_permutations</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span>
+        <span class="n">acceleration</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="usage.html"><span class="doc">Usage</span></a> for the full enhancement-method table and acceleration
+internals. The <code class="docutils literal notranslate"><span class="pre">(E,</span> <span class="pre">H)</span></code> stability sweep (<a class="reference internal" href="#wf-eh-stability"><span class="std std-ref">Inference stability: sweep (E, H) in one call</span></a>) and the
+several-predictors workflow (<a class="reference internal" href="#wf-multi-interest"><span class="std std-ref">Several predictors in one pass</span></a>, which wraps
+<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.compute_p_val_glm_multi()</span></code>) are covered above.</p>
+</section>
+</section>
+<section id="from-fmriprep-derivatives-and-on-demand-nilearn-atlases">
+<span id="wf-fmriprep-nilearn"></span><h2>From fMRIPrep derivatives and on-demand nilearn atlases<a class="headerlink" href="#from-fmriprep-derivatives-and-on-demand-nilearn-atlases" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">conninfpy</span></code> keeps <code class="docutils literal notranslate"><span class="pre">nilearn</span></code> optional and does not bundle third-party NIfTI
+atlases. Fetch a volumetric parcellation on demand with <code class="docutils literal notranslate"><span class="pre">nilearn</span></code>, extract
+confound-regressed time series with <code class="xref py py-class docutils literal notranslate"><span class="pre">FmriprepDerivativesLoader</span></code>,
+and annotate detected edges using <code class="docutils literal notranslate"><span class="pre">support='parcel'</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nilearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">datasets</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtlasInfo</span><span class="p">,</span> <span class="n">analyze</span><span class="p">,</span> <span class="n">compute_connectivity</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.brainnetome</span><span class="w"> </span><span class="kn">import</span> <span class="n">BrainnetomeReference</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.interpret</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotate_rois</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.loaders</span><span class="w"> </span><span class="kn">import</span> <span class="n">FmriprepDerivativesLoader</span>
+
+<span class="n">schaefer</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">fetch_atlas_schaefer_2018</span><span class="p">(</span><span class="n">n_rois</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">yeo_networks</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">resolution_mm</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">FmriprepDerivativesLoader</span><span class="p">(</span>
+    <span class="n">derivatives_dir</span><span class="o">=</span><span class="s2">"/path/to/bids/derivatives/fmriprep"</span><span class="p">,</span>
+    <span class="n">atlas_image_path</span><span class="o">=</span><span class="n">schaefer</span><span class="o">.</span><span class="n">maps</span><span class="p">,</span>
+    <span class="n">denoising</span><span class="o">=</span><span class="p">{</span><span class="s2">"strategy"</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span> <span class="s2">"n_compcor"</span><span class="p">:</span> <span class="mi">10</span><span class="p">},</span>
+<span class="p">)</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
+<span class="n">corr</span> <span class="o">=</span> <span class="n">compute_connectivity</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"correlation"</span><span class="p">)</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="n">corr</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="s2">"r"</span><span class="p">,</span> <span class="n">interest</span><span class="o">=</span><span class="n">age</span><span class="p">,</span> <span class="n">confounds</span><span class="o">=</span><span class="n">mean_fd</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">],</span>
+              <span class="n">motion_qc</span><span class="o">=</span><span class="p">{</span><span class="s2">"fd"</span><span class="p">:</span> <span class="n">mean_fd</span><span class="p">},</span> <span class="n">method</span><span class="o">=</span><span class="s2">"tfnbs"</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">atlas</span> <span class="o">=</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">from_nifti</span><span class="p">(</span><span class="n">schaefer</span><span class="o">.</span><span class="n">maps</span><span class="p">)</span>
+<span class="n">ref</span> <span class="o">=</span> <span class="n">BrainnetomeReference</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">profiles</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">resolution_mm</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">cerebellum</span><span class="o">=</span><span class="s2">"anatom"</span><span class="p">)</span>
+<span class="n">rois</span> <span class="o">=</span> <span class="n">annotate_rois</span><span class="p">(</span><span class="n">coords</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">coords</span><span class="p">,</span> <span class="n">reference</span><span class="o">=</span><span class="n">ref</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span>
+                     <span class="n">space</span><span class="o">=</span><span class="s2">"MNI152NLin2009cAsym"</span><span class="p">,</span> <span class="n">support</span><span class="o">=</span><span class="s2">"parcel"</span><span class="p">,</span>
+                     <span class="n">parcel_image</span><span class="o">=</span><span class="n">schaefer</span><span class="o">.</span><span class="n">maps</span><span class="p">,</span> <span class="n">parcel_labels</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">atlas</span><span class="o">.</span><span class="n">label_ids</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>See <code class="docutils literal notranslate"><span class="pre">examples/fmriprep_nilearn/</span></code> for the full runnable script
+(<code class="docutils literal notranslate"><span class="pre">run_fmriprep_workflow.py</span></code>), <code class="docutils literal notranslate"><span class="pre">manifest_template.yaml</span></code> (for Schaefer-100
+and Craddock-200), and the matching <code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">qc</span></code> → <code class="docutils literal notranslate"><span class="pre">run</span></code> → <code class="docutils literal notranslate"><span class="pre">interpret</span></code>
+CLI commands.</p>
+</section>
+<section id="custom-atlases">
+<span id="wf-custom-atlases"></span><h2>Custom atlases<a class="headerlink" href="#custom-atlases" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">conninfpy.AtlasInfo</span></code> supports four custom atlas constructors so any
+parcellation or coordinate set plugs into <code class="xref py py-func docutils literal notranslate"><span class="pre">analyze()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">out.significant_edges(atlas)</span></code>, <code class="docutils literal notranslate"><span class="pre">out.network_summary(atlas)</span></code>, and
+<a class="reference internal" href="conninfpy.interpret.html#conninfpy.interpret.annotate_rois" title="conninfpy.interpret.annotate_rois"><code class="xref py py-func docutils literal notranslate"><span class="pre">annotate_rois()</span></code></a>.</p>
+<ol class="arabic">
+<li><p><strong>ROI table (CSV)</strong> — <code class="docutils literal notranslate"><span class="pre">AtlasInfo.from_csv()</span></code></p>
+<p>Required columns: <code class="docutils literal notranslate"><span class="pre">name</span></code> and <code class="docutils literal notranslate"><span class="pre">network</span></code>. Optional columns: <code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>,
+<code class="docutils literal notranslate"><span class="pre">z</span></code> (MNI mm), <code class="docutils literal notranslate"><span class="pre">hemisphere</span></code>, and <code class="docutils literal notranslate"><span class="pre">id</span></code> or <code class="docutils literal notranslate"><span class="pre">roi_id</span></code>. Rows must be in
+matrix node order <code class="docutils literal notranslate"><span class="pre">0..N-1</span></code>:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>id,name,network,x,y,z,hemisphere
+1,LH_Vis_1,Visual,-18,-86,-4,L
+2,RH_Vis_1,Visual,20,-84,-2,R
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtlasInfo</span><span class="p">,</span> <span class="n">analyze</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.interpret</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotate_rois</span>
+
+<span class="n">atlas</span> <span class="o">=</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="s2">"my_atlas.csv"</span><span class="p">)</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="n">group1</span><span class="o">=</span><span class="n">ctrl</span><span class="p">,</span> <span class="n">group2</span><span class="o">=</span><span class="n">pat</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">"cnbs"</span><span class="p">,</span> <span class="n">atlas</span><span class="o">=</span><span class="n">atlas</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">edges</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">significant_edges</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span>
+<span class="n">nets</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">network_summary</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span>
+<span class="n">rois</span> <span class="o">=</span> <span class="n">annotate_rois</span><span class="p">(</span><span class="n">atlas</span><span class="o">.</span><span class="n">coords</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span> <span class="n">networks</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">networks</span><span class="p">,</span>
+                     <span class="n">support</span><span class="o">=</span><span class="s2">"sphere"</span><span class="p">,</span> <span class="n">radius_mm</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="s2">"MNI152NLin2009cAsym"</span><span class="p">)</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>3D integer label volume (NIfTI + optional LUT)</strong> — <code class="docutils literal notranslate"><span class="pre">AtlasInfo.from_nifti()</span></code></p>
+<p>Accepts a <strong>3D</strong> integer label NIfTI (<code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">=</span> <span class="pre">background</span></code>), reading non-zero
+ROI IDs in ascending order (matching <code class="docutils literal notranslate"><span class="pre">nilearn.maskers.NiftiLabelsMasker</span></code>)
+and computing ROI centroids automatically. Probabilistic <strong>4D</strong> maps are not
+label masks and are rejected; convert them to 3D integer labels or use
+<code class="docutils literal notranslate"><span class="pre">AtlasInfo.from_coordinates()</span></code> / <code class="docutils literal notranslate"><span class="pre">from_csv()</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">atlas</span> <span class="o">=</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">from_nifti</span><span class="p">(</span><span class="s2">"my_parcellation_3d.nii.gz"</span><span class="p">,</span> <span class="n">lut</span><span class="o">=</span><span class="s2">"my_lut.csv"</span><span class="p">)</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="n">group1</span><span class="o">=</span><span class="n">ctrl</span><span class="p">,</span> <span class="n">group2</span><span class="o">=</span><span class="n">pat</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">"tfnbs"</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">edges</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">significant_edges</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span>
+<span class="n">nets</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">network_summary</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span>   <span class="c1"># uses LUT 'network' column if present</span>
+<span class="n">rois</span> <span class="o">=</span> <span class="n">annotate_rois</span><span class="p">(</span><span class="n">coords</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">coords</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span>
+                     <span class="n">networks</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">networks</span><span class="p">,</span> <span class="n">support</span><span class="o">=</span><span class="s2">"parcel"</span><span class="p">,</span>
+                     <span class="n">parcel_image</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">image</span><span class="p">,</span>
+                     <span class="n">parcel_labels</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">atlas</span><span class="o">.</span><span class="n">label_ids</span><span class="p">),</span>
+                     <span class="n">space</span><span class="o">=</span><span class="s2">"MNI152NLin2009cAsym"</span><span class="p">)</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>MNI coordinates</strong> — <code class="docutils literal notranslate"><span class="pre">AtlasInfo.from_coordinates()</span></code></p>
+<p>Assigns an <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">3)</span></code> array of MNI coordinates (mm, in matrix order) to a
+reference atlas (e.g. <code class="docutils literal notranslate"><span class="pre">AtlasInfo.schaefer_200_yeo7()</span></code> or <code class="docutils literal notranslate"><span class="pre">AtlasInfo.bna_246()</span></code>)
+to populate ROI labels and network memberships:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">atlas</span> <span class="o">=</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">from_coordinates</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">reference</span><span class="o">=</span><span class="n">AtlasInfo</span><span class="o">.</span><span class="n">schaefer_200_yeo7</span><span class="p">())</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="n">group1</span><span class="o">=</span><span class="n">ctrl</span><span class="p">,</span> <span class="n">group2</span><span class="o">=</span><span class="n">pat</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">"cnbs"</span><span class="p">,</span> <span class="n">atlas</span><span class="o">=</span><span class="n">atlas</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">nets</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">network_summary</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span>
+<span class="n">rois</span> <span class="o">=</span> <span class="n">annotate_rois</span><span class="p">(</span><span class="n">atlas</span><span class="o">.</span><span class="n">coords</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span> <span class="n">networks</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">networks</span><span class="p">,</span>
+                     <span class="n">support</span><span class="o">=</span><span class="s2">"sphere"</span><span class="p">,</span> <span class="n">radius_mm</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="s2">"MNI152NLin2009cAsym"</span><span class="p">)</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>Deterministic nilearn atlas</strong> — <code class="docutils literal notranslate"><span class="pre">AtlasInfo.from_nilearn()</span></code></p>
+<p>Wraps deterministic <code class="docutils literal notranslate"><span class="pre">nilearn.datasets.fetch_atlas_*</span></code> results (<code class="docutils literal notranslate"><span class="pre">nilearn</span> <span class="pre">&gt;=</span> <span class="pre">0.13</span></code>,
+which provide a <code class="docutils literal notranslate"><span class="pre">lut</span></code> table; 4D probabilistic atlases are rejected):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">nilearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">datasets</span>
+<span class="n">ho</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">fetch_atlas_harvard_oxford</span><span class="p">(</span><span class="s2">"cort-maxprob-thr25-2mm"</span><span class="p">,</span> <span class="n">symmetric_split</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">atlas</span> <span class="o">=</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">from_nilearn</span><span class="p">(</span><span class="n">ho</span><span class="p">)</span>
+<span class="n">rois</span> <span class="o">=</span> <span class="n">annotate_rois</span><span class="p">(</span><span class="n">coords</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">coords</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span>
+                     <span class="n">support</span><span class="o">=</span><span class="s2">"parcel"</span><span class="p">,</span> <span class="n">parcel_image</span><span class="o">=</span><span class="n">atlas</span><span class="o">.</span><span class="n">image</span><span class="p">,</span>
+                     <span class="n">parcel_labels</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">atlas</span><span class="o">.</span><span class="n">label_ids</span><span class="p">),</span>
+                     <span class="n">space</span><span class="o">=</span><span class="s2">"MNI152NLin2009cAsym"</span><span class="p">)</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="approach.html" class="btn btn-neutral float-left" title="How Inference Works" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="conninfpy.html" class="btn btn-neutral float-right" title="conninfpy" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

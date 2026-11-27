@@ -1,0 +1,382 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.interpret.evidence &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.interpret.evidence</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.interpret.evidence</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Evidence packets for interpretation text, built from Brainnetome annotation.</span>
+
+<span class="sd">The packet holds only what the analysis and the atlas support:</span>
+
+<span class="sd">* ``query`` - the contrast, the source atlas, the detected connections and</span>
+<span class="sd">  their inference unit (edge, component or block), plus ``roi_restriction``:</span>
+<span class="sd">  which unit the ROI counts belong to, the counts they are built from and the</span>
+<span class="sd">  names of the unassigned and mixed ROIs;</span>
+<span class="sd">* ``reference`` - Brainnetome atlas and BrainMap provenance, ROI support;</span>
+<span class="sd">* ``rois`` - anatomy of every endpoint ROI (assignment level, region, lobe,</span>
+<span class="sd">  hemisphere, structure, cytoarchitectonic description, Yeo network,</span>
+<span class="sd">  BrainMap domains, flags) and how many detected connections touch it;</span>
+<span class="sd">* ``terms`` - BrainMap terms of the BNA regions each endpoint covers, with the</span>
+<span class="sd">  published forward-inference likelihood ratio (never combined across</span>
+<span class="sd">  regions or endpoints);</span>
+<span class="sd">* ``relations`` - optional detection counts by circuit class, hemispheric</span>
+<span class="sd">  relation and distance band, next to the tested opportunities;</span>
+<span class="sd">* ``caveats``.</span>
+
+<span class="sd">No term is ranked as "the" function of a region, and nothing here is a test.</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.brainnetome</span><span class="w"> </span><span class="kn">import</span> <span class="n">BD_DOMAINS</span>
+
+<span class="n">DEFAULT_CAVEATS</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"BrainMap profiles are forward-inference associations from published activation studies: "</span>
+    <span class="s2">"they describe which kinds of tasks engage a region, not what the region or the connection does."</span><span class="p">,</span>
+    <span class="s2">"A region without published terms has too few BrainMap experiments; this is not evidence of no function."</span><span class="p">,</span>
+    <span class="s2">"Left/right differences in profiles partly reflect lateralized task literatures (e.g. language); "</span>
+    <span class="s2">"read homologous regions together."</span><span class="p">,</span>
+    <span class="s2">"Detections are interpreted at the method's inference unit: an edge of a significant component or "</span>
+    <span class="s2">"block is not individually significant."</span><span class="p">,</span>
+    <span class="s2">"ROIs are described by the tissue they sampled (sphere or parcel overlap); 'mixed' and 'unassigned' "</span>
+    <span class="s2">"ROIs carry no single regional label."</span><span class="p">,</span>
+    <span class="s2">"ROI-level counts are member edges of the connections detected at the method's inference unit "</span>
+    <span class="s2">"(edge, component or block); 'unassigned' and 'mixed' ROIs keep their own group and are never "</span>
+    <span class="s2">"folded into a total."</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">_ROI_FIELDS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"assigned"</span><span class="p">,</span> <span class="s2">"level"</span><span class="p">,</span> <span class="s2">"region"</span><span class="p">,</span> <span class="s2">"lobe"</span><span class="p">,</span> <span class="s2">"hemisphere"</span><span class="p">,</span> <span class="s2">"structure"</span><span class="p">,</span> <span class="s2">"description"</span><span class="p">,</span>
+               <span class="s2">"yeo7"</span><span class="p">,</span> <span class="s2">"domains"</span><span class="p">,</span> <span class="s2">"profile_status"</span><span class="p">,</span> <span class="s2">"flags"</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="build_annotation_evidence">
+<a class="viewcode-back" href="../../../conninfpy.interpret.html#conninfpy.interpret.evidence.build_annotation_evidence">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_annotation_evidence</span><span class="p">(</span>
+    <span class="n">edges</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="n">rois</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">contrast_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"Unknown"</span><span class="p">,</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"conninfpy_edges"</span><span class="p">,</span>
+    <span class="n">source_atlas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">inference_unit</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"edge"</span><span class="p">,</span>
+    <span class="n">summary</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">caveats</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Compile detected connections and their Brainnetome annotation into an evidence packet.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    edges : DataFrame</span>
+<span class="sd">        Detected connections with ``roi_i`` / ``roi_j`` (matrix indices),</span>
+<span class="sd">        e.g. ``result.significant_edges(...)`` or ``annotate_edges(...)``.</span>
+<span class="sd">    rois : RoiAnnotation</span>
+<span class="sd">        From :func:`conninfpy.interpret.annotate.annotate_rois`, in matrix order.</span>
+<span class="sd">    contrast_name, source : str</span>
+<span class="sd">        Labels for the query.</span>
+<span class="sd">    source_atlas : str, optional</span>
+<span class="sd">        Name of the atlas the ROIs came from (default: the annotation's).</span>
+<span class="sd">    inference_unit : {'edge', 'component', 'block'}</span>
+<span class="sd">        Unit of the corrected inference (``result.inference_unit``).</span>
+<span class="sd">    summary : dict, optional</span>
+<span class="sd">        Output of :func:`conninfpy.interpret.annotate.summarize_annotation`; its</span>
+<span class="sd">        relation counts are added.</span>
+<span class="sd">    caveats : list of str, optional</span>
+<span class="sd">        Replaces :data:`DEFAULT_CAVEATS`.</span>
+<span class="sd">    """</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="n">rois</span><span class="o">.</span><span class="n">table</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">edges</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="n">ends</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">edges</span><span class="p">[</span><span class="s2">"roi_i"</span><span class="p">],</span> <span class="n">edges</span><span class="p">[</span><span class="s2">"roi_j"</span><span class="p">]])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">burden</span> <span class="o">=</span> <span class="n">ends</span><span class="o">.</span><span class="n">value_counts</span><span class="p">()</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">burden</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">endpoint_ids</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">burden</span><span class="p">)</span>
+
+    <span class="n">roi_entries</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">endpoint_ids</span><span class="p">:</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+        <span class="n">entry</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"roi_index"</span><span class="p">:</span> <span class="n">k</span><span class="p">,</span> <span class="s2">"roi_name"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">"roi"</span><span class="p">]),</span> <span class="s2">"n_detected_edges"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">burden</span><span class="p">[</span><span class="n">k</span><span class="p">])}</span>
+        <span class="n">entry</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">f</span><span class="p">:</span> <span class="p">(</span><span class="kc">None</span> <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">isna</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">f</span><span class="p">])</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">f</span><span class="p">]))</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">_ROI_FIELDS</span><span class="p">})</span>
+        <span class="n">roi_entries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+
+    <span class="n">terms</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">rois</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">profiles</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">endpoint_ids</span><span class="p">:</span>
+        <span class="n">long</span> <span class="o">=</span> <span class="n">rois</span><span class="o">.</span><span class="n">profiles</span><span class="p">(</span><span class="s2">"BD"</span><span class="p">)</span>
+        <span class="n">long</span> <span class="o">=</span> <span class="n">long</span><span class="p">[</span><span class="n">long</span><span class="p">[</span><span class="s2">"roi_index"</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">endpoint_ids</span><span class="p">)]</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">long</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+            <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"roi_index"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"roi_index"</span><span class="p">]),</span> <span class="s2">"roi_name"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"roi"</span><span class="p">]),</span>
+                          <span class="s2">"region"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"region"</span><span class="p">]),</span> <span class="s2">"region_weight"</span><span class="p">:</span> <span class="nb">round</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"region_weight"</span><span class="p">]),</span> <span class="mi">3</span><span class="p">),</span>
+                          <span class="s2">"term"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"term"</span><span class="p">]),</span> <span class="s2">"domain"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"domain"</span><span class="p">]),</span>
+                          <span class="s2">"likelihood_ratio"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"likelihood_ratio"</span><span class="p">])})</span>
+
+    <span class="n">pairs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">edges</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">edges</span><span class="p">[</span><span class="s2">"roi_i"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">),</span> <span class="n">edges</span><span class="p">[</span><span class="s2">"roi_j"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">((</span><span class="nb">str</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">a</span><span class="p">][</span><span class="s2">"assigned"</span><span class="p">]),</span> <span class="nb">str</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">b</span><span class="p">][</span><span class="s2">"assigned"</span><span class="p">]))))</span>
+            <span class="n">pairs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">pairs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="n">region_pairs</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">"source"</span><span class="p">:</span> <span class="n">s</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">:</span> <span class="n">g</span><span class="p">,</span> <span class="s2">"n_edges"</span><span class="p">:</span> <span class="n">n</span><span class="p">}</span> <span class="k">for</span> <span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">g</span><span class="p">),</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">pairs</span><span class="o">.</span><span class="n">items</span><span class="p">())]</span>
+
+    <span class="n">relations</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">summary</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">rel</span> <span class="o">=</span> <span class="n">summary</span><span class="p">[</span><span class="s2">"relations"</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rel</span><span class="p">[</span><span class="n">rel</span><span class="p">[</span><span class="s2">"n_detected"</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+            <span class="n">relations</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"relation"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"relation"</span><span class="p">]),</span> <span class="s2">"category"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"category"</span><span class="p">]),</span>
+                              <span class="s2">"n_detected"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"n_detected"</span><span class="p">]),</span> <span class="s2">"n_tested"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"n_tested"</span><span class="p">]),</span>
+                              <span class="s2">"share_of_detections"</span><span class="p">:</span> <span class="nb">round</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"share_of_detections"</span><span class="p">]),</span> <span class="mi">3</span><span class="p">),</span>
+                              <span class="s2">"share_of_tested"</span><span class="p">:</span> <span class="nb">round</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"share_of_tested"</span><span class="p">]),</span> <span class="mi">3</span><span class="p">)})</span>
+
+    <span class="n">settings</span> <span class="o">=</span> <span class="n">rois</span><span class="o">.</span><span class="n">settings</span>
+    <span class="n">prov</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"provenance"</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">unit</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">inference_unit</span> <span class="ow">or</span> <span class="s2">"edge"</span><span class="p">)</span>
+    <span class="n">unit_phrase</span> <span class="o">=</span> <span class="s2">"significant edges"</span> <span class="k">if</span> <span class="n">unit</span> <span class="o">==</span> <span class="s2">"edge"</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">"edges of the detected </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">s"</span>
+    <span class="n">levels</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">t</span><span class="p">[</span><span class="s2">"level"</span><span class="p">]]</span>
+    <span class="n">all_names</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">t</span><span class="p">[</span><span class="s2">"roi"</span><span class="p">]]</span>
+    <span class="n">unassigned_rois</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">lv</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">all_names</span><span class="p">,</span> <span class="n">levels</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">if</span> <span class="n">lv</span> <span class="o">==</span> <span class="s2">"unassigned"</span><span class="p">]</span>
+    <span class="n">mixed_rois</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">lv</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">all_names</span><span class="p">,</span> <span class="n">levels</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">if</span> <span class="n">lv</span> <span class="o">==</span> <span class="s2">"mixed"</span><span class="p">]</span>
+    <span class="n">roi_restriction</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"applies_to"</span><span class="p">:</span> <span class="n">unit</span><span class="p">,</span>
+        <span class="s2">"counts"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"n_rois"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">),</span> <span class="s2">"n_endpoint_rois"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">roi_entries</span><span class="p">),</span>
+                   <span class="s2">"n_unassigned_rois"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">unassigned_rois</span><span class="p">),</span> <span class="s2">"n_mixed_rois"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">mixed_rois</span><span class="p">),</span>
+                   <span class="s2">"n_detected_edges"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">edges</span><span class="p">))},</span>
+        <span class="s2">"unassigned_rois"</span><span class="p">:</span> <span class="n">unassigned_rois</span><span class="p">,</span>
+        <span class="s2">"mixed_rois"</span><span class="p">:</span> <span class="n">mixed_rois</span><span class="p">,</span>
+        <span class="s2">"statement"</span><span class="p">:</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"ROI entries count member </span><span class="si">{</span><span class="n">unit_phrase</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span><span class="si">}</span><span class="s2"> detected, inference unit: </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">); "</span>
+            <span class="sa">f</span><span class="s2">"they are not independent ROI findings. </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">unassigned_rois</span><span class="p">)</span><span class="si">}</span><span class="s2"> unassigned and "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">mixed_rois</span><span class="p">)</span><span class="si">}</span><span class="s2"> mixed ROI(s) keep their own group and are not placed in the unit-level "</span>
+            <span class="s2">"aggregation."</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">"query"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span> <span class="s2">"contrast"</span><span class="p">:</span> <span class="n">contrast_name</span><span class="p">,</span>
+            <span class="s2">"atlas"</span><span class="p">:</span> <span class="n">source_atlas</span> <span class="ow">or</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="si">}</span><span class="s2"> ROIs (</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'support'</span><span class="p">)</span><span class="si">}</span><span class="s2"> support)"</span><span class="p">,</span>
+            <span class="s2">"roi_ids"</span><span class="p">:</span> <span class="n">endpoint_ids</span><span class="p">,</span> <span class="s2">"edge_count"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">edges</span><span class="p">)),</span>
+            <span class="s2">"inference_unit"</span><span class="p">:</span> <span class="n">unit</span><span class="p">,</span> <span class="s2">"region_pairs"</span><span class="p">:</span> <span class="n">region_pairs</span><span class="p">,</span>
+            <span class="s2">"roi_restriction"</span><span class="p">:</span> <span class="n">roi_restriction</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="s2">"reference"</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">"atlas"</span><span class="p">:</span> <span class="n">prov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"atlas"</span><span class="p">,</span> <span class="s2">"Brainnetome BNA-246 (Fan et al. 2016)"</span><span class="p">),</span>
+            <span class="s2">"profiles"</span><span class="p">:</span> <span class="p">(</span><span class="n">prov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"profiles"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"source"</span><span class="p">,</span> <span class="s2">"not available"</span><span class="p">),</span>
+            <span class="s2">"support"</span><span class="p">:</span> <span class="n">settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"support"</span><span class="p">),</span> <span class="s2">"space"</span><span class="p">:</span> <span class="n">settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"space"</span><span class="p">),</span>
+            <span class="s2">"purity"</span><span class="p">:</span> <span class="n">settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"purity"</span><span class="p">),</span>
+        <span class="p">},</span>
+        <span class="s2">"rois"</span><span class="p">:</span> <span class="n">roi_entries</span><span class="p">,</span>
+        <span class="s2">"terms"</span><span class="p">:</span> <span class="n">terms</span><span class="p">,</span>
+        <span class="s2">"relations"</span><span class="p">:</span> <span class="n">relations</span><span class="p">,</span>
+        <span class="s2">"caveats"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">DEFAULT_CAVEATS</span> <span class="k">if</span> <span class="n">caveats</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">caveats</span><span class="p">),</span>
+    <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="validate_evidence">
+<a class="viewcode-back" href="../../../conninfpy.interpret.html#conninfpy.interpret.evidence.validate_evidence">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_evidence</span><span class="p">(</span><span class="n">evidence</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Check the structure of an evidence packet.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a required field is missing or malformed.</span>
+<span class="sd">    """</span>
+    <span class="n">required</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"query"</span><span class="p">,</span> <span class="s2">"reference"</span><span class="p">,</span> <span class="s2">"rois"</span><span class="p">,</span> <span class="s2">"terms"</span><span class="p">,</span> <span class="s2">"caveats"</span><span class="p">}</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="n">required</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">evidence</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Missing required top-level evidence fields: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">query</span> <span class="o">=</span> <span class="n">evidence</span><span class="p">[</span><span class="s2">"query"</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Field 'query' must be a dictionary."</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"source"</span><span class="p">,</span> <span class="s2">"atlas"</span><span class="p">,</span> <span class="s2">"inference_unit"</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">query</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Field 'query.</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">' is required and cannot be empty."</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">evidence</span><span class="p">[</span><span class="s2">"reference"</span><span class="p">],</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">evidence</span><span class="p">[</span><span class="s2">"reference"</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"atlas"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Field 'reference.atlas' is required."</span><span class="p">)</span>
+    <span class="n">rois</span> <span class="o">=</span> <span class="n">evidence</span><span class="p">[</span><span class="s2">"rois"</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rois</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">rois</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Field 'rois' must be a non-empty list: no detected connection to describe."</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">rois</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"roi_index"</span><span class="p">,</span> <span class="s2">"roi_name"</span><span class="p">,</span> <span class="s2">"assigned"</span><span class="p">,</span> <span class="s2">"level"</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">r</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"ROI entry </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> is missing '</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">'."</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">evidence</span><span class="p">[</span><span class="s2">"terms"</span><span class="p">],</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Field 'terms' must be a list (it may be empty)."</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">term</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">evidence</span><span class="p">[</span><span class="s2">"terms"</span><span class="p">]):</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"term"</span><span class="p">,</span> <span class="s2">"domain"</span><span class="p">,</span> <span class="s2">"likelihood_ratio"</span><span class="p">,</span> <span class="s2">"roi_index"</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">term</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Term entry </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> is missing '</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">'."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">term</span><span class="p">[</span><span class="s2">"term"</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Term entry </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> has an empty 'term'."</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">evidence</span><span class="p">[</span><span class="s2">"caveats"</span><span class="p">],</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Field 'caveats' must be a list of strings."</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="summarize_terms">
+<a class="viewcode-back" href="../../../conninfpy.interpret.html#conninfpy.interpret.evidence.summarize_terms">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">summarize_terms</span><span class="p">(</span><span class="n">evidence</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""BrainMap domains and terms among the endpoint ROIs.</span>
+
+<span class="sd">    Each ROI counts once per domain or term, however many connections touch</span>
+<span class="sd">    it (a hub is not counted repeatedly); ``n_detected_edges`` per ROI is</span>
+<span class="sd">    reported separately. Memberships overlap, so shares need not sum to 1.</span>
+<span class="sd">    """</span>
+    <span class="n">rois</span> <span class="o">=</span> <span class="n">evidence</span><span class="p">[</span><span class="s2">"rois"</span><span class="p">]</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">rois</span><span class="p">)</span>
+    <span class="n">by_domain</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">d</span><span class="p">:</span> <span class="nb">set</span><span class="p">()</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">BD_DOMAINS</span><span class="p">}</span>
+    <span class="n">by_term</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">evidence</span><span class="p">[</span><span class="s2">"terms"</span><span class="p">]:</span>
+        <span class="n">by_domain</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s2">"domain"</span><span class="p">],</span> <span class="nb">set</span><span class="p">())</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s2">"roi_index"</span><span class="p">])</span>
+        <span class="n">e</span> <span class="o">=</span> <span class="n">by_term</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s2">"term"</span><span class="p">],</span> <span class="p">{</span><span class="s2">"term"</span><span class="p">:</span> <span class="n">t</span><span class="p">[</span><span class="s2">"term"</span><span class="p">],</span> <span class="s2">"domain"</span><span class="p">:</span> <span class="n">t</span><span class="p">[</span><span class="s2">"domain"</span><span class="p">],</span> <span class="s2">"rois"</span><span class="p">:</span> <span class="nb">set</span><span class="p">(),</span>
+                                           <span class="s2">"max_likelihood_ratio"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">})</span>
+        <span class="n">e</span><span class="p">[</span><span class="s2">"rois"</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s2">"roi_index"</span><span class="p">])</span>
+        <span class="n">e</span><span class="p">[</span><span class="s2">"max_likelihood_ratio"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="s2">"max_likelihood_ratio"</span><span class="p">],</span> <span class="n">t</span><span class="p">[</span><span class="s2">"likelihood_ratio"</span><span class="p">])</span>
+    <span class="n">domains</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">"domain"</span><span class="p">:</span> <span class="n">d</span><span class="p">,</span> <span class="s2">"n_rois"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">),</span> <span class="s2">"share_rois"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">/</span> <span class="n">n</span> <span class="k">if</span> <span class="n">n</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">}</span>
+               <span class="k">for</span> <span class="n">d</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">by_domain</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
+    <span class="n">terms</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(({</span><span class="s2">"term"</span><span class="p">:</span> <span class="n">e</span><span class="p">[</span><span class="s2">"term"</span><span class="p">],</span> <span class="s2">"domain"</span><span class="p">:</span> <span class="n">e</span><span class="p">[</span><span class="s2">"domain"</span><span class="p">],</span> <span class="s2">"n_rois"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="s2">"rois"</span><span class="p">]),</span>
+                     <span class="s2">"max_likelihood_ratio"</span><span class="p">:</span> <span class="n">e</span><span class="p">[</span><span class="s2">"max_likelihood_ratio"</span><span class="p">]}</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">by_term</span><span class="o">.</span><span class="n">values</span><span class="p">()),</span>
+                   <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">e</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="n">e</span><span class="p">[</span><span class="s2">"n_rois"</span><span class="p">],</span> <span class="n">e</span><span class="p">[</span><span class="s2">"term"</span><span class="p">]))</span>
+    <span class="n">hubs</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(({</span><span class="s2">"roi_name"</span><span class="p">:</span> <span class="n">r</span><span class="p">[</span><span class="s2">"roi_name"</span><span class="p">],</span> <span class="s2">"assigned"</span><span class="p">:</span> <span class="n">r</span><span class="p">[</span><span class="s2">"assigned"</span><span class="p">],</span> <span class="s2">"n_detected_edges"</span><span class="p">:</span> <span class="n">r</span><span class="p">[</span><span class="s2">"n_detected_edges"</span><span class="p">]}</span>
+                   <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rois</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">e</span><span class="p">:</span> <span class="o">-</span><span class="n">e</span><span class="p">[</span><span class="s2">"n_detected_edges"</span><span class="p">])[:</span><span class="mi">5</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"domains"</span><span class="p">:</span> <span class="n">domains</span><span class="p">,</span> <span class="s2">"terms"</span><span class="p">:</span> <span class="n">terms</span><span class="p">,</span> <span class="s2">"top_endpoint_rois"</span><span class="p">:</span> <span class="n">hubs</span><span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="describe_coverage">
+<a class="viewcode-back" href="../../../conninfpy.interpret.html#conninfpy.interpret.evidence.describe_coverage">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">describe_coverage</span><span class="p">(</span><span class="n">evidence</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Factual description of what the annotation can support (no quality label).</span>
+
+<span class="sd">    ``roi_restriction`` repeats the packet's statement of which inference unit</span>
+<span class="sd">    the ROI counts belong to and which ROIs are unassigned or mixed; those</span>
+<span class="sd">    ROIs stay counted as such instead of disappearing behind one total.</span>
+<span class="sd">    """</span>
+    <span class="n">rois</span> <span class="o">=</span> <span class="n">evidence</span><span class="p">[</span><span class="s2">"rois"</span><span class="p">]</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">rois</span><span class="p">)</span>
+    <span class="n">query</span> <span class="o">=</span> <span class="n">evidence</span><span class="p">[</span><span class="s2">"query"</span><span class="p">]</span>
+    <span class="n">restriction</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"roi_restriction"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">with_terms</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rois</span> <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"profile_status"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"terms"</span><span class="p">)</span>
+    <span class="n">unassigned</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rois</span> <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"level"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"unassigned"</span><span class="p">)</span>
+    <span class="n">mixed</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rois</span> <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"level"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"mixed"</span><span class="p">)</span>
+    <span class="n">present</span> <span class="o">=</span> <span class="p">[</span><span class="n">d</span><span class="p">[</span><span class="s2">"domain"</span><span class="p">]</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">summarize_terms</span><span class="p">(</span><span class="n">evidence</span><span class="p">)[</span><span class="s2">"domains"</span><span class="p">]</span> <span class="k">if</span> <span class="n">d</span><span class="p">[</span><span class="s2">"n_rois"</span><span class="p">]]</span>
+    <span class="n">unit</span> <span class="o">=</span> <span class="n">query</span><span class="p">[</span><span class="s2">"inference_unit"</span><span class="p">]</span>
+    <span class="n">sentence</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"The </span><span class="si">{</span><span class="n">query</span><span class="p">[</span><span class="s1">'edge_count'</span><span class="p">]</span><span class="si">}</span><span class="s2"> detected connections (inference unit: </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">) involve </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> ROIs; "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">with_terms</span><span class="si">}</span><span class="s2"> of them cover Brainnetome regions with published BrainMap terms"</span>
+        <span class="o">+</span> <span class="p">(</span><span class="sa">f</span><span class="s2">" (domains: </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">present</span><span class="p">)</span><span class="si">}</span><span class="s2">)"</span> <span class="k">if</span> <span class="n">present</span> <span class="k">else</span> <span class="s2">""</span><span class="p">)</span>
+        <span class="o">+</span> <span class="sa">f</span><span class="s2">", </span><span class="si">{</span><span class="n">mixed</span><span class="si">}</span><span class="s2"> are anatomically mixed and </span><span class="si">{</span><span class="n">unassigned</span><span class="si">}</span><span class="s2"> unassigned."</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">restriction</span><span class="p">:</span>
+        <span class="n">sentence</span> <span class="o">+=</span> <span class="p">(</span><span class="sa">f</span><span class="s2">" ROI counts are member </span><span class="si">{</span><span class="p">(</span><span class="s1">'significant edges'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">unit</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s1">'edge'</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="sa">f</span><span class="s1">'edges of the detected </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s1">s'</span><span class="p">)</span><span class="si">}</span><span class="s2">; "</span>
+                     <span class="s2">"unassigned and mixed ROIs keep their own group and are not placed in the unit-level "</span>
+                     <span class="s2">"aggregation."</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"n_endpoint_rois"</span><span class="p">:</span> <span class="n">n</span><span class="p">,</span> <span class="s2">"n_with_terms"</span><span class="p">:</span> <span class="n">with_terms</span><span class="p">,</span> <span class="s2">"n_mixed"</span><span class="p">:</span> <span class="n">mixed</span><span class="p">,</span>
+            <span class="s2">"n_unassigned"</span><span class="p">:</span> <span class="n">unassigned</span><span class="p">,</span> <span class="s2">"domains_present"</span><span class="p">:</span> <span class="n">present</span><span class="p">,</span> <span class="s2">"report_sentence"</span><span class="p">:</span> <span class="n">sentence</span><span class="p">,</span>
+            <span class="s2">"inference_unit"</span><span class="p">:</span> <span class="n">unit</span><span class="p">,</span> <span class="s2">"roi_restriction"</span><span class="p">:</span> <span class="n">restriction</span><span class="p">}</span></div>
+
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"DEFAULT_CAVEATS"</span><span class="p">,</span> <span class="s2">"build_annotation_evidence"</span><span class="p">,</span> <span class="s2">"validate_evidence"</span><span class="p">,</span> <span class="s2">"summarize_terms"</span><span class="p">,</span>
+           <span class="s2">"describe_coverage"</span><span class="p">]</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

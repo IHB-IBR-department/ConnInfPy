@@ -1,0 +1,345 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.enhance.fbc_tfnbs &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+          <li class="breadcrumb-item"><a href="../enhance.html">conninfpy.enhance</a></li>
+      <li class="breadcrumb-item active">conninfpy.enhance.fbc_tfnbs</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.enhance.fbc_tfnbs</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Functional-block-clustering TFNBS scoring."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.defaults</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DEFAULT_MIN_CLUSTER_SIZE</span><span class="p">,</span>
+    <span class="n">DEFAULT_START_THRESHOLD</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.enhance._backend</span><span class="w"> </span><span class="kn">import</span> <span class="n">HAS_NUMBA</span><span class="p">,</span> <span class="n">_record_executed_backend</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.enhance._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_compute_canonical_block_ids</span><span class="p">,</span>
+    <span class="n">_validate_net_labels</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.enhance._graph</span><span class="w"> </span><span class="kn">import</span> <span class="n">_get_edges</span><span class="p">,</span> <span class="n">_is_symmetric</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.enhance._thresholds</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="n">_compute_thresholds</span><span class="p">,</span>
+    <span class="n">_extent_power</span><span class="p">,</span>
+    <span class="n">_validate_params</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="get_fbc_tfnbs_score">
+<a class="viewcode-back" href="../../../conninfpy.enhance.html#conninfpy.enhance.get_fbc_tfnbs_score">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_fbc_tfnbs_score</span><span class="p">(</span>
+    <span class="n">t_stats</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">floating</span><span class="p">],</span>
+    <span class="n">net_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">],</span>
+    <span class="n">e</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="n">h</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="n">n</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">start_thres</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_START_THRESHOLD</span><span class="p">,</span>
+    <span class="n">min_cluster_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DEFAULT_MIN_CLUSTER_SIZE</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">floating</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Functional Block Clustering TFNBS (FBC-TFNBS).</span>
+
+<span class="sd">    This method clusters edges by functional block membership rather than</span>
+<span class="sd">    topological connectivity. At each threshold:</span>
+
+<span class="sd">    1. Edges are grouped by their functional block (e.g., Visual-Visual, DMN-DMN)</span>
+<span class="sd">    2. If a block has k &gt;= min_cluster_size edges, those edges support each other</span>
+<span class="sd">       (support = k)</span>
+<span class="sd">    3. If a block has fewer edges, they are considered "isolated" and suppressed</span>
+<span class="sd">       (support = 0)</span>
+
+<span class="sd">    Key difference from standard TFNBS:</span>
+<span class="sd">        - Standard TFNBS: edges cluster if they share a node (topological)</span>
+<span class="sd">        - FBC-TFNBS: edges cluster if they're in the same functional block</span>
+
+<span class="sd">    Key difference from NI-TFNBS:</span>
+<span class="sd">        - NI-TFNBS: edge-level density weighting within predefined blocks</span>
+<span class="sd">        - FBC-TFNBS: no topological clustering, isolated edges are suppressed</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    t_stats : ndarray of shape (N, N)</span>
+<span class="sd">        Statistical matrix to be transformed (usually absolute t-values).</span>
+<span class="sd">    net_labels : ndarray of shape (N,)</span>
+<span class="sd">        Integer labels assigning each node to a functional network.</span>
+<span class="sd">    e : float or array-like</span>
+<span class="sd">        Extent exponent. Controls how much cluster size matters.</span>
+<span class="sd">    h : float or array-like</span>
+<span class="sd">        Height exponent. Controls how much threshold height matters.</span>
+<span class="sd">    n : int or None, default=None</span>
+<span class="sd">        Exact integration when None; otherwise the historical right grid.</span>
+<span class="sd">    start_thres : float, default=1.65</span>
+<span class="sd">        Initial threshold for cluster formation.</span>
+<span class="sd">    min_cluster_size : int, default=3</span>
+<span class="sd">        Minimum number of edges in a functional block to form a cluster.</span>
+<span class="sd">        Blocks with fewer edges get support=0 (suppressed).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tfnbs : ndarray of shape (N, N) or (N, N, num_params)</span>
+<span class="sd">        FBC-TFNBS score matrix.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The key insight is that edges in the same functional block should support</span>
+<span class="sd">    each other even if they don't share any nodes. This captures the biological</span>
+<span class="sd">    reality that effects within a functional system (e.g., Visual cortex) are</span>
+<span class="sd">    likely related, while isolated edges are more likely noise.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import numpy as np</span>
+<span class="sd">    &gt;&gt;&gt; # Create a simple t-statistic matrix</span>
+<span class="sd">    &gt;&gt;&gt; t = np.array([[0, 2.5, 1.8, 0.5],</span>
+<span class="sd">    ...               [2.5, 0, 2.2, 0.3],</span>
+<span class="sd">    ...               [1.8, 2.2, 0, 2.0],</span>
+<span class="sd">    ...               [0.5, 0.3, 2.0, 0]])</span>
+<span class="sd">    &gt;&gt;&gt; # Nodes 0,1 in network 0; nodes 2,3 in network 1</span>
+<span class="sd">    &gt;&gt;&gt; labels = np.array([0, 0, 1, 1])</span>
+<span class="sd">    &gt;&gt;&gt; scores = get_fbc_tfnbs_score(t, labels, e=0.5, h=2.0, n=20,</span>
+<span class="sd">    ...                               start_thres=1.5, min_cluster_size=2)</span>
+<span class="sd">    """</span>
+    <span class="c1"># 1. Validation</span>
+    <span class="n">e_arr</span><span class="p">,</span> <span class="n">h_arr</span><span class="p">,</span> <span class="n">scalar_mode</span> <span class="o">=</span> <span class="n">_validate_params</span><span class="p">(</span><span class="n">t_stats</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">h</span><span class="p">)</span>
+    <span class="n">nroi</span> <span class="o">=</span> <span class="n">t_stats</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">normalized_net_labels</span> <span class="o">=</span> <span class="n">_validate_net_labels</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">net_labels</span><span class="p">),</span> <span class="n">nroi</span><span class="p">)</span>
+    <span class="n">n_networks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">normalized_net_labels</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="c1"># Round to avoid float precision issues</span>
+    <span class="n">t_stats</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">t_stats</span><span class="p">,</span> <span class="n">decimals</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+    <span class="c1"># Initialize output</span>
+    <span class="n">num_params</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">e_arr</span><span class="p">)</span>
+    <span class="n">tfnbs_shape</span> <span class="o">=</span> <span class="p">(</span><span class="n">nroi</span><span class="p">,</span> <span class="n">nroi</span><span class="p">)</span> <span class="k">if</span> <span class="n">scalar_mode</span> <span class="k">else</span> <span class="p">(</span><span class="n">nroi</span><span class="p">,</span> <span class="n">nroi</span><span class="p">,</span> <span class="n">num_params</span><span class="p">)</span>
+    <span class="n">tfnbs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">tfnbs_shape</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">n</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.enhance._exact</span><span class="w"> </span><span class="kn">import</span> <span class="n">integrate</span>
+
+        <span class="n">is_symm</span> <span class="o">=</span> <span class="n">_is_symmetric</span><span class="p">(</span><span class="n">t_stats</span><span class="p">)</span>
+        <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">_get_edges</span><span class="p">(</span><span class="n">t_stats</span><span class="p">,</span> <span class="n">start_thres</span><span class="p">,</span> <span class="n">symmetric</span><span class="o">=</span><span class="n">is_symm</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">weights</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">integrate</span><span class="p">(</span>
+                <span class="n">rows</span><span class="p">,</span>
+                <span class="n">cols</span><span class="p">,</span>
+                <span class="n">weights</span><span class="p">,</span>
+                <span class="n">nroi</span><span class="p">,</span>
+                <span class="n">e_arr</span><span class="p">,</span>
+                <span class="n">h_arr</span><span class="p">,</span>
+                <span class="n">scalar_mode</span><span class="p">,</span>
+                <span class="n">is_symm</span><span class="p">,</span>
+                <span class="n">start_thres</span><span class="p">,</span>
+                <span class="n">blocks</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">),</span>
+                <span class="n">use_numba</span><span class="o">=</span><span class="n">HAS_NUMBA</span><span class="p">,</span>
+                <span class="n">method_label</span><span class="o">=</span><span class="s2">"FBC-TFNBS (exact)"</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">blocks</span> <span class="o">=</span> <span class="n">_compute_canonical_block_ids</span><span class="p">(</span>
+            <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">normalized_net_labels</span><span class="p">,</span> <span class="n">n_networks</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">integrate</span><span class="p">(</span>
+            <span class="n">rows</span><span class="p">,</span>
+            <span class="n">cols</span><span class="p">,</span>
+            <span class="n">weights</span><span class="p">,</span>
+            <span class="n">nroi</span><span class="p">,</span>
+            <span class="n">e_arr</span><span class="p">,</span>
+            <span class="n">h_arr</span><span class="p">,</span>
+            <span class="n">scalar_mode</span><span class="p">,</span>
+            <span class="n">is_symm</span><span class="p">,</span>
+            <span class="n">start_thres</span><span class="p">,</span>
+            <span class="n">blocks</span><span class="o">=</span><span class="n">blocks</span><span class="p">,</span>
+            <span class="n">scale</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_networks</span> <span class="o">*</span> <span class="n">n_networks</span><span class="p">),</span>
+            <span class="n">minimum</span><span class="o">=</span><span class="n">min_cluster_size</span><span class="p">,</span>
+            <span class="n">use_numba</span><span class="o">=</span><span class="n">HAS_NUMBA</span><span class="p">,</span>
+            <span class="n">method_label</span><span class="o">=</span><span class="s2">"FBC-TFNBS (exact)"</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">_record_executed_backend</span><span class="p">(</span>
+        <span class="s2">"numpy"</span><span class="p">,</span>
+        <span class="n">method_label</span><span class="o">=</span><span class="sa">f</span><span class="s2">"FBC-TFNBS (n=</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">)"</span><span class="p">,</span>
+        <span class="n">fallback_reason</span><span class="o">=</span><span class="s2">"no_numba"</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">HAS_NUMBA</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># 2. Compute thresholds</span>
+    <span class="n">threshs</span><span class="p">,</span> <span class="n">dh</span> <span class="o">=</span> <span class="n">_compute_thresholds</span><span class="p">(</span><span class="n">t_stats</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">start_thres</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">threshs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">tfnbs</span>
+
+    <span class="c1"># 3. Pre-processing</span>
+    <span class="n">is_symm</span> <span class="o">=</span> <span class="n">_is_symmetric</span><span class="p">(</span><span class="n">t_stats</span><span class="p">)</span>
+
+    <span class="c1"># Extract edges above start threshold</span>
+    <span class="n">edge_rows</span><span class="p">,</span> <span class="n">edge_cols</span><span class="p">,</span> <span class="n">edge_weights</span> <span class="o">=</span> <span class="n">_get_edges</span><span class="p">(</span>
+        <span class="n">t_stats</span><span class="p">,</span> <span class="n">start_thres</span><span class="p">,</span> <span class="n">symmetric</span><span class="o">=</span><span class="n">is_symm</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">edge_rows</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">tfnbs</span>
+
+    <span class="c1"># Compute canonical block IDs for all extracted edges</span>
+    <span class="n">edge_block_ids</span> <span class="o">=</span> <span class="n">_compute_canonical_block_ids</span><span class="p">(</span>
+        <span class="n">edge_rows</span><span class="p">,</span> <span class="n">edge_cols</span><span class="p">,</span> <span class="n">normalized_net_labels</span><span class="p">,</span> <span class="n">n_networks</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Maximum possible block ID (for bincount)</span>
+    <span class="n">max_block_id</span> <span class="o">=</span> <span class="n">n_networks</span> <span class="o">*</span> <span class="n">n_networks</span>
+
+    <span class="c1"># Prepare broadcasting parameters</span>
+    <span class="k">if</span> <span class="n">scalar_mode</span><span class="p">:</span>
+        <span class="n">e_bc</span> <span class="o">=</span> <span class="n">e_arr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">h_bc</span> <span class="o">=</span> <span class="n">h_arr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">e_bc</span> <span class="o">=</span> <span class="n">e_arr</span>
+        <span class="n">h_bc</span> <span class="o">=</span> <span class="n">h_arr</span>
+
+    <span class="c1"># 4. Main Integration Loop</span>
+    <span class="k">for</span> <span class="n">threshold</span> <span class="ow">in</span> <span class="n">threshs</span><span class="p">:</span>
+        <span class="c1"># Find active edges at this threshold</span>
+        <span class="n">active_mask</span> <span class="o">=</span> <span class="n">edge_weights</span> <span class="o">&gt;=</span> <span class="n">threshold</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">active_mask</span><span class="p">):</span>
+            <span class="k">continue</span>
+
+        <span class="n">active_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">active_mask</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">active_rows</span> <span class="o">=</span> <span class="n">edge_rows</span><span class="p">[</span><span class="n">active_indices</span><span class="p">]</span>
+        <span class="n">active_cols</span> <span class="o">=</span> <span class="n">edge_cols</span><span class="p">[</span><span class="n">active_indices</span><span class="p">]</span>
+        <span class="n">active_block_ids</span> <span class="o">=</span> <span class="n">edge_block_ids</span><span class="p">[</span><span class="n">active_indices</span><span class="p">]</span>
+
+        <span class="c1"># Count edges per functional block at this threshold</span>
+        <span class="n">block_counts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">active_block_ids</span><span class="p">,</span> <span class="n">minlength</span><span class="o">=</span><span class="n">max_block_id</span><span class="p">)</span>
+
+        <span class="c1"># Compute support for each active edge</span>
+        <span class="c1"># Support = block_count if block_count &gt;= min_cluster_size, else 0</span>
+        <span class="n">edge_block_counts</span> <span class="o">=</span> <span class="n">block_counts</span><span class="p">[</span><span class="n">active_block_ids</span><span class="p">]</span>
+        <span class="n">edge_supports</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">edge_block_counts</span> <span class="o">&gt;=</span> <span class="n">min_cluster_size</span><span class="p">,</span> <span class="n">edge_block_counts</span><span class="p">,</span> <span class="mi">0</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+        <span class="c1"># Calculate score increment: h^H * support^E * dh</span>
+        <span class="c1"># Suppressed edges (support 0) add nothing, also at E = 0 (0**0 = 1)</span>
+        <span class="k">if</span> <span class="n">scalar_mode</span><span class="p">:</span>
+            <span class="n">increment</span> <span class="o">=</span> <span class="p">(</span><span class="n">threshold</span><span class="o">**</span><span class="n">h_bc</span><span class="p">)</span> <span class="o">*</span> <span class="n">_extent_power</span><span class="p">(</span><span class="n">edge_supports</span><span class="p">,</span> <span class="n">e_bc</span><span class="p">)</span> <span class="o">*</span> <span class="n">dh</span>
+            <span class="n">tfnbs</span><span class="p">[</span><span class="n">active_rows</span><span class="p">,</span> <span class="n">active_cols</span><span class="p">]</span> <span class="o">+=</span> <span class="n">increment</span>
+            <span class="k">if</span> <span class="n">is_symm</span><span class="p">:</span>
+                <span class="n">tfnbs</span><span class="p">[</span><span class="n">active_cols</span><span class="p">,</span> <span class="n">active_rows</span><span class="p">]</span> <span class="o">+=</span> <span class="n">increment</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Handle parameter sweep</span>
+            <span class="n">increment</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">(</span><span class="n">threshold</span><span class="o">**</span><span class="n">h_bc</span><span class="p">)</span>
+                <span class="o">*</span> <span class="n">_extent_power</span><span class="p">(</span><span class="n">edge_supports</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">e_bc</span><span class="p">)</span>
+                <span class="o">*</span> <span class="n">dh</span>
+            <span class="p">)</span>
+            <span class="n">tfnbs</span><span class="p">[</span><span class="n">active_rows</span><span class="p">,</span> <span class="n">active_cols</span><span class="p">,</span> <span class="p">:]</span> <span class="o">+=</span> <span class="n">increment</span>
+            <span class="k">if</span> <span class="n">is_symm</span><span class="p">:</span>
+                <span class="n">tfnbs</span><span class="p">[</span><span class="n">active_cols</span><span class="p">,</span> <span class="n">active_rows</span><span class="p">,</span> <span class="p">:]</span> <span class="o">+=</span> <span class="n">increment</span>
+
+    <span class="k">return</span> <span class="n">tfnbs</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

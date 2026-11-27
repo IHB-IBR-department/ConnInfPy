@@ -1,0 +1,905 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.analysis &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.analysis</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.analysis</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""High-level `analyze()` convenience entry-point.</span>
+
+<span class="sd">Wraps the most common neuroimaging recipe in one function call:</span>
+
+<span class="sd">    input preparation (zero diagonal, Fisher r→z once) → ComBat (optional) →</span>
+<span class="sd">    GLM with Freedman-Lane permutation → :class:`InferenceResult`.</span>
+
+<span class="sd">Use the lower-level :func:`~conninfpy.compute_p_val` /</span>
+<span class="sd">:func:`~conninfpy.compute_p_val_glm` entry-points when you need</span>
+<span class="sd">fine-grained control. Use :func:`analyze` when the standard recipe</span>
+<span class="sd">fits and you want one line of code.</span>
+
+<span class="sd">The pipeline is decomposed into private stages in</span>
+<span class="sd">:mod:`conninfpy._analysis_stages`; :func:`analyze` below only normalizes the</span>
+<span class="sd">keyword aliases, builds the shared state and calls the stages in order.</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">replace</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._analysis_stages</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_add_site_dummies</span><span class="p">,</span>
+    <span class="n">_align_paired_subjects</span><span class="p">,</span>
+    <span class="n">_AnalysisState</span><span class="p">,</span>
+    <span class="n">_expand_interactions</span><span class="p">,</span>
+    <span class="n">_finalize_single</span><span class="p">,</span>
+    <span class="n">_prepare_inputs</span><span class="p">,</span>
+    <span class="n">_reduce_paired_interest</span><span class="p">,</span>
+    <span class="n">_resolve_harmonization_strategy</span><span class="p">,</span>
+    <span class="n">_resolve_modes</span><span class="p">,</span>
+    <span class="n">_resolve_strata</span><span class="p">,</span>
+    <span class="n">_resolve_tail_policy</span><span class="p">,</span>
+    <span class="n">_run_combat</span><span class="p">,</span>
+    <span class="n">_run_multi_inference</span><span class="p">,</span>
+    <span class="n">_run_single_inference</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># Named strategies and private helpers kept importable from</span>
+<span class="c1"># ``conninfpy.analysis`` for the CLI and the test-suite (explicit re-exports).</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._analysis_stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">COMBAT_ONLY</span> <span class="k">as</span> <span class="n">COMBAT_ONLY</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._analysis_stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">COMBAT_SITE_DUMMIES_GLM</span> <span class="k">as</span> <span class="n">COMBAT_SITE_DUMMIES_GLM</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._analysis_stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">SITE_DUMMIES_GLM</span> <span class="k">as</span> <span class="n">SITE_DUMMIES_GLM</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._analysis_stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">_encode_net_labels</span> <span class="k">as</span> <span class="n">_encode_net_labels</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._analysis_stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">_motion_qc_paired_diagnostics</span> <span class="k">as</span> <span class="n">_motion_qc_paired_diagnostics</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._analysis_stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">_motion_qc_single_diagnostics</span> <span class="k">as</span> <span class="n">_motion_qc_single_diagnostics</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._analysis_stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">_resolve_strategy</span> <span class="k">as</span> <span class="n">_resolve_strategy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._analysis_stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">_site_dummies</span> <span class="k">as</span> <span class="n">_site_dummies</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._analysis_stages</span><span class="w"> </span><span class="kn">import</span> <span class="n">_site_interest_association</span> <span class="k">as</span> <span class="n">_site_interest_association</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._prepare</span><span class="w"> </span><span class="kn">import</span> <span class="n">normalize_fisher_history</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.preprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">normalize_preprocessing_record</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.results</span><span class="w"> </span><span class="kn">import</span> <span class="n">InferenceResult</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.results</span><span class="w"> </span><span class="kn">import</span> <span class="n">OmnibusInferenceResult</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._shared.rng</span><span class="w"> </span><span class="kn">import</span> <span class="n">RngLike</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.defaults</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_ACCELERATION</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.defaults</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_EXTENT_EXPONENT</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.defaults</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_HEIGHT_EXPONENT</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.defaults</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_N_PERMUTATIONS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.defaults</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_N_THRESHOLDS_PERMUTATION</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.stats._types</span><span class="w"> </span><span class="kn">import</span> <span class="n">StatMethod</span>
+
+
+<div class="viewcode-block" id="AnalyzeResult">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AnalyzeResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Bundle of inference + harmonization diagnostics from :func:`analyze`."""</span>
+
+    <span class="n">inference</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">InferenceResult</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span><span class="p">]</span>
+    <span class="n">combat_diagnostics</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">design_diagnostics</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">flags</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">resolved_strategy</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1">#: Optional descriptive motion / QC-FC side-car (NETSTAT-28); ``None``</span>
+    <span class="c1">#: unless the caller opted in with ``motion_qc=``. It never affects</span>
+    <span class="c1">#: inference and carries its own provenance and unavailable reasons.</span>
+    <span class="n">motion_qc</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="c1"># Forward dict-style access to the underlying result so</span>
+        <span class="c1"># `analyze(...)['positive']` or ['omnibus'] works without users</span>
+        <span class="c1"># unwrapping.</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">positive</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""FWER-corrected p-values, positive tail."""</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                <span class="s2">"AnalyzeResult.positive is undefined for the F-stat omnibus "</span>
+                <span class="s2">"path; use AnalyzeResult.omnibus instead."</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">positive</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">negative</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""FWER-corrected p-values, negative tail."""</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                <span class="s2">"AnalyzeResult.negative is undefined for the F-stat omnibus "</span>
+                <span class="s2">"path; use AnalyzeResult.omnibus instead."</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">negative</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">omnibus</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""FWER-corrected p-values of the omnibus test."""</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                <span class="s2">"AnalyzeResult.omnibus is only defined for the F-stat path; "</span>
+                <span class="s2">"use .positive / .negative for t / β contrasts."</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">omnibus</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tail_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The declared directional family of the wrapped result</span>
+<span class="sd">        (``'two-sided'``, ``'separate-one-sided'``, ``'one-sided-&lt;tail&gt;'`` or</span>
+<span class="sd">        ``'omnibus'``); see :attr:`InferenceResult.tail_policy`."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">tail_policy</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tested_tail</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The one tested direction of a one-sided result, or ``None``."""</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="s2">"tested_tail"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tail_selection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""How ``tested_tail`` was fixed: ``'prespecified'`` (declared before</span>
+<span class="sd">        the run via ``analyze(..., tested_tail=...)``), ``'post-hoc'``</span>
+<span class="sd">        (:meth:`one_sided` on a finished result) or ``None``."""</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="s2">"tail_selection"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">preprocessing</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Known preprocessing facts (each with a source), or ``None``.</span>
+
+<span class="sd">        The record captured by ``analyze(preprocessing=...)``: three-state</span>
+<span class="sd">        (missing/None = unknown), never inferred from the data values. See</span>
+<span class="sd">        :mod:`conninfpy.preprocessing`. Also preserved in bundle exports.</span>
+<span class="sd">        """</span>
+        <span class="n">provenance</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="s2">"analysis_provenance"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">provenance</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"preprocessing"</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">provenance</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fisher</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Fisher-transform provenance: applied entries + upstream history.</span>
+
+<span class="sd">        ``{'applied': [...], 'upstream': [...] | 'unknown' | None}`` — the</span>
+<span class="sd">        transforms this call actually applied (policy, parameters, clipping</span>
+<span class="sd">        counts with explicit units) and, for already-transformed input, the</span>
+<span class="sd">        caller-supplied upstream history (or ``'unknown'``). Never invented;</span>
+<span class="sd">        preserved in bundle exports.</span>
+<span class="sd">        """</span>
+        <span class="n">provenance</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="s2">"analysis_provenance"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">provenance</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"fisher"</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">provenance</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">two_tailed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether both directions were corrected as one two-sided family."""</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="s2">"two_tailed"</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
+
+<div class="viewcode-block" id="AnalyzeResult.significant_edges">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult.significant_edges">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">significant_edges</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Any"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Delegate to the underlying inference result's</span>
+<span class="sd">        :meth:`~conninfpy.InferenceResult.significant_edges`.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">significant_edges</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AnalyzeResult.network_summary">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult.network_summary">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">network_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atlas</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Any"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Delegate to the underlying inference result's</span>
+<span class="sd">        :meth:`~conninfpy.InferenceResult.network_summary`: aggregate the</span>
+<span class="sd">        result over pairs of atlas networks.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">network_summary</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AnalyzeResult.to_bundle">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult.to_bundle">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_bundle</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Any"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Snapshot the completed inference; see ``ResultBundle.from_result``."""</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.post_analysis</span><span class="w"> </span><span class="kn">import</span> <span class="n">ResultBundle</span>
+
+        <span class="k">return</span> <span class="n">ResultBundle</span><span class="o">.</span><span class="n">from_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AnalyzeResult.node_summary">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult.node_summary">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">node_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Any"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Delegate to the underlying inference result's ``node_summary``:</span>
+<span class="sd">        which ROIs gather the detected connections (descriptive; see</span>
+<span class="sd">        :meth:`~conninfpy.InferenceResult.node_summary`).</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">node_summary</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">block_report</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""The underlying result's cNBS block report (``None`` for other</span>
+<span class="sd">        methods); see :attr:`~conninfpy.InferenceResult.block_report`.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="s2">"block_report"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">component_report</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""The underlying result's NBS component report (``None`` for other</span>
+<span class="sd">        methods); see :attr:`~conninfpy.InferenceResult.component_report`.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="s2">"component_report"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AnalyzeResult.component_table">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult.component_table">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">component_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Any"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Delegate to the underlying inference result's</span>
+<span class="sd">        :meth:`~conninfpy.InferenceResult.component_table`: the observed NBS</span>
+<span class="sd">        components with their FWER p-values.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">component_table</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AnalyzeResult.to_csv">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult.to_csv">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_csv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="s2">"Any"</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Delegate to the underlying inference result's</span>
+<span class="sd">        :meth:`~conninfpy.InferenceResult.to_csv`.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AnalyzeResult.methods_boilerplate">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult.methods_boilerplate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">methods_boilerplate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">atlas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">cerebellum</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Generate a deterministic, provenance-driven Methods section in Markdown."""</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.reporting</span><span class="w"> </span><span class="kn">import</span> <span class="n">methods_boilerplate</span>
+
+        <span class="k">return</span> <span class="n">methods_boilerplate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">atlas</span><span class="o">=</span><span class="n">atlas</span><span class="p">,</span> <span class="n">cerebellum</span><span class="o">=</span><span class="n">cerebellum</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AnalyzeResult.to_brainnet">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult.to_brainnet">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_brainnet</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">atlas</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">out_prefix</span><span class="p">:</span> <span class="s2">"Any"</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">tail</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"both"</span><span class="p">,</span>
+        <span class="n">param_idx</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Export thresholded edges and nodes to BrainNet Viewer ``.node`` / ``.edge`` files."""</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.reporting</span><span class="w"> </span><span class="kn">import</span> <span class="n">export_brainnet</span>
+
+        <span class="k">return</span> <span class="n">export_brainnet</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">atlas</span><span class="p">,</span>
+            <span class="n">out_prefix</span><span class="p">,</span>
+            <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>
+            <span class="n">tail</span><span class="o">=</span><span class="n">tail</span><span class="p">,</span>
+            <span class="n">param_idx</span><span class="o">=</span><span class="n">param_idx</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AnalyzeResult.one_sided">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult.one_sided">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">one_sided</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">direction</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"AnalyzeResult"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Copy restricted to one direction chosen after the run (post hoc);</span>
+<span class="sd">        see :meth:`~conninfpy.InferenceResult.one_sided`. To fix the direction</span>
+<span class="sd">        before the run, call :func:`analyze` with ``tested_tail=``."""</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"An F-stat omnibus result has no direction to restrict."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inference</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">one_sided</span><span class="p">(</span><span class="n">direction</span><span class="p">))</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>  <span class="c1"># pragma: no cover (cosmetic)</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="sa">f</span><span class="s2">"AnalyzeResult(inference=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="si">!r}</span><span class="s2">)"</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">combat_diagnostics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ratio</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">combat_diagnostics</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="s2">"between_site_variance_ratio_after_over_before"</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">ratio</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  combat: between-site var ratio=</span><span class="si">{</span><span class="n">ratio</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">flags</span><span class="p">:</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"  flags: "</span> <span class="o">+</span> <span class="s2">"; "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">flags</span><span class="p">))</span>
+        <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="analyze">
+<a class="viewcode-back" href="../../conninfpy.analysis.html#conninfpy.analysis.analyze">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">analyze</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">interest</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+        <span class="n">Union</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]]</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">confounds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">group1</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">group2</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">confounds_group1</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">confounds_group2</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">ids_group1</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">ids_group2</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">interactions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">test_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"two-sample"</span><span class="p">,</span>
+    <span class="n">sites</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">preserve</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">harmonize</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"auto"</span><span class="p">,</span>
+    <span class="nb">input</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fisher_z</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">r_to_z</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">var_equal</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">method</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">StatMethod</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"tfnbs"</span><span class="p">,</span>
+    <span class="n">two_tailed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">tested_tail</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">acceleration</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_ACCELERATION</span><span class="p">,</span>
+    <span class="n">n_permutations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DEFAULT_N_PERMUTATIONS</span><span class="p">,</span>
+    <span class="n">e</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">DEFAULT_EXTENT_EXPONENT</span><span class="p">,</span>
+    <span class="n">h</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">DEFAULT_HEIGHT_EXPONENT</span><span class="p">,</span>
+    <span class="n">n</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_N_THRESHOLDS_PERMUTATION</span><span class="p">,</span>
+    <span class="n">rng</span><span class="p">:</span> <span class="n">RngLike</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">use_mp</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">n_processes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">progress</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">cancel</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[],</span> <span class="nb">bool</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">missing</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"raise"</span><span class="p">,</span>
+    <span class="n">min_coverage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.8</span><span class="p">,</span>
+    <span class="n">atlas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">roi_ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">groupings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">units</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">contrast_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">preprocessing</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fisher_history</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">motion_qc</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">method_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">AnalyzeResult</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">AnalyzeResult</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Run the standard prepare → harmonize → GLM/two-sample → infer recipe.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    Y : ndarray of shape (n_subjects, N, N), optional</span>
+<span class="sd">        Per-subject connectivity matrices for the GLM path. Pass this</span>
+<span class="sd">        with ``interest``/``confounds``. Leave as ``None`` (or simply</span>
+<span class="sd">        omit) when using the two-sample path via ``group1``/``group2``.</span>
+<span class="sd">    interest : ndarray or dict of ndarray, optional</span>
+<span class="sd">        GLM regressor(s) of interest. Triggers the GLM pipeline.</span>
+
+<span class="sd">        * **Single predictor** — a 1D array of shape ``(n_subjects,)``</span>
+<span class="sd">          (or ``(n_subjects, 1)``), e.g. ``age`` or a 0/1 group dummy.</span>
+<span class="sd">          ``analyze()`` returns one :class:`AnalyzeResult`.</span>
+<span class="sd">        * **Several predictors** — a dict ``{name: vector}`` (e.g.</span>
+<span class="sd">          ``{'age': age, 'sex': sex}``). Each predictor is tested adjusted</span>
+<span class="sd">          for the intercept, ``confounds`` and the other predictors,</span>
+<span class="sd">          against its own Freedman–Lane null, with permutations shared</span>
+<span class="sd">          across predictors, via</span>
+<span class="sd">          :func:`~conninfpy.compute_p_val_glm_multi`. ``analyze()`` then</span>
+<span class="sd">          returns a ``dict`` mapping each name to its own</span>
+<span class="sd">          :class:`AnalyzeResult`.</span>
+
+<span class="sd">        A bare multi-column array or a Python list of regressors is</span>
+<span class="sd">        rejected (it cannot carry predictor names and would silently test</span>
+<span class="sd">        only the last column) — pass a dict instead. For a *joint*</span>
+<span class="sd">        omnibus test of several predictors use a multi-row F-contrast via</span>
+<span class="sd">        :func:`~conninfpy.compute_p_val_glm` (``stat_type='fstat'``).</span>
+<span class="sd">    confounds : ndarray, optional</span>
+<span class="sd">        Nuisance regressors for the GLM pipeline.</span>
+<span class="sd">    group1, group2 : ndarray, optional</span>
+<span class="sd">        Two-sample inputs of shape ``(n_i, N, N)``. Triggers the t-test</span>
+<span class="sd">        pipeline. With ``interest`` and ``test_type='paired'`` they instead</span>
+<span class="sd">        form the subject-level GLM response B minus A after transforming each</span>
+<span class="sd">        condition separately to Fisher z. For</span>
+<span class="sd">        ``test_type='paired'`` they are the two within-subject</span>
+<span class="sd">        conditions and must be row-aligned (``group1[s]`` and</span>
+<span class="sd">        ``group2[s]`` are the same subject) unless ``ids_group1`` /</span>
+<span class="sd">        ``ids_group2`` name the subjects.</span>
+<span class="sd">    ids_group1, ids_group2 : sequence of hashable scalars, optional</span>
+<span class="sd">        Subject IDs for the two paired conditions, in the row order of</span>
+<span class="sd">        ``group1`` / ``group2``. Paired paths only (``test_type='paired'``</span>
+<span class="sd">        with ``group1``/``group2`` and no ``Y``); passing them to a</span>
+<span class="sd">        two-sample, one-sample or Y-only call raises.</span>
+
+<span class="sd">        The two vectors must form a **strict full bijection**: the same</span>
+<span class="sd">        unique, non-missing IDs on both sides, matched by Python equality of</span>
+<span class="sd">        the opaque values. Nothing is normalised, stringified or type-coerced,</span>
+<span class="sd">        and no ID is ever guessed from the data. ``None``, ``NaN``, ``NaT``,</span>
+<span class="sd">        ``pd.NA`` and empty strings are rejected as IDs, as are unhashable</span>
+<span class="sd">        values. The API raises ``ValueError`` for one-sided IDs (only one</span>
+<span class="sd">        condition named), an ID present in only one condition (missing pair),</span>
+<span class="sd">        a repeated ID within a condition, an ID vector whose length disagrees</span>
+<span class="sd">        with its array's subject axis, and for data with mismatched shapes —</span>
+<span class="sd">        silently dropping a subject or pairing the wrong rows never happens.</span>
+
+<span class="sd">        **Index ownership.** ``group1`` (condition A) is the reference row</span>
+<span class="sd">        order and the result's order. Exactly one permutation moves every</span>
+<span class="sd">        condition-B subject-axis input — ``group2`` and</span>
+<span class="sd">        ``confounds_group2`` — into A order *before* the Fisher transform,</span>
+<span class="sd">        the B − A difference, the condition-confound difference and any</span>
+<span class="sd">        inference. Inputs that already live in A order are validated against</span>
+<span class="sd">        A and **never** permuted: ``interest`` (including interaction</span>
+<span class="sd">        predictors), subject-level ``confounds``, ``sites`` and</span>
+<span class="sd">        ``confounds_group1``. Edge-axis objects (``edge_mask``,</span>
+<span class="sd">        ``net_labels``) are invariant under a subject permutation.</span>
+<span class="sd">        Without IDs the positional behaviour is unchanged.</span>
+
+<span class="sd">        The applied alignment is recorded in ``result.design</span>
+<span class="sd">        ['paired_alignment']`` (``reference``, ``n_subjects``, the</span>
+<span class="sd">        ``permutation_b_to_a`` and ``identity_permutation``), in ``flags``</span>
+<span class="sd">        and, on the paired-interest path, in</span>
+<span class="sd">        ``design['paired_difference']['alignment']``; it survives</span>
+<span class="sd">        :meth:`~conninfpy.InferenceResult.to_bundle`.</span>
+<span class="sd">    confounds_group1, confounds_group2 : ndarray, optional</span>
+<span class="sd">        Condition-varying confounds for the **repeated-measures GLM**</span>
+<span class="sd">        path, shape ``(n_subjects,)`` or ``(n_subjects, k)``, aligned to</span>
+<span class="sd">        ``group1`` / ``group2`` respectively. Only valid with</span>
+<span class="sd">        ``test_type='paired'``; pass both or neither. When given, the</span>
+<span class="sd">        paired difference ``group2 - group1`` is tested while the</span>
+<span class="sd">        per-subject confound difference is partialled out</span>
+<span class="sd">        (Freedman–Lane on the differences, via</span>
+<span class="sd">        :func:`~conninfpy.compute_p_val_paired_glm`). Use these for a</span>
+<span class="sd">        confound whose value differs between conditions for the same</span>
+<span class="sd">        subject (e.g. condition-level motion, arousal, reaction time).</span>
+<span class="sd">        With paired ``interest``, ``confounds`` instead specifies subject-level</span>
+<span class="sd">        covariates; both kinds can be supplied and only the condition-specific</span>
+<span class="sd">        covariates are differenced (B minus A).</span>
+<span class="sd">    interactions : sequence of pairs of names, optional</span>
+<span class="sd">        Requires named numeric ``interest`` predictors. Center all named</span>
+<span class="sd">        predictors by their sample means and add a product column per pair,</span>
+<span class="sd">        named ``a:b``. Each named effect is tested with all other columns,</span>
+<span class="sd">        including the main effects, as nuisance. Encode categories explicitly.</span>
+<span class="sd">        Subject-constant nuisances (and additive site effects) cancel in</span>
+<span class="sd">        the difference and do not need to be supplied. With no</span>
+<span class="sd">        condition-varying confounds the paired path stays on the</span>
+<span class="sd">        sign-flip t-test (exact non-asymptotic null). Either way the</span>
+<span class="sd">        result keeps the ``positive = group2 &gt; group1`` orientation.</span>
+<span class="sd">    test_type : str, default ``'two-sample'``</span>
+<span class="sd">        Test type for the t-test pipeline (also accepts ``'paired'`` and</span>
+<span class="sd">        ``'one-sample'``). ``'paired'`` combined with</span>
+<span class="sd">        ``confounds_group1`` / ``confounds_group2`` selects the</span>
+<span class="sd">        repeated-measures GLM.</span>
+<span class="sd">    sites : sequence, optional</span>
+<span class="sd">        Per-subject site labels. If provided, the permutation engine is</span>
+<span class="sd">        auto-stratified on ``sites`` (within-block exchangeability —</span>
+<span class="sd">        equivalent to PALM's ``-eb`` option). ComBat runs when</span>
+<span class="sd">        ``harmonize`` resolves to ``'combat_only'`` or</span>
+<span class="sd">        ``'combat_site_dummies_glm'``. In GLM mode with sites but no confounds,</span>
+<span class="sd">        ``'auto'`` resolves to ``'site_dummies_glm'`` (site dummies in the GLM,</span>
+<span class="sd">        no ComBat). In two-sample mode with sites, ComBat is skipped and</span>
+<span class="sd">        a flag asks the caller to promote the analysis to GLM with a</span>
+<span class="sd">        binary ``interest``.</span>
+<span class="sd">    preserve : ndarray, optional</span>
+<span class="sd">        Covariates whose effect should be preserved through ComBat.</span>
+<span class="sd">        Under ``'combat_only'`` and ``'combat_site_dummies_glm'`` this is set</span>
+<span class="sd">        automatically to ``confounds``; passing ``preserve`` explicitly is</span>
+<span class="sd">        overridden and emits a flag because the tested variable must remain</span>
+<span class="sd">        outside the ComBat design. ``'site_dummies_glm'`` does not run ComBat, so</span>
+<span class="sd">        ``preserve`` is ignored.</span>
+<span class="sd">    harmonize : str or ``None``, default ``'auto'``</span>
+<span class="sd">        Selects the ComBat / site-handling strategy. Three named multi-site</span>
+<span class="sd">        strategies are supported, matching the paper comparison:</span>
+
+<span class="sd">        * ``'combat_only'`` — fit ComBat with</span>
+<span class="sd">          ``preserve = confounds`` only, then test on the harmonized matrix</span>
+<span class="sd">          without adding site dummies to the GLM. Use this to</span>
+<span class="sd">          isolate what the ComBat transform itself contributes.</span>
+<span class="sd">        * ``'combat_site_dummies_glm'`` — primary site-aware recipe. Fit ComBat with ``preserve = confounds``</span>
+<span class="sd">          only, deliberately excluding the tested variable, then append site</span>
+<span class="sd">          dummies to the downstream GLM nuisance design. Use this when the</span>
+<span class="sd">          analysis needs both a harmonized matrix and residual site control</span>
+<span class="sd">          during inference.</span>
+<span class="sd">        * ``'site_dummies_glm'`` (or ``None``) — skip ComBat entirely and model site as fixed-effect nuisance dummies in</span>
+<span class="sd">          the same GLM that tests the variable of interest. Use this when the</span>
+<span class="sd">          only deliverable is the inference result, when ComBat assumptions</span>
+<span class="sd">          are questionable, or as the no-ComBat site-aware sensitivity arm.</span>
+
+<span class="sd">        ``'auto'`` (default) dispatches based on the call shape:</span>
+
+<span class="sd">        - GLM + ``sites`` + ``confounds`` → ``'combat_site_dummies_glm'``.</span>
+<span class="sd">        - GLM + ``sites``, no ``confounds`` → ``'site_dummies_glm'``.</span>
+<span class="sd">        - GLM + no ``sites`` → no harmonization.</span>
+<span class="sd">        - Two-sample + ``sites`` → skip ComBat with a flag asking</span>
+<span class="sd">          the caller to promote to GLM with binary ``interest`` for</span>
+<span class="sd">          the ``'combat_site_dummies_glm'`` recipe.</span>
+<span class="sd">    input : {'r', 'z'} or None, default ``None``</span>
+<span class="sd">        Scale of ``Y`` (or ``group1``/``group2``). ``'r'``: correlations,</span>
+<span class="sd">        Fisher r→z is applied once. ``'z'``: already on the analysis scale</span>
+<span class="sd">        (e.g. Fisher z), left unchanged. ``None`` detects it: a diagonal of</span>
+<span class="sd">        ones means ``'r'``, any off-diagonal value beyond ±1 means ``'z'``;</span>
+<span class="sd">        anything else is ambiguous and raises ``ValueError`` rather than</span>
+<span class="sd">        risk transforming Fisher-z data twice. The diagonal is always</span>
+<span class="sd">        zeroed; the caller's arrays are never modified.</span>
+<span class="sd">    fisher_z : bool, optional</span>
+<span class="sd">        Legacy alias: ``True`` means ``input='r'``, ``False`` means</span>
+<span class="sd">        ``input='z'``. Prefer ``input``.</span>
+<span class="sd">    r_to_z : bool, default True</span>
+<span class="sd">        Whether correlations (``input='r'``, given or detected) are Fisher</span>
+<span class="sd">        transformed before inference. ``False`` analyses the correlations</span>
+<span class="sd">        as they are, as the MATLAB NBS toolbox does; the result then records</span>
+<span class="sd">        ``design['scale'] = 'correlation'`` instead of ``'fisher_z'``. No</span>
+<span class="sd">        effect for ``input='z'``.</span>
+<span class="sd">    var_equal : bool, default False</span>
+<span class="sd">        Two-sample t-test path only (``group1``/``group2`` with</span>
+<span class="sd">        ``test_type='two-sample'``): False uses Welch's t, True Student's t</span>
+<span class="sd">        with a pooled variance (the MATLAB NBS toolbox t-test). The GLM path</span>
+<span class="sd">        always uses the pooled residual variance, and paired / one-sample</span>
+<span class="sd">        tests have one group, so ``var_equal=True`` raises there.</span>
+<span class="sd">    method : str, default ``'tfnbs'``</span>
+<span class="sd">        Enhancement method.</span>
+<span class="sd">    two_tailed : bool or None, default None</span>
+<span class="sd">        Directional family of the corrected p-values. ``None`` (the default)</span>
+<span class="sd">        and ``True`` test **one two-sided family**: positive and negative</span>
+<span class="sd">        directions are corrected against the joint max null, so one nominal</span>
+<span class="sd">        alpha covers both directions. ``False`` keeps the legacy contract of</span>
+<span class="sd">        two separate one-sided families, each corrected at the nominal alpha</span>
+<span class="sd">        — two families at α=0.05 do **not** promise a combined-direction FWER</span>
+<span class="sd">        of 0.05 (use α/2 per tail for that). F-stat omnibus runs have no</span>
+<span class="sd">        direction and ignore this setting. The low-level</span>
+<span class="sd">        :func:`~conninfpy.compute_p_val` / :func:`~conninfpy.compute_p_val_glm`</span>
+<span class="sd">        entry-points also default to ``two_tailed=True``; pass</span>
+<span class="sd">        ``two_tailed=False`` explicitly for separate one-sided families.</span>
+<span class="sd">    tested_tail : {'positive', 'negative'} or None, default None</span>
+<span class="sd">        A directional hypothesis fixed **before** the run: the inference uses</span>
+<span class="sd">        per-tail nulls (``two_tailed=False`` at the kernel level) and the</span>
+<span class="sd">        result is restricted to that direction — the other direction is not</span>
+<span class="sd">        tested (p = 1, no detections). The result records</span>
+<span class="sd">        ``tail_policy = 'one-sided-&lt;tested_tail&gt;'`` and</span>
+<span class="sd">        ``tail_selection = 'prespecified'``, which provenance and exports</span>
+<span class="sd">        report honestly. Cannot be combined with ``two_tailed=True`` or with</span>
+<span class="sd">        an F-stat contrast (F is non-directional). Choosing a direction only</span>
+<span class="sd">        after inspecting a finished run is a post hoc selection: use</span>
+<span class="sd">        :meth:`~conninfpy.InferenceResult.one_sided` on that result, which is</span>
+<span class="sd">        marked ``tail_selection = 'post-hoc'`` instead.</span>
+<span class="sd">    acceleration : str or None, default ``None``</span>
+<span class="sd">        ``None`` gives exact empirical permutation p-values. ``'gpd'`` /</span>
+<span class="sd">        ``'gamma'`` replace the p-values that fewer than 10 permutations</span>
+<span class="sd">        reach with a fitted tail and keep all others exact — with ~200</span>
+<span class="sd">        permutations, a setting for exploratory runs.</span>
+<span class="sd">    n_permutations : int, default ``1000``</span>
+<span class="sd">        Permutations. The same defaults apply to every entry point</span>
+<span class="sd">        (:mod:`conninfpy.defaults`).</span>
+<span class="sd">    e, h : float or sequence of float, default ``0.4``, ``3.0``</span>
+<span class="sd">        TFNBS exponents. Pass equal-length sequences to evaluate a</span>
+<span class="sd">        whole ``(E, H)`` grid in one call. Exact integration evaluates</span>
+<span class="sd">        each parameter pair; cost increases with the number of pairs.</span>
+<span class="sd">        When arrays are passed the returned :class:`InferenceResult`</span>
+<span class="sd">        carries the parameter axis (``result.is_grid == True``,</span>
+<span class="sd">        ``result.e_grid``, ``result.h_grid``); use</span>
+<span class="sd">        ``result.select(param_idx)`` or pass ``param_idx=`` to</span>
+<span class="sd">        ``significant_edges`` / ``to_csv`` to project to a single</span>
+<span class="sd">        cell. Default ``(0.4, 3.0)``.</span>
+<span class="sd">    n : int or None, default None</span>
+<span class="sd">        Exact integral if None; a positive integer uses the historical right grid.</span>
+<span class="sd">    rng : int, ``numpy.random.Generator``, or ``None``</span>
+<span class="sd">        Reproducibility handle.</span>
+<span class="sd">    verbose : bool, default ``False``</span>
+<span class="sd">        Show a progress bar during permutation.</span>
+<span class="sd">    use_mp : bool, default ``True``</span>
+<span class="sd">        Use multiprocessing for the permutation loop.</span>
+<span class="sd">    n_processes : int, optional</span>
+<span class="sd">        Worker processes for the permutation loop (capped at the number of</span>
+<span class="sd">        planned permutations). ``None`` uses the available logical CPUs.</span>
+<span class="sd">        Each worker runs with one BLAS/OpenMP thread. The run plan records</span>
+<span class="sd">        the requested value; the effective pool size is resolved inside the</span>
+<span class="sd">        engine and may be smaller.</span>
+<span class="sd">    progress : callable or ProgressSession, optional</span>
+<span class="sd">        Parent-side progress reporting. A callable receives</span>
+<span class="sd">        ``(done, total)`` at permutation chunk boundaries for permutations</span>
+<span class="sd">        that were actually folded; ``total`` is the number of permutation</span>
+<span class="sd">        executions planned for the call (see</span>
+<span class="sd">        :class:`conninfpy.stats._workers.ProgressSession`). Nothing is sent</span>
+<span class="sd">        to the workers and no numerical result changes.</span>
+<span class="sd">    cancel : callable, optional</span>
+<span class="sd">        Zero-argument predicate evaluated in the parent process at chunk</span>
+<span class="sd">        boundaries. When it returns true the permutation loop stops at that</span>
+<span class="sd">        boundary, the pool is terminated and joined, private task files are</span>
+<span class="sd">        removed and :class:`~conninfpy.InferenceCancelled` is raised — no</span>
+<span class="sd">        partial p-values and no ``InferenceResult`` are returned. A</span>
+<span class="sd">        ``threading.Event`` is therefore never pickled into a worker.</span>
+<span class="sd">    missing : {'raise', 'available_case'}, default ``'raise'``</span>
+<span class="sd">        Missing connectivity values (NaN), e.g. a region without signal in</span>
+<span class="sd">        one subject. ``'raise'`` stops with a report of the affected</span>
+<span class="sd">        subjects and regions. ``'available_case'`` tests each edge with the</span>
+<span class="sd">        subjects who have it — no subject is dropped and nothing is filled</span>
+<span class="sd">        in; edges kept by fewer than ``min_coverage`` of a group's subjects</span>
+<span class="sd">        are not tested (p = NaN). Works for two-sample, paired and</span>
+<span class="sd">        one-sample designs and for GLM designs (per missingness pattern),</span>
+<span class="sd">        including the ComBat strategies (per-feature available-case ComBat).</span>
+<span class="sd">        The coverage report is in ``result.inference.missing_report`` and</span>
+<span class="sd">        summarised in ``flags``.</span>
+<span class="sd">    min_coverage : float, default ``0.8``</span>
+<span class="sd">        Minimum share of each group's subjects (or of the pairs) an edge</span>
+<span class="sd">        needs under ``missing='available_case'``.</span>
+<span class="sd">    atlas : AtlasInfo, optional</span>
+<span class="sd">        ROI identities and network/hemisphere metadata in input matrix order.</span>
+<span class="sd">    roi_ids : sequence, optional</span>
+<span class="sd">        Explicit original ROI IDs when the input has no suitable atlas IDs.</span>
+<span class="sd">    groupings : dict of str to sequence, optional</span>
+<span class="sd">        Additional named per-ROI groupings retained alongside atlas groupings.</span>
+<span class="sd">    units : str, optional</span>
+<span class="sd">        Response units for the saved effect; defaults to the declared scale or</span>
+<span class="sd">        ``'unknown response units'`` for low-level calls without a scale.</span>
+<span class="sd">    contrast_id : str, optional</span>
+<span class="sd">        Original contrast/predictor name for a single result. Multi-contrast</span>
+<span class="sd">        results use their dictionary keys instead.</span>
+<span class="sd">    preprocessing : dict, optional</span>
+<span class="sd">        Known preprocessing facts to attach to the result's provenance</span>
+<span class="sd">        (three-state: each fact carries a value and a source; ``None`` or a</span>
+<span class="sd">        missing fact means unknown, never "not applied"). Typically</span>
+<span class="sd">        ``dataset.provenance['preprocessing']`` from a loader; see</span>
+<span class="sd">        :mod:`conninfpy.preprocessing`. Nothing is inferred from the</span>
+<span class="sd">        connectivity values themselves.</span>
+<span class="sd">    fisher_history : sequence of dicts, optional</span>
+<span class="sd">        Structured provenance of Fisher transforms applied to the input</span>
+<span class="sd">        *before* this call (e.g. the app's ingestion option or design-step</span>
+<span class="sd">        button). Only meaningful with already-transformed (``input='z'``)</span>
+<span class="sd">        data; the entries are preserved verbatim as the result's upstream</span>
+<span class="sd">        history — this call never re-transforms or re-counts them.</span>
+<span class="sd">        ``input='z'`` without a history records the upstream transform as</span>
+<span class="sd">        unknown; ``input='r'`` transforms here and records its own entry.</span>
+<span class="sd">    motion_qc : mapping, optional</span>
+<span class="sd">        Opt-in descriptive motion / QC-FC side-car diagnostics, computed on</span>
+<span class="sd">        the native input **before** any Fisher/ComBat step and before</span>
+<span class="sd">        inference (see :mod:`conninfpy.interpret.motion_qc`). Off by default:</span>
+<span class="sd">        with ``None`` nothing is computed and the result is unchanged.</span>
+
+<span class="sd">        Recognised keys: ``fd`` (phenotype column name or a per-observation</span>
+<span class="sd">        vector aligned to the analysis observations: ``Y`` for the GLM path,</span>
+<span class="sd">        ``group1 + group2`` concatenated for the two-sample path, ``group1``</span>
+<span class="sd">        for a paired/one-sample path), ``fd_group1``/``fd_group2`` (paired</span>
+<span class="sd">        conditions; ``fd_group2`` follows the original condition-B row order</span>
+<span class="sd">        and is moved into condition A's order with the same ID permutation as</span>
+<span class="sd">        the data), ``pheno`` (for FD column lookup and subject-ID checks),</span>
+<span class="sd">        ``subject_ids`` (exact identity check, no normalisation), ``input``</span>
+<span class="sd">        (override the resolved ``'r'``/``'z'`` scale), ``nuisance`` (an</span>
+<span class="sd">        aligned design matrix **including an intercept**; only this enables</span>
+<span class="sd">        residualisation), ``nuisance_names``, ``coords``/``atlas``/``space``</span>
+<span class="sd">        (known ROI coordinates for the distance part), ``roi_ids``,</span>
+<span class="sd">        ``pool`` (paired pooling, only with verified identity),</span>
+<span class="sd">        ``condition_a``/``condition_b``, ``fd_units``, ``pheno_subject_column``.</span>
+
+<span class="sd">        The diagnostics are returned as ``result.motion_qc`` (also attached</span>
+<span class="sd">        to the wrapped inference result for report/export), with an explicit</span>
+<span class="sd">        ``status`` and every unavailable reason. They add one ``flags`` entry</span>
+<span class="sd">        and nothing else: p-maps, statistics, masks, sampling and RNG</span>
+<span class="sd">        consumption are bit-identical with and without them.</span>
+<span class="sd">    **method_kwargs</span>
+<span class="sd">        Forwarded to the underlying pipeline (e.g. ``net_labels``,</span>
+<span class="sd">        ``min_cluster_size``, ``threshold``).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    AnalyzeResult or dict of AnalyzeResult</span>
+<span class="sd">        For a single predictor / two-sample / paired call, one</span>
+<span class="sd">        :class:`AnalyzeResult` carrying ``.inference`` (the</span>
+<span class="sd">        :class:`~conninfpy.InferenceResult`) plus optional ComBat /</span>
+<span class="sd">        design diagnostics and any plain-English warning flags. For a</span>
+<span class="sd">        dict ``interest`` (several predictors), a ``dict`` mapping each</span>
+<span class="sd">        predictor name to its own :class:`AnalyzeResult`; the shared</span>
+<span class="sd">        ComBat diagnostics and flags are attached to every entry.</span>
+<span class="sd">    """</span>
+    <span class="c1"># ---- Keyword aliases arriving through **method_kwargs -------------------</span>
+    <span class="c1"># The same controls can arrive through **method_kwargs (e.g. from a</span>
+    <span class="c1"># wrapper that forwards the compute-function signature); keep one</span>
+    <span class="c1"># explicit value instead of failing on a duplicate keyword.</span>
+    <span class="k">if</span> <span class="n">method_kwargs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">n_processes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">n_processes</span> <span class="o">=</span> <span class="n">method_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"n_processes"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">progress</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">progress</span> <span class="o">=</span> <span class="n">method_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"progress"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cancel</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cancel</span> <span class="o">=</span> <span class="n">method_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"cancel"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="c1"># ---- Shared state for the stages --------------------------------------</span>
+    <span class="c1"># Opt-in motion/QC-FC side-car: ``None`` means the caller did not opt in,</span>
+    <span class="c1"># no diagnostic is computed and no result changes. The preprocessing and</span>
+    <span class="c1"># Fisher histories are normalized once so every result and export carries</span>
+    <span class="c1"># the same record (``None`` stays unknown).</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">_AnalysisState</span><span class="p">(</span>
+        <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span>
+        <span class="n">interest</span><span class="o">=</span><span class="n">interest</span><span class="p">,</span>
+        <span class="n">confounds</span><span class="o">=</span><span class="n">confounds</span><span class="p">,</span>
+        <span class="n">group1</span><span class="o">=</span><span class="n">group1</span><span class="p">,</span>
+        <span class="n">group2</span><span class="o">=</span><span class="n">group2</span><span class="p">,</span>
+        <span class="n">confounds_group1</span><span class="o">=</span><span class="n">confounds_group1</span><span class="p">,</span>
+        <span class="n">confounds_group2</span><span class="o">=</span><span class="n">confounds_group2</span><span class="p">,</span>
+        <span class="n">sites</span><span class="o">=</span><span class="n">sites</span><span class="p">,</span>
+        <span class="n">preserve</span><span class="o">=</span><span class="n">preserve</span><span class="p">,</span>
+        <span class="nb">input</span><span class="o">=</span><span class="nb">input</span><span class="p">,</span>
+        <span class="n">fisher_z</span><span class="o">=</span><span class="n">fisher_z</span><span class="p">,</span>
+        <span class="n">contrast_id</span><span class="o">=</span><span class="n">contrast_id</span><span class="p">,</span>
+        <span class="n">method_kwargs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">method_kwargs</span><span class="p">),</span>
+        <span class="n">n_processes</span><span class="o">=</span><span class="n">n_processes</span><span class="p">,</span>
+        <span class="n">progress</span><span class="o">=</span><span class="n">progress</span><span class="p">,</span>
+        <span class="n">cancel</span><span class="o">=</span><span class="n">cancel</span><span class="p">,</span>
+        <span class="n">motion_qc_spec</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">motion_qc</span><span class="p">)</span> <span class="k">if</span> <span class="n">motion_qc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">test_type</span><span class="o">=</span><span class="n">test_type</span><span class="p">,</span>
+        <span class="n">harmonize</span><span class="o">=</span><span class="n">harmonize</span><span class="p">,</span>
+        <span class="n">r_to_z</span><span class="o">=</span><span class="n">r_to_z</span><span class="p">,</span>
+        <span class="n">var_equal</span><span class="o">=</span><span class="n">var_equal</span><span class="p">,</span>
+        <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
+        <span class="n">two_tailed</span><span class="o">=</span><span class="n">two_tailed</span><span class="p">,</span>
+        <span class="n">tested_tail</span><span class="o">=</span><span class="n">tested_tail</span><span class="p">,</span>
+        <span class="n">acceleration</span><span class="o">=</span><span class="n">acceleration</span><span class="p">,</span>
+        <span class="n">n_permutations</span><span class="o">=</span><span class="n">n_permutations</span><span class="p">,</span>
+        <span class="n">e</span><span class="o">=</span><span class="n">e</span><span class="p">,</span>
+        <span class="n">h</span><span class="o">=</span><span class="n">h</span><span class="p">,</span>
+        <span class="n">n</span><span class="o">=</span><span class="n">n</span><span class="p">,</span>
+        <span class="n">rng</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span>
+        <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">,</span>
+        <span class="n">use_mp</span><span class="o">=</span><span class="n">use_mp</span><span class="p">,</span>
+        <span class="n">missing</span><span class="o">=</span><span class="n">missing</span><span class="p">,</span>
+        <span class="n">min_coverage</span><span class="o">=</span><span class="n">min_coverage</span><span class="p">,</span>
+        <span class="n">atlas</span><span class="o">=</span><span class="n">atlas</span><span class="p">,</span>
+        <span class="n">roi_ids</span><span class="o">=</span><span class="n">roi_ids</span><span class="p">,</span>
+        <span class="n">groupings</span><span class="o">=</span><span class="n">groupings</span><span class="p">,</span>
+        <span class="n">units</span><span class="o">=</span><span class="n">units</span><span class="p">,</span>
+        <span class="n">preprocessing_record</span><span class="o">=</span><span class="n">normalize_preprocessing_record</span><span class="p">(</span><span class="n">preprocessing</span><span class="p">),</span>
+        <span class="n">fisher_upstream</span><span class="o">=</span><span class="n">normalize_fisher_history</span><span class="p">(</span><span class="n">fisher_history</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="c1"># ---- 1. Tail policy: two-sided by default, prespecified direction opt-in</span>
+    <span class="n">_resolve_tail_policy</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+    <span class="c1"># ---- 2. Optional subject-ID alignment for paired designs -----------------</span>
+    <span class="c1"># Condition A (group1) is the reference row order; condition-B inputs move</span>
+    <span class="c1"># into A order before the Fisher transform, the B-A difference and any</span>
+    <span class="c1"># inference; A-order inputs are validated and never permuted.</span>
+    <span class="n">_align_paired_subjects</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">ids_group1</span><span class="p">,</span> <span class="n">ids_group2</span><span class="p">)</span>
+
+    <span class="c1"># ---- 3. Paired interest: GLM response B - A (transform each condition</span>
+    <span class="c1"># separately, never the difference); interactions: centered products.</span>
+    <span class="n">_reduce_paired_interest</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+    <span class="n">_expand_interactions</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">interactions</span><span class="p">)</span>
+
+    <span class="c1"># ---- 4. Modes (GLM / multi-predictor / t-test), method, net labels;</span>
+    <span class="c1"># then the ComBat / site-dummies strategy for this call shape.</span>
+    <span class="n">_resolve_modes</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+    <span class="n">_resolve_harmonization_strategy</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+    <span class="c1"># ---- 5. Input preparation: zero diagonal, Fisher r→z exactly once, and</span>
+    <span class="c1"># the opt-in motion/QC-FC side-car on the native input.</span>
+    <span class="n">_prepare_inputs</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+    <span class="c1"># ---- 6. ComBat (combat_only / combat_site_dummies_glm) ------------------</span>
+    <span class="n">_run_combat</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+    <span class="c1"># ---- 7. Site dummies → GLM nuisance (combat_site_dummies_glm, site_dummies_glm)</span>
+    <span class="n">_add_site_dummies</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+    <span class="c1"># ---- 8. Strata: auto-stratify permutations on sites (PALM -eb semantics);</span>
+    <span class="c1"># an explicit strata= through **method_kwargs wins.</span>
+    <span class="n">_resolve_strata</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+    <span class="c1"># ---- 9./10. Inference dispatch and provenance threading -----------------</span>
+    <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">multi_mode</span><span class="p">:</span>
+        <span class="c1"># Several predictors → one result per predictor, each against its own</span>
+        <span class="c1"># null with shared permutations; the shared ComBat diagnostics and</span>
+        <span class="c1"># flags are attached to every entry.</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">nm</span><span class="p">:</span> <span class="n">AnalyzeResult</span><span class="p">(</span>
+                <span class="n">inference</span><span class="o">=</span><span class="n">inferred</span><span class="o">.</span><span class="n">result</span><span class="p">,</span>
+                <span class="n">combat_diagnostics</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">combat_diag</span><span class="p">,</span>
+                <span class="n">design_diagnostics</span><span class="o">=</span><span class="n">inferred</span><span class="o">.</span><span class="n">design_diag</span><span class="p">,</span>
+                <span class="n">flags</span><span class="o">=</span><span class="n">inferred</span><span class="o">.</span><span class="n">flags</span><span class="p">,</span>
+                <span class="n">resolved_strategy</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">backend_resolved_strategy</span><span class="p">,</span>
+                <span class="n">motion_qc</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">motion_qc_diag</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">nm</span><span class="p">,</span> <span class="n">inferred</span> <span class="ow">in</span> <span class="n">_run_multi_inference</span><span class="p">(</span><span class="n">state</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+
+    <span class="n">result</span><span class="p">,</span> <span class="n">design_diag</span> <span class="o">=</span> <span class="n">_run_single_inference</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">_finalize_single</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">design_diag</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">AnalyzeResult</span><span class="p">(</span>
+        <span class="n">inference</span><span class="o">=</span><span class="n">result</span><span class="p">,</span>
+        <span class="n">combat_diagnostics</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">combat_diag</span><span class="p">,</span>
+        <span class="n">design_diagnostics</span><span class="o">=</span><span class="n">design_diag</span><span class="p">,</span>
+        <span class="n">flags</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">flags</span><span class="p">,</span>
+        <span class="n">resolved_strategy</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">backend_resolved_strategy</span><span class="p">,</span>
+        <span class="n">motion_qc</span><span class="o">=</span><span class="n">state</span><span class="o">.</span><span class="n">motion_qc_diag</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"analyze"</span><span class="p">,</span> <span class="s2">"AnalyzeResult"</span><span class="p">]</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

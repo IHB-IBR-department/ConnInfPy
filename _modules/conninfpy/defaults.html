@@ -1,0 +1,238 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.defaults &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.defaults</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.defaults</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""</span>
+<span class="sd">Unified default parameters for ConnInfPy.</span>
+
+<span class="sd">Single source of truth for all default constants used across modules.</span>
+
+<span class="sd">TFNBS defaults use E=0.4 and H=3.0. By default n=None integrates the</span>
+<span class="sd">piecewise support exactly, independently for each tail. An explicit positive</span>
+<span class="sd">integer n selects the historical right-endpoint grid, with threshold levels</span>
+<span class="sd">start + i * (max - start) / n and inclusive active edges at each level.</span>
+<span class="sd">Legacy finite-grid scores and the exact integral need not be equal. Record</span>
+<span class="sd">E, H, n and start explicitly when reproducing historical results.</span>
+
+<span class="sd">The permutation-based BH-FDR method uses raw edge statistics and does not</span>
+<span class="sd">apply TFNBS enhancement or its integration settings.</span>
+
+<span class="sd">References</span>
+<span class="sd">----------</span>
+<span class="sd">- Smith &amp; Nichols (2009). Threshold-free cluster enhancement.</span>
+<span class="sd">  NeuroImage 44(1):83-98.</span>
+<span class="sd">- Baggio et al. (2018). Statistical inference in brain graphs using</span>
+<span class="sd">  threshold-free network-based statistics. Hum Brain Mapp 39(6):2289-2302.</span>
+<span class="sd">  doi:10.1002/hbm.24007.</span>
+<span class="sd">- Vinokur, L., Smith, R. E., Dhollander, T., Vaughan, D., Jackson, G. D., &amp;</span>
+<span class="sd">  Connelly, A. (2023). Parameter Sensitivity of Network-Based Statistical</span>
+<span class="sd">  Inference. Research Square (preprint), doi:10.21203/rs.3.rs-3081615/v1.</span>
+<span class="sd">- Hao, Z., Wang, P., Xia, X., Pan, Y., &amp; Dou, W. (2024). Threshold-Free</span>
+<span class="sd">  Network-Oriented Statistics in Neuroscience (TFNOS). bioRxiv (preprint),</span>
+<span class="sd">  doi:10.1101/2024.01.03.574016. For edge-wise t-statistics in TFNOS-TT,</span>
+<span class="sd">  ``E=0.4, H=3.0`` yielded empirical FDR &lt; 10% and ``E=0.4, H=7.0``</span>
+<span class="sd">  empirical FDR &lt; 5%; earlier voxel/network defaults such as Baggio 2018</span>
+<span class="sd">  were overly liberal in the reported conditions.</span>
+<span class="sd">"""</span>
+
+<span class="c1"># =============================================================================</span>
+<span class="c1"># TFCE parameters (validation-paper network setting)</span>
+<span class="c1"># =============================================================================</span>
+
+<span class="n">DEFAULT_EXTENT_EXPONENT</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.4</span>
+<span class="sd">"""Default extent exponent E."""</span>
+
+<span class="n">DEFAULT_HEIGHT_EXPONENT</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span>
+<span class="sd">"""Default height exponent H."""</span>
+
+<span class="n">DEFAULT_START_THRESHOLD</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.65</span>
+<span class="sd">"""Initial t-threshold for cluster formation (asymptotic normal z ≈ 1.645 reference, one-tailed p ≈ 0.05 at large df; not a universal finite-df p-value)."""</span>
+
+<span class="c1"># =============================================================================</span>
+<span class="c1"># Integration resolution (path-specific)</span>
+<span class="c1"># =============================================================================</span>
+
+<span class="n">DEFAULT_N_THRESHOLDS_SCORING</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="sd">"""None selects exact integration; a positive integer selects the legacy grid."""</span>
+
+<span class="n">DEFAULT_N_THRESHOLDS_PERMUTATION</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="sd">"""None selects exact integration inside the permutation loop."""</span>
+
+<span class="c1"># =============================================================================</span>
+<span class="c1"># Permutation testing</span>
+<span class="c1"># =============================================================================</span>
+
+<span class="n">DEFAULT_N_PERMUTATIONS</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span>
+<span class="sd">"""Default number of permutations for null distribution."""</span>
+
+<span class="n">DEFAULT_ACCELERATION</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="sd">"""Default tail acceleration: ``None`` (exact empirical permutation p-values).</span>
+
+<span class="sd">``'gpd'`` / ``'gamma'`` are opt-in for exploration with ~200 permutations: a</span>
+<span class="sd">fitted tail replaces the p-values that fewer than 10 permutations reach</span>
+<span class="sd">(Winkler 2016); all others stay exact."""</span>
+
+<span class="c1"># =============================================================================</span>
+<span class="c1"># NBS defaults</span>
+<span class="c1"># =============================================================================</span>
+
+<span class="n">DEFAULT_NBS_THRESHOLD</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span>
+<span class="sd">"""Default t-statistic threshold for classical NBS edge inclusion."""</span>
+
+<span class="n">DEFAULT_NBS_STAT</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"extent"</span>
+<span class="sd">"""Default cluster statistic type for NBS ('extent' or 'intensity')."""</span>
+
+<span class="c1"># =============================================================================</span>
+<span class="c1"># FBC-TFNBS</span>
+<span class="c1"># =============================================================================</span>
+
+<span class="n">DEFAULT_MIN_CLUSTER_SIZE</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="sd">"""Default minimum edges in a functional block to form a cluster (for FBC-TFNBS)."""</span>
+
+
+<div class="viewcode-block" id="warn_low_nbs_threshold">
+<a class="viewcode-back" href="../../conninfpy.defaults.html#conninfpy.defaults.warn_low_nbs_threshold">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">warn_low_nbs_threshold</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">threshold</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Warn about interpretation of components at a low NBS threshold."""</span>
+    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">"nbs"</span> <span class="ow">and</span> <span class="n">threshold</span> <span class="o">&lt;</span> <span class="mf">3.0</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"NBS threshold &lt; 3.0 increases non-null edge spillover within "</span>
+            <span class="s2">"detected components; NBS inference is at the component level, "</span>
+            <span class="s2">"not the individual edge level."</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="format_bh_permutation_resolution_warning">
+<a class="viewcode-back" href="../../conninfpy.defaults.html#conninfpy.defaults.format_bh_permutation_resolution_warning">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_bh_permutation_resolution_warning</span><span class="p">(</span><span class="n">m</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_permutations</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return warning text when permutation resolution cannot support sparse BH rejections."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+
+    <span class="n">rank</span> <span class="o">=</span> <span class="n">m</span> <span class="o">/</span> <span class="p">(</span><span class="mf">0.05</span> <span class="o">*</span> <span class="p">(</span><span class="n">n_permutations</span> <span class="o">+</span> <span class="mf">1.0</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">rank</span> <span class="o">&gt;</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"bh_fdr_perm resolution: m=</span><span class="si">{</span><span class="n">m</span><span class="si">}</span><span class="s2"> edges, B=</span><span class="si">{</span><span class="n">n_permutations</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"p_min=</span><span class="si">{</span><span class="mi">1</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="p">(</span><span class="n">n_permutations</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mf">1.0</span><span class="p">)</span><span class="si">:</span><span class="s2">.6g</span><span class="si">}</span><span class="s2">; minimum rejection "</span>
+            <span class="sa">f</span><span class="s2">"rank k_min=</span><span class="si">{</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">rank</span><span class="p">)</span><span class="si">}</span><span class="s2"> at q=0.05. For single-edge "</span>
+            <span class="sa">f</span><span class="s2">"sensitivity use n_permutations &gt;= </span><span class="si">{</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">m</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">0.05</span><span class="p">)</span><span class="si">}</span><span class="s2"> "</span>
+            <span class="s2">"or consider parametric bh_fdr."</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="warn_bh_permutation_resolution">
+<a class="viewcode-back" href="../../conninfpy.defaults.html#conninfpy.defaults.warn_bh_permutation_resolution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">warn_bh_permutation_resolution</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n_permutations</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Warn when permutation resolution cannot support sparse BH rejections."""</span>
+    <span class="n">msg</span> <span class="o">=</span> <span class="n">format_bh_permutation_resolution_warning</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n_permutations</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">msg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

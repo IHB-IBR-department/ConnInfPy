@@ -1,0 +1,778 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.atlas.brainnetome &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.atlas.brainnetome</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.atlas.brainnetome</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Brainnetome Atlas (BNA-246) reference data for annotating connectivity results.</span>
+
+<span class="sd">The Brainnetome atlas (Fan et al., 2016) divides cortex and subcortex into 246</span>
+<span class="sd">subregions defined by connectivity, with an anatomical hierarchy (subregion -&gt;</span>
+<span class="sd">gyrus or nucleus -&gt; lobe), homologous left/right pairs (odd ID = left, the next</span>
+<span class="sd">even ID = its right homolog), cytoarchitectonic descriptions, a crosswalk to the</span>
+<span class="sd">Yeo 7/17 cortical networks, population structural-connectivity maps and</span>
+<span class="sd">BrainMap behavioural-domain (BD) and paradigm-class (PC) profiles.</span>
+
+<span class="sd">What is bundled and what is loaded</span>
+<span class="sd">----------------------------------</span>
+<span class="sd">* bundled: maximum-probability label images (1 and 2 mm, FSL MNI152 grid) and</span>
+<span class="sd">  the hierarchy table ``bna246_hierarchy.csv``;</span>
+<span class="sd">* bundled: the BrainMap profiles (BDf_FDR05.json, PCf_FDR05.json;</span>
+<span class="sd">  :func:`conninfpy.atlas.fetch_bna_behavioral_decoding`);</span>
+<span class="sd">* local files, optional, looked up in ``data_dir``: ``BNA_PM_4D.nii.gz``</span>
+<span class="sd">  (probabilistic maps, 40 subjects) and ``BNA_SC_3D_246.zip`` (population</span>
+<span class="sd">  tractography maps), from atlas.brainnetome.org/download.html.</span>
+
+<span class="sd">BrainMap profiles are forward-inference likelihood ratios that passed FDR</span>
+<span class="sd">q &lt; 0.05 in the BrainMap database: they describe which kinds of tasks activate</span>
+<span class="sd">a region in the literature, not what a region or a connection does. A region</span>
+<span class="sd">without terms has too few BrainMap experiments there, not "no function".</span>
+
+<span class="sd">Brainnetome data are distributed for non-commercial use with attribution and</span>
+<span class="sd">share-alike (``conninfpy/atlas_data/NOTICE_BRAINNETOME.txt``). Cite Fan et al.</span>
+<span class="sd">(2016), and Laird et al. (2005, 2011) for the profiles.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">zipfile</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">cast</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>  <span class="c1"># nibabel is imported lazily at runtime; only the stub type is needed here</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">nibabel.spatialimages</span><span class="w"> </span><span class="kn">import</span> <span class="n">SpatialImage</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.resources</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_default_cache</span><span class="p">,</span>
+    <span class="n">_sha256</span><span class="p">,</span>
+    <span class="n">brainnetome_data_dir</span><span class="p">,</span>
+    <span class="n">brainnetome_resource_path</span><span class="p">,</span>
+    <span class="n">read_bna_hierarchy</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">PM_FILE</span> <span class="o">=</span> <span class="s2">"BNA_PM_4D.nii.gz"</span>
+<span class="n">SC_FILE</span> <span class="o">=</span> <span class="s2">"BNA_SC_3D_246.zip"</span>
+<span class="n">N_REGIONS</span> <span class="o">=</span> <span class="mi">246</span>
+<span class="n">BD_DOMAINS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"Action"</span><span class="p">,</span> <span class="s2">"Cognition"</span><span class="p">,</span> <span class="s2">"Emotion"</span><span class="p">,</span> <span class="s2">"Interoception"</span><span class="p">,</span> <span class="s2">"Perception"</span><span class="p">)</span>
+
+<span class="n">_YEO7_NAMES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="mi">1</span><span class="p">:</span> <span class="s2">"Visual"</span><span class="p">,</span>
+    <span class="mi">2</span><span class="p">:</span> <span class="s2">"Somatomotor"</span><span class="p">,</span>
+    <span class="mi">3</span><span class="p">:</span> <span class="s2">"Dorsal Attention"</span><span class="p">,</span>
+    <span class="mi">4</span><span class="p">:</span> <span class="s2">"Ventral Attention"</span><span class="p">,</span>
+    <span class="mi">5</span><span class="p">:</span> <span class="s2">"Limbic"</span><span class="p">,</span>
+    <span class="mi">6</span><span class="p">:</span> <span class="s2">"Frontoparietal"</span><span class="p">,</span>
+    <span class="mi">7</span><span class="p">:</span> <span class="s2">"Default"</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_ANATOM_MACRO_LOBE</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="mi">1</span><span class="p">:</span> <span class="p">(</span><span class="s2">"Anterior"</span><span class="p">,</span> <span class="s2">"Anterior Lobe"</span><span class="p">),</span>
+    <span class="mi">2</span><span class="p">:</span> <span class="p">(</span><span class="s2">"Anterior"</span><span class="p">,</span> <span class="s2">"Anterior Lobe"</span><span class="p">),</span>
+    <span class="mi">3</span><span class="p">:</span> <span class="p">(</span><span class="s2">"Anterior"</span><span class="p">,</span> <span class="s2">"Anterior Lobe"</span><span class="p">),</span>
+    <span class="mi">4</span><span class="p">:</span> <span class="p">(</span><span class="s2">"Anterior"</span><span class="p">,</span> <span class="s2">"Anterior Lobe"</span><span class="p">),</span>
+    <span class="mi">26</span><span class="p">:</span> <span class="p">(</span><span class="s2">"Flocculonodular"</span><span class="p">,</span> <span class="s2">"Flocculonodular Lobe"</span><span class="p">),</span>
+    <span class="mi">28</span><span class="p">:</span> <span class="p">(</span><span class="s2">"Flocculonodular"</span><span class="p">,</span> <span class="s2">"Flocculonodular Lobe"</span><span class="p">),</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_spatial_image</span><span class="p">(</span><span class="n">img</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SpatialImage"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""``nib.load`` result narrowed to the spatial image every caller reads.</span>
+
+<span class="sd">    ``nibabel.load`` is typed as returning the ``FileBasedImage`` base class,</span>
+<span class="sd">    which has no ``shape`` / ``affine`` / ``dataobj``; the atlas, label and</span>
+<span class="sd">    probabilistic-map images loaded here always are spatial images. The cast</span>
+<span class="sd">    documents that and has no runtime effect.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="s2">"SpatialImage"</span><span class="p">,</span> <span class="n">img</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_lattice_mapping</span><span class="p">(</span><span class="n">src</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Voxel-&gt;voxel matrix M = inv(affine_dst) @ affine_src and exact-lattice flag."""</span>
+    <span class="n">M</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">dst</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="nb">float</span><span class="p">))</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+    <span class="n">R</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="n">M</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">],</span> <span class="n">M</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+    <span class="n">perm</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">R</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">R</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">R</span><span class="p">[</span><span class="n">R</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">]),</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">M</span><span class="p">,</span> <span class="nb">bool</span><span class="p">(</span><span class="n">perm</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">t</span><span class="p">),</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_gather_exact</span><span class="p">(</span><span class="n">src</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">dst</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Exact nearest-neighbour gather of ``src`` onto ``dst`` (requires exact lattice)."""</span>
+    <span class="n">M</span><span class="p">,</span> <span class="n">exact</span> <span class="o">=</span> <span class="n">_lattice_mapping</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">dst</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">exact</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"grids do not coincide exactly; resampling is not allowed here"</span><span class="p">)</span>
+    <span class="n">sh</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">])</span>
+    <span class="n">ii</span><span class="p">,</span> <span class="n">jj</span><span class="p">,</span> <span class="n">kk</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">sh</span><span class="p">],</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">"ij"</span><span class="p">)</span>
+    <span class="n">hom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">ii</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">jj</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">kk</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">ii</span><span class="o">.</span><span class="n">size</span><span class="p">)])</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">((</span><span class="n">M</span> <span class="o">@</span> <span class="n">hom</span><span class="p">)[:</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">inside</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">((</span><span class="n">r</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">r</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">dst</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">])),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">dst</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">src</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+    <span class="n">sel</span> <span class="o">=</span> <span class="n">inside</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">d</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">out</span><span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="n">sel</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">r</span><span class="p">[</span><span class="n">sel</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">r</span><span class="p">[</span><span class="n">sel</span><span class="p">,</span> <span class="mi">2</span><span class="p">]]</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="n">sel</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_crosswalk</span><span class="p">(</span>
+    <span class="n">cb_arr</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
+    <span class="n">net_arr</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
+    <span class="n">ids</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Per cerebellar region: label distribution, top label, purity, status."""</span>
+    <span class="n">out</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">ids</span><span class="p">):</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">cb_arr</span> <span class="o">==</span> <span class="n">i</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+        <span class="n">vals</span><span class="p">,</span> <span class="n">cnts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">net_arr</span><span class="p">[</span><span class="n">m</span><span class="p">],</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">dist</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">):</span> <span class="nb">int</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">vals</span><span class="p">,</span> <span class="n">cnts</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)}</span>
+        <span class="n">assigned</span> <span class="o">=</span> <span class="n">n</span> <span class="o">-</span> <span class="n">dist</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">ranked</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(((</span><span class="n">c</span><span class="p">,</span> <span class="o">-</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">dist</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">top</span> <span class="o">=</span> <span class="o">-</span><span class="n">ranked</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">ranked</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">purity</span> <span class="o">=</span> <span class="p">(</span><span class="n">ranked</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="n">assigned</span><span class="p">)</span> <span class="k">if</span> <span class="n">assigned</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">"unassigned"</span>
+            <span class="k">if</span> <span class="n">assigned</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">purity</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="p">(</span><span class="s2">"dominant"</span> <span class="k">if</span> <span class="n">purity</span> <span class="o">&gt;=</span> <span class="n">threshold</span> <span class="k">else</span> <span class="s2">"mixed"</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"top_label"</span><span class="p">:</span> <span class="n">top</span><span class="p">,</span> <span class="s2">"purity_of_assigned"</span><span class="p">:</span> <span class="n">purity</span><span class="p">,</span> <span class="s2">"status"</span><span class="p">:</span> <span class="n">status</span><span class="p">}</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<div class="viewcode-block" id="BrainnetomeReference">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.BrainnetomeReference">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">BrainnetomeReference</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""BNA-246 anatomy, profiles and optional probabilistic / structural maps.</span>
+
+<span class="sd">    Use :meth:`load`. ``regions`` is the hierarchy table indexed by the</span>
+<span class="sd">    original BNA ID (1-246); ``label_image`` the maximum-probability map.</span>
+<span class="sd">    """</span>
+
+    <span class="n">regions</span><span class="p">:</span> <span class="n">Any</span>  <span class="c1"># pandas.DataFrame indexed by roi_id</span>
+    <span class="n">label_image</span><span class="p">:</span> <span class="n">Any</span>  <span class="c1"># nibabel image (MPM)</span>
+    <span class="n">data_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">cache_dir</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">_default_cache</span><span class="p">)</span>
+    <span class="n">profiles</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">provenance</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">_labels</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_pm</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_sc</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+<div class="viewcode-block" id="BrainnetomeReference.load">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.BrainnetomeReference.load">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">data_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">resolution_mm</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">profiles</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">cache_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">cerebellum</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"BrainnetomeReference"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Load the bundled atlas and, when available, the BrainMap profiles.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data_dir : path, optional</span>
+<span class="sd">            Folder holding the optional local files (``BNA_PM_4D.nii.gz``,</span>
+<span class="sd">            ``BNA_SC_3D_246.zip``). Defaults to ``$CONNINFPY_BNA_DIR`` or</span>
+<span class="sd">            ``$CONNINFPY_DATA/brainnetome`` (``~/conninfpy_data/brainnetome``).</span>
+<span class="sd">            Originals are checked against the bundled source manifest when used.</span>
+<span class="sd">        resolution_mm : {1, 2}</span>
+<span class="sd">            Bundled label image to use (1 mm by default: spheres of a few</span>
+<span class="sd">            millimetres need it).</span>
+<span class="sd">        profiles : bool</span>
+<span class="sd">            Read the bundled BrainMap BD/PC snapshots without network access.</span>
+<span class="sd">            If unavailable, annotation proceeds without profiles.</span>
+<span class="sd">        cache_dir : path, optional</span>
+<span class="sd">            Cache for derived PM/SC arrays (default</span>
+<span class="sd">            ``$CONNINFPY_CACHE/bna246`` or ``~/.cache/conninfpy/bna246``).</span>
+<span class="sd">        cerebellum : {None, 'anatom'}, optional</span>
+<span class="sd">            Optional opt-in cerebellar companion layer (DiedrichsenLab v1.2</span>
+<span class="sd">            SUIT ``atl-Anatom`` with Buckner-7/17 crosswalk). Currently</span>
+<span class="sd">            supported only at ``resolution_mm=1`` (1 mm MNI152 lattice).</span>
+<span class="sd">            ``None`` (default) keeps pure 246-region BNA-246.</span>
+<span class="sd">        """</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.resources</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">bna_profile_paths</span><span class="p">,</span>
+            <span class="n">fetch_bna_behavioral_decoding</span><span class="p">,</span>
+            <span class="n">get_bna_246_nifti_path</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">cerebellum</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">"anatom"</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cerebellum must be None or 'anatom'; got </span><span class="si">{</span><span class="n">cerebellum</span><span class="si">!r}</span><span class="s2">."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cerebellum</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">resolution_mm</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"cerebellum=</span><span class="si">{</span><span class="n">cerebellum</span><span class="si">!r}</span><span class="s2"> requires resolution_mm=1 (1 mm MNI lattice)."</span>
+            <span class="p">)</span>
+
+        <span class="n">regions</span> <span class="o">=</span> <span class="n">read_bna_hierarchy</span><span class="p">()</span>
+        <span class="n">regions</span><span class="p">[</span><span class="s2">"atlas_source"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"BNA-246"</span>
+        <span class="n">img_path</span> <span class="o">=</span> <span class="n">get_bna_246_nifti_path</span><span class="p">(</span><span class="n">resolution_mm</span><span class="p">)</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">img_path</span><span class="p">))</span>
+        <span class="n">cache</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">cache_dir</span><span class="p">)</span> <span class="k">if</span> <span class="n">cache_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_default_cache</span><span class="p">()</span>
+        <span class="n">provenance</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"atlas"</span><span class="p">:</span> <span class="s2">"Brainnetome BNA-246 (Fan et al. 2016)"</span><span class="p">,</span>
+            <span class="s2">"label_image"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">img_path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> (FSL MNI152 grid, </span><span class="si">{</span><span class="n">resolution_mm</span><span class="si">}</span><span class="s2"> mm)"</span><span class="p">,</span>
+            <span class="s2">"label_image_sha256"</span><span class="p">:</span> <span class="n">_sha256</span><span class="p">(</span><span class="n">img_path</span><span class="p">),</span>
+            <span class="s2">"hierarchy"</span><span class="p">:</span> <span class="s2">"bna246_hierarchy.csv (BNA_subregions.xlsx Table 1 + Yeo crosswalk)"</span><span class="p">,</span>
+            <span class="s2">"data_dir"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">brainnetome_data_dir</span><span class="p">(</span><span class="n">data_dir</span><span class="p">))</span> <span class="k">if</span> <span class="n">brainnetome_data_dir</span><span class="p">(</span><span class="n">data_dir</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="n">cerebellum</span> <span class="o">==</span> <span class="s2">"anatom"</span><span class="p">:</span>
+            <span class="n">regions</span><span class="p">,</span> <span class="n">img</span><span class="p">,</span> <span class="n">cb_prov</span> <span class="o">=</span> <span class="n">_attach_suit_anatom</span><span class="p">(</span><span class="n">regions</span><span class="p">,</span> <span class="n">img</span><span class="p">)</span>
+            <span class="n">provenance</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">cb_prov</span><span class="p">)</span>
+
+        <span class="n">ref</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">regions</span><span class="o">=</span><span class="n">regions</span><span class="p">,</span>
+            <span class="n">label_image</span><span class="o">=</span><span class="n">img</span><span class="p">,</span>
+            <span class="n">data_dir</span><span class="o">=</span><span class="n">brainnetome_data_dir</span><span class="p">(</span><span class="n">data_dir</span><span class="p">),</span>
+            <span class="n">cache_dir</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">ref</span><span class="o">.</span><span class="n">provenance</span> <span class="o">=</span> <span class="n">provenance</span>
+        <span class="k">if</span> <span class="n">profiles</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">bd</span><span class="p">,</span> <span class="n">pc</span> <span class="o">=</span> <span class="n">fetch_bna_behavioral_decoding</span><span class="p">()</span>
+                <span class="n">ref</span><span class="o">.</span><span class="n">profiles</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">"BD"</span><span class="p">:</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="nb">dict</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">bd</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+                    <span class="s2">"PC"</span><span class="p">:</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="nb">dict</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">pc</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+                <span class="p">}</span>
+                <span class="n">ref</span><span class="o">.</span><span class="n">provenance</span><span class="p">[</span><span class="s2">"profiles"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">"source"</span><span class="p">:</span> <span class="s2">"BrainMap forward inference, FDR q&lt;0.05 (BDf_FDR05.json, PCf_FDR05.json)"</span><span class="p">,</span>
+                    <span class="s2">"files"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"local cache (</span><span class="si">{</span><span class="n">bna_profile_paths</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">parent</span><span class="si">}</span><span class="s2">)"</span><span class="p">,</span>
+                    <span class="s2">"BD_sha256"</span><span class="p">:</span> <span class="n">_sha256</span><span class="p">(</span><span class="n">bna_profile_paths</span><span class="p">()[</span><span class="mi">0</span><span class="p">]),</span>
+                    <span class="s2">"PC_sha256"</span><span class="p">:</span> <span class="n">_sha256</span><span class="p">(</span><span class="n">bna_profile_paths</span><span class="p">()[</span><span class="mi">1</span><span class="p">]),</span>
+                <span class="p">}</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">IOError</span><span class="p">,</span> <span class="ne">OSError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="s2">"BrainMap profiles unavailable (</span><span class="si">%s</span><span class="s2">); annotating without them."</span><span class="p">,</span> <span class="n">exc</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ref</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_regions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Total number of regions in the reference (246 for pure BNA-246)."""</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">labels</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Label array of the MPM image (0 = unlabelled: white matter, CSF, outside)."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_labels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">label_image</span><span class="o">.</span><span class="n">dataobj</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">int64</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_labels</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">affine</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">label_image</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+<div class="viewcode-block" id="BrainnetomeReference.names">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.BrainnetomeReference.names">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ids</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="s2">"name"</span><span class="p">]</span> <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">"unlabelled"</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">ids</span>
+        <span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="BrainnetomeReference.labels_at">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.BrainnetomeReference.labels_at">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">labels_at</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">world</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Label at each world (mm) coordinate; 0 outside the image or unlabelled."""</span>
+        <span class="n">world</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_2d</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
+        <span class="n">vox</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">c_</span><span class="p">[</span><span class="n">world</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="p">))]</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)[</span>
+            <span class="p">:,</span> <span class="p">:</span><span class="mi">3</span>
+        <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">inside</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">((</span><span class="n">vox</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">vox</span> <span class="o">&lt;</span> <span class="n">shape</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">out</span><span class="p">[</span><span class="n">inside</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">vox</span><span class="p">[</span><span class="n">inside</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">)]</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+
+<div class="viewcode-block" id="BrainnetomeReference.sphere">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.BrainnetomeReference.sphere">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sphere</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">center</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">,</span> <span class="n">radius_mm</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""World coordinates of the label-image voxels whose centres lie within ``radius_mm``."""</span>
+        <span class="k">return</span> <span class="n">_sphere_on_grid</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">center</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">radius_mm</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="o">.</span><span class="n">shape</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+<div class="viewcode-block" id="BrainnetomeReference.homolog">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.BrainnetomeReference.homolog">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">homolog</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">roi_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">regions</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">roi_id</span><span class="p">),</span> <span class="s2">"homolog_id"</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">val</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">val</span><span class="p">)):</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">val</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BrainnetomeReference.profile">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.BrainnetomeReference.profile">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">profile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kind</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">roi_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""BrainMap profile ``{term: likelihood ratio}`` of a region; None without profiles or for companion atlases."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">profiles</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">int</span><span class="p">(</span><span class="n">roi_id</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">N_REGIONS</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">profiles</span><span class="p">[</span><span class="n">kind</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">roi_id</span><span class="p">),</span> <span class="p">{}))</span></div>
+
+
+<div class="viewcode-block" id="BrainnetomeReference.domain">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.BrainnetomeReference.domain">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">domain</span><span class="p">(</span><span class="n">term</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Top-level BrainMap behavioural domain of a BD term (``Cognition.Memory.Working`` -&gt; ``Cognition``)."""</span>
+        <span class="k">return</span> <span class="n">term</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"."</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+<div class="viewcode-block" id="BrainnetomeReference.membership">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.BrainnetomeReference.membership">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">membership</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">world</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Mean probabilistic-map membership of each region over the given points.</span>
+
+<span class="sd">        Returns an array of shape (246,) in [0, 1] (the share of the 40</span>
+<span class="sd">        reference subjects in whom the points belong to each region, averaged</span>
+<span class="sd">        over the points), or None when ``BNA_PM_4D.nii.gz`` is not available.</span>
+<span class="sd">        """</span>
+        <span class="n">pm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_membership_matrix</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">pm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">mat</span><span class="p">,</span> <span class="n">affine</span><span class="p">,</span> <span class="n">shape</span> <span class="o">=</span> <span class="n">pm</span>
+        <span class="n">world</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_2d</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
+        <span class="n">vox</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">c_</span><span class="p">[</span><span class="n">world</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="p">))]</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">affine</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)[</span>
+            <span class="p">:,</span> <span class="p">:</span><span class="mi">3</span>
+        <span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">inside</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">((</span><span class="n">vox</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">vox</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">shape</span><span class="p">)),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inside</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_regions</span><span class="p">)</span>
+        <span class="n">flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ravel_multi_index</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">vox</span><span class="p">[</span><span class="n">inside</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">),</span> <span class="n">shape</span><span class="p">)</span>
+        <span class="n">vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mat</span><span class="p">[</span><span class="n">flat</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_regions</span> <span class="o">&gt;</span> <span class="n">N_REGIONS</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_regions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">vals</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+            <span class="n">out</span><span class="p">[:</span><span class="n">N_REGIONS</span><span class="p">]</span> <span class="o">=</span> <span class="n">vals</span>
+            <span class="k">return</span> <span class="n">out</span>
+        <span class="k">return</span> <span class="n">vals</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_membership_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pm</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">brainnetome_resource_path</span><span class="p">(</span><span class="n">PM_FILE</span><span class="p">,</span> <span class="n">data_dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">sparse</span>
+
+        <span class="n">digest</span> <span class="o">=</span> <span class="n">_sha256</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"pm_sparse_</span><span class="si">{</span><span class="n">digest</span><span class="p">[:</span><span class="mi">16</span><span class="p">]</span><span class="si">}</span><span class="s2">.npz"</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">_spatial_image</span><span class="p">(</span><span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)))</span>
+        <span class="n">shape</span><span class="p">,</span> <span class="n">affine</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">img</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cache</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="n">mat</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">load_npz</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">mat</span> <span class="o">=</span> <span class="n">_build_membership_cache</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">img</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pm</span> <span class="o">=</span> <span class="p">(</span><span class="n">mat</span><span class="p">,</span> <span class="n">affine</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">provenance</span><span class="p">[</span><span class="s2">"probabilistic_maps"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"file"</span><span class="p">:</span> <span class="n">PM_FILE</span><span class="p">,</span>
+            <span class="s2">"sha256"</span><span class="p">:</span> <span class="n">digest</span><span class="p">,</span>
+            <span class="s2">"grid"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">shape</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">affine</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">])</span><span class="si">}</span><span class="s2"> mm (HCP-40 MNI152)"</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pm</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+<div class="viewcode-block" id="BrainnetomeReference.structural_connectivity">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.BrainnetomeReference.structural_connectivity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">structural_connectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Population structural connectivity between BNA regions, (246, 246), or None.</span>
+
+<span class="sd">        Derived from the Brainnetome tractography maps (``BNA_SC_3D_246.zip``:</span>
+<span class="sd">        for each seed region, the share of reference subjects whose</span>
+<span class="sd">        probabilistic tractography reaches each voxel). Entry (a, b) is the</span>
+<span class="sd">        mean of seed a's map within region b, averaged with (b, a); the</span>
+<span class="sd">        diagonal is NaN. This is the population probability of a white-matter</span>
+<span class="sd">        pathway, with tractography's limits: long association fibres and</span>
+<span class="sd">        lateral callosal projections are under-detected, so a low value does</span>
+<span class="sd">        not show that two regions are unconnected.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sc</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">brainnetome_resource_path</span><span class="p">(</span><span class="n">SC_FILE</span><span class="p">,</span> <span class="n">data_dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+
+        <span class="n">digest</span> <span class="o">=</span> <span class="n">_sha256</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"sc_derived_</span><span class="si">{</span><span class="n">digest</span><span class="p">[:</span><span class="mi">16</span><span class="p">]</span><span class="si">}</span><span class="s2">.npy"</span>
+        <span class="k">if</span> <span class="n">cache</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="n">sc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_bna_246_nifti_path</span>
+
+            <span class="n">lab_img</span> <span class="o">=</span> <span class="n">_spatial_image</span><span class="p">(</span><span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">get_bna_246_nifti_path</span><span class="p">(</span><span class="mi">2</span><span class="p">))))</span>
+            <span class="n">lab</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">lab_img</span><span class="o">.</span><span class="n">dataobj</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+            <span class="n">keep</span> <span class="o">=</span> <span class="n">lab</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="n">counts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">lab</span><span class="p">[</span><span class="n">keep</span><span class="p">],</span> <span class="n">minlength</span><span class="o">=</span><span class="n">N_REGIONS</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]</span>
+            <span class="n">sc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">N_REGIONS</span><span class="p">,</span> <span class="n">N_REGIONS</span><span class="p">))</span>
+            <span class="k">with</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">as</span> <span class="n">zf</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N_REGIONS</span><span class="p">):</span>
+                    <span class="k">with</span> <span class="n">zf</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">s</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">:</span><span class="s2">03d</span><span class="si">}</span><span class="s2">.nii.gz"</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+                        <span class="n">seed</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="o">.</span><span class="n">from_bytes</span><span class="p">(</span><span class="n">_gunzip</span><span class="p">(</span><span class="n">fh</span><span class="o">.</span><span class="n">read</span><span class="p">()))</span>
+                    <span class="k">if</span> <span class="n">seed</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">lab_img</span><span class="o">.</span><span class="n">shape</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span>
+                        <span class="n">seed</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">lab_img</span><span class="o">.</span><span class="n">affine</span>
+                    <span class="p">):</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">SC_FILE</span><span class="si">}</span><span class="s2">: map </span><span class="si">{</span><span class="n">s</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> is not on the 2 mm BNA grid."</span>
+                        <span class="p">)</span>
+                    <span class="n">m</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">seed</span><span class="o">.</span><span class="n">dataobj</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+                    <span class="n">sc</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span>
+                            <span class="n">lab</span><span class="p">[</span><span class="n">keep</span><span class="p">],</span> <span class="n">weights</span><span class="o">=</span><span class="n">m</span><span class="p">[</span><span class="n">keep</span><span class="p">],</span> <span class="n">minlength</span><span class="o">=</span><span class="n">N_REGIONS</span> <span class="o">+</span> <span class="mi">1</span>
+                        <span class="p">)[</span><span class="mi">1</span><span class="p">:]</span>
+                        <span class="o">/</span> <span class="n">counts</span>
+                    <span class="p">)</span>
+            <span class="n">sc</span> <span class="o">=</span> <span class="p">(</span><span class="n">sc</span> <span class="o">+</span> <span class="n">sc</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.0</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">fill_diagonal</span><span class="p">(</span><span class="n">sc</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cache_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">cache</span><span class="p">,</span> <span class="n">sc</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sc</span> <span class="o">=</span> <span class="n">sc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">provenance</span><span class="p">[</span><span class="s2">"structural_connectivity"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"file"</span><span class="p">:</span> <span class="n">SC_FILE</span><span class="p">,</span>
+            <span class="s2">"sha256"</span><span class="p">:</span> <span class="n">digest</span><span class="p">,</span>
+            <span class="s2">"derivation"</span><span class="p">:</span> <span class="s2">"mean seed-map probability within the target region, symmetrized"</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_regions</span> <span class="o">&gt;</span> <span class="n">N_REGIONS</span><span class="p">:</span>
+            <span class="n">full</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n_regions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_regions</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+            <span class="n">full</span><span class="p">[:</span><span class="n">N_REGIONS</span><span class="p">,</span> <span class="p">:</span><span class="n">N_REGIONS</span><span class="p">]</span> <span class="o">=</span> <span class="n">sc</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sc</span> <span class="o">=</span> <span class="n">full</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sc</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_build_membership_cache</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">img</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="n">Path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Sparse (voxels x regions) membership matrix from the 4-D probabilistic maps.</span>
+
+<span class="sd">    Reading volume k of a gzipped 4-D image re-decompresses every volume</span>
+<span class="sd">    before it, so the file is decompressed once into a temporary</span>
+<span class="sd">    uncompressed NIfTI that is memory-mapped and read volume by volume.</span>
+<span class="sd">    """</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">gzip</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+
+    <span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">sparse</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+        <span class="s2">"Building the sparse probabilistic-map cache once (decompresses ~3.6 GB to a temporary file) ..."</span>
+    <span class="p">)</span>
+    <span class="n">cache</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">shape</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">(</span><span class="nb">dir</span><span class="o">=</span><span class="n">cache</span><span class="o">.</span><span class="n">parent</span><span class="p">)</span> <span class="k">as</span> <span class="n">tmp</span><span class="p">:</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tmp</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"pm.nii"</span>
+        <span class="k">with</span> <span class="n">gzip</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s2">"rb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">src</span><span class="p">,</span> <span class="nb">open</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">dst</span><span class="p">:</span>
+            <span class="n">shutil</span><span class="o">.</span><span class="n">copyfileobj</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">dst</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">24</span><span class="p">)</span>
+        <span class="n">mm</span> <span class="o">=</span> <span class="n">_spatial_image</span><span class="p">(</span><span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">raw</span><span class="p">),</span> <span class="n">mmap</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+        <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">vals</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">mm</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]):</span>
+            <span class="n">v</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mm</span><span class="o">.</span><span class="n">dataobj</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">k</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+            <span class="n">ijk</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ravel_multi_index</span><span class="p">(</span><span class="n">ijk</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span>
+            <span class="p">)</span>  <span class="c1"># same convention as membership()</span>
+            <span class="n">cols</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">ijk</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">))</span>
+            <span class="n">vals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="n">ijk</span><span class="p">])</span>
+        <span class="k">del</span> <span class="n">mm</span>
+    <span class="n">val_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">vals</span><span class="p">)</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="mf">100.0</span> <span class="k">if</span> <span class="n">val_arr</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">1e-6</span> <span class="k">else</span> <span class="mf">1.0</span>
+    <span class="p">)</span>  <span class="c1"># the official file stores percent</span>
+    <span class="n">mat</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">val_arr</span> <span class="o">/</span> <span class="n">scale</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">rows</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">cols</span><span class="p">))),</span>
+        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">shape</span><span class="p">)),</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">sparse</span><span class="o">.</span><span class="n">save_npz</span><span class="p">(</span><span class="n">cache</span><span class="p">,</span> <span class="n">mat</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mat</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_gunzip</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">gzip</span>
+
+    <span class="k">return</span> <span class="n">gzip</span><span class="o">.</span><span class="n">decompress</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sphere_on_grid</span><span class="p">(</span>
+    <span class="n">center</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">affine</span><span class="p">,</span> <span class="n">shape</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""World coordinates of grid voxel centres within ``radius`` of ``center``."""</span>
+    <span class="n">inv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">affine</span><span class="p">)</span>
+    <span class="n">c_vox</span> <span class="o">=</span> <span class="p">(</span><span class="n">inv</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">r_</span><span class="p">[</span><span class="n">center</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])[:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="c1"># Include lattice points outside the reference field of view: labels_at</span>
+    <span class="c1"># assigns them to background, so coverage uses the whole sphere rather</span>
+    <span class="c1"># than overstating overlap at an image boundary. Row norms also support</span>
+    <span class="c1"># rotated and oblique affines.</span>
+    <span class="n">half</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">radius</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">inv</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="n">lo</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">c_vox</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span> <span class="o">-</span> <span class="n">half</span>
+    <span class="n">hi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">c_vox</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span> <span class="o">+</span> <span class="n">half</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">hi</span> <span class="o">&lt;</span> <span class="n">lo</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">lo</span><span class="p">,</span> <span class="n">hi</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)],</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">"ij"</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">world</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">c_</span><span class="p">[</span><span class="n">grid</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">grid</span><span class="p">))]</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">affine</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+    <span class="n">world</span> <span class="o">=</span> <span class="n">world</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">world</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">world</span> <span class="o">-</span> <span class="n">center</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">radius</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_attach_suit_anatom</span><span class="p">(</span><span class="n">regions</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">bna_img</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Append SUIT atl-Anatom (34 cerebellar regions) with BNA-246 priority."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>
+
+    <span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">atlas_resource_path</span>
+
+    <span class="n">cb_img</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">atlas_resource_path</span><span class="p">(</span><span class="s2">"atl-Anatom_space-MNI_dseg.nii.gz"</span><span class="p">)))</span>
+    <span class="n">b7_img</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">atlas_resource_path</span><span class="p">(</span><span class="s2">"atl-Buckner7_space-MNI_dseg.nii.gz"</span><span class="p">)))</span>
+    <span class="n">b17_img</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">atlas_resource_path</span><span class="p">(</span><span class="s2">"atl-Buckner17_space-MNI_dseg.nii.gz"</span><span class="p">)))</span>
+
+    <span class="n">cb_arr</span> <span class="o">=</span> <span class="n">_gather_exact</span><span class="p">(</span><span class="n">cb_img</span><span class="p">,</span> <span class="n">bna_img</span><span class="p">)</span>
+    <span class="n">b7_arr</span> <span class="o">=</span> <span class="n">_gather_exact</span><span class="p">(</span><span class="n">b7_img</span><span class="p">,</span> <span class="n">bna_img</span><span class="p">)</span>
+    <span class="n">b17_arr</span> <span class="o">=</span> <span class="n">_gather_exact</span><span class="p">(</span><span class="n">b17_img</span><span class="p">,</span> <span class="n">bna_img</span><span class="p">)</span>
+    <span class="n">bna_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">bna_img</span><span class="o">.</span><span class="n">dataobj</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+    <span class="n">comp_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+        <span class="n">bna_arr</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">bna_arr</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">cb_arr</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">N_REGIONS</span> <span class="o">+</span> <span class="n">cb_arr</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">clipped_voxels</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(((</span><span class="n">bna_arr</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">cb_arr</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+    <span class="n">cerebellar_voxels</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="n">comp_arr</span> <span class="o">&gt;</span> <span class="n">N_REGIONS</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+
+    <span class="n">comp_img</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">Nifti1Image</span><span class="p">(</span><span class="n">comp_arr</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int16</span><span class="p">),</span> <span class="n">bna_img</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span>
+    <span class="n">comp_img</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">set_qform</span><span class="p">(</span><span class="n">bna_img</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">code</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">comp_img</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">set_sform</span><span class="p">(</span><span class="n">bna_img</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">code</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">atlas_resource_path</span><span class="p">(</span><span class="s2">"atl-Anatom.tsv"</span><span class="p">),</span> <span class="n">newline</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+        <span class="n">anatom_rows</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">fh</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s2">"</span><span class="se">\t</span><span class="s2">"</span><span class="p">))</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">atlas_resource_path</span><span class="p">(</span><span class="s2">"atl-Buckner17.tsv"</span><span class="p">),</span> <span class="n">newline</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+        <span class="n">b17_names</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">"index"</span><span class="p">]):</span> <span class="n">r</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">fh</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s2">"</span><span class="se">\t</span><span class="s2">"</span><span class="p">)}</span>
+
+    <span class="n">names_by_id</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">"index"</span><span class="p">]):</span> <span class="n">r</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">anatom_rows</span><span class="p">}</span>
+    <span class="n">cw7</span> <span class="o">=</span> <span class="n">_crosswalk</span><span class="p">(</span><span class="n">cb_arr</span><span class="p">,</span> <span class="n">b7_arr</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">names_by_id</span><span class="p">),</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+    <span class="n">cw17</span> <span class="o">=</span> <span class="n">_crosswalk</span><span class="p">(</span><span class="n">cb_arr</span><span class="p">,</span> <span class="n">b17_arr</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">names_by_id</span><span class="p">),</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+    <span class="n">aff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">bna_img</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="n">cb_records</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">names_by_id</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+        <span class="n">roi_id</span> <span class="o">=</span> <span class="n">N_REGIONS</span> <span class="o">+</span> <span class="n">idx</span>
+        <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"Left_"</span><span class="p">):</span>
+            <span class="n">hemi</span> <span class="o">=</span> <span class="s2">"L"</span>
+            <span class="n">other</span> <span class="o">=</span> <span class="s2">"Right_"</span> <span class="o">+</span> <span class="n">name</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="s2">"Left_"</span><span class="p">)</span> <span class="p">:]</span>
+            <span class="n">hom_idx</span> <span class="o">=</span> <span class="nb">next</span><span class="p">((</span><span class="n">j</span> <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">names_by_id</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">m</span> <span class="o">==</span> <span class="n">other</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"Right_"</span><span class="p">):</span>
+            <span class="n">hemi</span> <span class="o">=</span> <span class="s2">"R"</span>
+            <span class="n">other</span> <span class="o">=</span> <span class="s2">"Left_"</span> <span class="o">+</span> <span class="n">name</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="s2">"Right_"</span><span class="p">)</span> <span class="p">:]</span>
+            <span class="n">hom_idx</span> <span class="o">=</span> <span class="nb">next</span><span class="p">((</span><span class="n">j</span> <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">names_by_id</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">m</span> <span class="o">==</span> <span class="n">other</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"Vermis_"</span><span class="p">):</span>
+            <span class="n">hemi</span> <span class="o">=</span> <span class="s2">"M"</span>
+            <span class="n">hom_idx</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">hemi</span> <span class="o">=</span> <span class="s2">"M"</span>
+            <span class="n">hom_idx</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">homolog_id</span> <span class="o">=</span> <span class="p">(</span><span class="n">N_REGIONS</span> <span class="o">+</span> <span class="n">hom_idx</span><span class="p">)</span> <span class="k">if</span> <span class="n">hom_idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+        <span class="k">if</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">_ANATOM_MACRO_LOBE</span><span class="p">:</span>
+            <span class="n">gyrus</span><span class="p">,</span> <span class="n">gyrus_name</span> <span class="o">=</span> <span class="n">_ANATOM_MACRO_LOBE</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"Vermis_"</span><span class="p">):</span>
+            <span class="n">gyrus</span><span class="p">,</span> <span class="n">gyrus_name</span> <span class="o">=</span> <span class="s2">"Vermis"</span><span class="p">,</span> <span class="s2">"Cerebellar Vermis"</span>
+        <span class="k">elif</span> <span class="n">idx</span> <span class="o">&gt;=</span> <span class="mi">29</span><span class="p">:</span>
+            <span class="n">gyrus</span><span class="p">,</span> <span class="n">gyrus_name</span> <span class="o">=</span> <span class="s2">"Deep Nuclei"</span><span class="p">,</span> <span class="s2">"Deep Cerebellar Nuclei"</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">gyrus</span><span class="p">,</span> <span class="n">gyrus_name</span> <span class="o">=</span> <span class="s2">"Posterior"</span><span class="p">,</span> <span class="s2">"Posterior Lobe"</span>
+
+        <span class="n">r7</span> <span class="o">=</span> <span class="n">cw7</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">r7</span><span class="p">[</span><span class="s2">"status"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"dominant"</span> <span class="ow">and</span> <span class="n">r7</span><span class="p">[</span><span class="s2">"top_label"</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">y7_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">r7</span><span class="p">[</span><span class="s2">"top_label"</span><span class="p">])</span>
+            <span class="n">y7_name</span> <span class="o">=</span> <span class="n">_YEO7_NAMES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">y7_id</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"Network</span><span class="si">{</span><span class="n">y7_id</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">r7</span><span class="p">[</span><span class="s2">"status"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"mixed"</span><span class="p">:</span>
+            <span class="n">y7_id</span><span class="p">,</span> <span class="n">y7_name</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"mixed"</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">y7_id</span><span class="p">,</span> <span class="n">y7_name</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"not applicable"</span>
+
+        <span class="n">r17</span> <span class="o">=</span> <span class="n">cw17</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">r17</span><span class="p">[</span><span class="s2">"status"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"dominant"</span> <span class="ow">and</span> <span class="n">r17</span><span class="p">[</span><span class="s2">"top_label"</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">y17_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">r17</span><span class="p">[</span><span class="s2">"top_label"</span><span class="p">])</span>
+            <span class="n">y17_name</span> <span class="o">=</span> <span class="n">b17_names</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">y17_id</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"Network_</span><span class="si">{</span><span class="n">y17_id</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">r17</span><span class="p">[</span><span class="s2">"status"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"mixed"</span><span class="p">:</span>
+            <span class="n">y17_id</span><span class="p">,</span> <span class="n">y17_name</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"mixed"</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">y17_id</span><span class="p">,</span> <span class="n">y17_name</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"not applicable"</span>
+
+        <span class="n">ijk</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argwhere</span><span class="p">(</span><span class="n">comp_arr</span> <span class="o">==</span> <span class="n">roi_id</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ijk</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">ijk</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argwhere</span><span class="p">(</span><span class="n">cb_arr</span> <span class="o">==</span> <span class="n">idx</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ijk</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">xyz</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">c_</span><span class="p">[</span><span class="n">ijk</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ijk</span><span class="p">))]</span> <span class="o">@</span> <span class="n">aff</span><span class="o">.</span><span class="n">T</span><span class="p">)[:,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">cx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">cz</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">xyz</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">xyz</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">xyz</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">cx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">cz</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+        <span class="n">cb_records</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">"roi_id"</span><span class="p">:</span> <span class="n">roi_id</span><span class="p">,</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+                <span class="s2">"hemisphere"</span><span class="p">:</span> <span class="n">hemi</span><span class="p">,</span>
+                <span class="s2">"homolog_id"</span><span class="p">:</span> <span class="n">homolog_id</span><span class="p">,</span>
+                <span class="s2">"code"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"SUIT_</span><span class="si">{</span><span class="n">idx</span><span class="si">:</span><span class="s2">02d</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+                <span class="s2">"description"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"SUIT cerebellar </span><span class="si">{</span><span class="n">name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">'_'</span><span class="p">,</span><span class="w"> </span><span class="s1">' '</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+                <span class="s2">"gyrus"</span><span class="p">:</span> <span class="n">gyrus</span><span class="p">,</span>
+                <span class="s2">"gyrus_name"</span><span class="p">:</span> <span class="n">gyrus_name</span><span class="p">,</span>
+                <span class="s2">"lobe"</span><span class="p">:</span> <span class="s2">"Cerebellum"</span><span class="p">,</span>
+                <span class="s2">"structure"</span><span class="p">:</span> <span class="s2">"cerebellum"</span><span class="p">,</span>
+                <span class="s2">"yeo7_id"</span><span class="p">:</span> <span class="n">y7_id</span><span class="p">,</span>
+                <span class="s2">"yeo7"</span><span class="p">:</span> <span class="n">y7_name</span><span class="p">,</span>
+                <span class="s2">"yeo17_id"</span><span class="p">:</span> <span class="n">y17_id</span><span class="p">,</span>
+                <span class="s2">"yeo17"</span><span class="p">:</span> <span class="n">y17_name</span><span class="p">,</span>
+                <span class="s2">"x"</span><span class="p">:</span> <span class="n">cx</span><span class="p">,</span>
+                <span class="s2">"y"</span><span class="p">:</span> <span class="n">cy</span><span class="p">,</span>
+                <span class="s2">"z"</span><span class="p">:</span> <span class="n">cz</span><span class="p">,</span>
+                <span class="s2">"atlas_source"</span><span class="p">:</span> <span class="s2">"SUIT"</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+
+    <span class="n">cb_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">cb_records</span><span class="p">)</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">"roi_id"</span><span class="p">)</span>
+    <span class="n">combined</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">regions</span><span class="p">,</span> <span class="n">cb_df</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">prov</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"cerebellum_atlas"</span><span class="p">:</span> <span class="s2">"DiedrichsenLab cerebellar_atlases v1.2 (atl-Anatom)"</span><span class="p">,</span>
+        <span class="s2">"clipped_voxels"</span><span class="p">:</span> <span class="n">clipped_voxels</span><span class="p">,</span>
+        <span class="s2">"cerebellar_voxels"</span><span class="p">:</span> <span class="n">cerebellar_voxels</span><span class="p">,</span>
+        <span class="s2">"cerebellum_n_regions"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">cb_records</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">combined</span><span class="p">,</span> <span class="n">comp_img</span><span class="p">,</span> <span class="n">prov</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"BrainnetomeReference"</span><span class="p">,</span> <span class="s2">"BD_DOMAINS"</span><span class="p">]</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

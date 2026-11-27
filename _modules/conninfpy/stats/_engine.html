@@ -1,0 +1,505 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.stats._engine &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.stats._engine</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.stats._engine</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Shared permutation machinery used by both the t-test and GLM pipelines.</span>
+
+<span class="sd">Stratified (within-block) permutation, max-statistic extraction, collection</span>
+<span class="sd">of per-permutation results, empirical p-values with the +1 Phipson–Smyth</span>
+<span class="sd">correction, BH-FDR, and the worker-process / core-count helpers.</span>
+<span class="sd">:mod:`conninfpy.stats.pairwise` and :mod:`conninfpy.stats.glm` build their</span>
+<span class="sd">permutation loops from these pieces.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">multiprocessing</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">joblib</span><span class="w"> </span><span class="kn">import</span> <span class="n">cpu_count</span> <span class="k">as</span> <span class="n">_cpu_count</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._compat</span><span class="w"> </span><span class="kn">import</span> <span class="n">make_tail_result</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_twosample_se2</span><span class="p">(</span><span class="n">var1</span><span class="p">,</span> <span class="n">n1</span><span class="p">,</span> <span class="n">var2</span><span class="p">,</span> <span class="n">n2</span><span class="p">,</span> <span class="n">var_equal</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Squared standard error of ``mean2 - mean1``.</span>
+
+<span class="sd">    The one place where the two two-sample t statistics differ; the observed</span>
+<span class="sd">    statistic, every permutation and the available-case path use it, so the</span>
+<span class="sd">    observed t and its null are always of the same kind.</span>
+
+<span class="sd">    - Welch (``var_equal=False``): ``var1/n1 + var2/n2``.</span>
+<span class="sd">    - Student (``var_equal=True``): pooled variance</span>
+<span class="sd">      ``((n1-1) var1 + (n2-1) var2) / (n1+n2-2)`` times ``1/n1 + 1/n2``.</span>
+
+<span class="sd">    ``n1``/``n2`` may be per-edge arrays (available-case analysis).</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">var_equal</span><span class="p">:</span>
+        <span class="n">pooled</span> <span class="o">=</span> <span class="p">((</span><span class="n">n1</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">var1</span> <span class="o">+</span> <span class="p">(</span><span class="n">n2</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">var2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">n1</span> <span class="o">+</span> <span class="n">n2</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pooled</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">n1</span> <span class="o">+</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">n2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">var1</span> <span class="o">/</span> <span class="n">n1</span> <span class="o">+</span> <span class="n">var2</span> <span class="o">/</span> <span class="n">n2</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_encode_strata</span><span class="p">(</span><span class="n">strata</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Map an arbitrary stratum-label sequence to contiguous integer codes."""</span>
+    <span class="n">arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">strata</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">codes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">return_inverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">codes</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_stratified_perm</span><span class="p">(</span>
+    <span class="n">strata</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">],</span> <span class="n">rng</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return a permutation index honoring exchangeability blocks.</span>
+
+<span class="sd">    Within each unique stratum value, indices are independently</span>
+<span class="sd">    permuted; across strata, indices do not move. This implements</span>
+<span class="sd">    within-block exchangeability used by Freedman-Lane permutation</span>
+<span class="sd">    on multi-site or otherwise blocked designs.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    strata : ndarray of shape (n,)</span>
+<span class="sd">        Integer stratum codes (use :func:`_encode_strata` first).</span>
+<span class="sd">    rng : numpy.random.RandomState</span>
+<span class="sd">        Already-seeded RNG.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    perm : ndarray of shape (n,)</span>
+<span class="sd">        Permutation index such that ``perm[i]`` is the new position of</span>
+<span class="sd">        the data point originally at ``i``. Equivalent: for any array</span>
+<span class="sd">        ``a``, ``a[perm]`` is the stratum-respecting permutation of ``a``.</span>
+<span class="sd">    """</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">strata</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">perm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">strata</span><span class="p">):</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">strata</span> <span class="o">==</span> <span class="n">s</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">idx</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">perm</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">permutation</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">perm</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_stratified_choice_n1</span><span class="p">(</span>
+    <span class="n">strata</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">],</span>
+    <span class="n">n1_per_stratum</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">],</span>
+    <span class="n">rng</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Length-n binary mask honoring per-stratum group-1 counts.</span>
+
+<span class="sd">    For the two-sample fast permutation path under exchangeability</span>
+<span class="sd">    blocking: within each stratum ``s``, sample exactly</span>
+<span class="sd">    ``n1_per_stratum[s]`` indices to label as group 1 (the rest are</span>
+<span class="sd">    group 2). Across strata, the per-stratum group totals are held</span>
+<span class="sd">    fixed.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    strata : ndarray of shape (n,)</span>
+<span class="sd">        Integer stratum codes.</span>
+<span class="sd">    n1_per_stratum : ndarray of shape (n_unique_strata,)</span>
+<span class="sd">        Group-1 count per stratum (computed once from the observed</span>
+<span class="sd">        group labels and reused across permutations).</span>
+<span class="sd">    rng : numpy.random.RandomState</span>
+<span class="sd">    """</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">strata</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">g</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">s_code</span><span class="p">,</span> <span class="n">n1_s</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">n1_per_stratum</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">n1_s</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">strata</span> <span class="o">==</span> <span class="n">s_code</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">chosen</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">n1_s</span><span class="p">),</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">g</span><span class="p">[</span><span class="n">chosen</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="k">return</span> <span class="n">g</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_extract_max_stats</span><span class="p">(</span>
+    <span class="n">stat_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">],</span> <span class="n">reference_shape</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Extract maximum statistics from a stat dictionary.</span>
+
+<span class="sd">    Handles both 2D matrices and multi-parameter 3D arrays.</span>
+<span class="sd">    Key-agnostic: works with any dictionary keys (e.g., 'negative'/'positive'</span>
+<span class="sd">    for t-test pipeline, 'positive'/'negative' for GLM pipeline).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    stat_dict : dict</span>
+<span class="sd">        Dictionary with statistic arrays (any string keys).</span>
+<span class="sd">    reference_shape : tuple</span>
+<span class="sd">        Shape of a single sample for determining dimensionality.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Dictionary with maximum statistics for each key.</span>
+<span class="sd">    """</span>
+    <span class="n">result</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">stat_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">arr</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">reference_shape</span><span class="p">:</span>
+            <span class="n">result</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Multi-parameter case: max over spatial dims, keep param dim</span>
+            <span class="n">spatial_axes</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">arr</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+            <span class="n">result</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">spatial_axes</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">==</span> <span class="p">{</span><span class="s2">"positive"</span><span class="p">,</span> <span class="s2">"negative"</span><span class="p">}:</span>
+        <span class="k">return</span> <span class="n">make_tail_result</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"positive"</span><span class="p">],</span> <span class="n">result</span><span class="p">[</span><span class="s2">"negative"</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_collect_results_to_arrays</span><span class="p">(</span>
+    <span class="n">results</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">n_permutations</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Efficiently collect permutation results into numpy arrays.</span>
+
+<span class="sd">    Uses pre-allocation and direct indexing instead of Python loops.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    results : list of dict</span>
+<span class="sd">        List of permutation result dictionaries.</span>
+<span class="sd">    n_permutations : int</span>
+<span class="sd">        Number of permutations.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Dictionary with arrays of shape (n_permutations,) or (n_permutations, n_params).</span>
+<span class="sd">    """</span>
+    <span class="n">group_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="n">first_val</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">group_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+    <span class="n">output_shape</span> <span class="o">=</span> <span class="n">first_val</span><span class="o">.</span><span class="n">shape</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">first_val</span><span class="p">,</span> <span class="s2">"shape"</span><span class="p">)</span> <span class="k">else</span> <span class="p">()</span>
+
+    <span class="n">t_maxes_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">key</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">n_permutations</span><span class="p">,</span> <span class="o">*</span><span class="n">output_shape</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">group_keys</span>
+    <span class="p">}</span>
+
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">group_keys</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">perm_dict</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">results</span><span class="p">):</span>
+            <span class="n">t_maxes_dict</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">perm_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">t_maxes_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">==</span> <span class="p">{</span><span class="s2">"positive"</span><span class="p">,</span> <span class="s2">"negative"</span><span class="p">}:</span>
+        <span class="k">return</span> <span class="n">make_tail_result</span><span class="p">(</span><span class="n">t_maxes_dict</span><span class="p">[</span><span class="s2">"positive"</span><span class="p">],</span> <span class="n">t_maxes_dict</span><span class="p">[</span><span class="s2">"negative"</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">t_maxes_dict</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_worker_process</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Check if running inside a multiprocessing worker.</span>
+
+<span class="sd">    Returns True when the current process was spawned by a Pool,</span>
+<span class="sd">    preventing nested Pool creation which causes deadlocks and</span>
+<span class="sd">    unintentional process multiplication.</span>
+<span class="sd">    """</span>
+    <span class="n">proc_name</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">current_process</span><span class="p">()</span><span class="o">.</span><span class="n">name</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">proc_name</span> <span class="o">!=</span> <span class="s2">"MainProcess"</span>
+        <span class="ow">or</span> <span class="s2">"PoolWorker"</span> <span class="ow">in</span> <span class="n">proc_name</span>
+        <span class="ow">or</span> <span class="s2">"SpawnPoolWorker"</span> <span class="ow">in</span> <span class="n">proc_name</span>
+        <span class="ow">or</span> <span class="s2">"ForkPoolWorker"</span> <span class="ow">in</span> <span class="n">proc_name</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="get_available_cores">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.pairwise.get_available_cores">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_available_cores</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">"""Usable logical CPUs, including affinity, container quota and soft limits."""</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="n">_cpu_count</span><span class="p">()</span>
+    <span class="n">process_count</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">os</span><span class="p">,</span> <span class="s2">"process_cpu_count"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">process_count</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">process_limit</span> <span class="o">=</span> <span class="n">process_count</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">process_limit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">process_limit</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_finite_statistics</span><span class="p">(</span>
+    <span class="n">observed</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">,</span> <span class="n">null_dist</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Refuse to turn NaN statistics into p-values.</span>
+
+<span class="sd">    ``x &gt;= NaN`` is always False, so a NaN in the null maxima would give every</span>
+<span class="sd">    edge the smallest possible p-value. Inputs are checked on entry; this</span>
+<span class="sd">    catches NaN created inside a computation.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">null_dist</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">observed</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"NaN statistics in the </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2"> tail (observed: "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">observed</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="si">}</span><span class="s2"> values, permutation maxima: "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">null_dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">null_dist</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">); "</span>
+            <span class="s2">"p-values would be meaningless. Check the input for edges that "</span>
+            <span class="s2">"are constant across all subjects."</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compute_p_values_from_null</span><span class="p">(</span>
+    <span class="n">emp_t_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">],</span>
+    <span class="n">max_null_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">return_counts</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Compute max-statistic p-values from empirical statistics and a null.</span>
+
+<span class="sd">    Ties are counted in the conservative direction (``null &gt;= observed``)</span>
+<span class="sd">    and the Phipson-Smyth +1 correction is applied:</span>
+<span class="sd">    ``p = (count + 1) / (B + 1)``. This keeps an all-zero observed map</span>
+<span class="sd">    against an all-zero null at ``p = 1`` rather than ``1 / (B + 1)``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    emp_t_dict : dict</span>
+<span class="sd">        Dictionary with empirical t-statistic arrays.</span>
+<span class="sd">    max_null_dict : dict</span>
+<span class="sd">        Dictionary with null distribution arrays.</span>
+<span class="sd">    return_counts : bool, default False</span>
+<span class="sd">        Also return the raw per-cell exceedance counts (``null &gt;= observed``,</span>
+<span class="sd">        one 0/1 indicator per draw, summed). They are genuinely computed here,</span>
+<span class="sd">        never reconstructed from the p-values. The default return value is</span>
+<span class="sd">        unchanged.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict or (dict, dict)</span>
+<span class="sd">        Dictionary with p-value arrays for each direction, and, with</span>
+<span class="sd">        ``return_counts=True``, a second dictionary of int64 count arrays</span>
+<span class="sd">        (same shape as the p-value arrays).</span>
+<span class="sd">    """</span>
+    <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">emp_t_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="n">p_values</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">counts_out</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="n">is_2d</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">emp_t_dict</span><span class="p">[</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+        <span class="n">emp_t</span> <span class="o">=</span> <span class="n">emp_t_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="n">null_dist</span> <span class="o">=</span> <span class="n">max_null_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="n">_check_finite_statistics</span><span class="p">(</span><span class="n">emp_t</span><span class="p">,</span> <span class="n">null_dist</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+
+        <span class="n">n_perm</span> <span class="o">=</span> <span class="n">null_dist</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">is_2d</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">null_dist</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="c1"># Shape: (N, N) vs (n_permutations,). Count null &gt;= observed</span>
+                <span class="c1"># (ties included, identical to the broadcast comparison)</span>
+                <span class="c1"># without materialising an (N, N, B) boolean array: sort the</span>
+                <span class="c1"># null once, then the count is B minus the number of null</span>
+                <span class="c1"># values strictly below the observed statistic.</span>
+                <span class="n">count</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">emp_t</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+                <span class="n">sorted_null</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">null_dist</span><span class="p">)</span>
+                <span class="n">count</span><span class="p">[</span><span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_perm</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">sorted_null</span><span class="p">,</span> <span class="n">emp_t</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"left"</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Shape: (N, N) vs (n_permutations, n_params) — the broadcast</span>
+                <span class="c1"># contract of the base expression ``emp[..., None] &lt;= null``</span>
+                <span class="c1"># summed over the LAST (params) axis, without materialising</span>
+                <span class="c1"># the (N, B, P) comparison: column k of the null (shape (B,))</span>
+                <span class="c1"># right-aligns against emp (fusing with emp's last axis when</span>
+                <span class="c1"># sizes match, exactly like the base broadcast); incompatible</span>
+                <span class="c1"># axes raise ValueError from np.broadcast_shapes, the same</span>
+                <span class="c1"># failure type as the base comparison. Singleton null axes</span>
+                <span class="c1"># stretch; the resulting count may exceed B when B does not</span>
+                <span class="c1"># feed the summed axis — kept verbatim from base.</span>
+                <span class="n">out_shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_shapes</span><span class="p">(</span>
+                    <span class="n">emp_t</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">null_dist</span><span class="o">.</span><span class="n">shape</span>
+                <span class="p">)</span>
+                <span class="n">count</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">out_shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+                <span class="n">emp_full</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span><span class="n">emp_t</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out_shape</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">null_dist</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+                    <span class="c1"># Column k: the (B,)-slice at parameter k, kept on the B</span>
+                    <span class="c1"># axis (second-to-last of out) so singletons and fused</span>
+                    <span class="c1"># axes broadcast exactly as in the base comparison.</span>
+                    <span class="n">col_full</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span>
+                        <span class="n">null_dist</span><span class="p">[:,</span> <span class="n">param</span><span class="p">][:,</span> <span class="kc">None</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out_shape</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="n">count</span> <span class="o">+=</span> <span class="n">emp_full</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">col_full</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Multi-param: (N, N, n_params) vs (n_permutations, n_params),</span>
+            <span class="c1"># with the parameter-broadcast contract of the original</span>
+            <span class="c1"># ``emp_t[..., np.newaxis] &lt;= null_dist.swapaxes(0, 1)[None, None]``</span>
+            <span class="c1"># preserved without materialising the (N, N, P, B) array:</span>
+            <span class="c1"># a singleton parameter axis on either side stretches, mutually</span>
+            <span class="c1"># incompatible parameter axes raise ValueError</span>
+            <span class="c1"># (np.broadcast_shapes, the same failure type as the original</span>
+            <span class="c1"># comparison), and a 1D null in the multi-param branch raises</span>
+            <span class="c1"># AxisError exactly like the original swapaxes(0, 1).</span>
+            <span class="n">null_swapped</span> <span class="o">=</span> <span class="n">null_dist</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">out_shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_shapes</span><span class="p">(</span>
+                <span class="n">emp_t</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">null_swapped</span><span class="o">.</span><span class="n">shape</span>
+            <span class="p">)</span>
+            <span class="n">n_params</span> <span class="o">=</span> <span class="n">out_shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>  <span class="c1"># trailing axis of out_shape is B</span>
+            <span class="n">count_shape</span> <span class="o">=</span> <span class="n">out_shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">count_shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+            <span class="c1"># Observed values along the parameter axis of the original</span>
+            <span class="c1"># broadcast: emp[..., None] spread over the full comparison shape</span>
+            <span class="c1"># (a singleton emp parameter axis stretches, a full-size axis</span>
+            <span class="c1"># maps index to index, fused axes behave exactly as in the</span>
+            <span class="c1"># original expression) — the [:, param, 0] slice is the</span>
+            <span class="c1"># comparison minus the B axis.</span>
+            <span class="n">emp_full</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span><span class="n">emp_t</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out_shape</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_params</span><span class="p">):</span>
+                <span class="n">pn</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">null_dist</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">param</span>
+                <span class="n">sorted_col</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">null_dist</span><span class="p">[:,</span> <span class="n">pn</span><span class="p">])</span>
+                <span class="n">emp_values</span> <span class="o">=</span> <span class="n">emp_full</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">param</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+                <span class="n">count</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_perm</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span>
+                    <span class="n">sorted_col</span><span class="p">,</span> <span class="n">emp_values</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"left"</span>
+                <span class="p">)</span>
+
+        <span class="c1"># +1 correction (Phipson &amp; Smyth 2010): prevents p = 0 with finite perms</span>
+        <span class="n">p_values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">count</span> <span class="o">+</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_perm</span> <span class="o">+</span> <span class="mf">1.0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_counts</span><span class="p">:</span>
+            <span class="n">counts_out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">return_counts</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">p_values</span><span class="p">,</span> <span class="n">counts_out</span>
+    <span class="k">return</span> <span class="n">p_values</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_bh_fdr_correction</span><span class="p">(</span>
+    <span class="n">p_values</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Apply Benjamini-Hochberg FDR correction to a 1D array of p-values.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    p_values : ndarray of shape (m,)</span>
+<span class="sd">        Uncorrected p-values.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    ndarray of shape (m,)</span>
+<span class="sd">        BH-corrected p-values (adjusted so that thresholding at alpha</span>
+<span class="sd">        controls FDR at level alpha).</span>
+<span class="sd">    """</span>
+    <span class="n">m</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">p_values</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">m</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">p_values</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Sort p-values and track original indices</span>
+    <span class="n">sorted_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">p_values</span><span class="p">)</span>
+    <span class="n">sorted_p</span> <span class="o">=</span> <span class="n">p_values</span><span class="p">[</span><span class="n">sorted_idx</span><span class="p">]</span>
+
+    <span class="c1"># BH adjustment: p_adj[i] = p[i] * m / rank[i]</span>
+    <span class="n">ranks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">m</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">adjusted</span> <span class="o">=</span> <span class="n">sorted_p</span> <span class="o">*</span> <span class="n">m</span> <span class="o">/</span> <span class="n">ranks</span>
+
+    <span class="c1"># Enforce monotonicity (step-up): working backwards,</span>
+    <span class="c1"># each adjusted p-value must be &lt;= the next one</span>
+    <span class="n">adjusted</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="o">.</span><span class="n">accumulate</span><span class="p">(</span><span class="n">adjusted</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">])[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="c1"># Cap at 1.0</span>
+    <span class="n">adjusted</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">adjusted</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+
+    <span class="c1"># Restore original order</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">result</span><span class="p">[</span><span class="n">sorted_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">adjusted</span>
+
+    <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

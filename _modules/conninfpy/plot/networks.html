@@ -1,0 +1,480 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.plot.networks &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.plot.networks</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.plot.networks</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Networks plotting helpers."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.axes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axes</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.figure</span><span class="w"> </span><span class="kn">import</span> <span class="n">Figure</span>
+<span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover (env-specific)</span>
+    <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+        <span class="s2">"conninfpy.plot requires matplotlib; install via `pip install matplotlib`."</span>
+    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+<span class="kn">import</span> <span class="n">pandas</span> <span class="k">as</span> <span class="n">pd</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._export</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_network_summary</span><span class="p">,</span> <span class="n">network_summary_matrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.harmonize</span><span class="w"> </span><span class="kn">import</span> <span class="n">block_mass</span> <span class="k">as</span> <span class="n">_block_mass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.results</span><span class="w"> </span><span class="kn">import</span> <span class="n">InferenceResult</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>  <span class="c1"># pragma: no cover - typing only</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtlasInfo</span>
+
+
+<div class="viewcode-block" id="plot_block_mass">
+<a class="viewcode-back" href="../../../conninfpy.plot.html#conninfpy.plot.plot_block_mass">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_block_mass</span><span class="p">(</span>
+    <span class="n">p_map</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+    <span class="n">net_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">network_names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">ax</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Axes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">cmap</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"viridis"</span><span class="p">,</span>
+    <span class="n">annotate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">title</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Axes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Yeo-style block-mass heatmap of significant edges.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    p_map : ndarray of shape (N, N)</span>
+<span class="sd">        Edge-level p-value matrix (symmetric, diagonal=1).</span>
+<span class="sd">    net_labels : ndarray of shape (N,)</span>
+<span class="sd">        Integer network assignment per node, ``0..K-1``.</span>
+<span class="sd">    network_names : sequence of str, optional</span>
+<span class="sd">        Display names for the K networks. Defaults to ``["Net 0", ...]``.</span>
+<span class="sd">    alpha : float, default 0.05</span>
+<span class="sd">        Significance threshold for the underlying :func:`block_mass`</span>
+<span class="sd">        aggregation.</span>
+<span class="sd">    ax : matplotlib Axes, optional</span>
+<span class="sd">        Plot into this axis; otherwise a new ``(5, 4)`` figure is</span>
+<span class="sd">        created.</span>
+<span class="sd">    cmap : str, default "viridis"</span>
+<span class="sd">        Matplotlib colormap.</span>
+<span class="sd">    annotate : bool, default True</span>
+<span class="sd">        Print edge counts inside each cell.</span>
+<span class="sd">    title : str, optional</span>
+<span class="sd">        Axis title.</span>
+<span class="sd">    """</span>
+    <span class="n">M</span> <span class="o">=</span> <span class="n">_block_mass</span><span class="p">(</span><span class="n">p_map</span><span class="p">,</span> <span class="n">net_labels</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">return_upper</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">K</span> <span class="o">=</span> <span class="n">M</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">network_names</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">network_names</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"Net </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">)]</span>
+    <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+    <span class="n">vmax</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">M</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cmap</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">annotate</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;=</span> <span class="n">j</span> <span class="ow">and</span> <span class="n">M</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">color</span> <span class="o">=</span> <span class="s2">"white"</span> <span class="k">if</span> <span class="n">M</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">vmax</span> <span class="o">/</span> <span class="mi">2</span> <span class="k">else</span> <span class="s2">"black"</span>
+                    <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+                        <span class="n">j</span><span class="p">,</span>
+                        <span class="n">i</span><span class="p">,</span>
+                        <span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">M</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">])),</span>
+                        <span class="n">ha</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+                        <span class="n">va</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+                        <span class="n">fontsize</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span>
+                        <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span>
+                    <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">))</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">))</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xticklabels</span><span class="p">(</span><span class="n">network_names</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s2">"right"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">(</span><span class="n">network_names</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">title</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">9</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ax</span></div>
+
+
+
+<div class="viewcode-block" id="plot_network_summary">
+<a class="viewcode-back" href="../../../conninfpy.plot.html#conninfpy.plot.plot_network_summary">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_network_summary</span><span class="p">(</span>
+    <span class="n">result</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">atlas</span><span class="p">:</span> <span class="s2">"AtlasInfo"</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">ax</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Axes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">cmap</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"RdBu_r"</span><span class="p">,</span>
+    <span class="n">annotate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">title</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Axes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""K × K block heatmap of the signed proportion of significant edges.</span>
+
+<span class="sd">    For each pair of networks ``(i, j)`` (canonical, unordered), the</span>
+<span class="sd">    cell value is</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">       s_{ij} = \\frac{n_{ij}^{+} - n_{ij}^{-}}{n_{ij}^{\\text{total}}}</span>
+
+<span class="sd">    where ``n_{ij}^{+}`` and ``n_{ij}^{-}`` are counts of significant</span>
+<span class="sd">    positive- and negative-tail edges with one endpoint in network</span>
+<span class="sd">    ``i`` and the other in network ``j``, and the denominator is the</span>
+<span class="sd">    total number of edges in that block. The ratio is bounded in</span>
+<span class="sd">    ``[-1, 1]``; ``+1`` means every block edge is significantly</span>
+<span class="sd">    positive, ``-1`` significantly negative, ``0`` no net direction.</span>
+
+<span class="sd">    For the F-stat omnibus path the cell holds the *unsigned*</span>
+<span class="sd">    proportion ``n_{ij} / n_{ij}^{total}`` and the colormap defaults</span>
+<span class="sd">    to a sequential scheme.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    result : InferenceResult or OmnibusInferenceResult</span>
+<span class="sd">        Inference output (uses ``result['positive']`` / ``['negative']``</span>
+<span class="sd">        or ``['omnibus']`` p-value maps).</span>
+<span class="sd">    atlas : :class:`AtlasInfo`</span>
+<span class="sd">        Required — supplies the per-ROI network labels.</span>
+<span class="sd">    alpha : float, default 0.05</span>
+<span class="sd">        Significance threshold.</span>
+<span class="sd">    ax : matplotlib Axes, optional</span>
+<span class="sd">        Plot into this axis; otherwise a new figure is created.</span>
+<span class="sd">    cmap : str, default "RdBu_r"</span>
+<span class="sd">        Matplotlib colormap (sequential for the F-stat path).</span>
+<span class="sd">    annotate : bool, default True</span>
+<span class="sd">        Print the cell value inside each block.</span>
+<span class="sd">    title : str, optional</span>
+<span class="sd">        Axis title.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="p">(</span><span class="n">InferenceResult</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Unsupported result type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">; expected "</span>
+            <span class="s2">"InferenceResult or OmnibusInferenceResult."</span>
+        <span class="p">)</span>
+    <span class="n">omnibus</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">omnibus</span><span class="p">:</span>
+        <span class="n">p_maps</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"omnibus"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"omnibus"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">p_maps</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"positive"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"positive"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="s2">"negative"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"negative"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="p">}</span>
+    <span class="n">N</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">p_maps</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span> <span class="o">!=</span> <span class="n">N</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"atlas has </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span><span class="si">}</span><span class="s2"> ROIs but the result is on "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">N</span><span class="si">}</span><span class="s2"> nodes; cannot summarize."</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Same numbers as result.network_summary(atlas): one source of truth.</span>
+    <span class="n">summary</span> <span class="o">=</span> <span class="n">build_network_summary</span><span class="p">(</span><span class="n">p_maps</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">atlas</span><span class="o">.</span><span class="n">networks</span><span class="p">),</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">)</span>
+    <span class="n">block_names</span> <span class="o">=</span> <span class="n">summary</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"networks"</span><span class="p">]</span>
+    <span class="n">K</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">block_names</span><span class="p">)</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="s2">"prop_sig_omnibus"</span> <span class="k">if</span> <span class="n">omnibus</span> <span class="k">else</span> <span class="s2">"signed_proportion"</span>
+    <span class="n">cell_full</span> <span class="o">=</span> <span class="n">network_summary_matrix</span><span class="p">(</span><span class="n">summary</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="n">network_summary_matrix</span><span class="p">(</span><span class="n">summary</span><span class="p">,</span> <span class="s2">"n_edges"</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">omnibus</span><span class="p">:</span>
+        <span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span>
+        <span class="n">cmap_eff</span> <span class="o">=</span> <span class="s2">"magma"</span> <span class="k">if</span> <span class="n">cmap</span> <span class="o">==</span> <span class="s2">"RdBu_r"</span> <span class="k">else</span> <span class="n">cmap</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">vmax</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">cell_full</span><span class="p">)))</span> <span class="k">if</span> <span class="n">cell_full</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mf">1.0</span>
+        <span class="k">if</span> <span class="n">vmax</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">vmax</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="n">vmin</span> <span class="o">=</span> <span class="o">-</span><span class="n">vmax</span>
+        <span class="n">cmap_eff</span> <span class="o">=</span> <span class="n">cmap</span>
+
+    <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+    <span class="n">im</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">cell_full</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">cmap_eff</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="n">vmin</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="n">vmax</span><span class="p">)</span>
+    <span class="n">cbar</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">figure</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">im</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">fraction</span><span class="o">=</span><span class="mf">0.04</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mf">0.02</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">OmnibusInferenceResult</span><span class="p">):</span>
+        <span class="n">cbar</span><span class="o">.</span><span class="n">set_label</span><span class="p">(</span><span class="s2">"sig fraction"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">cbar</span><span class="o">.</span><span class="n">set_label</span><span class="p">(</span><span class="s2">"signed sig fraction"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">annotate</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">total</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+                    <span class="n">j</span><span class="p">,</span>
+                    <span class="n">i</span><span class="p">,</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">cell_full</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="n">j</span><span class="p">]</span><span class="si">:</span><span class="s2">+.2f</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+                    <span class="n">ha</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+                    <span class="n">va</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+                    <span class="n">fontsize</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
+                    <span class="n">color</span><span class="o">=</span><span class="s2">"black"</span><span class="p">,</span>
+                <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">))</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">))</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xticklabels</span><span class="p">(</span><span class="n">block_names</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s2">"right"</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">(</span><span class="n">block_names</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">title</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">9</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ax</span></div>
+
+
+
+<div class="viewcode-block" id="plot_connectome_graph">
+<a class="viewcode-back" href="../../../conninfpy.plot.html#conninfpy.plot.plot_connectome_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_connectome_graph</span><span class="p">(</span>
+    <span class="n">edges_df</span><span class="p">,</span>
+    <span class="n">atlas</span><span class="p">:</span> <span class="s2">"AtlasInfo"</span><span class="p">,</span>
+    <span class="n">tail</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">top_n</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+    <span class="n">display_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"z"</span><span class="p">,</span>
+    <span class="n">color_by</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"Network"</span><span class="p">,</span>
+    <span class="n">weight_by</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"-log10(p)"</span><span class="p">,</span>
+    <span class="n">rank_by</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"p-value"</span><span class="p">,</span>
+    <span class="n">selected_networks</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">network_filter_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"Either endpoint"</span><span class="p">,</span>
+    <span class="n">title</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Figure</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Plot significant edges on a brain connectome model.</span>
+
+<span class="sd">    Requires `nilearn` and `pandas` packages to be installed.</span>
+<span class="sd">    """</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">nilearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">plotting</span>
+    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">"plot_connectome_graph requires nilearn; install via `pip install nilearn`."</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="s2">"coords"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"plot_connectome_graph requires an atlas with MNI coordinates."</span>
+        <span class="p">)</span>
+
+    <span class="c1"># 1. Filter edges for tail, significance, and top_n</span>
+    <span class="n">p_col</span> <span class="o">=</span> <span class="s2">"p_positive"</span> <span class="k">if</span> <span class="n">tail</span> <span class="o">==</span> <span class="s2">"positive"</span> <span class="k">else</span> <span class="s2">"p_negative"</span>
+    <span class="k">if</span> <span class="n">edges_df</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="n">p_col</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">alpha</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">selected_networks</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="s2">"networks"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">networks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">atlas</span><span class="o">.</span><span class="n">networks</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">)</span>
+            <span class="n">roi_i_net</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">df</span><span class="p">[</span><span class="s2">"roi_i"</span><span class="p">]</span>
+                <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">idx</span><span class="p">:</span> <span class="n">networks</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">networks</span><span class="p">)</span> <span class="k">else</span> <span class="s2">"Unknown"</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">roi_j_net</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">df</span><span class="p">[</span><span class="s2">"roi_j"</span><span class="p">]</span>
+                <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+                <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">idx</span><span class="p">:</span> <span class="n">networks</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">networks</span><span class="p">)</span> <span class="k">else</span> <span class="s2">"Unknown"</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">selected</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">selected_networks</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">network_filter_mode</span> <span class="o">==</span> <span class="s2">"Both endpoints"</span><span class="p">:</span>
+                <span class="n">keep</span> <span class="o">=</span> <span class="n">roi_i_net</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">selected</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">roi_j_net</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">selected</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">keep</span> <span class="o">=</span> <span class="n">roi_i_net</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">selected</span><span class="p">)</span> <span class="o">|</span> <span class="n">roi_j_net</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">selected</span><span class="p">)</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">df</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">rank_by</span> <span class="o">==</span> <span class="s2">"|t|"</span><span class="p">:</span>
+                <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">_rank_value</span><span class="o">=</span><span class="n">df</span><span class="p">[</span><span class="s2">"t_signed"</span><span class="p">]</span><span class="o">.</span><span class="n">abs</span><span class="p">())</span>
+                <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s2">"_rank_value"</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="n">p_col</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">top_n</span><span class="p">))</span>
+
+    <span class="c1"># 2. Build adjacency matrix and calculate degree</span>
+    <span class="n">n_nodes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span>
+    <span class="n">adj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_nodes</span><span class="p">,</span> <span class="n">n_nodes</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">degrees</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_nodes</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">df</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+            <span class="n">i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"roi_i"</span><span class="p">])</span>
+            <span class="n">j</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">"roi_j"</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">i</span> <span class="o">&gt;=</span> <span class="n">n_nodes</span> <span class="ow">or</span> <span class="n">j</span> <span class="o">&gt;=</span> <span class="n">n_nodes</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">weight_by</span> <span class="o">==</span> <span class="s2">"|t|"</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"t_signed"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">p_col</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)),</span> <span class="mf">1e-12</span><span class="p">))</span>
+            <span class="n">adj</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="n">adj</span><span class="p">[</span><span class="n">j</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="n">degrees</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">degrees</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="c1"># 3. Determine node colors</span>
+    <span class="n">node_colors</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">color_map</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">color_by</span> <span class="o">==</span> <span class="s2">"Degree"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">degrees</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">normed</span> <span class="o">=</span> <span class="n">degrees</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">degrees</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">normed</span> <span class="o">=</span> <span class="n">degrees</span>
+        <span class="n">cmap</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">get_cmap</span><span class="p">(</span><span class="s2">"viridis"</span><span class="p">)</span>
+        <span class="n">node_colors</span> <span class="o">=</span> <span class="p">[</span><span class="n">cmap</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">))</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">normed</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">hemisphere_values</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="s2">"hemisphere"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">network_values</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="s2">"networks"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">color_by</span> <span class="o">==</span> <span class="s2">"Hemisphere"</span> <span class="ow">and</span> <span class="n">hemisphere_values</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">categories</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">hemisphere_values</span><span class="p">))</span>
+            <span class="n">cmap</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">get_cmap</span><span class="p">(</span><span class="s2">"tab20"</span><span class="p">)</span>
+            <span class="n">color_map</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="p">:</span> <span class="n">cmap</span><span class="p">(</span><span class="n">idx</span> <span class="o">%</span> <span class="n">cmap</span><span class="o">.</span><span class="n">N</span><span class="p">)</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">cat</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">categories</span><span class="p">)}</span>
+            <span class="n">node_colors</span> <span class="o">=</span> <span class="p">[</span><span class="n">color_map</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)]</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">hemisphere_values</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">network_values</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">categories</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">network_values</span><span class="p">))</span>
+            <span class="n">cmap</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">get_cmap</span><span class="p">(</span><span class="s2">"tab20"</span><span class="p">)</span>
+            <span class="n">color_map</span> <span class="o">=</span> <span class="p">{</span><span class="n">cat</span><span class="p">:</span> <span class="n">cmap</span><span class="p">(</span><span class="n">idx</span> <span class="o">%</span> <span class="n">cmap</span><span class="o">.</span><span class="n">N</span><span class="p">)</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">cat</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">categories</span><span class="p">)}</span>
+            <span class="n">node_colors</span> <span class="o">=</span> <span class="p">[</span><span class="n">color_map</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)]</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">network_values</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">node_colors</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"#9CA3AF"</span><span class="p">]</span> <span class="o">*</span> <span class="n">n_nodes</span>
+            <span class="n">color_map</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"ROI"</span><span class="p">:</span> <span class="s2">"#9CA3AF"</span><span class="p">}</span>
+
+    <span class="n">node_sizes</span> <span class="o">=</span> <span class="mi">18</span> <span class="o">+</span> <span class="mi">18</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">degrees</span><span class="p">)</span>
+    <span class="n">edge_cmap</span> <span class="o">=</span> <span class="s2">"Reds"</span> <span class="k">if</span> <span class="n">tail</span> <span class="o">==</span> <span class="s2">"positive"</span> <span class="k">else</span> <span class="s2">"Blues"</span>
+
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">facecolor</span><span class="o">=</span><span class="s2">"white"</span><span class="p">)</span>
+    <span class="n">plotting</span><span class="o">.</span><span class="n">plot_connectome</span><span class="p">(</span>
+        <span class="n">adj</span><span class="p">,</span>
+        <span class="n">atlas</span><span class="o">.</span><span class="n">coords</span><span class="p">,</span>
+        <span class="n">node_color</span><span class="o">=</span><span class="n">node_colors</span><span class="p">,</span>
+        <span class="n">node_size</span><span class="o">=</span><span class="n">node_sizes</span><span class="p">,</span>
+        <span class="n">edge_cmap</span><span class="o">=</span><span class="n">edge_cmap</span><span class="p">,</span>
+        <span class="n">edge_threshold</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">display_mode</span><span class="o">=</span><span class="n">display_mode</span><span class="p">,</span>
+        <span class="n">figure</span><span class="o">=</span><span class="n">fig</span><span class="p">,</span>
+        <span class="n">title</span><span class="o">=</span><span class="n">title</span><span class="p">,</span>
+        <span class="n">colorbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">color_map</span> <span class="ow">and</span> <span class="n">color_by</span> <span class="o">!=</span> <span class="s2">"Degree"</span><span class="p">:</span>
+        <span class="n">legend_items</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">color</span> <span class="ow">in</span> <span class="n">color_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">legend_items</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">plt</span><span class="o">.</span><span class="n">Line2D</span><span class="p">(</span>
+                    <span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="n">marker</span><span class="o">=</span><span class="s2">"o"</span><span class="p">,</span>
+                    <span class="n">linestyle</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span>
+                    <span class="n">markerfacecolor</span><span class="o">=</span><span class="n">color</span><span class="p">,</span>
+                    <span class="n">markeredgecolor</span><span class="o">=</span><span class="s2">"white"</span><span class="p">,</span>
+                    <span class="n">markersize</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span>
+                    <span class="n">label</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">legend_items</span><span class="p">:</span>
+            <span class="n">fig</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span>
+                <span class="n">handles</span><span class="o">=</span><span class="n">legend_items</span><span class="p">[:</span><span class="mi">14</span><span class="p">],</span>
+                <span class="n">loc</span><span class="o">=</span><span class="s2">"lower center"</span><span class="p">,</span>
+                <span class="n">ncol</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">legend_items</span><span class="p">)),</span>
+                <span class="n">fontsize</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span>
+                <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.02</span><span class="p">),</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="n">fig</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,747 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.atlas &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2943afd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="conninfpy.interpret" href="conninfpy.interpret.html" />
+    <link rel="prev" title="conninfpy.results" href="conninfpy.results.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="conninfpy.html">conninfpy</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.analysis.html">conninfpy.analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.results.html">conninfpy.results</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">conninfpy.atlas</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo"><code class="docutils literal notranslate"><span class="pre">AtlasInfo</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.labels"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.labels</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.networks"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.networks</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.coords"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.coords</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.hemisphere"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.hemisphere</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.source"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.source</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.image"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.image</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.label_ids"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.label_ids</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.assignment"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.assignment</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.network_index"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.network_index()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.from_csv"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.from_csv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.from_nifti"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.from_nifti()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.from_nilearn"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.from_nilearn()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.from_coordinates"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.from_coordinates()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.schaefer_100_yeo7"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.schaefer_100_yeo7()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.schaefer_200_yeo7"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.schaefer_200_yeo7()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.schaefer_400_yeo7"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.schaefer_400_yeo7()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo.bna_246"><code class="docutils literal notranslate"><span class="pre">AtlasInfo.bna_246()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.assign_coordinates"><code class="docutils literal notranslate"><span class="pre">assign_coordinates()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.regions"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.regions</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.label_image"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.label_image</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.data_dir"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.data_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.cache_dir"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.cache_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.profiles"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.profiles</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.provenance"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.provenance</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.load"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.load()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.n_regions"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.n_regions</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.affine"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.affine</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.names"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.names()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.labels_at"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.labels_at()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.sphere"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.sphere()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.homolog"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.homolog()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.profile"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.profile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.domain"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.domain()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.membership"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.membership()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.structural_connectivity"><code class="docutils literal notranslate"><span class="pre">BrainnetomeReference.structural_connectivity()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.atlas_cache_dir"><code class="docutils literal notranslate"><span class="pre">atlas_cache_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.atlas_resource_available"><code class="docutils literal notranslate"><span class="pre">atlas_resource_available()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.atlas_resource_path"><code class="docutils literal notranslate"><span class="pre">atlas_resource_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.get_bna_246_nifti_path"><code class="docutils literal notranslate"><span class="pre">get_bna_246_nifti_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.bna_profile_paths"><code class="docutils literal notranslate"><span class="pre">bna_profile_paths()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.brainnetome_data_dir"><code class="docutils literal notranslate"><span class="pre">brainnetome_data_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.brainnetome_resource_path"><code class="docutils literal notranslate"><span class="pre">brainnetome_resource_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.atlas.fetch_bna_behavioral_decoding"><code class="docutils literal notranslate"><span class="pre">fetch_bna_behavioral_decoding()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.interpret.html">conninfpy.interpret</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.plot.html">conninfpy.plot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.stats.html">conninfpy.stats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.influence.html">conninfpy.influence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.enhance.html">conninfpy.enhance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.harmonize.html">conninfpy.harmonize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.sim.html">conninfpy.sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.defaults.html">conninfpy.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.preprocessing.html">conninfpy.preprocessing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.html#shared-array-helpers">Shared array helpers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="conninfpy.html">conninfpy</a></li>
+      <li class="breadcrumb-item active">conninfpy.atlas</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/conninfpy.atlas.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="conninfpy-atlas">
+<h1>conninfpy.atlas<a class="headerlink" href="#conninfpy-atlas" title="Link to this heading"></a></h1>
+<p>Atlas metadata and reference data.</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.AtlasInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtlasInfo</span></code></a> holds per-region labels, networks,
+coordinates and hemispheres: the bundled Schaefer-100/200/400 (Yeo-7) and
+Brainnetome BNA-246 atlases, or any CSV, label image or nilearn atlas.
+<code class="docutils literal notranslate"><span class="pre">AtlasInfo.bna_246()</span></code> groups its regions by the Brainnetome Yeo-7 division
+(<code class="docutils literal notranslate"><span class="pre">networks='yeo17'</span></code> or <code class="docutils literal notranslate"><span class="pre">'lobe'</span></code> for the other groupings). Changed in
+October 2026: the default was the lobe grouping.</p></li>
+<li><p><a class="reference internal" href="#conninfpy.atlas.assign_coordinates" title="conninfpy.atlas.assign_coordinates"><code class="xref py py-func docutils literal notranslate"><span class="pre">assign_coordinates()</span></code></a> places MNI coordinates in a
+reference atlas.</p></li>
+<li><p><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference" title="conninfpy.atlas.BrainnetomeReference"><code class="xref py py-class docutils literal notranslate"><span class="pre">BrainnetomeReference</span></code></a> is the BNA-246 reference used
+by <a class="reference internal" href="conninfpy.interpret.html#module-conninfpy.interpret" title="conninfpy.interpret"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.interpret</span></code></a>: hierarchy (subregion → gyrus → lobe,
+homologs, cytoarchitectonic descriptions, Yeo crosswalk), label images,
+BrainMap profiles and the optional probabilistic and tractography maps.</p></li>
+</ul>
+<p>Data locations, the integrity manifest and caches are described in
+<a class="reference internal" href="architecture.html"><span class="doc">Package organization</span></a>. Brainnetome data are for non-commercial use with
+attribution and share-alike (<code class="docutils literal notranslate"><span class="pre">conninfpy/atlas_data/NOTICE_BRAINNETOME.txt</span></code>);
+cite Fan et al. (2016) and, for the BrainMap profiles, Laird et al. (2005,
+2011) (<a class="reference internal" href="references.html"><span class="doc">References</span></a>).</p>
+<p id="module-conninfpy.atlas">Atlas metadata, Brainnetome reference data and resource access.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">AtlasInfo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">networks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hemisphere</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">int64</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assignment</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#AtlasInfo"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.AtlasInfo" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Per-ROI metadata for a brain parcellation.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.labels">
+<span class="sig-name descname"><span class="pre">labels</span></span><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.labels" title="Link to this definition"></a></dt>
+<dd><p>ROI names, length <code class="docutils literal notranslate"><span class="pre">N</span></code>. Order is significant — index <code class="docutils literal notranslate"><span class="pre">i</span></code> in
+an <code class="docutils literal notranslate"><span class="pre">(n_subjects,</span> <span class="pre">N,</span> <span class="pre">N)</span></code> connectivity tensor corresponds to
+<code class="docutils literal notranslate"><span class="pre">labels[i]</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)">list</a>[<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)">str</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.networks">
+<span class="sig-name descname"><span class="pre">networks</span></span><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.networks" title="Link to this definition"></a></dt>
+<dd><p>Per-ROI resting-state-network (or lobe) label.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)">list</a>[<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)">str</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.coords">
+<span class="sig-name descname"><span class="pre">coords</span></span><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.coords" title="Link to this definition"></a></dt>
+<dd><p>MNI millimeter centroids <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code>. <code class="docutils literal notranslate"><span class="pre">None</span></code> when the
+bundled atlas did not ship coordinates.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray of shape (N, 3) or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.hemisphere">
+<span class="sig-name descname"><span class="pre">hemisphere</span></span><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.hemisphere" title="Link to this definition"></a></dt>
+<dd><p>Per-ROI hemisphere code (<code class="docutils literal notranslate"><span class="pre">'L'</span></code> / <code class="docutils literal notranslate"><span class="pre">'R'</span></code> / <code class="docutils literal notranslate"><span class="pre">'M'</span></code> for medial
+or subcortical structures spanning the midline). Optional.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)">list</a>[<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)">str</a>] or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.source">
+<span class="sig-name descname"><span class="pre">source</span></span><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.source" title="Link to this definition"></a></dt>
+<dd><p>Provenance string. For bundled atlases this points to the
+original publication and the resource the CSV was generated
+from.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)">str</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.image">
+<span class="sig-name descname"><span class="pre">image</span></span><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.image" title="Link to this definition"></a></dt>
+<dd><p>Integer label image the ROIs come from (set by <a class="reference internal" href="#conninfpy.atlas.AtlasInfo.from_nifti" title="conninfpy.atlas.AtlasInfo.from_nifti"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_nifti()</span></code></a>
+and <a class="reference internal" href="#conninfpy.atlas.AtlasInfo.from_nilearn" title="conninfpy.atlas.AtlasInfo.from_nilearn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_nilearn()</span></code></a>); enables voxel-exact placement of
+coordinates in <a class="reference internal" href="#conninfpy.atlas.AtlasInfo.from_coordinates" title="conninfpy.atlas.AtlasInfo.from_coordinates"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_coordinates()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>nibabel image or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.label_ids">
+<span class="sig-name descname"><span class="pre">label_ids</span></span><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.label_ids" title="Link to this definition"></a></dt>
+<dd><p>Label value of each ROI in <code class="docutils literal notranslate"><span class="pre">image</span></code> (same order as <code class="docutils literal notranslate"><span class="pre">labels</span></code>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ndarray of <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)">int</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.assignment">
+<span class="sig-name descname"><span class="pre">assignment</span></span><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.assignment" title="Link to this definition"></a></dt>
+<dd><p>For <a class="reference internal" href="#conninfpy.atlas.AtlasInfo.from_coordinates" title="conninfpy.atlas.AtlasInfo.from_coordinates"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_coordinates()</span></code></a>: where each coordinate was placed —
+region, network, whether it lies inside a region, and the distance
+to it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.1)">pandas.DataFrame</a> or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.network_index">
+<span class="sig-name descname"><span class="pre">network_index</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">int64</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#AtlasInfo.network_index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.network_index" title="Link to this definition"></a></dt>
+<dd><p>Integer-coded networks for <code class="docutils literal notranslate"><span class="pre">block_mass</span></code> / cnbs / ni_tfnbs.</p>
+<p>Two ROIs share an integer iff they share a network label.
+Codes are assigned in order of first appearance.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.from_csv">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_csv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'name'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">network_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'network'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coord_cols</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.15)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('x',</span> <span class="pre">'y',</span> <span class="pre">'z')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hemisphere_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'hemisphere'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.metadata.AtlasInfo"><span class="pre">AtlasInfo</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#AtlasInfo.from_csv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.from_csv" title="Link to this definition"></a></dt>
+<dd><p>Load an atlas from a CSV file.</p>
+<p>Required columns: <code class="docutils literal notranslate"><span class="pre">label_col</span></code> (default <code class="docutils literal notranslate"><span class="pre">'name'</span></code>) and
+<code class="docutils literal notranslate"><span class="pre">network_col</span></code> (default <code class="docutils literal notranslate"><span class="pre">'network'</span></code>). Coordinate columns
+(default <code class="docutils literal notranslate"><span class="pre">('x',</span> <span class="pre">'y',</span> <span class="pre">'z')</span></code>) and <code class="docutils literal notranslate"><span class="pre">hemisphere_col</span></code> (default
+<code class="docutils literal notranslate"><span class="pre">'hemisphere'</span></code>) are loaded when present and non-empty;
+otherwise <code class="docutils literal notranslate"><span class="pre">coords</span></code> / <code class="docutils literal notranslate"><span class="pre">hemisphere</span></code> are set to <code class="docutils literal notranslate"><span class="pre">None</span></code>.
+Rows are taken in file order.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.from_nifti">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_nifti</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">lut</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">networks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.15)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.metadata.AtlasInfo"><span class="pre">AtlasInfo</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#AtlasInfo.from_nifti"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.from_nifti" title="Link to this definition"></a></dt>
+<dd><p>Build an atlas from an integer label image (NIfTI path or nibabel image).</p>
+<p>ROIs are the non-zero label values in ascending order — the order in
+which nilearn’s <code class="docutils literal notranslate"><span class="pre">NiftiLabelsMasker</span></code> extracts them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>Path</em><em> or </em><em>nibabel image</em>) – 3-D image of integer labels (0 = background). Probabilistic
+(4-D) atlases are not label images and are rejected.</p></li>
+<li><p><strong>lut</strong> (<em>DataFrame</em><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>Path</em><em>, </em><em>optional</em>) – Region names (and optionally networks) per label value: a
+DataFrame or CSV / TSV with an id column (<code class="docutils literal notranslate"><span class="pre">index</span></code>, <code class="docutils literal notranslate"><span class="pre">id</span></code>,
+<code class="docutils literal notranslate"><span class="pre">roi_id</span></code> or <code class="docutils literal notranslate"><span class="pre">label</span></code>), a <code class="docutils literal notranslate"><span class="pre">name</span></code> column and optionally a
+<code class="docutils literal notranslate"><span class="pre">network</span></code> column (nilearn’s <code class="docutils literal notranslate"><span class="pre">lut</span></code> works as is); a
+FreeSurfer-style text LUT (<code class="docutils literal notranslate"><span class="pre">id</span> <span class="pre">name</span> <span class="pre">r</span> <span class="pre">g</span> <span class="pre">b</span> <span class="pre">a</span></code> per line); or a
+dict <code class="docutils literal notranslate"><span class="pre">{id:</span> <span class="pre">name}</span></code>. Unnamed labels become <code class="docutils literal notranslate"><span class="pre">region_&lt;id&gt;</span></code>.</p></li>
+<li><p><strong>networks</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, </em><em>sequence</em><em> or </em><em>callable</em><em>, </em><em>optional</em>) – Network per ROI: <code class="docutils literal notranslate"><span class="pre">{id</span> <span class="pre">or</span> <span class="pre">name:</span> <span class="pre">network}</span></code>, one value per ROI in
+label order, or a function of the region name. Without it the
+LUT’s <code class="docutils literal notranslate"><span class="pre">network</span></code> column is used, and without that each region is
+its own group (<code class="docutils literal notranslate"><span class="pre">networks</span> <span class="pre">==</span> <span class="pre">labels</span></code>).</p></li>
+<li><p><strong>exclude</strong> (<em>sequence</em><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Region names to drop (e.g. white matter or ventricles in the
+Harvard-Oxford subcortical atlas). Their voxels are set to 0 in
+<code class="docutils literal notranslate"><span class="pre">atlas.image</span></code>, so extraction with that image skips them too.</p></li>
+<li><p><strong>source</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – Provenance string.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The atlas keeps what the label image and the LUT state, and nothing
+else. Label values are read in ascending order (the order nilearn’s
+<code class="docutils literal notranslate"><span class="pre">NiftiLabelsMasker</span></code> extracts them) and <code class="docutils literal notranslate"><span class="pre">label_ids</span></code> keeps the
+original values, which need not start at 1 or be consecutive. LUT
+columns other than the id, <code class="docutils literal notranslate"><span class="pre">name</span></code> and <code class="docutils literal notranslate"><span class="pre">network</span></code> — a <code class="docutils literal notranslate"><span class="pre">structure</span></code>
+column included — are not carried, because <a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.AtlasInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtlasInfo</span></code></a> has no
+such field. A label without a LUT record is named <code class="docutils literal notranslate"><span class="pre">region_&lt;id&gt;</span></code> and
+gets the network <code class="docutils literal notranslate"><span class="pre">'unassigned'</span></code> when the LUT carries network labels
+at all; a network value such as <code class="docutils literal notranslate"><span class="pre">'unknown'</span></code> or <code class="docutils literal notranslate"><span class="pre">'not_applicable'</span></code>
+is kept verbatim and never replaced by a guess. No template is
+recorded: the image is assumed to be on the reference grid the caller
+annotates with.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.from_nilearn">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_nilearn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atlas</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">networks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.15)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.metadata.AtlasInfo"><span class="pre">AtlasInfo</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#AtlasInfo.from_nilearn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.from_nilearn" title="Link to this definition"></a></dt>
+<dd><p>Build an atlas from a nilearn <code class="docutils literal notranslate"><span class="pre">fetch_atlas_*</span></code> result.</p>
+<p>Needs a deterministic atlas and nilearn &gt;= 0.13 (its <code class="docutils literal notranslate"><span class="pre">lut</span></code> table).
+<code class="docutils literal notranslate"><span class="pre">networks='auto'</span></code> reads the Yeo network from Schaefer region names
+(<code class="docutils literal notranslate"><span class="pre">7Networks_LH_Vis_1</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">Visual</span></code>, matching
+<a class="reference internal" href="#conninfpy.atlas.AtlasInfo.schaefer_100_yeo7" title="conninfpy.atlas.AtlasInfo.schaefer_100_yeo7"><code class="xref py py-meth docutils literal notranslate"><span class="pre">schaefer_100_yeo7()</span></code></a>); other atlases have no networks, so each
+region is its own group unless <code class="docutils literal notranslate"><span class="pre">networks</span></code> is given (see
+<a class="reference internal" href="#conninfpy.atlas.AtlasInfo.from_nifti" title="conninfpy.atlas.AtlasInfo.from_nifti"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_nifti()</span></code></a>).</p>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">nilearn</span><span class="w"> </span><span class="kn">import</span> <span class="n">datasets</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ho</span> <span class="o">=</span> <span class="n">datasets</span><span class="o">.</span><span class="n">fetch_atlas_harvard_oxford</span><span class="p">(</span><span class="s2">"cort-maxprob-thr25-2mm"</span><span class="p">,</span> <span class="n">symmetric_split</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">atlas</span> <span class="o">=</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">from_nilearn</span><span class="p">(</span><span class="n">ho</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.from_coordinates">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_coordinates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.15)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">networks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.15)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_distance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">space</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_space</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">units</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.metadata.AtlasInfo"><span class="pre">AtlasInfo</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#AtlasInfo.from_coordinates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.from_coordinates" title="Link to this definition"></a></dt>
+<dd><p>Describe ROIs given by MNI coordinates, placed in a reference atlas.</p>
+<p>Typical use: ROIs centred on activation peaks, with time series
+extracted around them (e.g. spheres). Each coordinate is assigned to
+the reference region that contains it, or to the nearest region
+within <code class="docutils literal notranslate"><span class="pre">max_distance</span></code> mm; farther ones are <code class="docutils literal notranslate"><span class="pre">'unassigned'</span></code>. The
+resulting atlas groups the ROIs for <code class="docutils literal notranslate"><span class="pre">network_summary</span></code> and edge
+tables.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>coords</strong> (<em>array</em><em> of </em><em>shape</em><em> (</em><em>n_rois</em><em>, </em><em>3</em><em>)</em>) – MNI coordinates (mm), in the order of the connectivity matrix.</p></li>
+<li><p><strong>reference</strong> (<a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.AtlasInfo"><em>AtlasInfo</em></a><em>, </em><em>NIfTI path</em><em>, </em><em>nibabel image</em><em>, </em><em>nilearn atlas</em><em>, or </em><em>a list</em><em> of </em><em>them</em>) – Atlas to place the coordinates in. With a label image the
+placement is voxel-exact; an <a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.AtlasInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtlasInfo</span></code></a> without an image
+(e.g. the bundled Schaefer tables) falls back to the nearest
+region centroid, with a warning. A list is tried in order —
+e.g. a cortical atlas, then a subcortical one — and each
+coordinate takes the first atlas that assigns it.</p></li>
+<li><p><strong>names</strong> (<em>sequence</em><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – ROI names; default <code class="docutils literal notranslate"><span class="pre">ROI_01</span></code>, <code class="docutils literal notranslate"><span class="pre">ROI_02</span></code>, …</p></li>
+<li><p><strong>networks</strong> (<em>sequence</em><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – Network per ROI when you already have one (e.g. from the study
+that defined the coordinates). Overrides the grouping from the
+reference; the region assignment is still recorded.</p></li>
+<li><p><strong>group_by</strong> (<em>{'auto'</em><em>, </em><em>'network'</em><em>, </em><em>'region'}</em>) – How ROIs are grouped. <code class="docutils literal notranslate"><span class="pre">'auto'</span></code> uses the reference’s networks
+when it has them, else its regions.</p></li>
+<li><p><strong>max_distance</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – Opt-in maximum distance (mm) to a labelled voxel or, when no image
+exists, a centroid. The default leaves unmatched points unassigned.</p></li>
+<li><p><strong>space</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Declared, matching coordinate and reference templates. No
+registration or template conversion is performed.</p></li>
+<li><p><strong>reference_space</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Declared, matching coordinate and reference templates. No
+registration or template conversion is performed.</p></li>
+<li><p><strong>units</strong> (<em>{'mm'}</em>) – Coordinates are world coordinates in millimetres.</p></li>
+<li><p><strong>source</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – Provenance string.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">networks</span></code> holds the group of each ROI; <code class="docutils literal notranslate"><span class="pre">assignment</span></code> holds
+the placement table (region, network, inside, distance_mm,
+method).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.AtlasInfo">AtlasInfo</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.schaefer_100_yeo7">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">schaefer_100_yeo7</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.metadata.AtlasInfo"><span class="pre">AtlasInfo</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#AtlasInfo.schaefer_100_yeo7"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.schaefer_100_yeo7" title="Link to this definition"></a></dt>
+<dd><p>Schaefer-2018 100-parcel atlas with Yeo-7 networks.</p>
+<p>Source: ThomasYeoLab/CBIG Schaefer 2018 release. Labels and
+Yeo-7 network assignments follow the upstream naming
+(<code class="docutils literal notranslate"><span class="pre">7Networks_LH_Vis_1</span></code> etc.); <code class="docutils literal notranslate"><span class="pre">coords</span></code> are MNI152 2mm
+centroids derived from the published parcellation image.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.schaefer_200_yeo7">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">schaefer_200_yeo7</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.metadata.AtlasInfo"><span class="pre">AtlasInfo</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#AtlasInfo.schaefer_200_yeo7"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.schaefer_200_yeo7" title="Link to this definition"></a></dt>
+<dd><p>Schaefer-2018 200-parcel atlas with Yeo-7 networks.</p>
+<p>Same source and conventions as <a class="reference internal" href="#conninfpy.atlas.AtlasInfo.schaefer_100_yeo7" title="conninfpy.atlas.AtlasInfo.schaefer_100_yeo7"><code class="xref py py-meth docutils literal notranslate"><span class="pre">schaefer_100_yeo7()</span></code></a>, at
+the 200-parcel resolution.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.schaefer_400_yeo7">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">schaefer_400_yeo7</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.metadata.AtlasInfo"><span class="pre">AtlasInfo</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#AtlasInfo.schaefer_400_yeo7"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.schaefer_400_yeo7" title="Link to this definition"></a></dt>
+<dd><p>Schaefer-2018 400-parcel atlas with Yeo-7 networks.</p>
+<p>Same source and conventions as <a class="reference internal" href="#conninfpy.atlas.AtlasInfo.schaefer_100_yeo7" title="conninfpy.atlas.AtlasInfo.schaefer_100_yeo7"><code class="xref py py-meth docutils literal notranslate"><span class="pre">schaefer_100_yeo7()</span></code></a>, at
+the 400-parcel resolution.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.AtlasInfo.bna_246">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">bna_246</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">with_image</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">networks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'yeo7'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.metadata.AtlasInfo"><span class="pre">AtlasInfo</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#AtlasInfo.bna_246"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.AtlasInfo.bna_246" title="Link to this definition"></a></dt>
+<dd><p>Brainnetome Atlas (Fan et al. 2016) 246-region parcellation.</p>
+<p>Names follow <code class="docutils literal notranslate"><span class="pre">BN_Atlas_246_LUT.txt</span></code>. MNI coordinates are voxel-mass
+centroids computed from the <code class="docutils literal notranslate"><span class="pre">BN_Atlas_246_1mm.nii.gz</span></code> parcellation
+(atlas.brainnetome.org).</p>
+<p><code class="docutils literal notranslate"><span class="pre">networks</span></code> selects the grouping carried in <code class="docutils literal notranslate"><span class="pre">networks</span></code>: the
+Brainnetome division of the regions (<code class="docutils literal notranslate"><span class="pre">'yeo7'</span></code>, default, or
+<code class="docutils literal notranslate"><span class="pre">'yeo17'</span></code>; from <code class="docutils literal notranslate"><span class="pre">bna246_hierarchy.csv</span></code>, i.e. the Brainnetome
+Center’s subregion-to-network table; subcortical regions, which the
+division leaves unassigned, are ‘Subcortical’), or <code class="docutils literal notranslate"><span class="pre">'lobe'</span></code> (the
+seven-lobe grouping Frontal / Temporal / Parietal / Insular / Limbic /
+Occipital / Subcortical). Changed in October 2026: the default was
+the lobe grouping; pass <code class="docutils literal notranslate"><span class="pre">networks='lobe'</span></code> to keep it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">with_image=True</span></code> also attaches the bundled 1 mm label image, so
+<a class="reference internal" href="#conninfpy.atlas.AtlasInfo.from_coordinates" title="conninfpy.atlas.AtlasInfo.from_coordinates"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_coordinates()</span></code></a> can place coordinates voxel-exactly.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.atlas.assign_coordinates">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">assign_coordinates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_distance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">space</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_space</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">units</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/metadata.html#assign_coordinates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.assign_coordinates" title="Link to this definition"></a></dt>
+<dd><p>Place MNI coordinates in a reference atlas (or a list of atlases, in order).</p>
+<p>Returns a table with one row per coordinate: <code class="docutils literal notranslate"><span class="pre">x,</span> <span class="pre">y,</span> <span class="pre">z</span></code>, the assigned
+<code class="docutils literal notranslate"><span class="pre">region</span></code>, its <code class="docutils literal notranslate"><span class="pre">network</span></code> (the region itself when the atlas has no
+networks), <code class="docutils literal notranslate"><span class="pre">label_id</span></code>, <code class="docutils literal notranslate"><span class="pre">inside</span></code> (the coordinate lies in that
+region), <code class="docutils literal notranslate"><span class="pre">distance_mm</span></code> (0 inside; else to the nearest labelled voxel,
+or to the region centroid without an image), <code class="docutils literal notranslate"><span class="pre">method</span></code> (<code class="docutils literal notranslate"><span class="pre">'voxel'</span></code>,
+<code class="docutils literal notranslate"><span class="pre">'nearest</span> <span class="pre">voxel'</span></code>, <code class="docutils literal notranslate"><span class="pre">'centroid'</span></code> or <code class="docutils literal notranslate"><span class="pre">'unassigned'</span></code>) and, for a
+list of atlases, <code class="docutils literal notranslate"><span class="pre">atlas</span></code> (the position of the atlas that assigned it).
+With a list, exact containment is tried across all references first,
+followed by opt-in bounded nearest-voxel and centroid approximations.
+Declare identical source/reference spaces and mm units; this function
+does not register images or infer templates.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">BrainnetomeReference</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">regions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_image</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">profiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">~typing.Dict[int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">~typing.Dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">float]]]</span> <span class="pre">|</span> <span class="pre">None</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">provenance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">~typing.Any]</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">int64</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_pm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_sc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/atlas/brainnetome.html#BrainnetomeReference"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>BNA-246 anatomy, profiles and optional probabilistic / structural maps.</p>
+<p>Use <a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference.load" title="conninfpy.atlas.BrainnetomeReference.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load()</span></code></a>. <code class="docutils literal notranslate"><span class="pre">regions</span></code> is the hierarchy table indexed by the
+original BNA ID (1-246); <code class="docutils literal notranslate"><span class="pre">label_image</span></code> the maximum-probability map.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.regions">
+<span class="sig-name descname"><span class="pre">regions</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.regions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.label_image">
+<span class="sig-name descname"><span class="pre">label_image</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.label_image" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.data_dir">
+<span class="sig-name descname"><span class="pre">data_dir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.data_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.cache_dir">
+<span class="sig-name descname"><span class="pre">cache_dir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.cache_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.profiles">
+<span class="sig-name descname"><span class="pre">profiles</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.profiles" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.provenance">
+<span class="sig-name descname"><span class="pre">provenance</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.provenance" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.load">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">resolution_mm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">profiles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cerebellum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.atlas.BrainnetomeReference" title="conninfpy.atlas.brainnetome.BrainnetomeReference"><span class="pre">BrainnetomeReference</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/brainnetome.html#BrainnetomeReference.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.load" title="Link to this definition"></a></dt>
+<dd><p>Load the bundled atlas and, when available, the BrainMap profiles.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data_dir</strong> (<em>path</em><em>, </em><em>optional</em>) – Folder holding the optional local files (<code class="docutils literal notranslate"><span class="pre">BNA_PM_4D.nii.gz</span></code>,
+<code class="docutils literal notranslate"><span class="pre">BNA_SC_3D_246.zip</span></code>). Defaults to <code class="docutils literal notranslate"><span class="pre">$CONNINFPY_BNA_DIR</span></code> or
+<code class="docutils literal notranslate"><span class="pre">$CONNINFPY_DATA/brainnetome</span></code> (<code class="docutils literal notranslate"><span class="pre">~/conninfpy_data/brainnetome</span></code>).
+Originals are checked against the bundled source manifest when used.</p></li>
+<li><p><strong>resolution_mm</strong> (<em>{1</em><em>, </em><em>2}</em>) – Bundled label image to use (1 mm by default: spheres of a few
+millimetres need it).</p></li>
+<li><p><strong>profiles</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – Read the bundled BrainMap BD/PC snapshots without network access.
+If unavailable, annotation proceeds without profiles.</p></li>
+<li><p><strong>cache_dir</strong> (<em>path</em><em>, </em><em>optional</em>) – Cache for derived PM/SC arrays (default
+<code class="docutils literal notranslate"><span class="pre">$CONNINFPY_CACHE/bna246</span></code> or <code class="docutils literal notranslate"><span class="pre">~/.cache/conninfpy/bna246</span></code>).</p></li>
+<li><p><strong>cerebellum</strong> (<em>{None</em><em>, </em><em>'anatom'}</em><em>, </em><em>optional</em>) – Optional opt-in cerebellar companion layer (DiedrichsenLab v1.2
+SUIT <code class="docutils literal notranslate"><span class="pre">atl-Anatom</span></code> with Buckner-7/17 crosswalk). Currently
+supported only at <code class="docutils literal notranslate"><span class="pre">resolution_mm=1</span></code> (1 mm MNI152 lattice).
+<code class="docutils literal notranslate"><span class="pre">None</span></code> (default) keeps pure 246-region BNA-246.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.n_regions">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">n_regions</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.n_regions" title="Link to this definition"></a></dt>
+<dd><p>Total number of regions in the reference (246 for pure BNA-246).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.affine">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">affine</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.affine" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.names">
+<span class="sig-name descname"><span class="pre">names</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.15)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/brainnetome.html#BrainnetomeReference.names"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.names" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.labels_at">
+<span class="sig-name descname"><span class="pre">labels_at</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">world</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">int64</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/atlas/brainnetome.html#BrainnetomeReference.labels_at"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.labels_at" title="Link to this definition"></a></dt>
+<dd><p>Label at each world (mm) coordinate; 0 outside the image or unlabelled.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.sphere">
+<span class="sig-name descname"><span class="pre">sphere</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">radius_mm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/atlas/brainnetome.html#BrainnetomeReference.sphere"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.sphere" title="Link to this definition"></a></dt>
+<dd><p>World coordinates of the label-image voxels whose centres lie within <code class="docutils literal notranslate"><span class="pre">radius_mm</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.homolog">
+<span class="sig-name descname"><span class="pre">homolog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">roi_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/brainnetome.html#BrainnetomeReference.homolog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.homolog" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.profile">
+<span class="sig-name descname"><span class="pre">profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kind</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">roi_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/brainnetome.html#BrainnetomeReference.profile"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.profile" title="Link to this definition"></a></dt>
+<dd><p>BrainMap profile <code class="docutils literal notranslate"><span class="pre">{term:</span> <span class="pre">likelihood</span> <span class="pre">ratio}</span></code> of a region; None without profiles or for companion atlases.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.domain">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">domain</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">term</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/brainnetome.html#BrainnetomeReference.domain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.domain" title="Link to this definition"></a></dt>
+<dd><p>Top-level BrainMap behavioural domain of a BD term (<code class="docutils literal notranslate"><span class="pre">Cognition.Memory.Working</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">Cognition</span></code>).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.membership">
+<span class="sig-name descname"><span class="pre">membership</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">world</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/brainnetome.html#BrainnetomeReference.membership"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.membership" title="Link to this definition"></a></dt>
+<dd><p>Mean probabilistic-map membership of each region over the given points.</p>
+<p>Returns an array of shape (246,) in [0, 1] (the share of the 40
+reference subjects in whom the points belong to each region, averaged
+over the points), or None when <code class="docutils literal notranslate"><span class="pre">BNA_PM_4D.nii.gz</span></code> is not available.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.atlas.BrainnetomeReference.structural_connectivity">
+<span class="sig-name descname"><span class="pre">structural_connectivity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/brainnetome.html#BrainnetomeReference.structural_connectivity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.BrainnetomeReference.structural_connectivity" title="Link to this definition"></a></dt>
+<dd><p>Population structural connectivity between BNA regions, (246, 246), or None.</p>
+<p>Derived from the Brainnetome tractography maps (<code class="docutils literal notranslate"><span class="pre">BNA_SC_3D_246.zip</span></code>:
+for each seed region, the share of reference subjects whose
+probabilistic tractography reaches each voxel). Entry (a, b) is the
+mean of seed a’s map within region b, averaged with (b, a); the
+diagonal is NaN. This is the population probability of a white-matter
+pathway, with tractography’s limits: long association fibres and
+lateral callosal projections are under-detected, so a low value does
+not show that two regions are unconnected.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.atlas.atlas_cache_dir">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">atlas_cache_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atlas_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/resources.html#atlas_cache_dir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.atlas_cache_dir" title="Link to this definition"></a></dt>
+<dd><p>Directory for on-demand third-party Brainnetome/SUIT atlases; does not create it.</p>
+<p>Precedence: explicit <code class="docutils literal notranslate"><span class="pre">atlas_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">CONNINFPY_ATLAS_DIR</span></code>, then
+<code class="docutils literal notranslate"><span class="pre">~/.cache/conninfpy/atlases</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.atlas.atlas_resource_available">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">atlas_resource_available</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">atlas_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/resources.html#atlas_resource_available"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.atlas_resource_available" title="Link to this definition"></a></dt>
+<dd><p>Return True if an on-demand atlas file exists in the local cache and passes SHA-256.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.atlas.atlas_resource_path">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">atlas_resource_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">atlas_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verify</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/resources.html#atlas_resource_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.atlas_resource_path" title="Link to this definition"></a></dt>
+<dd><p>Locate and SHA-256-verify an on-demand Brainnetome or SUIT atlas file.</p>
+<p>Raises <code class="docutils literal notranslate"><span class="pre">FileNotFoundError</span></code> with download instructions and upstream terms
+when the file is absent from <code class="docutils literal notranslate"><span class="pre">atlas_cache_dir(atlas_dir)</span></code>; never downloads
+implicitly.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.atlas.get_bna_246_nifti_path">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">get_bna_246_nifti_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resolution_mm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/resources.html#get_bna_246_nifti_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.get_bna_246_nifti_path" title="Link to this definition"></a></dt>
+<dd><p>Get the file system path of the cached Brainnetome 246 NIfTI atlas image.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.atlas.bna_profile_paths">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">bna_profile_paths</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/atlas/resources.html#bna_profile_paths"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.bna_profile_paths" title="Link to this definition"></a></dt>
+<dd><p>Paths of the cached BrainMap profiles of BNA-246 (BDf_FDR05.json, PCf_FDR05.json).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.atlas.brainnetome_data_dir">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">brainnetome_data_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/resources.html#brainnetome_data_dir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.brainnetome_data_dir" title="Link to this definition"></a></dt>
+<dd><p>Directory for optional Brainnetome originals; does not create it.</p>
+<p>Precedence: explicit <code class="docutils literal notranslate"><span class="pre">data_dir</span></code>, legacy <code class="docutils literal notranslate"><span class="pre">CONNINFPY_BNA_DIR</span></code>, then
+<code class="docutils literal notranslate"><span class="pre">CONNINFPY_DATA/brainnetome</span></code> (default <code class="docutils literal notranslate"><span class="pre">~/conninfpy_data/brainnetome</span></code>).
+An explicit directory is authoritative, even if it does not exist.
+Derived caches use <code class="docutils literal notranslate"><span class="pre">CONNINFPY_CACHE</span></code> separately.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.atlas.brainnetome_resource_path">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">brainnetome_resource_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">required</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/resources.html#brainnetome_resource_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.brainnetome_resource_path" title="Link to this definition"></a></dt>
+<dd><p>Locate and verify a versioned optional original from the source manifest.</p>
+<p>Missing optional files return <code class="docutils literal notranslate"><span class="pre">None</span></code>. <code class="docutils literal notranslate"><span class="pre">required=True</span></code> gives manual
+acquisition instructions. A different/corrupt source raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>;
+no implicit download or fallback to another directory occurs.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.atlas.fetch_bna_behavioral_decoding">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.atlas.</span></span><span class="sig-name descname"><span class="pre">fetch_bna_behavioral_decoding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force_download</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_dataframe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></span><a class="reference internal" href="_modules/conninfpy/atlas/resources.html#fetch_bna_behavioral_decoding"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.atlas.fetch_bna_behavioral_decoding" title="Link to this definition"></a></dt>
+<dd><p>Brainnetome Atlas (BNA-246) BrainMap behavioral decoding data.</p>
+<p>The forward-inference Behavioral Domain (BD) and Paradigm Class (PC)
+association scores (thresholded at FDR &lt; 0.05) published with the
+Brainnetome Atlas (<cite>atlas.brainnetome.org</cite>) are read from the local
+on-demand atlas cache (<code class="docutils literal notranslate"><span class="pre">CONNINFPY_ATLAS_DIR</span></code> or
+<code class="docutils literal notranslate"><span class="pre">~/.cache/conninfpy/atlases</span></code>, under the Brainnetome terms in
+<code class="docutils literal notranslate"><span class="pre">NOTICE_BRAINNETOME.txt</span></code>) without network access by default.
+With <code class="docutils literal notranslate"><span class="pre">cache_dir</span></code> or <code class="docutils literal notranslate"><span class="pre">force_download=True</span></code> they are downloaded from the
+official repository instead and cached.</p>
+<section id="data-attribution-licensing">
+<h2>Data attribution &amp; licensing<a class="headerlink" href="#data-attribution-licensing" title="Link to this heading"></a></h2>
+<p>The Behavioral Domain and Paradigm Class taxonomy and coordinate data are
+derived from the BrainMap database (Laird et al., 2005, 2011)
+and computed for the Brainnetome Atlas by Fan et al. (2016). When publishing
+analyses that use these decodings, please cite:</p>
+<ol class="arabic simple">
+<li><p>Fan L, Li H, Zhuo J, et al. (2016). The Human Brainnetome Atlas: A New Brain
+Atlas Based on Connectional Architecture. Cerebral Cortex, 26(8):3508–3526.</p></li>
+<li><p>Laird AR, Lancaster JL, Fox PT (2005). BrainMap: The social evolution of a human
+brain mapping database. Neuroinformatics, 3(1):65–78.</p></li>
+<li><p>Laird AR, Eickhoff SB, Fox PM, et al. (2011). The BrainMap strategy for
+standardization, sharing, and meta-analysis of neuroimaging data. BMC Research
+Notes, 4:349.</p></li>
+</ol>
+<dl class="field-list simple">
+<dt class="field-odd">param cache_dir<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Download into (and read from) this directory instead of using the
+on-demand atlas cache.</p>
+</dd>
+<dt class="field-even">type cache_dir<span class="colon">:</span></dt>
+<dd class="field-even"><p>str or Path, optional</p>
+</dd>
+<dt class="field-odd">param force_download<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Download a fresh copy even when cached files exist (into
+<code class="docutils literal notranslate"><span class="pre">cache_dir</span></code>, default <code class="docutils literal notranslate"><span class="pre">atlas_cache_dir()</span></code>).</p>
+</dd>
+<dt class="field-even">type force_download<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool, default=False</p>
+</dd>
+<dt class="field-odd">param as_dataframe<span class="colon">:</span></dt>
+<dd class="field-odd"><p>If True, returns a consolidated <code class="docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code> merged with
+BNA-246 parcel names and ROI IDs.</p>
+</dd>
+<dt class="field-even">type as_dataframe<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool, default=False</p>
+</dd>
+<dt class="field-odd">returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>If <code class="docutils literal notranslate"><span class="pre">as_dataframe=False</span></code>, returns <code class="docutils literal notranslate"><span class="pre">(behavioral_domains,</span> <span class="pre">paradigm_classes)</span></code>
+where each is a dict mapping string ROI ID (<code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code> to <code class="docutils literal notranslate"><span class="pre">&quot;246&quot;</span></code>) to
+<code class="docutils literal notranslate"><span class="pre">{term:</span> <span class="pre">score}</span></code>.
+If <code class="docutils literal notranslate"><span class="pre">as_dataframe=True</span></code>, returns a DataFrame indexed by <code class="docutils literal notranslate"><span class="pre">roi_id</span></code> (1..246).</p>
+</dd>
+<dt class="field-even">rtype<span class="colon">:</span></dt>
+<dd class="field-even"><p>tuple of (dict, dict) or pandas.DataFrame</p>
+</dd>
+</dl>
+</section>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="conninfpy.results.html" class="btn btn-neutral float-left" title="conninfpy.results" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="conninfpy.interpret.html" class="btn btn-neutral float-right" title="conninfpy.interpret" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

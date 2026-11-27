@@ -1,0 +1,1167 @@
+Usage
+=====
+
+Start with :func:`conninfpy.analyze`: it takes per-subject connectivity and a
+design, prepares the input, optionally harmonizes sites, and runs permutation
+inference. The pipelines it is built from live in :mod:`conninfpy.stats` and
+share one contract: edge-wise statistics → topology-aware enhancement →
+permutation null → FWER / FDR-corrected p-values. :func:`conninfpy.analyze`
+tests positive and negative effects jointly against a two-sided null by
+default (see :doc:`approach`), while :mod:`conninfpy.stats` entry points keep
+separate per-tail nulls unless ``two_tailed=True`` is passed.
+
+Quick reference:
+
+============================================================  ============================================================
+Entry point                                                    Use case
+============================================================  ============================================================
+:func:`conninfpy.analyze`                                      Main entry point: input preparation → optional ComBat → GLM / t-test inference → :class:`~conninfpy.analysis.AnalyzeResult`
+:func:`conninfpy.stats.compute_p_val`                          Group / paired / one-sample t-test
+:func:`conninfpy.stats.compute_p_val_glm`                      Custom design matrix and t / β / F contrasts (Freedman–Lane)
+:func:`conninfpy.stats.compute_p_val_glm_multi`                Several contrasts of one design, each with its own null, shared permutations
+:func:`conninfpy.stats.compute_p_val_paired_glm`               Paired A vs B with condition-varying confounds
+============================================================  ============================================================
+
+Helper modules:
+
+- :mod:`conninfpy.harmonize` — multi-site ComBat harmonization + design diagnostics
+- :mod:`conninfpy.stats.acceleration` — GPD/gamma tail approximation for permutation acceleration
+- :mod:`conninfpy.enhance` — enhancement without permutation (``apply_*``, ``get_*_score``, ``nbs_bct``)
+- :mod:`conninfpy.sim` — synthetic connectivity and topology scenarios
+- :mod:`conninfpy.loaders` — manifest-based data loading (:func:`conninfpy.load`)
+
+Input conventions
+-----------------
+
+- Connectivity tensors: shape ``(n_subjects, N, N)``, symmetric. Directed
+  (asymmetric) connectivity is rejected: the pipelines, ComBat, the
+  parametric baselines and the network summaries treat edges as undirected,
+  so it would be tested inconsistently. Symmetrise it or analyse each
+  direction separately. The diagonal is zeroed automatically on a copy —
+  your arrays are never modified.
+- Paired data (``test_type='paired'``) must hold the same subjects, in the
+  same order, in both conditions; unequal counts are rejected.
+- Edges with zero variance: an edge that is the same in every subject has no
+  standard error. If its effect is zero too (e.g. 0 everywhere) its statistic
+  is 0 and its p-value 1. If the effect is nonzero (e.g. 0.3 everywhere, or a
+  constant shift between paired conditions) the t or F statistic is infinite
+  and the entry points raise an error naming the edges: such values usually
+  come from duplicated subjects or preprocessing. Set those edges to NaN and
+  pass ``missing='available_case'`` to leave them untested. "Zero" is judged
+  by a **scale-relative degeneracy floor**: an edge's residual variance counts
+  as zero when it falls below ``RTOL`` (= 1e-10) times that edge's own mean
+  square, so the classification is invariant to the units/scale of the data
+  (z, r, or arbitrary units) — floating-point sums leave ~1e-16 relative
+  noise where the exact variance is zero, and a standard deviation below
+  roughly 1e-5 of the root mean square is never real connectivity data. The
+  floor value is a fixed numerical guard, not a tunable analysis parameter.
+- GLM contrasts must be estimable (``C = C X⁺X``). With collinear columns,
+  e.g. two copies of a variable or a group indicator nested in site dummies,
+  a coefficient on one column alone is not identified and is rejected; test
+  an identified combination or drop the redundant column.
+- :func:`conninfpy.analyze` takes ``input='r'`` (correlations; Fisher r→z is
+  applied once) or ``input='z'`` (already transformed). Left as ``None`` it
+  detects the scale: a unit diagonal means correlations, any value beyond ±1
+  means Fisher z; data that could be either raise an error rather than risk a
+  second transform. ``r_to_z=False`` analyses correlations as given, without
+  the transform, as the MATLAB NBS toolbox does (``design['scale']`` then
+  reads ``'correlation'``).
+- The advanced pipelines in :mod:`conninfpy.stats` expect data already on the
+  analysis scale (e.g. Fisher z via :func:`conninfpy.fisher_r_to_z`).
+- Results are :class:`~conninfpy.results.InferenceResult` objects, which
+  behave as ``{'positive', 'negative'}`` dicts and additionally carry
+  ``positive`` / ``negative`` / ``method`` / ``n_permutations`` /
+  ``acceleration`` / ``wall_time_s`` attributes and edge-table exports.
+  ``analyze()`` wraps one in an :class:`~conninfpy.analysis.AnalyzeResult`
+  (``.inference``, plus ``flags`` and ComBat diagnostics). The legacy v1.x
+  keys ``'g2>g1'`` / ``'g1>g2'`` remain readable with a
+  :class:`DeprecationWarning` until v2.1. F-stat omnibus tests return
+  ``{'omnibus': arr}``.
+- Every entry point shares the defaults in :mod:`conninfpy.defaults`
+  (1000 permutations, exact empirical p-values).
+
+Connectivity from time series
+-----------------------------
+
+``compute_connectivity`` accepts a single ``(timepoints, ROIs)`` array, a
+stack of equally long observations, or a list with different lengths. For each
+observation it removes every frame containing a non-finite value in any ROI;
+it does not perform pairwise deletion. The returned matrices retain the input
+observation order. Constant ROIs have undefined Pearson correlations (NaN and
+a warning); partial correlation raises an error. Fewer than two complete frames
+raises an error and fewer than ten emits a warning by default.
+
+.. code-block:: python
+
+   from conninfpy import compute_connectivity
+
+   r, info = compute_connectivity(series, return_diagnostics=True)
+   partial, diagnostics = compute_connectivity(
+       series, kind="partial_correlation", shrinkage="oas",
+       return_diagnostics=True,
+   )
+   print(diagnostics["n_valid_tr"], diagnostics["delta_s"])
+
+Omitting shrinkage uses no shrinkage for Pearson and Ledoit–Wolf for partial
+correlation. Explicit ``shrinkage=None`` disables it even for partial
+correlation; singular or ill-conditioned covariance raises an error. ``oas``
+and ``ledoit_wolf`` estimate a separate intensity per observation, while a
+float in [0, 1] fixes a common intensity. Unless ``standardize=False``, each
+ROI is centered and scaled by its population standard deviation before
+shrinking covariance toward its mean diagonal times the identity. Partial
+correlations are derived from the precision matrix. Large output stacks still
+require memory proportional to the number of observations times ROIs squared;
+working batches are bounded.
+
+Subject-specific shrinkage can itself create group differences in connectivity,
+particularly when recording lengths or quality differ. The diagnostics report
+``n_valid_tr`` and ``delta_s`` for each observation. Compare their distributions
+by group and consider including relevant diagnostics as covariates when
+scientifically appropriate; descriptive warnings are not significance tests.
+
+Manifests for time-series loaders can request construction with, for example:
+
+.. code-block:: yaml
+
+   params:
+     connectivity_kind: partial_correlation
+     shrinkage: oas
+     group_column: group
+     min_valid_tr: 10
+
+The resulting phenotype table gains ``n_valid_tr`` and ``delta_s`` and the
+loader provenance records the estimator. Without these manifest options, raw
+time series remain raw for loaders that normally return them. In a CLI analysis
+file, use ``connectivity: {kind: partial_correlation, shrinkage: oas}`` when
+the manifest returns raw time series. A loader that constructs matrices itself
+must instead receive its settings in the manifest. In the app, choose the
+estimator and shrinkage before loading. Fisher transformation remains an
+independent option. The built-in demo picker contains ABIDE-mini and OpenClose;
+other datasets can be loaded through a manifest.
+
+Preprocessing provenance
+------------------------
+
+Loaders, the connectivity backend, ``analyze()`` and result bundles carry a
+**three-state preprocessing record**
+(``dataset.provenance['preprocessing']`` → ``analyze(preprocessing=...)`` →
+``result.analysis_provenance['preprocessing']`` → ``bundle.metadata``). Each
+fact is either unknown (absent) or known **with an explicit source**::
+
+    {
+      "gsr":                  {"value": false, "source": "loader_denoising_pipeline"},
+      "connectivity_method":  {"value": "pearson", "source": "computed_by_conninfpy"},
+      "standardize":          {"value": true, "source": "computed_by_conninfpy"},
+      "shrinkage":            {"value": null, "source": "computed_by_conninfpy"},
+      "tr_seconds":           {"value": 2.0, "source": "input_manifest_declared"}
+    }
+
+Sources separate what this library did (``computed_by_conninfpy``,
+``loader_denoising_pipeline``) from mere declarations (``input_file_name_token``
+for names like ``..._GSR.npy`` / ``..._noGSR.npy`` / ``..._no_GSR.npy``,
+``input_manifest_declared`` for the manifest's ``preprocessing.applied``
+block). Precedence is fact-wise: when the connectivity backend actually
+computes matrices, its **estimator facts** (``connectivity_method``,
+``standardize``, ``shrinkage``) state what that computation resolved and
+override any older declaration about the same facts, while independent
+upstream facts (``gsr``, ``tr_seconds``) and their declaration sources are
+kept unchanged. A missing fact is **unknown**, never "not applied" — an
+explicitly recorded ``use_GSR: false`` stays ``False``. When several
+constituents are combined (e.g. the multi-site Open/Close loader), a fact is
+asserted globally only if **every** site states the same value; differing
+values, or a mix of known and unknown, leave the global fact unknown —
+per-site records are kept alongside: inside the record's optional
+``per_site`` mapping — so the ordinary loader → ``analyze()`` → bundle /
+``conninfpy run`` / app channel carries them without any extra parameter —
+and as the loader's ``preprocessing_per_site`` provenance key for direct
+readers. Site records carry each site's own known values and sources (a
+``None`` site record reads as all-unknown) and cannot nest ``per_site``
+again. The first site is never silently copied. Nothing is inferred from the connectivity values themselves (GSR is
+never guessed from negative edges). ``tr_seconds`` is only recorded from an
+explicit declaration; the per-observation phenotype columns ``n_valid_tr``
+(complete frames) and ``delta_s`` (shrinkage intensity in [0, 1]) are
+diagnostics, not repetition times. ``conninfpy run`` writes the record to
+``provenance.json`` (next to ``connectivity`` and
+``connectivity_diagnostics``) and into the saved bundle; the app shows it on
+the dataset card and keeps it in the run plan. An explicit record
+``schema_version`` other than 1 is rejected rather than silently rewritten.
+
+Fisher transformation policies
+------------------------------
+
+:func:`conninfpy.fisher_r_to_z` is the single implementation, with two explicit
+clipping policies:
+
+- **clip-z** (default, ``handle_bounds=True, max_z=5``): transform first, then
+  clip z at ±5 (``|r|`` > tanh(5) ≈ 0.99991 and r = ±1); a warning names the
+  number of clipped values. This is what ``analyze(input='r')`` and the app's
+  ingestion option apply.
+- **clip-r** (``clip_r=0.9999``): clip the correlations to ±0.9999 *before*
+  arctanh (z bounded by ≈ 4.9517), silently. This is the historical in-app
+  "Apply Fisher-z now" policy, which now goes through the same function.
+
+The two policies give different numbers near the bounds (e.g. r = 0.99995 →
+z = 5 under clip-z but 4.9517 under clip-r), so existing behaviour is kept
+per call site. ``return_report=True`` additionally returns a report separating
+the **structural diagonal** (r = 1 by construction — expected, not observed
+saturation) from **observed off-diagonal** clipped values, with explicit units:
+matrix cells (counted per observation matrix), unique undirected edges
+(upper-triangle positions clipped in at least one observation), and the number
+of observations. NaN values pass through untouched under both policies, and
+input outside [-1, 1] raises (including under ``clip_r``: invalid
+correlations are rejected, not silently clipped).
+
+Fisher transforms are also **provenance**: ``analyze()`` records the transform
+it actually applied (stage, scope, policy, parameters and the clipping
+counts above) as ``result.analysis_provenance['fisher'] =
+{'applied': [...], 'upstream': [...] | 'unknown' | None}``, preserved into
+bundle exports and ``conninfpy run``'s ``provenance.json``. Already-
+transformed input (``input='z'``) records the caller-supplied upstream
+history (``analyze(fisher_history=[...])``, e.g. the app's captured button
+entry) without transforming or counting again — or ``'unknown'`` when no
+history exists; nothing is invented. Supplied histories are validated, not
+repaired: each entry must carry its own nonempty ``source`` (upstream work
+is never attributed to this library by default) and its top-level
+``policy``/``parameters`` must agree with its counts report, so a
+contradictory record cannot be normalized away; a dict is accepted only as
+a full schema-checked record. Paired designs transform each condition
+*before* the B − A difference (stage
+``analysis_prepare_before_difference``), never the difference itself. Under
+the unbounded policy (``handle_bounds=False``) nothing is clipped: the
+report's clipped counts are zero and values left at ±infinity are reported
+separately (``left_at_infinity``, same count units).
+
+Missing connectivity
+--------------------
+
+A region without signal in a subject (outside the field of view, signal
+dropout) has undefined correlations. ConnInfPy never treats them as zero.
+
+- **Default (``missing='raise'``)**: every entry point rejects NaN or infinite
+  off-diagonal values and reports the affected subjects, the regions without
+  signal and any other missing edges. (Before this check a single NaN made
+  every edge "significant".)
+- **Available-case analysis (``missing='available_case'``)** in
+  :func:`conninfpy.analyze` and every inference entry point. For two-sample,
+  paired and one-sample designs (:func:`compute_p_val`) each edge is tested
+  with the subjects who have it
+  (paired: the complete pairs) — no subject is dropped and nothing is filled
+  in, which matters in cohorts of 30–40. Permutations shuffle or sign-flip
+  whole subjects, so the max-statistic test stays exact given the
+  missingness, which must not depend on the connectivity values themselves.
+  Edges kept by fewer than ``min_coverage`` (default 80 %) of a group's
+  subjects, or by fewer than 3, are not tested: their p-value is NaN and they
+  leave the family (and the Bonferroni / BH count). Bonferroni and BH use
+  per-edge Welch degrees of freedom, or per-edge ``n1 + n2 - 2`` with
+  Student's t (``var_equal=True``).
+
+  .. code-block:: python
+
+     out = analyze(group1=g1, group2=g2, test_type="two-sample",
+                   method="tfnbs", missing="available_case")
+     out.flags                         # one-line coverage summary
+     out.inference.missing_report      # per-edge n, untested edges,
+                                       # regions without signal, Fisher test
+                                       # of missingness by group
+
+  Report the coverage, and check ``missing_by_group_p``: missingness that
+  differs between groups is not a validity problem for the test, but the
+  groups are then compared on slightly different subsets per edge.
+- **GLM designs** (:func:`compute_p_val_glm`, the multi-contrast and paired
+  GLMs, ``analyze(Y, interest=...)``) use the same option: edges are grouped
+  by missingness pattern, each pattern gets its own full and reduced
+  Freedman–Lane fits on its subjects, and every pattern uses the global
+  (within-site) permutation restricted to its subjects, so the shuffles stay
+  coherent and equal the standard ones on complete data. An edge is also left
+  untested when its pattern has fewer than 2 residual degrees of freedom or
+  the contrast is not estimable on its subjects (e.g. a two-group contrast
+  where one group lacks the edge); a site whose subjects all lack an edge
+  simply drops out of the site dummies. In 1,000 simulated nulls (36
+  subjects at 3 sites, ComBat + site dummies, within-site permutation, 30 %
+  of subjects missing one region) FWER stayed within Monte-Carlo error of
+  0.05, as on the complete data (every 95 % interval includes 0.05).
+- **ComBat** (``combat_harmonize(..., missing='available_case')``, and the
+  ComBat strategies of ``analyze``) estimates every quantity per feature from
+  the subjects who have it. A site with fewer than 2 subjects for a feature
+  cannot be harmonized there: those values become NaN (counted in
+  ``diagnostics['values_not_harmonized']`` and flagged by ``analyze``) and are
+  then handled as missing.
+- **Dataset manifests** may set ``params: missing: drop_subjects`` to remove
+  affected subjects on loading (listed in the dataset warnings); the bundled
+  ABIDE manifests do.
+
+Declared edge family — ``edge_mask``
+------------------------------------
+
+``compute_p_val(..., edge_mask=mask)`` (and ``analyze``, which passes it
+through) restricts inference to the edges of a symmetric boolean ``(N, N)``
+mask, for example structurally connected pairs:
+
+.. code-block:: python
+
+   sc = BrainnetomeReference.load().structural_connectivity()   # (246, 246), BNA ID order
+   rows = np.asarray(bna_ids) - 1                                 # the analysed BNA regions
+   mask = np.nan_to_num(sc[np.ix_(rows, rows)]) >= 0.05
+   out = analyze(group1=eo, group2=ec, test_type="paired", method="tfnbs", edge_mask=mask)
+
+Statistics outside the mask are set to 0 in the observed map and in every
+permutation. Those edges join no TFNBS / NBS cluster, count toward no
+NI-TFNBS block density or capacity, and never set the null maximum, so FWER is
+controlled over the masked family; their p-values are NaN (untested). The mask
+must be fixed before the data are seen. Supported for ``tfnbs``,
+``ni_tfnbs``, ``nbs`` and ``tstat``; not yet combined with
+``missing='available_case'``. A smaller family gains power by itself, so
+compare a structural mask with random masks matched in density and distance
+(``examples/open_close/structural_prior``).
+
+t-test pipeline — :func:`compute_p_val`
+---------------------------------------
+
+The simplest entry point. Computes per-edge t-statistics, applies an
+enhancement operator, builds a permutation null of per-tail max
+statistics, and returns FWER- or FDR-corrected p-maps with the +1
+Phipson–Smyth correction.
+
+.. code-block:: python
+
+   from conninfpy import compute_p_val, fisher_r_to_z
+
+   group1_z = fisher_r_to_z(group1_corr)   # (n1, N, N)
+   group2_z = fisher_r_to_z(group2_corr)
+
+   p = compute_p_val(
+       group1_z, group2_z,
+       test_type='two-sample',             # or 'paired', 'one-sample'
+       method='tfnbs',
+       n_permutations=1000,
+       e=0.4, h=3.0, n=None,               # shared defaults (n=None: exact; pass int n for legacy grid)
+       use_mp=True, rng=42,
+   )
+   # p['positive'] : (N, N) p-map for group2 > group1
+   # p['negative'] : (N, N) p-map for group1 > group2
+
+GLM pipeline — :func:`compute_p_val_glm`
+----------------------------------------
+
+Edge-wise GLM with Freedman–Lane permutation. Use this when you have a
+continuous predictor and want to control for nuisance regressors
+(motion, age, sex, site). The null model is ``X null(C)`` — the fits allowed
+by ``C β = 0`` — so general contrasts such as ``β_x − β_z`` keep their
+common effect in the null (Winkler et al. 2014). Residuals are permuted
+across subjects (within ``strata``), or sign-flipped when the tested effect
+involves the mean (``scheme='auto'``; override with ``scheme='permutation'``
+or ``'sign-flip'``). A ``strata`` code permutes residuals **within** its
+block only — never whole blocks — so it is not a mixed-model facility:
+stacked repeated sessions require subject fixed effects in **both** the full
+and the reduced model and are covered only by the narrow repeated-sessions
+recipe (:ref:`wf-repeated-sessions`). In that recipe the residual permutation
+reduces, in exact arithmetic, to permuting the data rows within each subject
+block; its premise is joint invariance of the whole error array under
+independent within-subject permutations (see the recipe). In general,
+Freedman–Lane is approximately, not exactly, valid.
+
+Convenience API (recommended):
+
+.. code-block:: python
+
+   import numpy as np
+   from conninfpy import compute_p_val_glm, fisher_r_to_z
+
+   Y = fisher_r_to_z(connectivity_matrices)              # (n, N, N)
+   age = np.array([25, 30, 28])                          # (n,)
+   confounds = np.column_stack([motion, sex])            # (n, p)
+
+   p = compute_p_val_glm(
+       Y, interest=age, confounds=confounds,
+       stat_type='tstat',                                 # or 'beta', 'fstat'
+       method='tfnbs',
+       n_permutations=1000,
+       e=0.4, h=3.0, n=None,
+       use_mp=True, rng=42,
+   )
+   # p['positive'] : edges where age ↑ → connectivity ↑
+   # p['negative'] : edges where age ↑ → connectivity ↓
+
+Advanced API (full design matrix + contrast):
+
+.. code-block:: python
+
+   from conninfpy import build_design_matrix, compute_p_val_glm
+
+   X, contrast = build_design_matrix(interest=age, confounds=motion_sex)
+   p = compute_p_val_glm(
+       Y, design_matrix=X, contrast=contrast,
+       stat_type='tstat', method='tfnbs', n_permutations=1000,
+   )
+
+F-contrast (omnibus) for joint multi-row tests — e.g. ≥3-condition
+designs or testing several predictors jointly:
+
+.. code-block:: python
+
+   X = np.column_stack([np.ones(n), age, age**2, sex, motion])
+   contrast = np.array([
+       [0, 1, 0, 0, 0],       # beta_age
+       [0, 0, 1, 0, 0],       # beta_age_squared
+   ])
+   p = compute_p_val_glm(
+       Y, design_matrix=X, contrast=contrast,
+       stat_type='fstat', method='tfnbs', n_permutations=1000,
+   )
+   # F-pipeline returns a single non-negative tail:
+   # p['omnibus'] : (N, N) FWER-corrected p-map
+
+Multi-contrast GLM in one pass — :func:`compute_p_val_glm_multi`
+----------------------------------------------------------------
+
+To test several contrasts of one design — e.g. ``age``, ``sex``, and
+``mean_fd`` separately, each adjusted for the others — the
+multi-contrast wrapper runs them in one call. Each contrast gets its
+own Freedman–Lane reduced model ``X null(c)`` (the other predictors are
+nuisance) and its own resampling scheme; the permutations are shared,
+so each result equals :func:`compute_p_val_glm` for that contrast with
+the same ``rng``. Passing ``nuisance_contrast`` instead requests one
+joint null for all contrasts ("all marked coefficients are zero"),
+which is conservative when one of them has a real effect.
+
+.. code-block:: python
+
+   from conninfpy import compute_p_val_glm_multi
+
+   X = np.column_stack([np.ones(n), age, sex, mean_fd])  # (n, 4)
+   contrasts = {
+       "age":     np.array([0.0, 1.0, 0.0, 0.0]),
+       "sex":     np.array([0.0, 0.0, 1.0, 0.0]),
+       "motion":  np.array([0.0, 0.0, 0.0, 1.0]),
+   }
+
+   results = compute_p_val_glm_multi(
+       Y, design_matrix=X, contrasts=contrasts,
+       method="tfnbs", n_permutations=5000,
+       acceleration="gpd", rng=42,
+   )
+   # results = {'age': InferenceResult, 'sex': ..., 'motion': ...}
+   results["age"].positive          # (N, N) FWER p-map
+   results["age"].n_significant(0.05)
+
+For ``K`` contrasts the wall-time is roughly that of a single
+:func:`compute_p_val_glm`` call rather than ``K`` calls — typically a
+3× speedup for the canonical age + sex + motion design.
+
+By default the reduced model excludes any column touched by *any*
+contrast in the dictionary. Pass ``nuisance_contrast=`` to override
+explicitly, e.g. when you want sex and motion treated as nuisance for
+the age contrast even though you also test them separately. F-stat /
+multi-row contrasts are unsupported in this wrapper — call
+:func:`compute_p_val_glm` once per omnibus test.
+
+Paired A vs B with Δ-level confounds — :func:`compute_p_val_paired_glm`
+------------------------------------------------------------------------
+
+When you have a within-subject contrast (task A vs B) and confounds
+that differ between conditions (e.g. condition-level motion):
+
+.. code-block:: python
+
+   from conninfpy import compute_p_val_paired_glm
+
+   p = compute_p_val_paired_glm(
+       Y_task_A, Y_task_B,                            # both (n, N, N)
+       confounds_A=np.column_stack([motion_A, drowsiness_A]),
+       confounds_B=np.column_stack([motion_B, drowsiness_B]),
+       method='tfnbs', n_permutations=1000,
+       e=0.4, h=3.0, n=None,
+   )
+
+With no confounds, this delegates to ``compute_p_val(test_type='paired')``
+(sign-flip permutation, the exact non-asymptotic null). With Δ-level
+confounds it constructs Δ_Y = Y^B − Y^A, Δ_C = C^B − C^A and runs a
+one-sample GLM on the differences, resampled by sign flips of the
+reduced-model residuals (row permutations cannot change the tested mean;
+sign flips assume symmetric errors). With all-zero Δ-confounds it reduces
+exactly to the paired sign-flip test. On both routes ``positive`` means
+Y^B > Y^A.
+
+Optional subject IDs in paired designs
+--------------------------------------
+
+A paired design assumes that row ``s`` of condition B is the same subject as
+row ``s`` of condition A. When the caller can name the subjects, pass the IDs
+in row order and the API verifies that and reorders condition B instead of
+trusting the row order:
+
+.. code-block:: python
+
+   out = analyze(
+       group1=a, group2=b, test_type='paired',
+       ids_group1=['s01', 's02', 's03'],
+       ids_group2=['s03', 's01', 's02'],   # same subjects, different rows
+   )
+
+The two vectors must be a strict full bijection (same unique, non-missing IDs
+matched by value — nothing is normalised, stringified or type-coerced). One
+permutation moves every condition-B subject-axis input (``group2``,
+``confounds_group2``) into condition A's row order *before* the Fisher
+transform, the B − A difference and any inference, so ``positive`` keeps its
+``group2 > group1`` meaning and the result stays in A's order. Inputs that
+already live in A order (``interest``, subject-level ``confounds``, ``sites``,
+``confounds_group1``) are validated against A and never permuted; edge-axis
+masks are invariant. One-sided IDs, an ID present in only one condition, a
+duplicate ID, a length mismatch and a non-paired test type all raise
+``ValueError``; without IDs the positional behaviour is unchanged. The
+alignment is recorded in ``design['paired_alignment']`` (reference, number of
+subjects, the B→A permutation) and in ``flags``, and survives
+``to_bundle()``. ``compute_p_val`` (``ids_group1``/``ids_group2``) and
+``compute_p_val_paired_glm`` (``ids_A``/``ids_B``) accept the same arguments,
+and the YAML ``paired`` design in :mod:`conninfpy.cli` uses one shared helper,
+so a shuffled phenotype table and an API call with IDs give the same result.
+
+Methods (enhancement operators)
+-------------------------------
+
+``compute_p_val(..., method=...)`` and ``compute_p_val_glm(..., method=...)``
+both accept:
+
+==================  ================================================================
+``method``          Operator
+==================  ================================================================
+``'tstat'``         No enhancement; per-tail max-statistic FWER on raw t / β / F
+``'tfnbs'``         Threshold-Free NBS (Baggio 2018)
+``'nbs'``           Classical Network-Based Statistic (Zalesky 2010); supply
+                    default ``threshold=3.0`` and ``nbs_stat='extent'`` or ``'intensity'``;
+                    thresholds below 3.0 warn about component edge spillover;
+                    inference per component (``result.component_table()``)
+``'cnbs'``          Constrained NBS (Noble & Scheinost 2020): mean signed t per
+                    block, one null per block, Bonferroni (or ``cnbs_correction='bh'``)
+                    across blocks; supply ``net_labels=``; inference per block
+``'ni_tfnbs'``      Network-Informed TFNBS (this work); soft block-density prior;
+                    supply ``net_labels=``
+``'fbc_tfnbs'``     Functional-Block-Clustering TFNBS (this work); hard block
+                    prior; supply ``net_labels=``, ``min_cluster_size=3``
+``'bh_fdr'``        Parametric Benjamini–Hochberg FDR (no permutation)
+``'bh_fdr_perm'``   Empirical edge-wise BH-FDR via permutation null
+==================  ================================================================
+
+Multi-site harmonization — :mod:`conninfpy.harmonize`
+-----------------------------------------------------
+
+Native NumPy implementation of parametric empirical-Bayes ComBat.
+No ``neuroHarmonize`` or ``neurocombat`` dependency.
+
+End-to-end with confound-aware GLM:
+
+.. code-block:: python
+
+   import numpy as np
+   from conninfpy import (
+       fisher_r_to_z,
+       combat_harmonize, design_diagnostics,
+       compute_p_val_glm,
+   )
+
+   # Y_corr : (n, N, N) per-subject Pearson correlation matrices
+   # sites  : (n,) acquisition-site labels
+   # age, sex, mean_fd : per-subject phenotype
+   Y = fisher_r_to_z(Y_corr)
+
+   # 1. Harmonize site effects, preserving age + sex + motion as biology
+   preserve = np.column_stack([age, sex, mean_fd])
+   Y = combat_harmonize(Y, sites=sites, preserve=preserve).Y_adjusted
+
+   # 2. Sanity-check the design before running anything expensive
+   X = np.column_stack([np.ones_like(age), age, sex, mean_fd])
+   diag = design_diagnostics(X, names=["intercept", "age", "sex", "mean_fd"])
+   # reports condition number + per-column VIF + plain-English flags
+
+   # 3. TFNBS on age, partialling out sex + motion (Freedman–Lane)
+   p = compute_p_val_glm(
+       Y, interest=age,
+       confounds=np.column_stack([sex, mean_fd]),
+       stat_type='tstat', method='tfnbs',
+       e=0.4, h=3.0, n=None,
+       n_permutations=200, acceleration='gpd',
+       use_mp=True, rng=42,
+   )
+
+For cross-site machine-learning transfer (fit ComBat on training
+cohorts, freeze, apply to held-out sites at test time), use
+:func:`combat_fit` / :func:`combat_apply` separately.
+
+Permutation acceleration — :mod:`conninfpy.stats.acceleration`
+--------------------------------------------------------------
+
+Set ``acceleration='gpd'`` (or ``'gamma'``) on either pipeline to use a
+fitted parametric tail (Generalized Pareto Distribution, Winkler 2016b)
+where the permutation count is too coarse: statistics reached by fewer
+than 10 null maxima get the fitted p-value, all others keep the exact
+permutation p-value. This makes ~200 permutations usable for exploration
+(~25× faster than ~5000). A goodness-of-fit guard (Anderson–Darling on
+tail exceedances) falls back to permutation p-values when the GPD does
+not fit cleanly. Report exact p-values from a large run.
+
+TFNBS integration
+-----------------
+
+The default ``n=None`` integrates the piecewise support exactly. Set a
+positive integer ``n`` to reproduce the historical right-endpoint grid.
+Record the chosen mode, E/H and start threshold with the result; exact scores
+can differ from the finite-grid scores. ``bh_fdr_perm`` does not use this
+integration.
+
+The exponents ``(e, h)`` accept either scalars or equal-length lists.
+Lists are zipped pairwise into a single 3-D batched call, so a 16×11
+(E, H) grid runs 176 combos in one ``compute_p_val`` invocation. Exact
+integration evaluates each pair, so the grid increases computation time.
+
+See :mod:`conninfpy.defaults` for the full list of constants and
+citations (Smith & Nichols 2009, Baggio 2018, Vinokur 2023, Hao 2024).
+
+
+Synthetic data and scenarios — :mod:`conninfpy.sim`
+---------------------------------------------------
+
+Planted-effect data for tutorials, power analysis and method comparison:
+
+.. code-block:: python
+
+   import conninfpy
+
+   # Two groups of correlation matrices with a planted difference
+   g1, g2, _ = conninfpy.sim.generate_fc_matrices(
+       N=60, effect_size=0.3, n_samples_group1=30, n_samples_group2=30, seed=0)
+
+   # 20 controlled effect topologies (hub, rich club, chain, gradient, ...)
+   print(conninfpy.sim.list_scenarios())
+   gen = conninfpy.sim.TopologyDatasetGenerator(n_nodes=100, n_modules=7, seed=42)
+   ds = gen.generate(conninfpy.sim.get_scenario("within_module_dense"),
+                     effect_size=0.3, n_samples=30, time_points=120)
+   # ds.group1 / ds.group2: correlations with a zeroed diagonal → input='r'
+   out = conninfpy.analyze(group1=ds.group1, group2=ds.group2, input="r",
+                           test_type="two-sample", method="tfnbs")
+
+Enhancement without permutation — :mod:`conninfpy.enhance`
+----------------------------------------------------------
+
+Apply an enhancement operator to a statistic map you computed yourself
+(scores only, no p-values):
+
+.. code-block:: python
+
+   from conninfpy import enhance, stats
+
+   t = stats.compute_t_stat(group1_z, group2_z, test_type="two-sample")
+   scores = enhance.apply_tfnbs(t, e=0.4, h=3.0, n=None)  # {'positive', 'negative'} (shared defaults; int n for legacy grid)
+
+
+Command line — ``conninfpy run``
+--------------------------------
+
+An analysis file (YAML) names a data manifest, the design and the inference
+settings; ``conninfpy run`` loads the data, calls :func:`conninfpy.analyze`
+and writes ``edges.csv`` (significant edges, atlas-annotated when an atlas is
+known), ``pvals.npz``, a reloadable ``bundle.pkl`` for independent summaries,
+and ``provenance.json`` (package version, analysis file, data summary,
+warnings, run time):
+
+.. code-block:: yaml
+
+   data: ../../datasets/abide_mini.yaml   # manifest, relative to this file
+   design:
+     type: glm                            # glm | two-sample | paired | one-sample
+     interest: Age                        # a list tests several predictors in one pass
+     confounds: [Sex, Motion_FD]          # text columns are one-hot encoded
+     sites: site
+   inference:                             # any conninfpy.analyze() keyword
+     method: tfnbs
+     n_permutations: 200
+     acceleration: gpd
+     rng: 42
+     # two_tailed: false                  # legacy: separate one-sided families
+     # tested_tail: positive              # a one-sided hypothesis fixed before the run
+   atlas: schaefer_100_yeo7               # built-in name or CSV path
+   output: results/abide_mini_age
+
+.. code-block:: bash
+
+   conninfpy run examples/abide/configs/abide_mini_age.yaml [--out DIR] [--n-permutations N] [--no-mp]
+   conninfpy info
+
+Two-sample designs use ``group:`` and ``levels: [group1, group2]``
+(``positive`` = second level higher); paired designs use ``condition:``,
+``levels:`` and ``subject:`` (default ``subject_id``) and pair rows by subject.
+For GLM and two-sample designs, rows with a missing value in any column the
+design uses are dropped and counted in ``provenance.json``. Paired designs
+reject missing design values. ``python -m conninfpy`` is equivalent.
+Built-in atlas names are ``schaefer_100_yeo7``, ``schaefer_200_yeo7``,
+``schaefer_400_yeo7`` and ``bna_246``; ``bna_246`` labels networks with the
+Brainnetome Yeo-7 division (see :ref:`usage-interpret`).
+
+Replaying application runs
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The application's *Download Full Analysis Archive* export writes a ZIP with
+a reloadable ``result_bundle.zip`` (pickle-free ZIP containing JSON metadata
+and numeric NPY arrays), the corrected-evidence and
+coefficient arrays, the edge / network / node / component / block tables,
+figures, a deterministic ``methods.md`` and an ``analysis.yaml`` for this
+command together with an explicit replay status
+(``replayable`` / ``requires-input`` / ``not-replayable`` and why — missing
+data files, an ROI subset, synthetic data, or uncaptured settings stay
+honest instead of being defaulted). Two keys exist specifically so a replay
+reproduces the policy of the finished run rather than a look-alike:
+
+- ``connectivity.fisher`` applies a Fisher r-to-z transform with the exact
+  captured policy — ``clip_r`` (clip correlations before ``arctanh``, e.g.
+  the application's ±0.9999 button), ``clip_z`` (clip z afterwards) or
+  ``unbounded`` — and records the applied transform in the run's
+  provenance. The bound (``clip_r`` / ``max_z``) is a required explicit
+  argument: a different bound is a different analysis, so it is never
+  defaulted. Without the block nothing is transformed, and applying it to
+  already-transformed data is an error, not a second pass.
+- ``design.interest_reference`` declares the reference level of one binary
+  GLM/paired predictor, categorical or numeric 0/1, so a group indicator
+  keeps the level order the finished run used (absent: the first sorted
+  level of a categorical column, numeric pass-through, as before).
+
+The archived ``run_plan.json`` / ``dataset_info.json`` keep the launch-time
+facts (α, seed, resolved acceleration, network-label vector, Fisher history,
+synthetic generator parameters) separate from any later display choices;
+the archive never contains subject-level observations or phenotype rows.
+A ``replayable`` status requires the recorded facts to cover the whole run:
+the seed, the directional family, the variance choice, the operator
+arguments (network labels always replay as the captured vector, whether it
+came from an SC prior or from atlas network labels) and the source files.
+Values the finished result genuinely records on itself (an NBS threshold,
+the (E, H) grid coordinates, cNBS block labels) may back the replay file
+under an explicit contract, listed in the archive manifest; anything else
+blocks the status instead of borrowing a default. The referenced manifest
+is exported as a resolved absolute path with its declared file dependencies
+checked, so an extracted archive replays from any directory.
+
+.. code-block:: yaml
+
+   data: study.yaml
+   design:
+     type: glm
+     interest: group
+     interest_reference: control     # indicator of (group != control)
+   connectivity:
+     fisher: {policy: clip_r, clip_r: 0.9999}
+   inference: {method: tstat, n_permutations: 1000, rng: 42}
+
+
+Saving and restoring workspaces
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The application sidebar (*Save & restore workspace*) and the results export
+both write a versioned, pickle-free ``workspace/`` layer
+(``workspace/manifest.json`` + ``workspace/state.json`` + ``workspace/arrays/arrays.npz``
+loaded strictly with ``allow_pickle=False``). ``workspace/manifest.json`` declares
+``kind`` and ``workspace_schema_version``; the current schema is version 2, and
+every other version is rejected before anything is applied. The declared version
+must be a JSON integer in both manifests, and every declared section must be a
+JSON object: a document typed otherwise (for example ``[]`` where an object
+belongs, or ``2.0`` instead of ``2``) is rejected as malformed before the active
+session is touched. The layer separates
+four explicit sections plus optional subject data:
+
+``source_refs``
+  dataset metadata, load-time SHA-256 source hashes, atlas, preprocessing and
+  Fisher history.
+``results``
+  primary and companion ``InferenceResult`` / ``OmnibusInferenceResult``,
+  ``edges_df``, and ``run_plan``.
+``annotation``
+  the ``RoiAnnotation`` and its ``evidence_packet`` — both durable offline, with
+  no inference run needed to read them back.
+``ui_state``
+  allowlisted tabs, display controls, and comparison/annotation settings. API
+  keys, tokens, and secrets are never stored.
+``data``
+  the subject-level connectivity matrices and phenotype table, only when
+  **Include subject data** is on (default off).
+
+- Restoring a results-only workspace opens *Inference Results* and *Brainnetome
+  Annotation* immediately, without re-running inference, preprocessing, ComBat,
+  SC, or Louvain, and states clearly that subject-level connectivity matrices
+  are not loaded and must be re-imported in Tab 1 to run a new analysis.
+- Source freshness is verified honestly against load-time SHA-256 hashes
+  (``verified``, ``stale``, ``missing``, ``unknown``, or ``synthetic``). Legacy
+  or unhashed sources stay ``unknown`` rather than claiming freshness. A source
+  reference recorded as something other than a JSON object is reported
+  explicitly as malformed (per file, counted, and it degrades the overall status
+  to ``unknown``) instead of being skipped silently.
+- Saving a workspace from the sidebar (*Save workspace (.zip)*) always produces
+  a pickle-free archive, including when a full finished result is present: it
+  carries the ``workspace/`` layer and the standard analysis files, omitting
+  the separate ``result_bundle.zip`` member. Root ``manifest.json`` states that
+  explicitly (``bundle_available: false``, ``trusted_only: []``, and
+  ``methods.md`` notes that the export is pickle-free by design). The
+  reloadable ``result_bundle.zip`` (safe ZIP/JSON/NPY, no Python pickle) is
+  included when exporting through the results-page *Download Full Analysis
+  Archive (ZIP)* button.
+- Inspection and restoration never import ``pickle`` or read pickled files, and
+  reject corrupt checksums, malformed sections, or unsupported schema versions
+  without mutating the active session. An archive is parsed, validated and
+  summarized exactly once, and only then applied, so a rejected archive cannot
+  leave a half-restored session behind.
+- Workspaces saved by an earlier schema that also carried the retired LLM
+  narrative report still load: those narrative fields, API keys, and narrative
+  widgets are skipped and reported as legacy, and a saved *5. Narrative Report*
+  tab opens on *4. Brainnetome Annotation* instead.
+
+
+The guided application (Streamlit) — design step
+------------------------------------------------
+
+The application's *Design & Inference* step exposes four package capabilities
+that are otherwise reachable only through the Python API. Each run still
+answers one scientific question; nothing below changes the statistical engine,
+the permutation scheme, or a correction.
+
+**Paired contrasts with condition-specific confounds.** The paired path needs a
+subject-ID column and a condition column and requires a strict one-to-one
+subject match between the two conditions: condition A (baseline) keeps the
+phenotype row order, condition B is matched by subject ID, and empty IDs,
+duplicate IDs within a condition, a subject measured in only one condition or
+different numbers of rows stop the run before it starts, naming the offending
+subjects. Nothing is dropped, re-sorted or matched by row position. Selecting
+one or more *condition-specific confounds* (columns whose value may differ
+between conditions, such as condition-level motion) passes both condition
+arrays with their subject IDs; the per-subject difference ``B - A`` used by
+:func:`conninfpy.stats.compute_p_val_paired_glm` is computed inside the
+analysis, never in the interface. A subject without a value in either
+condition is excluded (with a warning) before the run, and the preview in the
+review panel describes exactly the arrays that will be analysed.
+
+**Missing design fields vs missing connectivity.** A missing value in a
+required design field (subject, condition, group, site, selected covariates) is
+a data-entry problem: those rows are excluded before the run and the number is
+reported. A missing value inside the connectivity matrices is a different
+question, controlled by *Missing connectivity policy*: ``Complete-case (stop on
+any NaN)`` is the package default (``missing='raise'``), and ``Available-case
+(test each edge on its available subjects)`` tests every edge on the subjects
+that have a finite value there, with a coverage floor (``min_coverage``,
+default 0.8). Available-case does not tolerate missing design fields, does not
+add a statistical correction, and makes the tested n vary from edge to edge;
+the results page reports the tested/untested edge counts, the coverage floor,
+the per-edge n range and the subjects with missing values, and never presents
+that varying n as one complete-case sample. Combinations the engine rejects
+(available-case with a tested-edge-family mask, or a mask with the GLM route)
+are blocked before the run instead of silently falling back to another policy.
+The GLM design keeps ``missing='raise'``.
+
+**Declared tested edge family.** An optional boolean, symmetric ``N x N`` mask
+(``.npy``) restricts which edges enter the tested family, so the family-wise
+correction is calibrated on those edges only. It is validated with the engine's
+own mask rules (shape, symmetry, at least one eligible edge) and is supported
+for TFNBS, NI-TFNBS, NBS and t-stat. The run plan records its purpose
+(``edge_family_mask``), SHA-256, shape, eligible-edge count and source file
+name; the array is bundled as ``arrays/edge_family_mask.npy`` in the archive and
+round-trips through a saved workspace. This mask is not an ROI exclusion subset
+(``roi_indices``) and not a structural-connectivity community label vector
+(``net_labels``); the three are reported separately and never substituted for
+one another.
+
+**Declared primary cell of an (E, H) sensitivity grid.** For the TFNBS family an
+optional grid evaluates several ``(E, H)`` cells in one run; the engine pairs
+the E and H sequences element-wise, so the two lists must have equal length.
+The cell that carries the confirmatory claim is declared *before* the run and
+recorded with its resolved grid index; the result table and the completion view
+use that cell. The results page can still browse other cells, but they are
+labelled descriptive sensitivity: the grid creates no corrected family-wise
+conclusion for a cell chosen after the data were seen, no p-value based
+automatic best-cell selection exists, and browsing does not rewrite the
+declared primary cell in the run plan or in an export. Grid values and the
+declared cell appear in the replay facts of the archive.
+
+Designs the guided interface deliberately does not offer — arbitrary F
+contrasts, multi-row contrasts, interaction terms and EEG-style data — remain
+available through the Python API, for example:
+
+.. code-block:: python
+
+   import numpy as np
+   from conninfpy import analyze
+   from conninfpy.stats import compute_p_val_glm
+
+   # Arbitrary multi-row F contrast (omnibus) on subject-level matrices.
+   X = np.column_stack([np.ones(n), age, sex, motion])
+   C = np.array([[0, 1, -1, 0], [0, 1, 0, -1]], dtype=float)
+   res = compute_p_val_glm(
+       Y, design_matrix=X, contrast=C, stat_type="fstat",
+       method="tfnbs", n_permutations=5000, rng=42,
+   )
+
+   # The same design through the standard recipe (prepare -> harmonize -> GLM).
+   out = analyze(Y, interest={"age": age, "sex": sex}, confounds=[motion],
+                 interactions=[("age", "sex")], method="tfnbs", rng=42)
+
+
+Network-level summaries — ``result.network_summary(atlas)``
+-----------------------------------------------------------
+
+Edge-level findings often replicate poorly across cohorts while the pattern
+over pairs of functional networks is far more stable, so report network-pair
+summaries alongside edge tables. :meth:`~conninfpy.results.InferenceResult.network_summary`
+aggregates a result over pairs of networks defined by the per-region
+``networks`` field of an :class:`~conninfpy.atlas.AtlasInfo` — Yeo-7,
+Yeo-17, lobes, or any partition you supply (a plain list of per-region labels
+also works):
+
+.. code-block:: python
+
+   table = out.network_summary(atlas, alpha=0.05)
+   # network_a, network_b, network_pair, within_network, n_edges,
+   # n_sig_positive / n_sig_negative, prop_sig_*, signed_proportion,
+   # sum_neglog10p_* / mean_neglog10p_*  (* = positive, negative)
+
+   mass = out.network_summary(atlas, as_matrix="sum_neglog10p_positive")  # K × K
+
+For raw p-value maps (e.g. loaded from disk) use
+:func:`conninfpy.results.summarize_by_network`. The same numbers drive
+:func:`conninfpy.plot.plot_network_summary` (``signed_proportion``), and
+:func:`conninfpy.harmonize.block_mass` returns the significant-edge counts.
+
+
+.. _usage-interpret:
+
+Anatomical interpretation — :mod:`conninfpy.interpret`
+------------------------------------------------------
+
+Everything that interprets a result lives in :mod:`conninfpy.interpret`.
+:func:`~conninfpy.interpret.annotate_rois` describes each ROI with the
+Brainnetome atlas (BNA-246; Fan et al., 2016) by the tissue its signal came
+from; :func:`~conninfpy.interpret.annotate_bna_regions` annotates data
+parcellated with the Brainnetome atlas itself; and
+:func:`~conninfpy.interpret.interpret_result` describes a result in one call
+(annotated connections, relations, groups, coupling change, BrainMap domains,
+distance check, evidence packet, connectograms):
+
+.. code-block:: python
+
+   from conninfpy.interpret import annotate_bna_regions, annotate_rois, interpret_result
+
+   # Schaefer parcels: anatomy from the Brainnetome tissue they cover, networks = their own Yeo-7 labels
+   rois = annotate_rois(support="parcel", parcel_image=img, parcel_labels=ids, networks=yeo_labels)
+   # or spheres: annotate_rois(coords, names=names, support="sphere", radius_mm=6, space="MNI152NLin2009cAsym")
+   # Brainnetome regions: identity and networks from the Brainnetome division (bna246_hierarchy.csv)
+   # rois = annotate_bna_regions(bna_ids, division="yeo7")
+   report = interpret_result(out.inference, rois, name="EC vs EO", source_atlas="Schaefer-200")
+   report.save("results/ec_vs_eo")          # CSV tables, evidence.json, connectograms
+   print(report.markdown())
+
+- **Network labels follow the atlas.** The ``network`` column used for network
+  relations, network groups and connectogram colours is the source atlas's own
+  division when it has one (Schaefer: Yeo-7, ``networks=``), the Brainnetome
+  division for Brainnetome regions (``annotate_bna_regions``; ``yeo7`` or
+  ``yeo17`` columns of ``bna246_hierarchy.csv``, subcortex 'Subcortical'), and
+  otherwise the Brainnetome division of the tissue each ROI covers. ``yeo7``
+  keeps the Brainnetome crosswalk for reference. ``AtlasInfo.bna_246()`` carries
+  the same Brainnetome division (``networks='yeo7'`` by default,
+  ``'yeo17'``, or ``'lobe'`` for the lobe grouping). **Changed in October
+  2026:** ``bna_246()`` previously grouped by lobe; network-pair summaries,
+  network columns of edge tables and network-ordered figures of BNA-246 data
+  now follow the Yeo-7 division unless ``networks='lobe'`` is passed.
+
+- **Support, not points.** A 6 mm sphere usually covers 2–4 Brainnetome
+  regions, and a parcel's centroid can lie outside the parcel, so each ROI
+  gets its overlap with every region (``rois.weights``) and, with the
+  probabilistic maps, its membership probability. A label is given at the
+  finest level (subregion → gyrus → lobe) holding at least ``purity`` of the
+  labelled tissue; otherwise the ROI is ``mixed``. Cerebellum, brainstem and
+  white matter are ``unassigned``.
+- **Declare the template.** The atlas is on the FSL MNI152 grid, and
+  ``space`` defaults to it (``'MNI152NLin6Asym'``, no flag). Set ``space``
+  to the template the signals were extracted in: other MNI variants
+  (``'MNI152NLin2009cAsym'``, fMRIPrep's default output; ``'MNI152'`` when
+  the variant is unknown) differ from that grid by an unquantified amount,
+  and every ROI is flagged approximate. No numeric offset is promised:
+  neither the atlas nor the analysis knows the voxel-wise displacement
+  between template grids. Talairach coordinates are refused (convert them
+  first, e.g. Lancaster et al., 2007).
+- **Identity first.** Each ROI carries its subregion, gyrus, lobe, hemisphere,
+  cytoarchitectonic description, Yeo-7 and Yeo-17 networks (cortex only; each
+  assigned under the same purity rule on its own shares, with
+  ``yeo7_purity`` / ``yeo17_purity``) and BrainMap behavioural domains. BrainMap terms are published forward-inference
+  associations (which tasks activate a region in the literature), kept per
+  region with their likelihood ratios and never combined into a "top term";
+  a region without terms has too few BrainMap studies.
+- **Connections as relations.** ``annotated_edges`` adds the hemispheric
+  relation (homotopic, heterotopic, intrahemispheric), anatomical level,
+  circuit class (cortico-cortical, thalamo-cortical, cortico-basal ganglia,
+  ...), centre distance, sphere overlap (overlapping spheres share voxels),
+  population structural connectivity and network relation.
+- **Descriptive summaries.** :func:`~conninfpy.interpret.summarize_annotation`
+  puts the detections next to the tested opportunities by relation, region
+  group and BrainMap domain, and reports the distance dependence of the
+  statistic (a motion-confound check). It adds no test and leaves the
+  correction and the inference unit (edge, component or block) unchanged.
+  ``rois.to_atlas(level)`` gives an :class:`~conninfpy.atlas.AtlasInfo` for
+  :meth:`~conninfpy.results.InferenceResult.network_summary`.
+- **Connectogram.** :func:`~conninfpy.interpret.aggregate_connections` sums the
+  detected and tested connections over Brainnetome units (subregions, gyri or
+  lobes per hemisphere), split by the endpoints' networks: each ROI is spread
+  over the units its support covers (``assign="weighted"``, so a connection
+  contributes 1 in total) or placed in the unit holding most of it
+  (``"dominant"``). :func:`conninfpy.plot.plot_connectogram` draws one tail in
+  the layout of the Brainnetome atlas connectogram (left hemisphere left, lobes
+  from frontal to subcortical; rings for subregions, gyri and each unit's
+  network make-up) with chords coloured by the endpoint networks. It places
+  ROIs by default (whole connections per chord); weighted assignment splits a
+  connection between large parcels into many fractional chords. ROIs that
+  came out ``unassigned`` (no labelled support in the atlas, or a labelled
+  share below ``min_coverage``) are not placed: they get no tissue on the
+  rings and no chords. The figure's footer reports how many ROIs were placed
+  and why the rest were not, how many detected connections touch an unplaced
+  ROI, and the share of detected connections the drawn chords carry; the same
+  counts are in ``df.attrs["coverage"]`` of the aggregation (``n_rois``,
+  ``n_placed``, ``unplaced_no_support``, ``unplaced_low_coverage`` — ROI names
+  —, ``detected_total`` / ``detected_placed``, ``tested_total`` /
+  ``tested_placed``, ``level``, ``assign``, ``tail``):
+
+  .. code-block:: python
+
+     from conninfpy.plot import plot_connectogram
+
+     plot_connectogram(out.inference, rois, tail="positive", level="gyrus")
+     plot_connectogram(out.inference, rois, tail="negative", level="subregion",
+                       labels="subregion")
+
+     agg = aggregate_connections(out.inference, rois, tail="positive")
+     agg.attrs["coverage"]      # placement and detection counts
+
+The probabilistic and tractography maps (``BNA_PM_4D.nii.gz``,
+``BNA_SC_3D_246.zip``, from atlas.brainnetome.org) are optional and read from
+``~/conninfpy_data/brainnetome/``. The configured root is
+``$CONNINFPY_DATA/brainnetome``; ``$CONNINFPY_BNA_DIR`` remains a direct
+legacy override, and explicit ``data_dir=`` takes precedence. Originals
+are SHA256-checked against the bundled reference manifest. Missing optional
+resources leave anatomical annotation available without downloading them.
+Derived arrays are cached separately in ``~/.cache/conninfpy/bna246``
+(or ``$CONNINFPY_CACHE/bna246``). Brainnetome data are for non-commercial
+use with attribution and share-alike (``conninfpy/atlas_data/NOTICE_BRAINNETOME.txt``).
+
+Coefficient maps and baseline coupling — ``result.beta``
+--------------------------------------------------------
+
+Every result keeps the coefficients of the model it tested next to its
+p-values: ``result.beta`` (shape ``(p, N, N)``, response scale) and
+``result.design`` (column names and means, contrast, named covariate
+profiles). Pairwise tests use their equivalent designs: two-sample
+``[group-1 mean, group 2 - group 1]``, paired ``[condition-A mean, B - A]``,
+one-sample ``[mean]``. They do not depend on the enhancement settings.
+
+.. code-block:: python
+
+   r = out.inference
+   r.effect_map()          # c' beta: e.g. Δz per year of age, or the group difference
+   r.predicted("mean")     # connectivity at the covariate means (= the sample mean)
+   r.design["comparison"]  # e.g. ['interest=15.4 (mean-1SD)', 'interest=34.9 (mean+1SD)']
+   c = r.coupling()        # predicted maps at the two profiles, Δr, and the class per edge
+
+Read baselines from predictions, never from the intercept map alone: the
+designs use uncentred covariates and reference-coded sites, so the intercept
+is the connectivity at age 0, sex 0 and the reference site. A positive effect
+on Fisher z can mean stronger positive coupling, weaker anticorrelation or a
+sign change; :meth:`~conninfpy.results.InferenceResult.coupling` names which
+(``stronger / weaker positive coupling``, ``stronger / weaker
+anticorrelation``, ``sign change``, and with a prespecified ``near_zero``
+band, ``emerges from / returns to ~0``) and gives the change in correlation
+units, Δr = tanh(z_b) − tanh(z_a). Negative baselines depend on preprocessing
+(global-signal regression both removes and induces anticorrelations); coupling
+classes are descriptive labels on the recorded scale and never by themselves
+carry physiological or causal meaning. When the estimator was a *partial*
+correlation, Fisher z means atanh(partial r) — a scale transform stabilizing
+its variance — not the exact standard z of a marginal Pearson r, and
+back-transformed values remain partial correlations, not marginal ones. ``annotated_edges`` and
+``summarize_annotation`` add these classes when the result defines a
+comparison, and ``conninfpy run`` writes ``beta``, ``effect`` and the two
+predicted maps to ``pvals.npz``.
+
+Independent post-analysis summaries
+-----------------------------------
+
+``ResultBundle`` snapshots a completed result for descriptive reporting without
+original observations, permutation arrays, or statistic/enhanced maps. It uses
+an explicit schema version and trusted Python pickle; never load an untrusted
+pickle. New inference results capture their eligible, effect-estimable and
+actually-tested masks, correction family, model/contrast identity and available
+ROI metadata at the original producer call, so ``result.to_bundle()`` needs no
+manual reconstruction. ``analyze``, ``compute_p_val``, ``compute_p_val_glm``
+and ``compute_p_val_glm_multi`` accept ``atlas=``, ``roi_ids=``, ``groupings=``
+and ``units=``; single-result calls also accept ``contrast_id=``. Atlas label
+IDs and all available groupings are retained in
+matrix order; without atlas identities, zero-based input positions and unknown
+response units are declared explicitly. ``conninfpy run`` writes the same
+snapshot as ``bundle[_contrast].pkl``.
+
+Explicit metadata arguments to ``to_bundle(...)`` remain available for legacy
+or manually constructed results. On a new result they must agree with the
+captured values; conflicting masks or family are rejected. The diagonal is
+excluded. Grid tested masks have the same N × N × K shape as the corrected p
+map. Zero is a valid estimate; a p-value of 1, a finite beta or an absent tail
+does not reconstruct the original family or estimability. Legacy results
+lacking explicit metadata cannot silently be upgraded.
+
+The named effect ``contrast_beta`` is the unstandardized signed contrast
+``cᵀβ`` in the declared response units; ``standardizer`` is ``None``. Multirow
+F results have no signed effect and require an all-false estimability mask.
+Effect summaries include every estimable ROI pair, irrespective of detection.
+Counts of corrected detections are separate and keep the original tail,
+correction, family, grid selection and native inference unit. Component/block
+projections are descriptive locations, not individually significant edges.
+A grouping does not create new tests or confidence intervals.
+
+``brainnetome_crosswalk`` accepts non-BNA original ROI IDs and an explicitly
+declared MNI template and mm coordinates. Point annotations describe centres
+only; known parcel or sphere support preserves BNA overlap and unlabelled
+fractions. Pure/mixed/low-coverage settings and reference provenance are kept.
+Parallel anatomical, gyrus, lobe, hemisphere, structure and functional groupings
+are saved with the annotation and added to the bundle when not already defined.
+Functional ``not_applicable`` remains distinct from ``unknown``. Approximate
+MNI variants are flagged, never registered automatically. Nearest
+placement is disabled unless a finite limit and tissue class are provided; a
+cross-hemisphere or cross-tissue fallback is rejected. BD/PC terms and source
+scores are descriptive endpoint context, including reference homologs; they
+are not functions of edges or new connectivity evidence. Atlas overlap is not
+EPI coverage. See ``examples/post_analysis_bundle.py`` for an offline example.
+``bundle.export_summary(table, path)`` exports the selected table with a JSON
+metadata sidecar; ``bundle.plot_summary(table)`` plots that same table.
+
+Paired condition differences and interactions
+---------------------------------------------
+
+For a between-subject effect on change, supply paired arrays in identical
+subject order, ``test_type="paired"``, and ``interest``. With ``input="r"``,
+Fisher transformation is applied to each condition before forming B minus A.
+With ``input="z"``, inputs are already Fisher z. The response units are Fisher
+z difference; coefficients are native contrast estimates. ``confounds`` are
+subject-level covariates, whereas ``confounds_group1`` and
+``confounds_group2`` are matched numeric condition-specific covariates and
+enter as B minus A. Both may be supplied. The permutation unit is the subject.
+
+Named numeric predictors can include ``interactions=[("group", "age")]``.
+All named predictors are mean centered on this path; the interaction is their
+product. Each returned contrast adjusts for all other columns, including both
+main effects. Encode categorical variables numerically (e.g. 0/1) in Python;
+CLI text predictors must have exactly two levels and use the sorted first level
+as reference. Text CLI confounds are dummy coded with the first sorted level as
+reference; condition-specific categorical confounds must have the same levels
+in both conditions and use a single shared encoding.
+
+.. code-block:: yaml
+
+   design:
+     type: paired
+     subject: subject_id
+     condition: condition
+     levels: [pre, post]
+     interest: [group, age]
+     interactions: [[group, age]]
+     confounds: [motion]           # post - pre
+     subject_confounds: [sex]      # constant within subject
+
+Paired CLI rows require exactly one observation at each listed level for every
+subject, and interest, subject confounds and sites must agree across conditions.
+Missing values, duplicate pairs and extra or absent levels raise errors.

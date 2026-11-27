@@ -1,0 +1,546 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy._shared.arrays &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy._shared.arrays</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy._shared.arrays</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Statistical utilities for ConnInfPy.</span>
+
+<span class="sd">Includes:</span>
+
+<span class="sd">- :func:`fisher_r_to_z` / :func:`fisher_z_to_r` — Fisher transformations.</span>
+<span class="sd">- :func:`get_components` — connected components (BCT-style).</span>
+<span class="sd">- :func:`binarize` — threshold-and-binarize a connectivity matrix.</span>
+<span class="sd">- :func:`create_prior_weights` — block-density priors used by NI-TFNBS.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">overload</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">csgraph</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"fisher_r_to_z"</span><span class="p">,</span>
+    <span class="s2">"fisher_z_to_r"</span><span class="p">,</span>
+    <span class="s2">"get_components"</span><span class="p">,</span>
+    <span class="s2">"binarize"</span><span class="p">,</span>
+    <span class="s2">"create_prior_weights"</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_clipped_mask</span><span class="p">(</span><span class="n">r</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">policy</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">max_z</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                    <span class="n">clip_r</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">z</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Boolean mask of the values the active policy replaces (NaN: False)."""</span>
+    <span class="k">if</span> <span class="n">policy</span> <span class="o">==</span> <span class="s2">"clip_r"</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">clip_r</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># the clip_r policy always carries its bound</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">clip_r</span>
+    <span class="c1"># clip_z policy: |z| beyond max_z (r = ±1 gives |z| = inf, so it is included)</span>
+    <span class="k">assert</span> <span class="n">z</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># the transformed values are what this policy inspects</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">max_z</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_clip_report</span><span class="p">(</span><span class="n">mask</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">],</span> <span class="n">r</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span>
+                 <span class="n">policy</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">max_z</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">clip_r</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+                 <span class="n">z</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Explicit clipping counts with separate units.</span>
+
+<span class="sd">    ``matrix cells`` are counted per observation matrix (a cell clipped in</span>
+<span class="sd">    two subjects counts twice); ``n_unique_undirected_edges_clipped`` counts</span>
+<span class="sd">    upper-triangle positions (i &lt; j) clipped in at least one observation;</span>
+<span class="sd">    ``n_observations`` is the number of leading (N, N) matrices. The</span>
+<span class="sd">    correlation diagonal (r = 1 by construction) is reported separately from</span>
+<span class="sd">    observed off-diagonal values, so a structural diagonal is never reported</span>
+<span class="sd">    as saturation of measured edges. Under the unbounded policy nothing is</span>
+<span class="sd">    clipped: the clipped counts are zero and the values left at ±infinity</span>
+<span class="sd">    are reported separately in ``left_at_infinity`` (same count units).</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">policy</span> <span class="o">==</span> <span class="s2">"clip_r"</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">clip_r</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># the clip_r policy always carries its bound</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"clip_r"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">clip_r</span><span class="p">)}</span>
+    <span class="k">elif</span> <span class="n">policy</span> <span class="o">==</span> <span class="s2">"unbounded"</span><span class="p">:</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"max_z"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_z</span><span class="p">)}</span>
+    <span class="n">report</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"policy"</span><span class="p">:</span> <span class="n">policy</span><span class="p">,</span>
+        <span class="s2">"parameters"</span><span class="p">:</span> <span class="n">parameters</span><span class="p">,</span>
+        <span class="s2">"n_values_clipped"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+        <span class="s2">"matrix_shape"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"n_observations"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"diagonal"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"off_diagonal"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"left_at_infinity"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"count_units"</span><span class="p">:</span> <span class="p">(</span>
+            <span class="s2">"n_values_clipped counts matrix cells when the input is a stack of "</span>
+            <span class="s2">"(N, N) matrices (each cell counted once per observation); "</span>
+            <span class="s2">"diagonal/off_diagonal n_cells count matrix cells; "</span>
+            <span class="s2">"n_unique_undirected_edges_clipped counts upper-triangle positions "</span>
+            <span class="s2">"(i &lt; j) clipped in at least one observation; n_observations is the "</span>
+            <span class="s2">"number of (N, N) matrices in the input stack."</span>
+        <span class="p">),</span>
+    <span class="p">}</span>
+    <span class="n">arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">arr</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span> <span class="o">!=</span> <span class="n">arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">report</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">cells</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+    <span class="n">report</span><span class="p">[</span><span class="s2">"matrix_shape"</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+    <span class="n">report</span><span class="p">[</span><span class="s2">"n_observations"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">cells</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">diag_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">cells</span><span class="p">)</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">diag_mask</span><span class="p">[:,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">cells</span><span class="p">[:,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">idx</span><span class="p">]</span>
+    <span class="n">off_mask</span> <span class="o">=</span> <span class="n">cells</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">diag_mask</span>
+    <span class="n">report</span><span class="p">[</span><span class="s2">"diagonal"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"n_cells_clipped"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">diag_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())}</span>
+    <span class="n">iu</span><span class="p">,</span> <span class="n">ju</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">triu_indices</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">upper</span> <span class="o">=</span> <span class="n">off_mask</span><span class="p">[:,</span> <span class="n">iu</span><span class="p">,</span> <span class="n">ju</span><span class="p">]</span> <span class="o">|</span> <span class="n">off_mask</span><span class="p">[:,</span> <span class="n">ju</span><span class="p">,</span> <span class="n">iu</span><span class="p">]</span>  <span class="c1"># either symmetric cell</span>
+    <span class="n">report</span><span class="p">[</span><span class="s2">"off_diagonal"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"n_cells_clipped"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">off_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+        <span class="s2">"n_unique_undirected_edges_clipped"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">upper</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">policy</span> <span class="o">==</span> <span class="s2">"unbounded"</span> <span class="ow">and</span> <span class="n">z</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">inf_cells</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">z</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+        <span class="n">inf_diag</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">inf_cells</span><span class="p">)</span>
+        <span class="n">inf_diag</span><span class="p">[:,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">inf_cells</span><span class="p">[:,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">idx</span><span class="p">]</span>
+        <span class="n">inf_off</span> <span class="o">=</span> <span class="n">inf_cells</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">inf_diag</span>
+        <span class="n">report</span><span class="p">[</span><span class="s2">"left_at_infinity"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"n_values"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">inf_cells</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+            <span class="s2">"diagonal"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"n_cells"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">inf_diag</span><span class="o">.</span><span class="n">sum</span><span class="p">())},</span>
+            <span class="s2">"off_diagonal"</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">"n_cells"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">inf_off</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+                <span class="s2">"n_unique_undirected_edges"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span>
+                    <span class="n">inf_off</span><span class="p">[:,</span> <span class="n">iu</span><span class="p">,</span> <span class="n">ju</span><span class="p">]</span> <span class="o">|</span> <span class="n">inf_off</span><span class="p">[:,</span> <span class="n">ju</span><span class="p">,</span> <span class="n">iu</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+    <span class="k">return</span> <span class="n">report</span>
+
+
+<span class="nd">@overload</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">fisher_r_to_z</span><span class="p">(</span>
+    <span class="n">r</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">handle_bounds</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span> <span class="n">max_z</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span> <span class="n">clip_r</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span> <span class="n">return_report</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"npt.NDArray[np.float64]"</span><span class="p">:</span> <span class="o">...</span>
+
+
+<span class="nd">@overload</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">fisher_r_to_z</span><span class="p">(</span>
+    <span class="n">r</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">handle_bounds</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span> <span class="n">max_z</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span> <span class="n">clip_r</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span> <span class="n">return_report</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"tuple[npt.NDArray[np.float64], dict]"</span><span class="p">:</span> <span class="o">...</span>
+
+
+<div class="viewcode-block" id="fisher_r_to_z">
+<a class="viewcode-back" href="../../../conninfpy.html#conninfpy._shared.arrays.fisher_r_to_z">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fisher_r_to_z</span><span class="p">(</span>
+    <span class="n">r</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">handle_bounds</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">max_z</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span> <span class="n">clip_r</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">return_report</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Union[npt.NDArray[np.float64], tuple[npt.NDArray[np.float64], dict]]"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Apply Fisher r-to-z transformation to correlation coefficients, handling boundary cases.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    r : np.ndarray</span>
+<span class="sd">        Array of correlation coefficients with values in ``[-1, 1]``.</span>
+<span class="sd">        Can be any shape (scalar, 1D, 2D, ...).</span>
+<span class="sd">    handle_bounds : bool, optional</span>
+<span class="sd">        Clip-z policy: if True (default), clip z to ``[-max_z, max_z]``</span>
+<span class="sd">        (this also makes ``r = ±1`` finite). If False, keep the exact</span>
+<span class="sd">        transform, with infinities at ``r = ±1`` and a warning.</span>
+<span class="sd">    max_z : float</span>
+<span class="sd">        Clipping bound of the clip-z policy (default: 5, i.e.</span>
+<span class="sd">        ``|r| &gt; tanh(5) ≈ 0.99991``). Every value beyond it is clipped, so</span>
+<span class="sd">        the transform stays monotone in ``r``.</span>
+<span class="sd">    clip_r : float, optional</span>
+<span class="sd">        Clip-r policy: clip correlations to ``[-clip_r, clip_r]`` *before*</span>
+<span class="sd">        ``arctanh`` instead of clipping z afterwards (``0 &lt; clip_r &lt; 1``).</span>
+<span class="sd">        This is the historical in-app "Apply Fisher-z now" behaviour</span>
+<span class="sd">        (``clip_r=0.9999``, z bounded by ``atanh(0.9999) ≈ 4.9517``, no</span>
+<span class="sd">        warning). Mutually exclusive with ``handle_bounds=False``; out-of-</span>
+<span class="sd">        range input still raises.</span>
+<span class="sd">    return_report : bool, optional</span>
+<span class="sd">        Also return a report dict with the number of clipped values,</span>
+<span class="sd">        separating the structural diagonal (``r = 1`` by construction) from</span>
+<span class="sd">        observed off-diagonal values, with explicit count units (matrix</span>
+<span class="sd">        cells vs unique undirected edges vs observations). Under the</span>
+<span class="sd">        unbounded policy nothing is clipped: the clipped counts are zero</span>
+<span class="sd">        and values left at ±infinity are reported separately</span>
+<span class="sd">        (``left_at_infinity``). Default False returns only the transformed</span>
+<span class="sd">        array.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    z : np.ndarray</span>
+<span class="sd">        Array of z-scores with the same shape as ``r`` (plus the report</span>
+<span class="sd">        dict when ``return_report=True``).</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If any value in ``r`` is outside ``[-1, 1]``, or ``clip_r`` is not</span>
+<span class="sd">        a number in (0, 1), or both ``clip_r`` and</span>
+<span class="sd">        ``handle_bounds=False`` are given.</span>
+
+<span class="sd">    Warnings</span>
+<span class="sd">    --------</span>
+<span class="sd">    UserWarning</span>
+<span class="sd">        Under the clip-z policy: if ``r`` contains ``±1`` or values beyond</span>
+<span class="sd">        ``tanh(max_z)``. With ``handle_bounds=False``: if ``r`` contains</span>
+<span class="sd">        ``±1`` (infinities are kept). The clip-r policy stays silent, as it</span>
+<span class="sd">        has always been; use ``return_report`` for its counts.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The transformation is :math:`z = \\operatorname{arctanh}(r)`. For</span>
+<span class="sd">    :math:`r = \\pm 1`, :math:`z` approaches :math:`\\pm\\infty`. When</span>
+<span class="sd">    ``handle_bounds=True``, z is clipped at ``±max_z``. (Earlier versions</span>
+<span class="sd">    replaced only values within ``np.isclose`` of ±1, so r = 0.99998 gave</span>
+<span class="sd">    z = 5.76 while the larger r = 0.99999 gave 5.) Missing values (NaN)</span>
+<span class="sd">    stay NaN.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; r_vals = np.array([1.0, -1.0])</span>
+<span class="sd">    &gt;&gt;&gt; fisher_r_to_z(r_vals, handle_bounds=True, max_z=4.0)</span>
+<span class="sd">    array([ 4., -4.])</span>
+
+<span class="sd">    """</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">clip_r</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">clip_r</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">clip_r</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">))</span> <span class="ow">or</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;</span> <span class="n">clip_r</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"clip_r must be a number in (0, 1)."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">handle_bounds</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"clip_r and handle_bounds=False are mutually exclusive policies."</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">((</span><span class="n">r</span> <span class="o">&lt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">r</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Correlation coefficients must be in the range [-1, 1]."</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">clip_r</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Clip-r policy: bound the correlations first, then transform. The</span>
+        <span class="c1"># bounded r makes z finite by construction; no clipping of z, no</span>
+        <span class="c1"># warning (historical in-app behaviour; counts via return_report).</span>
+        <span class="n">clipped</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">clip_r</span>  <span class="c1"># NaN compares False</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arctanh</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="o">-</span><span class="n">clip_r</span><span class="p">,</span> <span class="n">clip_r</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">return_report</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">z</span><span class="p">,</span> <span class="n">_clip_report</span><span class="p">(</span><span class="n">clipped</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="s2">"clip_r"</span><span class="p">,</span> <span class="n">max_z</span><span class="o">=</span><span class="n">max_z</span><span class="p">,</span> <span class="n">clip_r</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">clip_r</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">z</span>
+
+    <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span>
+        <span class="n">divide</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">,</span> <span class="n">invalid</span><span class="o">=</span><span class="s2">"ignore"</span>
+    <span class="p">):</span>  <span class="c1"># arctanh(±1): divide-by-zero → ±inf, handled below</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arctanh</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">handle_bounds</span><span class="p">:</span>
+        <span class="n">over</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">max_z</span>  <span class="c1"># includes r = ±1; NaN compares False</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">over</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Input contains r = ±1 or |r| &gt; tanh(</span><span class="si">{</span><span class="n">max_z</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2">) = </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">max_z</span><span class="p">)</span><span class="si">:</span><span class="s2">.5f</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">over</span><span class="p">))</span><span class="si">}</span><span class="s2"> value(s)); z clipped at ±</span><span class="si">{</span><span class="n">max_z</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2">."</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="o">-</span><span class="n">max_z</span><span class="p">,</span> <span class="n">max_z</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_report</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">z</span><span class="p">,</span> <span class="n">_clip_report</span><span class="p">(</span><span class="n">over</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="s2">"clip_z"</span><span class="p">,</span> <span class="n">max_z</span><span class="o">=</span><span class="n">max_z</span><span class="p">,</span> <span class="n">clip_r</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">z</span><span class="p">)):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">"Input contains r = ±1, resulting in infinite z-values. Left as infinity."</span><span class="p">,</span>
+                <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_report</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">z</span><span class="p">,</span> <span class="n">_clip_report</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">z</span><span class="p">)),</span> <span class="n">r</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="s2">"unbounded"</span><span class="p">,</span>
+                                   <span class="n">max_z</span><span class="o">=</span><span class="n">max_z</span><span class="p">,</span> <span class="n">clip_r</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="n">z</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">z</span></div>
+
+
+
+<div class="viewcode-block" id="fisher_z_to_r">
+<a class="viewcode-back" href="../../../conninfpy.html#conninfpy._shared.arrays.fisher_z_to_r">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fisher_z_to_r</span><span class="p">(</span><span class="n">z</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Convert Fisher z-scores back to correlation coefficients.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    z : np.ndarray</span>
+<span class="sd">        Fisher z-scores, any shape.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        Correlation coefficients in (-1, 1), same shape as ``z``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; z_vals = np.array([0.0, 1.0, -1.0, 2.0])</span>
+<span class="sd">    &gt;&gt;&gt; fisher_z_to_r(z_vals).round(3)</span>
+<span class="sd">    array([ 0.   ,  0.762, -0.762,  0.964])</span>
+<span class="sd">    """</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">z</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="get_components">
+<a class="viewcode-back" href="../../../conninfpy.html#conninfpy._shared.arrays.get_components">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_components</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">no_depend</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Connected components of an undirected binary graph.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    A : np.ndarray of shape (N, N)</span>
+<span class="sd">        Binary undirected adjacency matrix.</span>
+<span class="sd">    no_depend : bool, optional</span>
+<span class="sd">        Does nothing; kept for backwards compatibility.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    comps : np.ndarray of shape (N,)</span>
+<span class="sd">        Component index (1-based) assigned to each node.</span>
+<span class="sd">    comp_sizes : np.ndarray of shape (M,)</span>
+<span class="sd">        Number of nodes in each component.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``A`` is not symmetric.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Isolated nodes form components of size 1. Component numbering is not</span>
+<span class="sd">    guaranteed to match the BCT Matlab implementation, although the</span>
+<span class="sd">    component topology is. Thanks to Nick Cullen for the original</span>
+<span class="sd">    implementation.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; A = np.eye(3)</span>
+<span class="sd">    &gt;&gt;&gt; comps, sizes = get_components(A)</span>
+<span class="sd">    &gt;&gt;&gt; comps</span>
+<span class="sd">    array([1, 2, 3])</span>
+<span class="sd">    &gt;&gt;&gt; sizes</span>
+<span class="sd">    array([1, 1, 1])</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span>
+        <span class="n">A</span><span class="p">,</span> <span class="n">A</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">equal_nan</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">):</span>  <span class="c1"># NaN != NaN; binarize drops it below</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"get_components can only be computed for undirected"</span>
+            <span class="s2">" matrices. If your matrix is noisy, correct it with np.around"</span>
+        <span class="p">)</span>
+
+    <span class="n">A</span> <span class="o">=</span> <span class="n">binarize</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">fill_diagonal</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="n">n_comp</span><span class="p">,</span> <span class="n">comps</span> <span class="o">=</span> <span class="n">csgraph</span><span class="o">.</span><span class="n">connected_components</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">directed</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">comps</span> <span class="o">=</span> <span class="n">comps</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="n">comp_sizes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">comps</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]</span>
+    <span class="k">return</span> <span class="n">comps</span><span class="p">,</span> <span class="n">comp_sizes</span></div>
+
+
+
+<div class="viewcode-block" id="binarize">
+<a class="viewcode-back" href="../../../conninfpy.html#conninfpy._shared.arrays.binarize">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">binarize</span><span class="p">(</span><span class="n">W</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Binarize a weighted connectivity matrix: nonzero → 1, zero → 0.</span>
+
+<span class="sd">    NaN counts as absent data and becomes 0 — missing values must not</span>
+<span class="sd">    turn into present edges. With ``copy=False`` the input array is</span>
+<span class="sd">    modified in place.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    W : np.ndarray of shape (N, N)</span>
+<span class="sd">        Weighted connectivity matrix.</span>
+<span class="sd">    copy : bool, optional</span>
+<span class="sd">        If True (default), return a new array; otherwise modify ``W``</span>
+<span class="sd">        in place.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray of shape (N, N)</span>
+<span class="sd">        Binary adjacency matrix (0/1, same dtype behavior as input copy).</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; W = np.array([</span>
+<span class="sd">    ...     [0.0, 2.5, 0.0],</span>
+<span class="sd">    ...     [1.1, 0.0, 0.3],</span>
+<span class="sd">    ...     [0.0, 0.0, 0.0]</span>
+<span class="sd">    ... ])</span>
+<span class="sd">    &gt;&gt;&gt; binarize(W)</span>
+<span class="sd">    array([[0., 1., 0.],</span>
+<span class="sd">           [1., 0., 1.],</span>
+<span class="sd">           [0., 0., 0.]])</span>
+<span class="sd">    &gt;&gt;&gt; binarize(np.array([np.nan, 0.0, 2.0]))</span>
+<span class="sd">    array([0., 0., 1.])</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">copy</span><span class="p">:</span>
+        <span class="n">W</span> <span class="o">=</span> <span class="n">W</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">W</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">W</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># missing data is not an edge</span>
+    <span class="n">W</span><span class="p">[</span><span class="n">W</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">W</span></div>
+
+
+
+<div class="viewcode-block" id="create_prior_weights">
+<a class="viewcode-back" href="../../../conninfpy.enhance.html#conninfpy._shared.arrays.create_prior_weights">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_prior_weights</span><span class="p">(</span>
+    <span class="n">node_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">],</span>
+    <span class="n">target_network_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">boost_factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Create an (N, N) symmetric weight matrix based on node network labels.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    node_labels : np.ndarray[int]</span>
+<span class="sd">        1D array of integer network IDs for each node (length N).</span>
+<span class="sd">    target_network_id : int or None, optional</span>
+<span class="sd">        If provided, only edges where both nodes belong to this network are</span>
+<span class="sd">        boosted. If None (default), all intra-network edges (nodes sharing</span>
+<span class="sd">        the same label) are boosted.</span>
+<span class="sd">    boost_factor : float, optional</span>
+<span class="sd">        Multiplicative weight for priority edges (default 2.0).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    weights : np.ndarray[float]</span>
+<span class="sd">        Symmetric (N, N) weight matrix with background value 1.0 and</span>
+<span class="sd">        `boost_factor` for priority intra-network edges. The diagonal is</span>
+<span class="sd">        left at 1.0.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; labels = np.array([1, 1, 2, 2])</span>
+<span class="sd">    &gt;&gt;&gt; create_prior_weights(labels, boost_factor=3.0)</span>
+<span class="sd">    array([[1., 3., 1., 1.],</span>
+<span class="sd">           [3., 1., 1., 1.],</span>
+<span class="sd">           [1., 1., 1., 3.],</span>
+<span class="sd">           [1., 1., 3., 1.]])</span>
+<span class="sd">    """</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">node_labels</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">labels</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"`node_labels` must be a 1D array of integer labels"</span><span class="p">)</span>
+
+    <span class="n">N</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">N</span><span class="p">,</span> <span class="n">N</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="n">same_network</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">==</span> <span class="n">labels</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>
+
+    <span class="k">if</span> <span class="n">target_network_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">target_mask</span> <span class="o">=</span> <span class="n">labels</span> <span class="o">==</span> <span class="n">target_network_id</span>
+        <span class="n">same_network</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">logical_and</span><span class="p">(</span>
+            <span class="n">same_network</span><span class="p">,</span> <span class="n">target_mask</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">&amp;</span> <span class="n">target_mask</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="p">)</span>
+
+    <span class="n">np</span><span class="o">.</span><span class="n">fill_diagonal</span><span class="p">(</span><span class="n">same_network</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">weights</span><span class="p">[</span><span class="n">same_network</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">boost_factor</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">weights</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

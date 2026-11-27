@@ -1,0 +1,1260 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Usage &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2943afd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Package organization" href="architecture.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Usage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#input-conventions">Input conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#connectivity-from-time-series">Connectivity from time series</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#preprocessing-provenance">Preprocessing provenance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fisher-transformation-policies">Fisher transformation policies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#missing-connectivity">Missing connectivity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#declared-edge-family-edge-mask">Declared edge family — <code class="docutils literal notranslate"><span class="pre">edge_mask</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#t-test-pipeline-compute-p-val">t-test pipeline — <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#glm-pipeline-compute-p-val-glm">GLM pipeline — <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_glm()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#multi-contrast-glm-in-one-pass-compute-p-val-glm-multi">Multi-contrast GLM in one pass — <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_glm_multi()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#paired-a-vs-b-with-level-confounds-compute-p-val-paired-glm">Paired A vs B with Δ-level confounds — <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_paired_glm()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#optional-subject-ids-in-paired-designs">Optional subject IDs in paired designs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#methods-enhancement-operators">Methods (enhancement operators)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#multi-site-harmonization-conninfpy-harmonize">Multi-site harmonization — <code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.harmonize</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#permutation-acceleration-conninfpy-stats-acceleration">Permutation acceleration — <code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.stats.acceleration</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tfnbs-integration">TFNBS integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#synthetic-data-and-scenarios-conninfpy-sim">Synthetic data and scenarios — <code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.sim</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#enhancement-without-permutation-conninfpy-enhance">Enhancement without permutation — <code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.enhance</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#command-line-conninfpy-run">Command line — <code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">run</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#replaying-application-runs">Replaying application runs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#saving-and-restoring-workspaces">Saving and restoring workspaces</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#the-guided-application-streamlit-design-step">The guided application (Streamlit) — design step</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#network-level-summaries-result-network-summary-atlas">Network-level summaries — <code class="docutils literal notranslate"><span class="pre">result.network_summary(atlas)</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#anatomical-interpretation-conninfpy-interpret">Anatomical interpretation — <code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.interpret</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#coefficient-maps-and-baseline-coupling-result-beta">Coefficient maps and baseline coupling — <code class="docutils literal notranslate"><span class="pre">result.beta</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#independent-post-analysis-summaries">Independent post-analysis summaries</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#paired-condition-differences-and-interactions">Paired condition differences and interactions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Usage</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/usage.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="usage">
+<h1>Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h1>
+<p>Start with <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.analyze()</span></code>: it takes per-subject connectivity and a
+design, prepares the input, optionally harmonizes sites, and runs permutation
+inference. The pipelines it is built from live in <a class="reference internal" href="conninfpy.stats.html#module-conninfpy.stats" title="conninfpy.stats"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.stats</span></code></a> and
+share one contract: edge-wise statistics → topology-aware enhancement →
+permutation null → FWER / FDR-corrected p-values. <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.analyze()</span></code>
+tests positive and negative effects jointly against a two-sided null by
+default (see <a class="reference internal" href="approach.html"><span class="doc">How Inference Works</span></a>), while <a class="reference internal" href="conninfpy.stats.html#module-conninfpy.stats" title="conninfpy.stats"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.stats</span></code></a> entry points keep
+separate per-tail nulls unless <code class="docutils literal notranslate"><span class="pre">two_tailed=True</span></code> is passed.</p>
+<p>Quick reference:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Entry point</p></th>
+<th class="head"><p>Use case</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.analyze()</span></code></p></td>
+<td><p>Main entry point: input preparation → optional ComBat → GLM / t-test inference → <a class="reference internal" href="conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult" title="conninfpy.analysis.AnalyzeResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">AnalyzeResult</span></code></a></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="conninfpy.stats.html#conninfpy.stats.compute_p_val" title="conninfpy.stats.compute_p_val"><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.stats.compute_p_val()</span></code></a></p></td>
+<td><p>Group / paired / one-sample t-test</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="conninfpy.stats.html#conninfpy.stats.compute_p_val_glm" title="conninfpy.stats.compute_p_val_glm"><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.stats.compute_p_val_glm()</span></code></a></p></td>
+<td><p>Custom design matrix and t / β / F contrasts (Freedman–Lane)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="conninfpy.stats.html#conninfpy.stats.compute_p_val_glm_multi" title="conninfpy.stats.compute_p_val_glm_multi"><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.stats.compute_p_val_glm_multi()</span></code></a></p></td>
+<td><p>Several contrasts of one design, each with its own null, shared permutations</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="conninfpy.stats.html#conninfpy.stats.compute_p_val_paired_glm" title="conninfpy.stats.compute_p_val_paired_glm"><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.stats.compute_p_val_paired_glm()</span></code></a></p></td>
+<td><p>Paired A vs B with condition-varying confounds</p></td>
+</tr>
+</tbody>
+</table>
+<p>Helper modules:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="conninfpy.harmonize.html#module-conninfpy.harmonize" title="conninfpy.harmonize"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.harmonize</span></code></a> — multi-site ComBat harmonization + design diagnostics</p></li>
+<li><p><a class="reference internal" href="conninfpy.stats.html#module-conninfpy.stats.acceleration" title="conninfpy.stats.acceleration"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.stats.acceleration</span></code></a> — GPD/gamma tail approximation for permutation acceleration</p></li>
+<li><p><a class="reference internal" href="conninfpy.enhance.html#module-conninfpy.enhance" title="conninfpy.enhance"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.enhance</span></code></a> — enhancement without permutation (<code class="docutils literal notranslate"><span class="pre">apply_*</span></code>, <code class="docutils literal notranslate"><span class="pre">get_*_score</span></code>, <code class="docutils literal notranslate"><span class="pre">nbs_bct</span></code>)</p></li>
+<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.sim</span></code> — synthetic connectivity and topology scenarios</p></li>
+<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.loaders</span></code> — manifest-based data loading (<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.load()</span></code>)</p></li>
+</ul>
+<section id="input-conventions">
+<h2>Input conventions<a class="headerlink" href="#input-conventions" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Connectivity tensors: shape <code class="docutils literal notranslate"><span class="pre">(n_subjects,</span> <span class="pre">N,</span> <span class="pre">N)</span></code>, symmetric. Directed
+(asymmetric) connectivity is rejected: the pipelines, ComBat, the
+parametric baselines and the network summaries treat edges as undirected,
+so it would be tested inconsistently. Symmetrise it or analyse each
+direction separately. The diagonal is zeroed automatically on a copy —
+your arrays are never modified.</p></li>
+<li><p>Paired data (<code class="docutils literal notranslate"><span class="pre">test_type='paired'</span></code>) must hold the same subjects, in the
+same order, in both conditions; unequal counts are rejected.</p></li>
+<li><p>Edges with zero variance: an edge that is the same in every subject has no
+standard error. If its effect is zero too (e.g. 0 everywhere) its statistic
+is 0 and its p-value 1. If the effect is nonzero (e.g. 0.3 everywhere, or a
+constant shift between paired conditions) the t or F statistic is infinite
+and the entry points raise an error naming the edges: such values usually
+come from duplicated subjects or preprocessing. Set those edges to NaN and
+pass <code class="docutils literal notranslate"><span class="pre">missing='available_case'</span></code> to leave them untested. “Zero” is judged
+by a <strong>scale-relative degeneracy floor</strong>: an edge’s residual variance counts
+as zero when it falls below <code class="docutils literal notranslate"><span class="pre">RTOL</span></code> (= 1e-10) times that edge’s own mean
+square, so the classification is invariant to the units/scale of the data
+(z, r, or arbitrary units) — floating-point sums leave ~1e-16 relative
+noise where the exact variance is zero, and a standard deviation below
+roughly 1e-5 of the root mean square is never real connectivity data. The
+floor value is a fixed numerical guard, not a tunable analysis parameter.</p></li>
+<li><p>GLM contrasts must be estimable (<code class="docutils literal notranslate"><span class="pre">C</span> <span class="pre">=</span> <span class="pre">C</span> <span class="pre">X⁺X</span></code>). With collinear columns,
+e.g. two copies of a variable or a group indicator nested in site dummies,
+a coefficient on one column alone is not identified and is rejected; test
+an identified combination or drop the redundant column.</p></li>
+<li><p><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.analyze()</span></code> takes <code class="docutils literal notranslate"><span class="pre">input='r'</span></code> (correlations; Fisher r→z is
+applied once) or <code class="docutils literal notranslate"><span class="pre">input='z'</span></code> (already transformed). Left as <code class="docutils literal notranslate"><span class="pre">None</span></code> it
+detects the scale: a unit diagonal means correlations, any value beyond ±1
+means Fisher z; data that could be either raise an error rather than risk a
+second transform. <code class="docutils literal notranslate"><span class="pre">r_to_z=False</span></code> analyses correlations as given, without
+the transform, as the MATLAB NBS toolbox does (<code class="docutils literal notranslate"><span class="pre">design['scale']</span></code> then
+reads <code class="docutils literal notranslate"><span class="pre">'correlation'</span></code>).</p></li>
+<li><p>The advanced pipelines in <a class="reference internal" href="conninfpy.stats.html#module-conninfpy.stats" title="conninfpy.stats"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.stats</span></code></a> expect data already on the
+analysis scale (e.g. Fisher z via <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.fisher_r_to_z()</span></code>).</p></li>
+<li><p>Results are <a class="reference internal" href="conninfpy.results.html#conninfpy.results.InferenceResult" title="conninfpy.results.InferenceResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">InferenceResult</span></code></a> objects, which
+behave as <code class="docutils literal notranslate"><span class="pre">{'positive',</span> <span class="pre">'negative'}</span></code> dicts and additionally carry
+<code class="docutils literal notranslate"><span class="pre">positive</span></code> / <code class="docutils literal notranslate"><span class="pre">negative</span></code> / <code class="docutils literal notranslate"><span class="pre">method</span></code> / <code class="docutils literal notranslate"><span class="pre">n_permutations</span></code> /
+<code class="docutils literal notranslate"><span class="pre">acceleration</span></code> / <code class="docutils literal notranslate"><span class="pre">wall_time_s</span></code> attributes and edge-table exports.
+<code class="docutils literal notranslate"><span class="pre">analyze()</span></code> wraps one in an <a class="reference internal" href="conninfpy.analysis.html#conninfpy.analysis.AnalyzeResult" title="conninfpy.analysis.AnalyzeResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">AnalyzeResult</span></code></a>
+(<code class="docutils literal notranslate"><span class="pre">.inference</span></code>, plus <code class="docutils literal notranslate"><span class="pre">flags</span></code> and ComBat diagnostics). The legacy v1.x
+keys <code class="docutils literal notranslate"><span class="pre">'g2&gt;g1'</span></code> / <code class="docutils literal notranslate"><span class="pre">'g1&gt;g2'</span></code> remain readable with a
+<a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#DeprecationWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DeprecationWarning</span></code></a> until v2.1. F-stat omnibus tests return
+<code class="docutils literal notranslate"><span class="pre">{'omnibus':</span> <span class="pre">arr}</span></code>.</p></li>
+<li><p>Every entry point shares the defaults in <a class="reference internal" href="conninfpy.defaults.html#module-conninfpy.defaults" title="conninfpy.defaults"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.defaults</span></code></a>
+(1000 permutations, exact empirical p-values).</p></li>
+</ul>
+</section>
+<section id="connectivity-from-time-series">
+<h2>Connectivity from time series<a class="headerlink" href="#connectivity-from-time-series" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">compute_connectivity</span></code> accepts a single <code class="docutils literal notranslate"><span class="pre">(timepoints,</span> <span class="pre">ROIs)</span></code> array, a
+stack of equally long observations, or a list with different lengths. For each
+observation it removes every frame containing a non-finite value in any ROI;
+it does not perform pairwise deletion. The returned matrices retain the input
+observation order. Constant ROIs have undefined Pearson correlations (NaN and
+a warning); partial correlation raises an error. Fewer than two complete frames
+raises an error and fewer than ten emits a warning by default.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_connectivity</span>
+
+<span class="n">r</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">compute_connectivity</span><span class="p">(</span><span class="n">series</span><span class="p">,</span> <span class="n">return_diagnostics</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">partial</span><span class="p">,</span> <span class="n">diagnostics</span> <span class="o">=</span> <span class="n">compute_connectivity</span><span class="p">(</span>
+    <span class="n">series</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"partial_correlation"</span><span class="p">,</span> <span class="n">shrinkage</span><span class="o">=</span><span class="s2">"oas"</span><span class="p">,</span>
+    <span class="n">return_diagnostics</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">diagnostics</span><span class="p">[</span><span class="s2">"n_valid_tr"</span><span class="p">],</span> <span class="n">diagnostics</span><span class="p">[</span><span class="s2">"delta_s"</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Omitting shrinkage uses no shrinkage for Pearson and Ledoit–Wolf for partial
+correlation. Explicit <code class="docutils literal notranslate"><span class="pre">shrinkage=None</span></code> disables it even for partial
+correlation; singular or ill-conditioned covariance raises an error. <code class="docutils literal notranslate"><span class="pre">oas</span></code>
+and <code class="docutils literal notranslate"><span class="pre">ledoit_wolf</span></code> estimate a separate intensity per observation, while a
+float in [0, 1] fixes a common intensity. Unless <code class="docutils literal notranslate"><span class="pre">standardize=False</span></code>, each
+ROI is centered and scaled by its population standard deviation before
+shrinking covariance toward its mean diagonal times the identity. Partial
+correlations are derived from the precision matrix. Large output stacks still
+require memory proportional to the number of observations times ROIs squared;
+working batches are bounded.</p>
+<p>Subject-specific shrinkage can itself create group differences in connectivity,
+particularly when recording lengths or quality differ. The diagnostics report
+<code class="docutils literal notranslate"><span class="pre">n_valid_tr</span></code> and <code class="docutils literal notranslate"><span class="pre">delta_s</span></code> for each observation. Compare their distributions
+by group and consider including relevant diagnostics as covariates when
+scientifically appropriate; descriptive warnings are not significance tests.</p>
+<p>Manifests for time-series loaders can request construction with, for example:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">params</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">connectivity_kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">partial_correlation</span>
+<span class="w">  </span><span class="nt">shrinkage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">oas</span>
+<span class="w">  </span><span class="nt">group_column</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">group</span>
+<span class="w">  </span><span class="nt">min_valid_tr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</pre></div>
+</div>
+<p>The resulting phenotype table gains <code class="docutils literal notranslate"><span class="pre">n_valid_tr</span></code> and <code class="docutils literal notranslate"><span class="pre">delta_s</span></code> and the
+loader provenance records the estimator. Without these manifest options, raw
+time series remain raw for loaders that normally return them. In a CLI analysis
+file, use <code class="docutils literal notranslate"><span class="pre">connectivity:</span> <span class="pre">{kind:</span> <span class="pre">partial_correlation,</span> <span class="pre">shrinkage:</span> <span class="pre">oas}</span></code> when
+the manifest returns raw time series. A loader that constructs matrices itself
+must instead receive its settings in the manifest. In the app, choose the
+estimator and shrinkage before loading. Fisher transformation remains an
+independent option. The built-in demo picker contains ABIDE-mini and OpenClose;
+other datasets can be loaded through a manifest.</p>
+</section>
+<section id="preprocessing-provenance">
+<h2>Preprocessing provenance<a class="headerlink" href="#preprocessing-provenance" title="Link to this heading"></a></h2>
+<p>Loaders, the connectivity backend, <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> and result bundles carry a
+<strong>three-state preprocessing record</strong>
+(<code class="docutils literal notranslate"><span class="pre">dataset.provenance['preprocessing']</span></code> → <code class="docutils literal notranslate"><span class="pre">analyze(preprocessing=...)</span></code> →
+<code class="docutils literal notranslate"><span class="pre">result.analysis_provenance['preprocessing']</span></code> → <code class="docutils literal notranslate"><span class="pre">bundle.metadata</span></code>). Each
+fact is either unknown (absent) or known <strong>with an explicit source</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+  <span class="s2">"gsr"</span><span class="p">:</span>                  <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="n">false</span><span class="p">,</span> <span class="s2">"source"</span><span class="p">:</span> <span class="s2">"loader_denoising_pipeline"</span><span class="p">},</span>
+  <span class="s2">"connectivity_method"</span><span class="p">:</span>  <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="s2">"pearson"</span><span class="p">,</span> <span class="s2">"source"</span><span class="p">:</span> <span class="s2">"computed_by_conninfpy"</span><span class="p">},</span>
+  <span class="s2">"standardize"</span><span class="p">:</span>          <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="n">true</span><span class="p">,</span> <span class="s2">"source"</span><span class="p">:</span> <span class="s2">"computed_by_conninfpy"</span><span class="p">},</span>
+  <span class="s2">"shrinkage"</span><span class="p">:</span>            <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="n">null</span><span class="p">,</span> <span class="s2">"source"</span><span class="p">:</span> <span class="s2">"computed_by_conninfpy"</span><span class="p">},</span>
+  <span class="s2">"tr_seconds"</span><span class="p">:</span>           <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span> <span class="s2">"source"</span><span class="p">:</span> <span class="s2">"input_manifest_declared"</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Sources separate what this library did (<code class="docutils literal notranslate"><span class="pre">computed_by_conninfpy</span></code>,
+<code class="docutils literal notranslate"><span class="pre">loader_denoising_pipeline</span></code>) from mere declarations (<code class="docutils literal notranslate"><span class="pre">input_file_name_token</span></code>
+for names like <code class="docutils literal notranslate"><span class="pre">..._GSR.npy</span></code> / <code class="docutils literal notranslate"><span class="pre">..._noGSR.npy</span></code> / <code class="docutils literal notranslate"><span class="pre">..._no_GSR.npy</span></code>,
+<code class="docutils literal notranslate"><span class="pre">input_manifest_declared</span></code> for the manifest’s <code class="docutils literal notranslate"><span class="pre">preprocessing.applied</span></code>
+block). Precedence is fact-wise: when the connectivity backend actually
+computes matrices, its <strong>estimator facts</strong> (<code class="docutils literal notranslate"><span class="pre">connectivity_method</span></code>,
+<code class="docutils literal notranslate"><span class="pre">standardize</span></code>, <code class="docutils literal notranslate"><span class="pre">shrinkage</span></code>) state what that computation resolved and
+override any older declaration about the same facts, while independent
+upstream facts (<code class="docutils literal notranslate"><span class="pre">gsr</span></code>, <code class="docutils literal notranslate"><span class="pre">tr_seconds</span></code>) and their declaration sources are
+kept unchanged. A missing fact is <strong>unknown</strong>, never “not applied” — an
+explicitly recorded <code class="docutils literal notranslate"><span class="pre">use_GSR:</span> <span class="pre">false</span></code> stays <code class="docutils literal notranslate"><span class="pre">False</span></code>. When several
+constituents are combined (e.g. the multi-site Open/Close loader), a fact is
+asserted globally only if <strong>every</strong> site states the same value; differing
+values, or a mix of known and unknown, leave the global fact unknown —
+per-site records are kept alongside: inside the record’s optional
+<code class="docutils literal notranslate"><span class="pre">per_site</span></code> mapping — so the ordinary loader → <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> → bundle /
+<code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">run</span></code> / app channel carries them without any extra parameter —
+and as the loader’s <code class="docutils literal notranslate"><span class="pre">preprocessing_per_site</span></code> provenance key for direct
+readers. Site records carry each site’s own known values and sources (a
+<code class="docutils literal notranslate"><span class="pre">None</span></code> site record reads as all-unknown) and cannot nest <code class="docutils literal notranslate"><span class="pre">per_site</span></code>
+again. The first site is never silently copied. Nothing is inferred from the connectivity values themselves (GSR is
+never guessed from negative edges). <code class="docutils literal notranslate"><span class="pre">tr_seconds</span></code> is only recorded from an
+explicit declaration; the per-observation phenotype columns <code class="docutils literal notranslate"><span class="pre">n_valid_tr</span></code>
+(complete frames) and <code class="docutils literal notranslate"><span class="pre">delta_s</span></code> (shrinkage intensity in [0, 1]) are
+diagnostics, not repetition times. <code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">run</span></code> writes the record to
+<code class="docutils literal notranslate"><span class="pre">provenance.json</span></code> (next to <code class="docutils literal notranslate"><span class="pre">connectivity</span></code> and
+<code class="docutils literal notranslate"><span class="pre">connectivity_diagnostics</span></code>) and into the saved bundle; the app shows it on
+the dataset card and keeps it in the run plan. An explicit record
+<code class="docutils literal notranslate"><span class="pre">schema_version</span></code> other than 1 is rejected rather than silently rewritten.</p>
+</section>
+<section id="fisher-transformation-policies">
+<h2>Fisher transformation policies<a class="headerlink" href="#fisher-transformation-policies" title="Link to this heading"></a></h2>
+<p><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.fisher_r_to_z()</span></code> is the single implementation, with two explicit
+clipping policies:</p>
+<ul class="simple">
+<li><p><strong>clip-z</strong> (default, <code class="docutils literal notranslate"><span class="pre">handle_bounds=True,</span> <span class="pre">max_z=5</span></code>): transform first, then
+clip z at ±5 (<code class="docutils literal notranslate"><span class="pre">|r|</span></code> &gt; tanh(5) ≈ 0.99991 and r = ±1); a warning names the
+number of clipped values. This is what <code class="docutils literal notranslate"><span class="pre">analyze(input='r')</span></code> and the app’s
+ingestion option apply.</p></li>
+<li><p><strong>clip-r</strong> (<code class="docutils literal notranslate"><span class="pre">clip_r=0.9999</span></code>): clip the correlations to ±0.9999 <em>before</em>
+arctanh (z bounded by ≈ 4.9517), silently. This is the historical in-app
+“Apply Fisher-z now” policy, which now goes through the same function.</p></li>
+</ul>
+<p>The two policies give different numbers near the bounds (e.g. r = 0.99995 →
+z = 5 under clip-z but 4.9517 under clip-r), so existing behaviour is kept
+per call site. <code class="docutils literal notranslate"><span class="pre">return_report=True</span></code> additionally returns a report separating
+the <strong>structural diagonal</strong> (r = 1 by construction — expected, not observed
+saturation) from <strong>observed off-diagonal</strong> clipped values, with explicit units:
+matrix cells (counted per observation matrix), unique undirected edges
+(upper-triangle positions clipped in at least one observation), and the number
+of observations. NaN values pass through untouched under both policies, and
+input outside [-1, 1] raises (including under <code class="docutils literal notranslate"><span class="pre">clip_r</span></code>: invalid
+correlations are rejected, not silently clipped).</p>
+<p>Fisher transforms are also <strong>provenance</strong>: <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> records the transform
+it actually applied (stage, scope, policy, parameters and the clipping
+counts above) as <code class="docutils literal notranslate"><span class="pre">result.analysis_provenance['fisher']</span> <span class="pre">=</span>
+<span class="pre">{'applied':</span> <span class="pre">[...],</span> <span class="pre">'upstream':</span> <span class="pre">[...]</span> <span class="pre">|</span> <span class="pre">'unknown'</span> <span class="pre">|</span> <span class="pre">None}</span></code>, preserved into
+bundle exports and <code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">run</span></code>’s <code class="docutils literal notranslate"><span class="pre">provenance.json</span></code>. Already-
+transformed input (<code class="docutils literal notranslate"><span class="pre">input='z'</span></code>) records the caller-supplied upstream
+history (<code class="docutils literal notranslate"><span class="pre">analyze(fisher_history=[...])</span></code>, e.g. the app’s captured button
+entry) without transforming or counting again — or <code class="docutils literal notranslate"><span class="pre">'unknown'</span></code> when no
+history exists; nothing is invented. Supplied histories are validated, not
+repaired: each entry must carry its own nonempty <code class="docutils literal notranslate"><span class="pre">source</span></code> (upstream work
+is never attributed to this library by default) and its top-level
+<code class="docutils literal notranslate"><span class="pre">policy</span></code>/<code class="docutils literal notranslate"><span class="pre">parameters</span></code> must agree with its counts report, so a
+contradictory record cannot be normalized away; a dict is accepted only as
+a full schema-checked record. Paired designs transform each condition
+<em>before</em> the B − A difference (stage
+<code class="docutils literal notranslate"><span class="pre">analysis_prepare_before_difference</span></code>), never the difference itself. Under
+the unbounded policy (<code class="docutils literal notranslate"><span class="pre">handle_bounds=False</span></code>) nothing is clipped: the
+report’s clipped counts are zero and values left at ±infinity are reported
+separately (<code class="docutils literal notranslate"><span class="pre">left_at_infinity</span></code>, same count units).</p>
+</section>
+<section id="missing-connectivity">
+<h2>Missing connectivity<a class="headerlink" href="#missing-connectivity" title="Link to this heading"></a></h2>
+<p>A region without signal in a subject (outside the field of view, signal
+dropout) has undefined correlations. ConnInfPy never treats them as zero.</p>
+<ul>
+<li><p><strong>Default (``missing=’raise’``)</strong>: every entry point rejects NaN or infinite
+off-diagonal values and reports the affected subjects, the regions without
+signal and any other missing edges. (Before this check a single NaN made
+every edge “significant”.)</p></li>
+<li><p><strong>Available-case analysis (``missing=’available_case’``)</strong> in
+<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.analyze()</span></code> and every inference entry point. For two-sample,
+paired and one-sample designs (<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val()</span></code>) each edge is tested
+with the subjects who have it
+(paired: the complete pairs) — no subject is dropped and nothing is filled
+in, which matters in cohorts of 30–40. Permutations shuffle or sign-flip
+whole subjects, so the max-statistic test stays exact given the
+missingness, which must not depend on the connectivity values themselves.
+Edges kept by fewer than <code class="docutils literal notranslate"><span class="pre">min_coverage</span></code> (default 80 %) of a group’s
+subjects, or by fewer than 3, are not tested: their p-value is NaN and they
+leave the family (and the Bonferroni / BH count). Bonferroni and BH use
+per-edge Welch degrees of freedom, or per-edge <code class="docutils literal notranslate"><span class="pre">n1</span> <span class="pre">+</span> <span class="pre">n2</span> <span class="pre">-</span> <span class="pre">2</span></code> with
+Student’s t (<code class="docutils literal notranslate"><span class="pre">var_equal=True</span></code>).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="n">group1</span><span class="o">=</span><span class="n">g1</span><span class="p">,</span> <span class="n">group2</span><span class="o">=</span><span class="n">g2</span><span class="p">,</span> <span class="n">test_type</span><span class="o">=</span><span class="s2">"two-sample"</span><span class="p">,</span>
+              <span class="n">method</span><span class="o">=</span><span class="s2">"tfnbs"</span><span class="p">,</span> <span class="n">missing</span><span class="o">=</span><span class="s2">"available_case"</span><span class="p">)</span>
+<span class="n">out</span><span class="o">.</span><span class="n">flags</span>                         <span class="c1"># one-line coverage summary</span>
+<span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="o">.</span><span class="n">missing_report</span>      <span class="c1"># per-edge n, untested edges,</span>
+                                  <span class="c1"># regions without signal, Fisher test</span>
+                                  <span class="c1"># of missingness by group</span>
+</pre></div>
+</div>
+<p>Report the coverage, and check <code class="docutils literal notranslate"><span class="pre">missing_by_group_p</span></code>: missingness that
+differs between groups is not a validity problem for the test, but the
+groups are then compared on slightly different subsets per edge.</p>
+</li>
+<li><p><strong>GLM designs</strong> (<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_glm()</span></code>, the multi-contrast and paired
+GLMs, <code class="docutils literal notranslate"><span class="pre">analyze(Y,</span> <span class="pre">interest=...)</span></code>) use the same option: edges are grouped
+by missingness pattern, each pattern gets its own full and reduced
+Freedman–Lane fits on its subjects, and every pattern uses the global
+(within-site) permutation restricted to its subjects, so the shuffles stay
+coherent and equal the standard ones on complete data. An edge is also left
+untested when its pattern has fewer than 2 residual degrees of freedom or
+the contrast is not estimable on its subjects (e.g. a two-group contrast
+where one group lacks the edge); a site whose subjects all lack an edge
+simply drops out of the site dummies. In 1,000 simulated nulls (36
+subjects at 3 sites, ComBat + site dummies, within-site permutation, 30 %
+of subjects missing one region) FWER stayed within Monte-Carlo error of
+0.05, as on the complete data (every 95 % interval includes 0.05).</p></li>
+<li><p><strong>ComBat</strong> (<code class="docutils literal notranslate"><span class="pre">combat_harmonize(...,</span> <span class="pre">missing='available_case')</span></code>, and the
+ComBat strategies of <code class="docutils literal notranslate"><span class="pre">analyze</span></code>) estimates every quantity per feature from
+the subjects who have it. A site with fewer than 2 subjects for a feature
+cannot be harmonized there: those values become NaN (counted in
+<code class="docutils literal notranslate"><span class="pre">diagnostics['values_not_harmonized']</span></code> and flagged by <code class="docutils literal notranslate"><span class="pre">analyze</span></code>) and are
+then handled as missing.</p></li>
+<li><p><strong>Dataset manifests</strong> may set <code class="docutils literal notranslate"><span class="pre">params:</span> <span class="pre">missing:</span> <span class="pre">drop_subjects</span></code> to remove
+affected subjects on loading (listed in the dataset warnings); the bundled
+ABIDE manifests do.</p></li>
+</ul>
+</section>
+<section id="declared-edge-family-edge-mask">
+<h2>Declared edge family — <code class="docutils literal notranslate"><span class="pre">edge_mask</span></code><a class="headerlink" href="#declared-edge-family-edge-mask" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">compute_p_val(...,</span> <span class="pre">edge_mask=mask)</span></code> (and <code class="docutils literal notranslate"><span class="pre">analyze</span></code>, which passes it
+through) restricts inference to the edges of a symmetric boolean <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">N)</span></code>
+mask, for example structurally connected pairs:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">sc</span> <span class="o">=</span> <span class="n">BrainnetomeReference</span><span class="o">.</span><span class="n">load</span><span class="p">()</span><span class="o">.</span><span class="n">structural_connectivity</span><span class="p">()</span>   <span class="c1"># (246, 246), BNA ID order</span>
+<span class="n">rows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">bna_ids</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>                                 <span class="c1"># the analysed BNA regions</span>
+<span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">sc</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ix_</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">rows</span><span class="p">)])</span> <span class="o">&gt;=</span> <span class="mf">0.05</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="n">group1</span><span class="o">=</span><span class="n">eo</span><span class="p">,</span> <span class="n">group2</span><span class="o">=</span><span class="n">ec</span><span class="p">,</span> <span class="n">test_type</span><span class="o">=</span><span class="s2">"paired"</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">"tfnbs"</span><span class="p">,</span> <span class="n">edge_mask</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Statistics outside the mask are set to 0 in the observed map and in every
+permutation. Those edges join no TFNBS / NBS cluster, count toward no
+NI-TFNBS block density or capacity, and never set the null maximum, so FWER is
+controlled over the masked family; their p-values are NaN (untested). The mask
+must be fixed before the data are seen. Supported for <code class="docutils literal notranslate"><span class="pre">tfnbs</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ni_tfnbs</span></code>, <code class="docutils literal notranslate"><span class="pre">nbs</span></code> and <code class="docutils literal notranslate"><span class="pre">tstat</span></code>; not yet combined with
+<code class="docutils literal notranslate"><span class="pre">missing='available_case'</span></code>. A smaller family gains power by itself, so
+compare a structural mask with random masks matched in density and distance
+(<code class="docutils literal notranslate"><span class="pre">examples/open_close/structural_prior</span></code>).</p>
+</section>
+<section id="t-test-pipeline-compute-p-val">
+<h2>t-test pipeline — <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val()</span></code><a class="headerlink" href="#t-test-pipeline-compute-p-val" title="Link to this heading"></a></h2>
+<p>The simplest entry point. Computes per-edge t-statistics, applies an
+enhancement operator, builds a permutation null of per-tail max
+statistics, and returns FWER- or FDR-corrected p-maps with the +1
+Phipson–Smyth correction.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_p_val</span><span class="p">,</span> <span class="n">fisher_r_to_z</span>
+
+<span class="n">group1_z</span> <span class="o">=</span> <span class="n">fisher_r_to_z</span><span class="p">(</span><span class="n">group1_corr</span><span class="p">)</span>   <span class="c1"># (n1, N, N)</span>
+<span class="n">group2_z</span> <span class="o">=</span> <span class="n">fisher_r_to_z</span><span class="p">(</span><span class="n">group2_corr</span><span class="p">)</span>
+
+<span class="n">p</span> <span class="o">=</span> <span class="n">compute_p_val</span><span class="p">(</span>
+    <span class="n">group1_z</span><span class="p">,</span> <span class="n">group2_z</span><span class="p">,</span>
+    <span class="n">test_type</span><span class="o">=</span><span class="s1">'two-sample'</span><span class="p">,</span>             <span class="c1"># or 'paired', 'one-sample'</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>               <span class="c1"># shared defaults (n=None: exact; pass int n for legacy grid)</span>
+    <span class="n">use_mp</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># p['positive'] : (N, N) p-map for group2 &gt; group1</span>
+<span class="c1"># p['negative'] : (N, N) p-map for group1 &gt; group2</span>
+</pre></div>
+</div>
+</section>
+<section id="glm-pipeline-compute-p-val-glm">
+<h2>GLM pipeline — <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_glm()</span></code><a class="headerlink" href="#glm-pipeline-compute-p-val-glm" title="Link to this heading"></a></h2>
+<p>Edge-wise GLM with Freedman–Lane permutation. Use this when you have a
+continuous predictor and want to control for nuisance regressors
+(motion, age, sex, site). The null model is <code class="docutils literal notranslate"><span class="pre">X</span> <span class="pre">null(C)</span></code> — the fits allowed
+by <code class="docutils literal notranslate"><span class="pre">C</span> <span class="pre">β</span> <span class="pre">=</span> <span class="pre">0</span></code> — so general contrasts such as <code class="docutils literal notranslate"><span class="pre">β_x</span> <span class="pre">−</span> <span class="pre">β_z</span></code> keep their
+common effect in the null (Winkler et al. 2014). Residuals are permuted
+across subjects (within <code class="docutils literal notranslate"><span class="pre">strata</span></code>), or sign-flipped when the tested effect
+involves the mean (<code class="docutils literal notranslate"><span class="pre">scheme='auto'</span></code>; override with <code class="docutils literal notranslate"><span class="pre">scheme='permutation'</span></code>
+or <code class="docutils literal notranslate"><span class="pre">'sign-flip'</span></code>). A <code class="docutils literal notranslate"><span class="pre">strata</span></code> code permutes residuals <strong>within</strong> its
+block only — never whole blocks — so it is not a mixed-model facility:
+stacked repeated sessions require subject fixed effects in <strong>both</strong> the full
+and the reduced model and are covered only by the narrow repeated-sessions
+recipe (<a class="reference internal" href="workflows.html#wf-repeated-sessions"><span class="std std-ref">Three or more repeated sessions (within-subject omnibus F)</span></a>). In that recipe the residual permutation
+reduces, in exact arithmetic, to permuting the data rows within each subject
+block; its premise is joint invariance of the whole error array under
+independent within-subject permutations (see the recipe). In general,
+Freedman–Lane is approximately, not exactly, valid.</p>
+<p>Convenience API (recommended):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_p_val_glm</span><span class="p">,</span> <span class="n">fisher_r_to_z</span>
+
+<span class="n">Y</span> <span class="o">=</span> <span class="n">fisher_r_to_z</span><span class="p">(</span><span class="n">connectivity_matrices</span><span class="p">)</span>              <span class="c1"># (n, N, N)</span>
+<span class="n">age</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">25</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">28</span><span class="p">])</span>                          <span class="c1"># (n,)</span>
+<span class="n">confounds</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">motion</span><span class="p">,</span> <span class="n">sex</span><span class="p">])</span>            <span class="c1"># (n, p)</span>
+
+<span class="n">p</span> <span class="o">=</span> <span class="n">compute_p_val_glm</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span> <span class="n">interest</span><span class="o">=</span><span class="n">age</span><span class="p">,</span> <span class="n">confounds</span><span class="o">=</span><span class="n">confounds</span><span class="p">,</span>
+    <span class="n">stat_type</span><span class="o">=</span><span class="s1">'tstat'</span><span class="p">,</span>                                 <span class="c1"># or 'beta', 'fstat'</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">use_mp</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># p['positive'] : edges where age ↑ → connectivity ↑</span>
+<span class="c1"># p['negative'] : edges where age ↑ → connectivity ↓</span>
+</pre></div>
+</div>
+<p>Advanced API (full design matrix + contrast):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_design_matrix</span><span class="p">,</span> <span class="n">compute_p_val_glm</span>
+
+<span class="n">X</span><span class="p">,</span> <span class="n">contrast</span> <span class="o">=</span> <span class="n">build_design_matrix</span><span class="p">(</span><span class="n">interest</span><span class="o">=</span><span class="n">age</span><span class="p">,</span> <span class="n">confounds</span><span class="o">=</span><span class="n">motion_sex</span><span class="p">)</span>
+<span class="n">p</span> <span class="o">=</span> <span class="n">compute_p_val_glm</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span> <span class="n">design_matrix</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">contrast</span><span class="o">=</span><span class="n">contrast</span><span class="p">,</span>
+    <span class="n">stat_type</span><span class="o">=</span><span class="s1">'tstat'</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">n_permutations</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>F-contrast (omnibus) for joint multi-row tests — e.g. ≥3-condition
+designs or testing several predictors jointly:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">age</span><span class="p">,</span> <span class="n">age</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">sex</span><span class="p">,</span> <span class="n">motion</span><span class="p">])</span>
+<span class="n">contrast</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>       <span class="c1"># beta_age</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>       <span class="c1"># beta_age_squared</span>
+<span class="p">])</span>
+<span class="n">p</span> <span class="o">=</span> <span class="n">compute_p_val_glm</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span> <span class="n">design_matrix</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">contrast</span><span class="o">=</span><span class="n">contrast</span><span class="p">,</span>
+    <span class="n">stat_type</span><span class="o">=</span><span class="s1">'fstat'</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">n_permutations</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># F-pipeline returns a single non-negative tail:</span>
+<span class="c1"># p['omnibus'] : (N, N) FWER-corrected p-map</span>
+</pre></div>
+</div>
+</section>
+<section id="multi-contrast-glm-in-one-pass-compute-p-val-glm-multi">
+<h2>Multi-contrast GLM in one pass — <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_glm_multi()</span></code><a class="headerlink" href="#multi-contrast-glm-in-one-pass-compute-p-val-glm-multi" title="Link to this heading"></a></h2>
+<p>To test several contrasts of one design — e.g. <code class="docutils literal notranslate"><span class="pre">age</span></code>, <code class="docutils literal notranslate"><span class="pre">sex</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">mean_fd</span></code> separately, each adjusted for the others — the
+multi-contrast wrapper runs them in one call. Each contrast gets its
+own Freedman–Lane reduced model <code class="docutils literal notranslate"><span class="pre">X</span> <span class="pre">null(c)</span></code> (the other predictors are
+nuisance) and its own resampling scheme; the permutations are shared,
+so each result equals <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_glm()</span></code> for that contrast with
+the same <code class="docutils literal notranslate"><span class="pre">rng</span></code>. Passing <code class="docutils literal notranslate"><span class="pre">nuisance_contrast</span></code> instead requests one
+joint null for all contrasts (“all marked coefficients are zero”),
+which is conservative when one of them has a real effect.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_p_val_glm_multi</span>
+
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">age</span><span class="p">,</span> <span class="n">sex</span><span class="p">,</span> <span class="n">mean_fd</span><span class="p">])</span>  <span class="c1"># (n, 4)</span>
+<span class="n">contrasts</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"age"</span><span class="p">:</span>     <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>
+    <span class="s2">"sex"</span><span class="p">:</span>     <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>
+    <span class="s2">"motion"</span><span class="p">:</span>  <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]),</span>
+<span class="p">}</span>
+
+<span class="n">results</span> <span class="o">=</span> <span class="n">compute_p_val_glm_multi</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span> <span class="n">design_matrix</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">contrasts</span><span class="o">=</span><span class="n">contrasts</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">"tfnbs"</span><span class="p">,</span> <span class="n">n_permutations</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span>
+    <span class="n">acceleration</span><span class="o">=</span><span class="s2">"gpd"</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># results = {'age': InferenceResult, 'sex': ..., 'motion': ...}</span>
+<span class="n">results</span><span class="p">[</span><span class="s2">"age"</span><span class="p">]</span><span class="o">.</span><span class="n">positive</span>          <span class="c1"># (N, N) FWER p-map</span>
+<span class="n">results</span><span class="p">[</span><span class="s2">"age"</span><span class="p">]</span><span class="o">.</span><span class="n">n_significant</span><span class="p">(</span><span class="mf">0.05</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>For <code class="docutils literal notranslate"><span class="pre">K</span></code> contrasts the wall-time is roughly that of a single
+<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_glm`()</span></code> call rather than <code class="docutils literal notranslate"><span class="pre">K</span></code> calls — typically a
+3× speedup for the canonical age + sex + motion design.</p>
+<p>By default the reduced model excludes any column touched by <em>any</em>
+contrast in the dictionary. Pass <code class="docutils literal notranslate"><span class="pre">nuisance_contrast=</span></code> to override
+explicitly, e.g. when you want sex and motion treated as nuisance for
+the age contrast even though you also test them separately. F-stat /
+multi-row contrasts are unsupported in this wrapper — call
+<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_glm()</span></code> once per omnibus test.</p>
+</section>
+<section id="paired-a-vs-b-with-level-confounds-compute-p-val-paired-glm">
+<h2>Paired A vs B with Δ-level confounds — <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_paired_glm()</span></code><a class="headerlink" href="#paired-a-vs-b-with-level-confounds-compute-p-val-paired-glm" title="Link to this heading"></a></h2>
+<p>When you have a within-subject contrast (task A vs B) and confounds
+that differ between conditions (e.g. condition-level motion):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_p_val_paired_glm</span>
+
+<span class="n">p</span> <span class="o">=</span> <span class="n">compute_p_val_paired_glm</span><span class="p">(</span>
+    <span class="n">Y_task_A</span><span class="p">,</span> <span class="n">Y_task_B</span><span class="p">,</span>                            <span class="c1"># both (n, N, N)</span>
+    <span class="n">confounds_A</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">motion_A</span><span class="p">,</span> <span class="n">drowsiness_A</span><span class="p">]),</span>
+    <span class="n">confounds_B</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">motion_B</span><span class="p">,</span> <span class="n">drowsiness_B</span><span class="p">]),</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">n_permutations</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>With no confounds, this delegates to <code class="docutils literal notranslate"><span class="pre">compute_p_val(test_type='paired')</span></code>
+(sign-flip permutation, the exact non-asymptotic null). With Δ-level
+confounds it constructs Δ_Y = Y^B − Y^A, Δ_C = C^B − C^A and runs a
+one-sample GLM on the differences, resampled by sign flips of the
+reduced-model residuals (row permutations cannot change the tested mean;
+sign flips assume symmetric errors). With all-zero Δ-confounds it reduces
+exactly to the paired sign-flip test. On both routes <code class="docutils literal notranslate"><span class="pre">positive</span></code> means
+Y^B &gt; Y^A.</p>
+</section>
+<section id="optional-subject-ids-in-paired-designs">
+<h2>Optional subject IDs in paired designs<a class="headerlink" href="#optional-subject-ids-in-paired-designs" title="Link to this heading"></a></h2>
+<p>A paired design assumes that row <code class="docutils literal notranslate"><span class="pre">s</span></code> of condition B is the same subject as
+row <code class="docutils literal notranslate"><span class="pre">s</span></code> of condition A. When the caller can name the subjects, pass the IDs
+in row order and the API verifies that and reorders condition B instead of
+trusting the row order:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">group1</span><span class="o">=</span><span class="n">a</span><span class="p">,</span> <span class="n">group2</span><span class="o">=</span><span class="n">b</span><span class="p">,</span> <span class="n">test_type</span><span class="o">=</span><span class="s1">'paired'</span><span class="p">,</span>
+    <span class="n">ids_group1</span><span class="o">=</span><span class="p">[</span><span class="s1">'s01'</span><span class="p">,</span> <span class="s1">'s02'</span><span class="p">,</span> <span class="s1">'s03'</span><span class="p">],</span>
+    <span class="n">ids_group2</span><span class="o">=</span><span class="p">[</span><span class="s1">'s03'</span><span class="p">,</span> <span class="s1">'s01'</span><span class="p">,</span> <span class="s1">'s02'</span><span class="p">],</span>   <span class="c1"># same subjects, different rows</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The two vectors must be a strict full bijection (same unique, non-missing IDs
+matched by value — nothing is normalised, stringified or type-coerced). One
+permutation moves every condition-B subject-axis input (<code class="docutils literal notranslate"><span class="pre">group2</span></code>,
+<code class="docutils literal notranslate"><span class="pre">confounds_group2</span></code>) into condition A’s row order <em>before</em> the Fisher
+transform, the B − A difference and any inference, so <code class="docutils literal notranslate"><span class="pre">positive</span></code> keeps its
+<code class="docutils literal notranslate"><span class="pre">group2</span> <span class="pre">&gt;</span> <span class="pre">group1</span></code> meaning and the result stays in A’s order. Inputs that
+already live in A order (<code class="docutils literal notranslate"><span class="pre">interest</span></code>, subject-level <code class="docutils literal notranslate"><span class="pre">confounds</span></code>, <code class="docutils literal notranslate"><span class="pre">sites</span></code>,
+<code class="docutils literal notranslate"><span class="pre">confounds_group1</span></code>) are validated against A and never permuted; edge-axis
+masks are invariant. One-sided IDs, an ID present in only one condition, a
+duplicate ID, a length mismatch and a non-paired test type all raise
+<code class="docutils literal notranslate"><span class="pre">ValueError</span></code>; without IDs the positional behaviour is unchanged. The
+alignment is recorded in <code class="docutils literal notranslate"><span class="pre">design['paired_alignment']</span></code> (reference, number of
+subjects, the B→A permutation) and in <code class="docutils literal notranslate"><span class="pre">flags</span></code>, and survives
+<code class="docutils literal notranslate"><span class="pre">to_bundle()</span></code>. <code class="docutils literal notranslate"><span class="pre">compute_p_val</span></code> (<code class="docutils literal notranslate"><span class="pre">ids_group1</span></code>/<code class="docutils literal notranslate"><span class="pre">ids_group2</span></code>) and
+<code class="docutils literal notranslate"><span class="pre">compute_p_val_paired_glm</span></code> (<code class="docutils literal notranslate"><span class="pre">ids_A</span></code>/<code class="docutils literal notranslate"><span class="pre">ids_B</span></code>) accept the same arguments,
+and the YAML <code class="docutils literal notranslate"><span class="pre">paired</span></code> design in <code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.cli</span></code> uses one shared helper,
+so a shuffled phenotype table and an API call with IDs give the same result.</p>
+</section>
+<section id="methods-enhancement-operators">
+<h2>Methods (enhancement operators)<a class="headerlink" href="#methods-enhancement-operators" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">compute_p_val(...,</span> <span class="pre">method=...)</span></code> and <code class="docutils literal notranslate"><span class="pre">compute_p_val_glm(...,</span> <span class="pre">method=...)</span></code>
+both accept:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">method</span></code></p></th>
+<th class="head"><p>Operator</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">'tstat'</span></code></p></td>
+<td><p>No enhancement; per-tail max-statistic FWER on raw t / β / F</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">'tfnbs'</span></code></p></td>
+<td><p>Threshold-Free NBS (Baggio 2018)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">'nbs'</span></code></p></td>
+<td><p>Classical Network-Based Statistic (Zalesky 2010); supply
+default <code class="docutils literal notranslate"><span class="pre">threshold=3.0</span></code> and <code class="docutils literal notranslate"><span class="pre">nbs_stat='extent'</span></code> or <code class="docutils literal notranslate"><span class="pre">'intensity'</span></code>;
+thresholds below 3.0 warn about component edge spillover;
+inference per component (<code class="docutils literal notranslate"><span class="pre">result.component_table()</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">'cnbs'</span></code></p></td>
+<td><p>Constrained NBS (Noble &amp; Scheinost 2020): mean signed t per
+block, one null per block, Bonferroni (or <code class="docutils literal notranslate"><span class="pre">cnbs_correction='bh'</span></code>)
+across blocks; supply <code class="docutils literal notranslate"><span class="pre">net_labels=</span></code>; inference per block</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">'ni_tfnbs'</span></code></p></td>
+<td><p>Network-Informed TFNBS (this work); soft block-density prior;
+supply <code class="docutils literal notranslate"><span class="pre">net_labels=</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">'fbc_tfnbs'</span></code></p></td>
+<td><p>Functional-Block-Clustering TFNBS (this work); hard block
+prior; supply <code class="docutils literal notranslate"><span class="pre">net_labels=</span></code>, <code class="docutils literal notranslate"><span class="pre">min_cluster_size=3</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">'bh_fdr'</span></code></p></td>
+<td><p>Parametric Benjamini–Hochberg FDR (no permutation)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">'bh_fdr_perm'</span></code></p></td>
+<td><p>Empirical edge-wise BH-FDR via permutation null</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="multi-site-harmonization-conninfpy-harmonize">
+<h2>Multi-site harmonization — <a class="reference internal" href="conninfpy.harmonize.html#module-conninfpy.harmonize" title="conninfpy.harmonize"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.harmonize</span></code></a><a class="headerlink" href="#multi-site-harmonization-conninfpy-harmonize" title="Link to this heading"></a></h2>
+<p>Native NumPy implementation of parametric empirical-Bayes ComBat.
+No <code class="docutils literal notranslate"><span class="pre">neuroHarmonize</span></code> or <code class="docutils literal notranslate"><span class="pre">neurocombat</span></code> dependency.</p>
+<p>End-to-end with confound-aware GLM:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">fisher_r_to_z</span><span class="p">,</span>
+    <span class="n">combat_harmonize</span><span class="p">,</span> <span class="n">design_diagnostics</span><span class="p">,</span>
+    <span class="n">compute_p_val_glm</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Y_corr : (n, N, N) per-subject Pearson correlation matrices</span>
+<span class="c1"># sites  : (n,) acquisition-site labels</span>
+<span class="c1"># age, sex, mean_fd : per-subject phenotype</span>
+<span class="n">Y</span> <span class="o">=</span> <span class="n">fisher_r_to_z</span><span class="p">(</span><span class="n">Y_corr</span><span class="p">)</span>
+
+<span class="c1"># 1. Harmonize site effects, preserving age + sex + motion as biology</span>
+<span class="n">preserve</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">age</span><span class="p">,</span> <span class="n">sex</span><span class="p">,</span> <span class="n">mean_fd</span><span class="p">])</span>
+<span class="n">Y</span> <span class="o">=</span> <span class="n">combat_harmonize</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">sites</span><span class="o">=</span><span class="n">sites</span><span class="p">,</span> <span class="n">preserve</span><span class="o">=</span><span class="n">preserve</span><span class="p">)</span><span class="o">.</span><span class="n">Y_adjusted</span>
+
+<span class="c1"># 2. Sanity-check the design before running anything expensive</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">age</span><span class="p">),</span> <span class="n">age</span><span class="p">,</span> <span class="n">sex</span><span class="p">,</span> <span class="n">mean_fd</span><span class="p">])</span>
+<span class="n">diag</span> <span class="o">=</span> <span class="n">design_diagnostics</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">"intercept"</span><span class="p">,</span> <span class="s2">"age"</span><span class="p">,</span> <span class="s2">"sex"</span><span class="p">,</span> <span class="s2">"mean_fd"</span><span class="p">])</span>
+<span class="c1"># reports condition number + per-column VIF + plain-English flags</span>
+
+<span class="c1"># 3. TFNBS on age, partialling out sex + motion (Freedman–Lane)</span>
+<span class="n">p</span> <span class="o">=</span> <span class="n">compute_p_val_glm</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span> <span class="n">interest</span><span class="o">=</span><span class="n">age</span><span class="p">,</span>
+    <span class="n">confounds</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">sex</span><span class="p">,</span> <span class="n">mean_fd</span><span class="p">]),</span>
+    <span class="n">stat_type</span><span class="o">=</span><span class="s1">'tstat'</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span>
+    <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">acceleration</span><span class="o">=</span><span class="s1">'gpd'</span><span class="p">,</span>
+    <span class="n">use_mp</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>For cross-site machine-learning transfer (fit ComBat on training
+cohorts, freeze, apply to held-out sites at test time), use
+<code class="xref py py-func docutils literal notranslate"><span class="pre">combat_fit()</span></code> / <code class="xref py py-func docutils literal notranslate"><span class="pre">combat_apply()</span></code> separately.</p>
+</section>
+<section id="permutation-acceleration-conninfpy-stats-acceleration">
+<h2>Permutation acceleration — <a class="reference internal" href="conninfpy.stats.html#module-conninfpy.stats.acceleration" title="conninfpy.stats.acceleration"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.stats.acceleration</span></code></a><a class="headerlink" href="#permutation-acceleration-conninfpy-stats-acceleration" title="Link to this heading"></a></h2>
+<p>Set <code class="docutils literal notranslate"><span class="pre">acceleration='gpd'</span></code> (or <code class="docutils literal notranslate"><span class="pre">'gamma'</span></code>) on either pipeline to use a
+fitted parametric tail (Generalized Pareto Distribution, Winkler 2016b)
+where the permutation count is too coarse: statistics reached by fewer
+than 10 null maxima get the fitted p-value, all others keep the exact
+permutation p-value. This makes ~200 permutations usable for exploration
+(~25× faster than ~5000). A goodness-of-fit guard (Anderson–Darling on
+tail exceedances) falls back to permutation p-values when the GPD does
+not fit cleanly. Report exact p-values from a large run.</p>
+</section>
+<section id="tfnbs-integration">
+<h2>TFNBS integration<a class="headerlink" href="#tfnbs-integration" title="Link to this heading"></a></h2>
+<p>The default <code class="docutils literal notranslate"><span class="pre">n=None</span></code> integrates the piecewise support exactly. Set a
+positive integer <code class="docutils literal notranslate"><span class="pre">n</span></code> to reproduce the historical right-endpoint grid.
+Record the chosen mode, E/H and start threshold with the result; exact scores
+can differ from the finite-grid scores. <code class="docutils literal notranslate"><span class="pre">bh_fdr_perm</span></code> does not use this
+integration.</p>
+<p>The exponents <code class="docutils literal notranslate"><span class="pre">(e,</span> <span class="pre">h)</span></code> accept either scalars or equal-length lists.
+Lists are zipped pairwise into a single 3-D batched call, so a 16×11
+(E, H) grid runs 176 combos in one <code class="docutils literal notranslate"><span class="pre">compute_p_val</span></code> invocation. Exact
+integration evaluates each pair, so the grid increases computation time.</p>
+<p>See <a class="reference internal" href="conninfpy.defaults.html#module-conninfpy.defaults" title="conninfpy.defaults"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.defaults</span></code></a> for the full list of constants and
+citations (Smith &amp; Nichols 2009, Baggio 2018, Vinokur 2023, Hao 2024).</p>
+</section>
+<section id="synthetic-data-and-scenarios-conninfpy-sim">
+<h2>Synthetic data and scenarios — <code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.sim</span></code><a class="headerlink" href="#synthetic-data-and-scenarios-conninfpy-sim" title="Link to this heading"></a></h2>
+<p>Planted-effect data for tutorials, power analysis and method comparison:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">conninfpy</span>
+
+<span class="c1"># Two groups of correlation matrices with a planted difference</span>
+<span class="n">g1</span><span class="p">,</span> <span class="n">g2</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">conninfpy</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">generate_fc_matrices</span><span class="p">(</span>
+    <span class="n">N</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">effect_size</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">n_samples_group1</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">n_samples_group2</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="c1"># 20 controlled effect topologies (hub, rich club, chain, gradient, ...)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">conninfpy</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">list_scenarios</span><span class="p">())</span>
+<span class="n">gen</span> <span class="o">=</span> <span class="n">conninfpy</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">TopologyDatasetGenerator</span><span class="p">(</span><span class="n">n_nodes</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">n_modules</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">conninfpy</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">get_scenario</span><span class="p">(</span><span class="s2">"within_module_dense"</span><span class="p">),</span>
+                  <span class="n">effect_size</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">time_points</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
+<span class="c1"># ds.group1 / ds.group2: correlations with a zeroed diagonal → input='r'</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">conninfpy</span><span class="o">.</span><span class="n">analyze</span><span class="p">(</span><span class="n">group1</span><span class="o">=</span><span class="n">ds</span><span class="o">.</span><span class="n">group1</span><span class="p">,</span> <span class="n">group2</span><span class="o">=</span><span class="n">ds</span><span class="o">.</span><span class="n">group2</span><span class="p">,</span> <span class="nb">input</span><span class="o">=</span><span class="s2">"r"</span><span class="p">,</span>
+                        <span class="n">test_type</span><span class="o">=</span><span class="s2">"two-sample"</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">"tfnbs"</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="enhancement-without-permutation-conninfpy-enhance">
+<h2>Enhancement without permutation — <a class="reference internal" href="conninfpy.enhance.html#module-conninfpy.enhance" title="conninfpy.enhance"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.enhance</span></code></a><a class="headerlink" href="#enhancement-without-permutation-conninfpy-enhance" title="Link to this heading"></a></h2>
+<p>Apply an enhancement operator to a statistic map you computed yourself
+(scores only, no p-values):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">enhance</span><span class="p">,</span> <span class="n">stats</span>
+
+<span class="n">t</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">compute_t_stat</span><span class="p">(</span><span class="n">group1_z</span><span class="p">,</span> <span class="n">group2_z</span><span class="p">,</span> <span class="n">test_type</span><span class="o">=</span><span class="s2">"two-sample"</span><span class="p">)</span>
+<span class="n">scores</span> <span class="o">=</span> <span class="n">enhance</span><span class="o">.</span><span class="n">apply_tfnbs</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">e</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>  <span class="c1"># {'positive', 'negative'} (shared defaults; int n for legacy grid)</span>
+</pre></div>
+</div>
+</section>
+<section id="command-line-conninfpy-run">
+<h2>Command line — <code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">run</span></code><a class="headerlink" href="#command-line-conninfpy-run" title="Link to this heading"></a></h2>
+<p>An analysis file (YAML) names a data manifest, the design and the inference
+settings; <code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">run</span></code> loads the data, calls <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.analyze()</span></code>
+and writes <code class="docutils literal notranslate"><span class="pre">edges.csv</span></code> (significant edges, atlas-annotated when an atlas is
+known), <code class="docutils literal notranslate"><span class="pre">pvals.npz</span></code>, a reloadable <code class="docutils literal notranslate"><span class="pre">bundle.pkl</span></code> for independent summaries,
+and <code class="docutils literal notranslate"><span class="pre">provenance.json</span></code> (package version, analysis file, data summary,
+warnings, run time):</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">data</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">../../datasets/abide_mini.yaml</span><span class="w">   </span><span class="c1"># manifest, relative to this file</span>
+<span class="nt">design</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">glm</span><span class="w">                            </span><span class="c1"># glm | two-sample | paired | one-sample</span>
+<span class="w">  </span><span class="nt">interest</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Age</span><span class="w">                        </span><span class="c1"># a list tests several predictors in one pass</span>
+<span class="w">  </span><span class="nt">confounds</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Sex</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Motion_FD</span><span class="p p-Indicator">]</span><span class="w">          </span><span class="c1"># text columns are one-hot encoded</span>
+<span class="w">  </span><span class="nt">sites</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">site</span>
+<span class="nt">inference</span><span class="p">:</span><span class="w">                             </span><span class="c1"># any conninfpy.analyze() keyword</span>
+<span class="w">  </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tfnbs</span>
+<span class="w">  </span><span class="nt">n_permutations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span>
+<span class="w">  </span><span class="nt">acceleration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gpd</span>
+<span class="w">  </span><span class="nt">rng</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">42</span>
+<span class="w">  </span><span class="c1"># two_tailed: false                  # legacy: separate one-sided families</span>
+<span class="w">  </span><span class="c1"># tested_tail: positive              # a one-sided hypothesis fixed before the run</span>
+<span class="nt">atlas</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">schaefer_100_yeo7</span><span class="w">               </span><span class="c1"># built-in name or CSV path</span>
+<span class="nt">output</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">results/abide_mini_age</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conninfpy<span class="w"> </span>run<span class="w"> </span>examples/abide/configs/abide_mini_age.yaml<span class="w"> </span><span class="o">[</span>--out<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--n-permutations<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--no-mp<span class="o">]</span>
+conninfpy<span class="w"> </span>info
+</pre></div>
+</div>
+<p>Two-sample designs use <code class="docutils literal notranslate"><span class="pre">group:</span></code> and <code class="docutils literal notranslate"><span class="pre">levels:</span> <span class="pre">[group1,</span> <span class="pre">group2]</span></code>
+(<code class="docutils literal notranslate"><span class="pre">positive</span></code> = second level higher); paired designs use <code class="docutils literal notranslate"><span class="pre">condition:</span></code>,
+<code class="docutils literal notranslate"><span class="pre">levels:</span></code> and <code class="docutils literal notranslate"><span class="pre">subject:</span></code> (default <code class="docutils literal notranslate"><span class="pre">subject_id</span></code>) and pair rows by subject.
+For GLM and two-sample designs, rows with a missing value in any column the
+design uses are dropped and counted in <code class="docutils literal notranslate"><span class="pre">provenance.json</span></code>. Paired designs
+reject missing design values. <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">conninfpy</span></code> is equivalent.
+Built-in atlas names are <code class="docutils literal notranslate"><span class="pre">schaefer_100_yeo7</span></code>, <code class="docutils literal notranslate"><span class="pre">schaefer_200_yeo7</span></code>,
+<code class="docutils literal notranslate"><span class="pre">schaefer_400_yeo7</span></code> and <code class="docutils literal notranslate"><span class="pre">bna_246</span></code>; <code class="docutils literal notranslate"><span class="pre">bna_246</span></code> labels networks with the
+Brainnetome Yeo-7 division (see <a class="reference internal" href="#usage-interpret"><span class="std std-ref">Anatomical interpretation — conninfpy.interpret</span></a>).</p>
+<section id="replaying-application-runs">
+<h3>Replaying application runs<a class="headerlink" href="#replaying-application-runs" title="Link to this heading"></a></h3>
+<p>The application’s <em>Download Full Analysis Archive</em> export writes a ZIP with
+a reloadable <code class="docutils literal notranslate"><span class="pre">result_bundle.zip</span></code> (pickle-free ZIP containing JSON metadata
+and numeric NPY arrays), the corrected-evidence and
+coefficient arrays, the edge / network / node / component / block tables,
+figures, a deterministic <code class="docutils literal notranslate"><span class="pre">methods.md</span></code> and an <code class="docutils literal notranslate"><span class="pre">analysis.yaml</span></code> for this
+command together with an explicit replay status
+(<code class="docutils literal notranslate"><span class="pre">replayable</span></code> / <code class="docutils literal notranslate"><span class="pre">requires-input</span></code> / <code class="docutils literal notranslate"><span class="pre">not-replayable</span></code> and why — missing
+data files, an ROI subset, synthetic data, or uncaptured settings stay
+honest instead of being defaulted). Two keys exist specifically so a replay
+reproduces the policy of the finished run rather than a look-alike:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">connectivity.fisher</span></code> applies a Fisher r-to-z transform with the exact
+captured policy — <code class="docutils literal notranslate"><span class="pre">clip_r</span></code> (clip correlations before <code class="docutils literal notranslate"><span class="pre">arctanh</span></code>, e.g.
+the application’s ±0.9999 button), <code class="docutils literal notranslate"><span class="pre">clip_z</span></code> (clip z afterwards) or
+<code class="docutils literal notranslate"><span class="pre">unbounded</span></code> — and records the applied transform in the run’s
+provenance. The bound (<code class="docutils literal notranslate"><span class="pre">clip_r</span></code> / <code class="docutils literal notranslate"><span class="pre">max_z</span></code>) is a required explicit
+argument: a different bound is a different analysis, so it is never
+defaulted. Without the block nothing is transformed, and applying it to
+already-transformed data is an error, not a second pass.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">design.interest_reference</span></code> declares the reference level of one binary
+GLM/paired predictor, categorical or numeric 0/1, so a group indicator
+keeps the level order the finished run used (absent: the first sorted
+level of a categorical column, numeric pass-through, as before).</p></li>
+</ul>
+<p>The archived <code class="docutils literal notranslate"><span class="pre">run_plan.json</span></code> / <code class="docutils literal notranslate"><span class="pre">dataset_info.json</span></code> keep the launch-time
+facts (α, seed, resolved acceleration, network-label vector, Fisher history,
+synthetic generator parameters) separate from any later display choices;
+the archive never contains subject-level observations or phenotype rows.
+A <code class="docutils literal notranslate"><span class="pre">replayable</span></code> status requires the recorded facts to cover the whole run:
+the seed, the directional family, the variance choice, the operator
+arguments (network labels always replay as the captured vector, whether it
+came from an SC prior or from atlas network labels) and the source files.
+Values the finished result genuinely records on itself (an NBS threshold,
+the (E, H) grid coordinates, cNBS block labels) may back the replay file
+under an explicit contract, listed in the archive manifest; anything else
+blocks the status instead of borrowing a default. The referenced manifest
+is exported as a resolved absolute path with its declared file dependencies
+checked, so an extracted archive replays from any directory.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">data</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">study.yaml</span>
+<span class="nt">design</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">glm</span>
+<span class="w">  </span><span class="nt">interest</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">group</span>
+<span class="w">  </span><span class="nt">interest_reference</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">control</span><span class="w">     </span><span class="c1"># indicator of (group != control)</span>
+<span class="nt">connectivity</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">fisher</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">policy</span><span class="p">:</span><span class="w"> </span><span class="nv">clip_r</span><span class="p p-Indicator">,</span><span class="nt"> clip_r</span><span class="p">:</span><span class="w"> </span><span class="nv">0.9999</span><span class="p p-Indicator">}</span>
+<span class="nt">inference</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="nv">tstat</span><span class="p p-Indicator">,</span><span class="nt"> n_permutations</span><span class="p">:</span><span class="w"> </span><span class="nv">1000</span><span class="p p-Indicator">,</span><span class="nt"> rng</span><span class="p">:</span><span class="w"> </span><span class="nv">42</span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+</section>
+<section id="saving-and-restoring-workspaces">
+<h3>Saving and restoring workspaces<a class="headerlink" href="#saving-and-restoring-workspaces" title="Link to this heading"></a></h3>
+<p>The application sidebar (<em>Save &amp; restore workspace</em>) and the results export
+both write a versioned, pickle-free <code class="docutils literal notranslate"><span class="pre">workspace/</span></code> layer
+(<code class="docutils literal notranslate"><span class="pre">workspace/manifest.json</span></code> + <code class="docutils literal notranslate"><span class="pre">workspace/state.json</span></code> + <code class="docutils literal notranslate"><span class="pre">workspace/arrays/arrays.npz</span></code>
+loaded strictly with <code class="docutils literal notranslate"><span class="pre">allow_pickle=False</span></code>). <code class="docutils literal notranslate"><span class="pre">workspace/manifest.json</span></code> declares
+<code class="docutils literal notranslate"><span class="pre">kind</span></code> and <code class="docutils literal notranslate"><span class="pre">workspace_schema_version</span></code>; the current schema is version 2, and
+every other version is rejected before anything is applied. The declared version
+must be a JSON integer in both manifests, and every declared section must be a
+JSON object: a document typed otherwise (for example <code class="docutils literal notranslate"><span class="pre">[]</span></code> where an object
+belongs, or <code class="docutils literal notranslate"><span class="pre">2.0</span></code> instead of <code class="docutils literal notranslate"><span class="pre">2</span></code>) is rejected as malformed before the active
+session is touched. The layer separates
+four explicit sections plus optional subject data:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">source_refs</span></code></dt><dd><p>dataset metadata, load-time SHA-256 source hashes, atlas, preprocessing and
+Fisher history.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">results</span></code></dt><dd><p>primary and companion <code class="docutils literal notranslate"><span class="pre">InferenceResult</span></code> / <code class="docutils literal notranslate"><span class="pre">OmnibusInferenceResult</span></code>,
+<code class="docutils literal notranslate"><span class="pre">edges_df</span></code>, and <code class="docutils literal notranslate"><span class="pre">run_plan</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">annotation</span></code></dt><dd><p>the <code class="docutils literal notranslate"><span class="pre">RoiAnnotation</span></code> and its <code class="docutils literal notranslate"><span class="pre">evidence_packet</span></code> — both durable offline, with
+no inference run needed to read them back.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">ui_state</span></code></dt><dd><p>allowlisted tabs, display controls, and comparison/annotation settings. API
+keys, tokens, and secrets are never stored.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">data</span></code></dt><dd><p>the subject-level connectivity matrices and phenotype table, only when
+<strong>Include subject data</strong> is on (default off).</p>
+</dd>
+</dl>
+<ul class="simple">
+<li><p>Restoring a results-only workspace opens <em>Inference Results</em> and <em>Brainnetome
+Annotation</em> immediately, without re-running inference, preprocessing, ComBat,
+SC, or Louvain, and states clearly that subject-level connectivity matrices
+are not loaded and must be re-imported in Tab 1 to run a new analysis.</p></li>
+<li><p>Source freshness is verified honestly against load-time SHA-256 hashes
+(<code class="docutils literal notranslate"><span class="pre">verified</span></code>, <code class="docutils literal notranslate"><span class="pre">stale</span></code>, <code class="docutils literal notranslate"><span class="pre">missing</span></code>, <code class="docutils literal notranslate"><span class="pre">unknown</span></code>, or <code class="docutils literal notranslate"><span class="pre">synthetic</span></code>). Legacy
+or unhashed sources stay <code class="docutils literal notranslate"><span class="pre">unknown</span></code> rather than claiming freshness. A source
+reference recorded as something other than a JSON object is reported
+explicitly as malformed (per file, counted, and it degrades the overall status
+to <code class="docutils literal notranslate"><span class="pre">unknown</span></code>) instead of being skipped silently.</p></li>
+<li><p>Saving a workspace from the sidebar (<em>Save workspace (.zip)</em>) always produces
+a pickle-free archive, including when a full finished result is present: it
+carries the <code class="docutils literal notranslate"><span class="pre">workspace/</span></code> layer and the standard analysis files, omitting
+the separate <code class="docutils literal notranslate"><span class="pre">result_bundle.zip</span></code> member. Root <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> states that
+explicitly (<code class="docutils literal notranslate"><span class="pre">bundle_available:</span> <span class="pre">false</span></code>, <code class="docutils literal notranslate"><span class="pre">trusted_only:</span> <span class="pre">[]</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">methods.md</span></code> notes that the export is pickle-free by design). The
+reloadable <code class="docutils literal notranslate"><span class="pre">result_bundle.zip</span></code> (safe ZIP/JSON/NPY, no Python pickle) is
+included when exporting through the results-page <em>Download Full Analysis
+Archive (ZIP)</em> button.</p></li>
+<li><p>Inspection and restoration never import <code class="docutils literal notranslate"><span class="pre">pickle</span></code> or read pickled files, and
+reject corrupt checksums, malformed sections, or unsupported schema versions
+without mutating the active session. An archive is parsed, validated and
+summarized exactly once, and only then applied, so a rejected archive cannot
+leave a half-restored session behind.</p></li>
+<li><p>Workspaces saved by an earlier schema that also carried the retired LLM
+narrative report still load: those narrative fields, API keys, and narrative
+widgets are skipped and reported as legacy, and a saved <em>5. Narrative Report</em>
+tab opens on <em>4. Brainnetome Annotation</em> instead.</p></li>
+</ul>
+</section>
+</section>
+<section id="the-guided-application-streamlit-design-step">
+<h2>The guided application (Streamlit) — design step<a class="headerlink" href="#the-guided-application-streamlit-design-step" title="Link to this heading"></a></h2>
+<p>The application’s <em>Design &amp; Inference</em> step exposes four package capabilities
+that are otherwise reachable only through the Python API. Each run still
+answers one scientific question; nothing below changes the statistical engine,
+the permutation scheme, or a correction.</p>
+<p><strong>Paired contrasts with condition-specific confounds.</strong> The paired path needs a
+subject-ID column and a condition column and requires a strict one-to-one
+subject match between the two conditions: condition A (baseline) keeps the
+phenotype row order, condition B is matched by subject ID, and empty IDs,
+duplicate IDs within a condition, a subject measured in only one condition or
+different numbers of rows stop the run before it starts, naming the offending
+subjects. Nothing is dropped, re-sorted or matched by row position. Selecting
+one or more <em>condition-specific confounds</em> (columns whose value may differ
+between conditions, such as condition-level motion) passes both condition
+arrays with their subject IDs; the per-subject difference <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">-</span> <span class="pre">A</span></code> used by
+<a class="reference internal" href="conninfpy.stats.html#conninfpy.stats.compute_p_val_paired_glm" title="conninfpy.stats.compute_p_val_paired_glm"><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.stats.compute_p_val_paired_glm()</span></code></a> is computed inside the
+analysis, never in the interface. A subject without a value in either
+condition is excluded (with a warning) before the run, and the preview in the
+review panel describes exactly the arrays that will be analysed.</p>
+<p><strong>Missing design fields vs missing connectivity.</strong> A missing value in a
+required design field (subject, condition, group, site, selected covariates) is
+a data-entry problem: those rows are excluded before the run and the number is
+reported. A missing value inside the connectivity matrices is a different
+question, controlled by <em>Missing connectivity policy</em>: <code class="docutils literal notranslate"><span class="pre">Complete-case</span> <span class="pre">(stop</span> <span class="pre">on</span>
+<span class="pre">any</span> <span class="pre">NaN)</span></code> is the package default (<code class="docutils literal notranslate"><span class="pre">missing='raise'</span></code>), and <code class="docutils literal notranslate"><span class="pre">Available-case</span>
+<span class="pre">(test</span> <span class="pre">each</span> <span class="pre">edge</span> <span class="pre">on</span> <span class="pre">its</span> <span class="pre">available</span> <span class="pre">subjects)</span></code> tests every edge on the subjects
+that have a finite value there, with a coverage floor (<code class="docutils literal notranslate"><span class="pre">min_coverage</span></code>,
+default 0.8). Available-case does not tolerate missing design fields, does not
+add a statistical correction, and makes the tested n vary from edge to edge;
+the results page reports the tested/untested edge counts, the coverage floor,
+the per-edge n range and the subjects with missing values, and never presents
+that varying n as one complete-case sample. Combinations the engine rejects
+(available-case with a tested-edge-family mask, or a mask with the GLM route)
+are blocked before the run instead of silently falling back to another policy.
+The GLM design keeps <code class="docutils literal notranslate"><span class="pre">missing='raise'</span></code>.</p>
+<p><strong>Declared tested edge family.</strong> An optional boolean, symmetric <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">x</span> <span class="pre">N</span></code> mask
+(<code class="docutils literal notranslate"><span class="pre">.npy</span></code>) restricts which edges enter the tested family, so the family-wise
+correction is calibrated on those edges only. It is validated with the engine’s
+own mask rules (shape, symmetry, at least one eligible edge) and is supported
+for TFNBS, NI-TFNBS, NBS and t-stat. The run plan records its purpose
+(<code class="docutils literal notranslate"><span class="pre">edge_family_mask</span></code>), SHA-256, shape, eligible-edge count and source file
+name; the array is bundled as <code class="docutils literal notranslate"><span class="pre">arrays/edge_family_mask.npy</span></code> in the archive and
+round-trips through a saved workspace. This mask is not an ROI exclusion subset
+(<code class="docutils literal notranslate"><span class="pre">roi_indices</span></code>) and not a structural-connectivity community label vector
+(<code class="docutils literal notranslate"><span class="pre">net_labels</span></code>); the three are reported separately and never substituted for
+one another.</p>
+<p><strong>Declared primary cell of an (E, H) sensitivity grid.</strong> For the TFNBS family an
+optional grid evaluates several <code class="docutils literal notranslate"><span class="pre">(E,</span> <span class="pre">H)</span></code> cells in one run; the engine pairs
+the E and H sequences element-wise, so the two lists must have equal length.
+The cell that carries the confirmatory claim is declared <em>before</em> the run and
+recorded with its resolved grid index; the result table and the completion view
+use that cell. The results page can still browse other cells, but they are
+labelled descriptive sensitivity: the grid creates no corrected family-wise
+conclusion for a cell chosen after the data were seen, no p-value based
+automatic best-cell selection exists, and browsing does not rewrite the
+declared primary cell in the run plan or in an export. Grid values and the
+declared cell appear in the replay facts of the archive.</p>
+<p>Designs the guided interface deliberately does not offer — arbitrary F
+contrasts, multi-row contrasts, interaction terms and EEG-style data — remain
+available through the Python API, for example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_p_val_glm</span>
+
+<span class="c1"># Arbitrary multi-row F contrast (omnibus) on subject-level matrices.</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">age</span><span class="p">,</span> <span class="n">sex</span><span class="p">,</span> <span class="n">motion</span><span class="p">])</span>
+<span class="n">C</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+<span class="n">res</span> <span class="o">=</span> <span class="n">compute_p_val_glm</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span> <span class="n">design_matrix</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">contrast</span><span class="o">=</span><span class="n">C</span><span class="p">,</span> <span class="n">stat_type</span><span class="o">=</span><span class="s2">"fstat"</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">"tfnbs"</span><span class="p">,</span> <span class="n">n_permutations</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># The same design through the standard recipe (prepare -&gt; harmonize -&gt; GLM).</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">interest</span><span class="o">=</span><span class="p">{</span><span class="s2">"age"</span><span class="p">:</span> <span class="n">age</span><span class="p">,</span> <span class="s2">"sex"</span><span class="p">:</span> <span class="n">sex</span><span class="p">},</span> <span class="n">confounds</span><span class="o">=</span><span class="p">[</span><span class="n">motion</span><span class="p">],</span>
+              <span class="n">interactions</span><span class="o">=</span><span class="p">[(</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"sex"</span><span class="p">)],</span> <span class="n">method</span><span class="o">=</span><span class="s2">"tfnbs"</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="network-level-summaries-result-network-summary-atlas">
+<h2>Network-level summaries — <code class="docutils literal notranslate"><span class="pre">result.network_summary(atlas)</span></code><a class="headerlink" href="#network-level-summaries-result-network-summary-atlas" title="Link to this heading"></a></h2>
+<p>Edge-level findings often replicate poorly across cohorts while the pattern
+over pairs of functional networks is far more stable, so report network-pair
+summaries alongside edge tables. <a class="reference internal" href="conninfpy.results.html#conninfpy.results.InferenceResult.network_summary" title="conninfpy.results.InferenceResult.network_summary"><code class="xref py py-meth docutils literal notranslate"><span class="pre">network_summary()</span></code></a>
+aggregates a result over pairs of networks defined by the per-region
+<code class="docutils literal notranslate"><span class="pre">networks</span></code> field of an <a class="reference internal" href="conninfpy.atlas.html#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.AtlasInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtlasInfo</span></code></a> — Yeo-7,
+Yeo-17, lobes, or any partition you supply (a plain list of per-region labels
+also works):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">table</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">network_summary</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="c1"># network_a, network_b, network_pair, within_network, n_edges,</span>
+<span class="c1"># n_sig_positive / n_sig_negative, prop_sig_*, signed_proportion,</span>
+<span class="c1"># sum_neglog10p_* / mean_neglog10p_*  (* = positive, negative)</span>
+
+<span class="n">mass</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">network_summary</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="n">as_matrix</span><span class="o">=</span><span class="s2">"sum_neglog10p_positive"</span><span class="p">)</span>  <span class="c1"># K × K</span>
+</pre></div>
+</div>
+<p>For raw p-value maps (e.g. loaded from disk) use
+<a class="reference internal" href="conninfpy.results.html#conninfpy.results.summarize_by_network" title="conninfpy.results.summarize_by_network"><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.results.summarize_by_network()</span></code></a>. The same numbers drive
+<a class="reference internal" href="conninfpy.plot.html#conninfpy.plot.plot_network_summary" title="conninfpy.plot.plot_network_summary"><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.plot.plot_network_summary()</span></code></a> (<code class="docutils literal notranslate"><span class="pre">signed_proportion</span></code>), and
+<a class="reference internal" href="conninfpy.harmonize.html#conninfpy.harmonize.block_mass" title="conninfpy.harmonize.block_mass"><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.harmonize.block_mass()</span></code></a> returns the significant-edge counts.</p>
+</section>
+<section id="anatomical-interpretation-conninfpy-interpret">
+<span id="usage-interpret"></span><h2>Anatomical interpretation — <a class="reference internal" href="conninfpy.interpret.html#module-conninfpy.interpret" title="conninfpy.interpret"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.interpret</span></code></a><a class="headerlink" href="#anatomical-interpretation-conninfpy-interpret" title="Link to this heading"></a></h2>
+<p>Everything that interprets a result lives in <a class="reference internal" href="conninfpy.interpret.html#module-conninfpy.interpret" title="conninfpy.interpret"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.interpret</span></code></a>.
+<a class="reference internal" href="conninfpy.interpret.html#conninfpy.interpret.annotate_rois" title="conninfpy.interpret.annotate_rois"><code class="xref py py-func docutils literal notranslate"><span class="pre">annotate_rois()</span></code></a> describes each ROI with the
+Brainnetome atlas (BNA-246; Fan et al., 2016) by the tissue its signal came
+from; <a class="reference internal" href="conninfpy.interpret.html#conninfpy.interpret.annotate_bna_regions" title="conninfpy.interpret.annotate_bna_regions"><code class="xref py py-func docutils literal notranslate"><span class="pre">annotate_bna_regions()</span></code></a> annotates data
+parcellated with the Brainnetome atlas itself; and
+<a class="reference internal" href="conninfpy.interpret.html#conninfpy.interpret.interpret_result" title="conninfpy.interpret.interpret_result"><code class="xref py py-func docutils literal notranslate"><span class="pre">interpret_result()</span></code></a> describes a result in one call
+(annotated connections, relations, groups, coupling change, BrainMap domains,
+distance check, evidence packet, connectograms):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.interpret</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotate_bna_regions</span><span class="p">,</span> <span class="n">annotate_rois</span><span class="p">,</span> <span class="n">interpret_result</span>
+
+<span class="c1"># Schaefer parcels: anatomy from the Brainnetome tissue they cover, networks = their own Yeo-7 labels</span>
+<span class="n">rois</span> <span class="o">=</span> <span class="n">annotate_rois</span><span class="p">(</span><span class="n">support</span><span class="o">=</span><span class="s2">"parcel"</span><span class="p">,</span> <span class="n">parcel_image</span><span class="o">=</span><span class="n">img</span><span class="p">,</span> <span class="n">parcel_labels</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span> <span class="n">networks</span><span class="o">=</span><span class="n">yeo_labels</span><span class="p">)</span>
+<span class="c1"># or spheres: annotate_rois(coords, names=names, support="sphere", radius_mm=6, space="MNI152NLin2009cAsym")</span>
+<span class="c1"># Brainnetome regions: identity and networks from the Brainnetome division (bna246_hierarchy.csv)</span>
+<span class="c1"># rois = annotate_bna_regions(bna_ids, division="yeo7")</span>
+<span class="n">report</span> <span class="o">=</span> <span class="n">interpret_result</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">rois</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"EC vs EO"</span><span class="p">,</span> <span class="n">source_atlas</span><span class="o">=</span><span class="s2">"Schaefer-200"</span><span class="p">)</span>
+<span class="n">report</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"results/ec_vs_eo"</span><span class="p">)</span>          <span class="c1"># CSV tables, evidence.json, connectograms</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">markdown</span><span class="p">())</span>
+</pre></div>
+</div>
+<ul>
+<li><p><strong>Network labels follow the atlas.</strong> The <code class="docutils literal notranslate"><span class="pre">network</span></code> column used for network
+relations, network groups and connectogram colours is the source atlas’s own
+division when it has one (Schaefer: Yeo-7, <code class="docutils literal notranslate"><span class="pre">networks=</span></code>), the Brainnetome
+division for Brainnetome regions (<code class="docutils literal notranslate"><span class="pre">annotate_bna_regions</span></code>; <code class="docutils literal notranslate"><span class="pre">yeo7</span></code> or
+<code class="docutils literal notranslate"><span class="pre">yeo17</span></code> columns of <code class="docutils literal notranslate"><span class="pre">bna246_hierarchy.csv</span></code>, subcortex ‘Subcortical’), and
+otherwise the Brainnetome division of the tissue each ROI covers. <code class="docutils literal notranslate"><span class="pre">yeo7</span></code>
+keeps the Brainnetome crosswalk for reference. <code class="docutils literal notranslate"><span class="pre">AtlasInfo.bna_246()</span></code> carries
+the same Brainnetome division (<code class="docutils literal notranslate"><span class="pre">networks='yeo7'</span></code> by default,
+<code class="docutils literal notranslate"><span class="pre">'yeo17'</span></code>, or <code class="docutils literal notranslate"><span class="pre">'lobe'</span></code> for the lobe grouping). <strong>Changed in October
+2026:</strong> <code class="docutils literal notranslate"><span class="pre">bna_246()</span></code> previously grouped by lobe; network-pair summaries,
+network columns of edge tables and network-ordered figures of BNA-246 data
+now follow the Yeo-7 division unless <code class="docutils literal notranslate"><span class="pre">networks='lobe'</span></code> is passed.</p></li>
+<li><p><strong>Support, not points.</strong> A 6 mm sphere usually covers 2–4 Brainnetome
+regions, and a parcel’s centroid can lie outside the parcel, so each ROI
+gets its overlap with every region (<code class="docutils literal notranslate"><span class="pre">rois.weights</span></code>) and, with the
+probabilistic maps, its membership probability. A label is given at the
+finest level (subregion → gyrus → lobe) holding at least <code class="docutils literal notranslate"><span class="pre">purity</span></code> of the
+labelled tissue; otherwise the ROI is <code class="docutils literal notranslate"><span class="pre">mixed</span></code>. Cerebellum, brainstem and
+white matter are <code class="docutils literal notranslate"><span class="pre">unassigned</span></code>.</p></li>
+<li><p><strong>Declare the template.</strong> The atlas is on the FSL MNI152 grid, and
+<code class="docutils literal notranslate"><span class="pre">space</span></code> defaults to it (<code class="docutils literal notranslate"><span class="pre">'MNI152NLin6Asym'</span></code>, no flag). Set <code class="docutils literal notranslate"><span class="pre">space</span></code>
+to the template the signals were extracted in: other MNI variants
+(<code class="docutils literal notranslate"><span class="pre">'MNI152NLin2009cAsym'</span></code>, fMRIPrep’s default output; <code class="docutils literal notranslate"><span class="pre">'MNI152'</span></code> when
+the variant is unknown) differ from that grid by an unquantified amount,
+and every ROI is flagged approximate. No numeric offset is promised:
+neither the atlas nor the analysis knows the voxel-wise displacement
+between template grids. Talairach coordinates are refused (convert them
+first, e.g. Lancaster et al., 2007).</p></li>
+<li><p><strong>Identity first.</strong> Each ROI carries its subregion, gyrus, lobe, hemisphere,
+cytoarchitectonic description, Yeo-7 and Yeo-17 networks (cortex only; each
+assigned under the same purity rule on its own shares, with
+<code class="docutils literal notranslate"><span class="pre">yeo7_purity</span></code> / <code class="docutils literal notranslate"><span class="pre">yeo17_purity</span></code>) and BrainMap behavioural domains. BrainMap terms are published forward-inference
+associations (which tasks activate a region in the literature), kept per
+region with their likelihood ratios and never combined into a “top term”;
+a region without terms has too few BrainMap studies.</p></li>
+<li><p><strong>Connections as relations.</strong> <code class="docutils literal notranslate"><span class="pre">annotated_edges</span></code> adds the hemispheric
+relation (homotopic, heterotopic, intrahemispheric), anatomical level,
+circuit class (cortico-cortical, thalamo-cortical, cortico-basal ganglia,
+…), centre distance, sphere overlap (overlapping spheres share voxels),
+population structural connectivity and network relation.</p></li>
+<li><p><strong>Descriptive summaries.</strong> <a class="reference internal" href="conninfpy.interpret.html#conninfpy.interpret.summarize_annotation" title="conninfpy.interpret.summarize_annotation"><code class="xref py py-func docutils literal notranslate"><span class="pre">summarize_annotation()</span></code></a>
+puts the detections next to the tested opportunities by relation, region
+group and BrainMap domain, and reports the distance dependence of the
+statistic (a motion-confound check). It adds no test and leaves the
+correction and the inference unit (edge, component or block) unchanged.
+<code class="docutils literal notranslate"><span class="pre">rois.to_atlas(level)</span></code> gives an <a class="reference internal" href="conninfpy.atlas.html#conninfpy.atlas.AtlasInfo" title="conninfpy.atlas.AtlasInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">AtlasInfo</span></code></a> for
+<a class="reference internal" href="conninfpy.results.html#conninfpy.results.InferenceResult.network_summary" title="conninfpy.results.InferenceResult.network_summary"><code class="xref py py-meth docutils literal notranslate"><span class="pre">network_summary()</span></code></a>.</p></li>
+<li><p><strong>Connectogram.</strong> <a class="reference internal" href="conninfpy.interpret.html#conninfpy.interpret.aggregate_connections" title="conninfpy.interpret.aggregate_connections"><code class="xref py py-func docutils literal notranslate"><span class="pre">aggregate_connections()</span></code></a> sums the
+detected and tested connections over Brainnetome units (subregions, gyri or
+lobes per hemisphere), split by the endpoints’ networks: each ROI is spread
+over the units its support covers (<code class="docutils literal notranslate"><span class="pre">assign=&quot;weighted&quot;</span></code>, so a connection
+contributes 1 in total) or placed in the unit holding most of it
+(<code class="docutils literal notranslate"><span class="pre">&quot;dominant&quot;</span></code>). <a class="reference internal" href="conninfpy.plot.html#conninfpy.plot.plot_connectogram" title="conninfpy.plot.plot_connectogram"><code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.plot.plot_connectogram()</span></code></a> draws one tail in
+the layout of the Brainnetome atlas connectogram (left hemisphere left, lobes
+from frontal to subcortical; rings for subregions, gyri and each unit’s
+network make-up) with chords coloured by the endpoint networks. It places
+ROIs by default (whole connections per chord); weighted assignment splits a
+connection between large parcels into many fractional chords. ROIs that
+came out <code class="docutils literal notranslate"><span class="pre">unassigned</span></code> (no labelled support in the atlas, or a labelled
+share below <code class="docutils literal notranslate"><span class="pre">min_coverage</span></code>) are not placed: they get no tissue on the
+rings and no chords. The figure’s footer reports how many ROIs were placed
+and why the rest were not, how many detected connections touch an unplaced
+ROI, and the share of detected connections the drawn chords carry; the same
+counts are in <code class="docutils literal notranslate"><span class="pre">df.attrs[&quot;coverage&quot;]</span></code> of the aggregation (<code class="docutils literal notranslate"><span class="pre">n_rois</span></code>,
+<code class="docutils literal notranslate"><span class="pre">n_placed</span></code>, <code class="docutils literal notranslate"><span class="pre">unplaced_no_support</span></code>, <code class="docutils literal notranslate"><span class="pre">unplaced_low_coverage</span></code> — ROI names
+—, <code class="docutils literal notranslate"><span class="pre">detected_total</span></code> / <code class="docutils literal notranslate"><span class="pre">detected_placed</span></code>, <code class="docutils literal notranslate"><span class="pre">tested_total</span></code> /
+<code class="docutils literal notranslate"><span class="pre">tested_placed</span></code>, <code class="docutils literal notranslate"><span class="pre">level</span></code>, <code class="docutils literal notranslate"><span class="pre">assign</span></code>, <code class="docutils literal notranslate"><span class="pre">tail</span></code>):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.plot</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_connectogram</span>
+
+<span class="n">plot_connectogram</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">rois</span><span class="p">,</span> <span class="n">tail</span><span class="o">=</span><span class="s2">"positive"</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="s2">"gyrus"</span><span class="p">)</span>
+<span class="n">plot_connectogram</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">rois</span><span class="p">,</span> <span class="n">tail</span><span class="o">=</span><span class="s2">"negative"</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="s2">"subregion"</span><span class="p">,</span>
+                  <span class="n">labels</span><span class="o">=</span><span class="s2">"subregion"</span><span class="p">)</span>
+
+<span class="n">agg</span> <span class="o">=</span> <span class="n">aggregate_connections</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">,</span> <span class="n">rois</span><span class="p">,</span> <span class="n">tail</span><span class="o">=</span><span class="s2">"positive"</span><span class="p">)</span>
+<span class="n">agg</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"coverage"</span><span class="p">]</span>      <span class="c1"># placement and detection counts</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<p>The probabilistic and tractography maps (<code class="docutils literal notranslate"><span class="pre">BNA_PM_4D.nii.gz</span></code>,
+<code class="docutils literal notranslate"><span class="pre">BNA_SC_3D_246.zip</span></code>, from atlas.brainnetome.org) are optional and read from
+<code class="docutils literal notranslate"><span class="pre">~/conninfpy_data/brainnetome/</span></code>. The configured root is
+<code class="docutils literal notranslate"><span class="pre">$CONNINFPY_DATA/brainnetome</span></code>; <code class="docutils literal notranslate"><span class="pre">$CONNINFPY_BNA_DIR</span></code> remains a direct
+legacy override, and explicit <code class="docutils literal notranslate"><span class="pre">data_dir=</span></code> takes precedence. Originals
+are SHA256-checked against the bundled reference manifest. Missing optional
+resources leave anatomical annotation available without downloading them.
+Derived arrays are cached separately in <code class="docutils literal notranslate"><span class="pre">~/.cache/conninfpy/bna246</span></code>
+(or <code class="docutils literal notranslate"><span class="pre">$CONNINFPY_CACHE/bna246</span></code>). Brainnetome data are for non-commercial
+use with attribution and share-alike (<code class="docutils literal notranslate"><span class="pre">conninfpy/atlas_data/NOTICE_BRAINNETOME.txt</span></code>).</p>
+</section>
+<section id="coefficient-maps-and-baseline-coupling-result-beta">
+<h2>Coefficient maps and baseline coupling — <code class="docutils literal notranslate"><span class="pre">result.beta</span></code><a class="headerlink" href="#coefficient-maps-and-baseline-coupling-result-beta" title="Link to this heading"></a></h2>
+<p>Every result keeps the coefficients of the model it tested next to its
+p-values: <code class="docutils literal notranslate"><span class="pre">result.beta</span></code> (shape <code class="docutils literal notranslate"><span class="pre">(p,</span> <span class="pre">N,</span> <span class="pre">N)</span></code>, response scale) and
+<code class="docutils literal notranslate"><span class="pre">result.design</span></code> (column names and means, contrast, named covariate
+profiles). Pairwise tests use their equivalent designs: two-sample
+<code class="docutils literal notranslate"><span class="pre">[group-1</span> <span class="pre">mean,</span> <span class="pre">group</span> <span class="pre">2</span> <span class="pre">-</span> <span class="pre">group</span> <span class="pre">1]</span></code>, paired <code class="docutils literal notranslate"><span class="pre">[condition-A</span> <span class="pre">mean,</span> <span class="pre">B</span> <span class="pre">-</span> <span class="pre">A]</span></code>,
+one-sample <code class="docutils literal notranslate"><span class="pre">[mean]</span></code>. They do not depend on the enhancement settings.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">r</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">inference</span>
+<span class="n">r</span><span class="o">.</span><span class="n">effect_map</span><span class="p">()</span>          <span class="c1"># c' beta: e.g. Δz per year of age, or the group difference</span>
+<span class="n">r</span><span class="o">.</span><span class="n">predicted</span><span class="p">(</span><span class="s2">"mean"</span><span class="p">)</span>     <span class="c1"># connectivity at the covariate means (= the sample mean)</span>
+<span class="n">r</span><span class="o">.</span><span class="n">design</span><span class="p">[</span><span class="s2">"comparison"</span><span class="p">]</span>  <span class="c1"># e.g. ['interest=15.4 (mean-1SD)', 'interest=34.9 (mean+1SD)']</span>
+<span class="n">c</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">coupling</span><span class="p">()</span>        <span class="c1"># predicted maps at the two profiles, Δr, and the class per edge</span>
+</pre></div>
+</div>
+<p>Read baselines from predictions, never from the intercept map alone: the
+designs use uncentred covariates and reference-coded sites, so the intercept
+is the connectivity at age 0, sex 0 and the reference site. A positive effect
+on Fisher z can mean stronger positive coupling, weaker anticorrelation or a
+sign change; <a class="reference internal" href="conninfpy.results.html#conninfpy.results.InferenceResult.coupling" title="conninfpy.results.InferenceResult.coupling"><code class="xref py py-meth docutils literal notranslate"><span class="pre">coupling()</span></code></a> names which
+(<code class="docutils literal notranslate"><span class="pre">stronger</span> <span class="pre">/</span> <span class="pre">weaker</span> <span class="pre">positive</span> <span class="pre">coupling</span></code>, <code class="docutils literal notranslate"><span class="pre">stronger</span> <span class="pre">/</span> <span class="pre">weaker</span>
+<span class="pre">anticorrelation</span></code>, <code class="docutils literal notranslate"><span class="pre">sign</span> <span class="pre">change</span></code>, and with a prespecified <code class="docutils literal notranslate"><span class="pre">near_zero</span></code>
+band, <code class="docutils literal notranslate"><span class="pre">emerges</span> <span class="pre">from</span> <span class="pre">/</span> <span class="pre">returns</span> <span class="pre">to</span> <span class="pre">~0</span></code>) and gives the change in correlation
+units, Δr = tanh(z_b) − tanh(z_a). Negative baselines depend on preprocessing
+(global-signal regression both removes and induces anticorrelations); coupling
+classes are descriptive labels on the recorded scale and never by themselves
+carry physiological or causal meaning. When the estimator was a <em>partial</em>
+correlation, Fisher z means atanh(partial r) — a scale transform stabilizing
+its variance — not the exact standard z of a marginal Pearson r, and
+back-transformed values remain partial correlations, not marginal ones. <code class="docutils literal notranslate"><span class="pre">annotated_edges</span></code> and
+<code class="docutils literal notranslate"><span class="pre">summarize_annotation</span></code> add these classes when the result defines a
+comparison, and <code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">run</span></code> writes <code class="docutils literal notranslate"><span class="pre">beta</span></code>, <code class="docutils literal notranslate"><span class="pre">effect</span></code> and the two
+predicted maps to <code class="docutils literal notranslate"><span class="pre">pvals.npz</span></code>.</p>
+</section>
+<section id="independent-post-analysis-summaries">
+<h2>Independent post-analysis summaries<a class="headerlink" href="#independent-post-analysis-summaries" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">ResultBundle</span></code> snapshots a completed result for descriptive reporting without
+original observations, permutation arrays, or statistic/enhanced maps. It uses
+an explicit schema version and trusted Python pickle; never load an untrusted
+pickle. New inference results capture their eligible, effect-estimable and
+actually-tested masks, correction family, model/contrast identity and available
+ROI metadata at the original producer call, so <code class="docutils literal notranslate"><span class="pre">result.to_bundle()</span></code> needs no
+manual reconstruction. <code class="docutils literal notranslate"><span class="pre">analyze</span></code>, <code class="docutils literal notranslate"><span class="pre">compute_p_val</span></code>, <code class="docutils literal notranslate"><span class="pre">compute_p_val_glm</span></code>
+and <code class="docutils literal notranslate"><span class="pre">compute_p_val_glm_multi</span></code> accept <code class="docutils literal notranslate"><span class="pre">atlas=</span></code>, <code class="docutils literal notranslate"><span class="pre">roi_ids=</span></code>, <code class="docutils literal notranslate"><span class="pre">groupings=</span></code>
+and <code class="docutils literal notranslate"><span class="pre">units=</span></code>; single-result calls also accept <code class="docutils literal notranslate"><span class="pre">contrast_id=</span></code>. Atlas label
+IDs and all available groupings are retained in
+matrix order; without atlas identities, zero-based input positions and unknown
+response units are declared explicitly. <code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">run</span></code> writes the same
+snapshot as <code class="docutils literal notranslate"><span class="pre">bundle[_contrast].pkl</span></code>.</p>
+<p>Explicit metadata arguments to <code class="docutils literal notranslate"><span class="pre">to_bundle(...)</span></code> remain available for legacy
+or manually constructed results. On a new result they must agree with the
+captured values; conflicting masks or family are rejected. The diagonal is
+excluded. Grid tested masks have the same N × N × K shape as the corrected p
+map. Zero is a valid estimate; a p-value of 1, a finite beta or an absent tail
+does not reconstruct the original family or estimability. Legacy results
+lacking explicit metadata cannot silently be upgraded.</p>
+<p>The named effect <code class="docutils literal notranslate"><span class="pre">contrast_beta</span></code> is the unstandardized signed contrast
+<code class="docutils literal notranslate"><span class="pre">cᵀβ</span></code> in the declared response units; <code class="docutils literal notranslate"><span class="pre">standardizer</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>. Multirow
+F results have no signed effect and require an all-false estimability mask.
+Effect summaries include every estimable ROI pair, irrespective of detection.
+Counts of corrected detections are separate and keep the original tail,
+correction, family, grid selection and native inference unit. Component/block
+projections are descriptive locations, not individually significant edges.
+A grouping does not create new tests or confidence intervals.</p>
+<p><code class="docutils literal notranslate"><span class="pre">brainnetome_crosswalk</span></code> accepts non-BNA original ROI IDs and an explicitly
+declared MNI template and mm coordinates. Point annotations describe centres
+only; known parcel or sphere support preserves BNA overlap and unlabelled
+fractions. Pure/mixed/low-coverage settings and reference provenance are kept.
+Parallel anatomical, gyrus, lobe, hemisphere, structure and functional groupings
+are saved with the annotation and added to the bundle when not already defined.
+Functional <code class="docutils literal notranslate"><span class="pre">not_applicable</span></code> remains distinct from <code class="docutils literal notranslate"><span class="pre">unknown</span></code>. Approximate
+MNI variants are flagged, never registered automatically. Nearest
+placement is disabled unless a finite limit and tissue class are provided; a
+cross-hemisphere or cross-tissue fallback is rejected. BD/PC terms and source
+scores are descriptive endpoint context, including reference homologs; they
+are not functions of edges or new connectivity evidence. Atlas overlap is not
+EPI coverage. See <code class="docutils literal notranslate"><span class="pre">examples/post_analysis_bundle.py</span></code> for an offline example.
+<code class="docutils literal notranslate"><span class="pre">bundle.export_summary(table,</span> <span class="pre">path)</span></code> exports the selected table with a JSON
+metadata sidecar; <code class="docutils literal notranslate"><span class="pre">bundle.plot_summary(table)</span></code> plots that same table.</p>
+</section>
+<section id="paired-condition-differences-and-interactions">
+<h2>Paired condition differences and interactions<a class="headerlink" href="#paired-condition-differences-and-interactions" title="Link to this heading"></a></h2>
+<p>For a between-subject effect on change, supply paired arrays in identical
+subject order, <code class="docutils literal notranslate"><span class="pre">test_type=&quot;paired&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">interest</span></code>. With <code class="docutils literal notranslate"><span class="pre">input=&quot;r&quot;</span></code>,
+Fisher transformation is applied to each condition before forming B minus A.
+With <code class="docutils literal notranslate"><span class="pre">input=&quot;z&quot;</span></code>, inputs are already Fisher z. The response units are Fisher
+z difference; coefficients are native contrast estimates. <code class="docutils literal notranslate"><span class="pre">confounds</span></code> are
+subject-level covariates, whereas <code class="docutils literal notranslate"><span class="pre">confounds_group1</span></code> and
+<code class="docutils literal notranslate"><span class="pre">confounds_group2</span></code> are matched numeric condition-specific covariates and
+enter as B minus A. Both may be supplied. The permutation unit is the subject.</p>
+<p>Named numeric predictors can include <code class="docutils literal notranslate"><span class="pre">interactions=[(&quot;group&quot;,</span> <span class="pre">&quot;age&quot;)]</span></code>.
+All named predictors are mean centered on this path; the interaction is their
+product. Each returned contrast adjusts for all other columns, including both
+main effects. Encode categorical variables numerically (e.g. 0/1) in Python;
+CLI text predictors must have exactly two levels and use the sorted first level
+as reference. Text CLI confounds are dummy coded with the first sorted level as
+reference; condition-specific categorical confounds must have the same levels
+in both conditions and use a single shared encoding.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">design</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">paired</span>
+<span class="w">  </span><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">subject_id</span>
+<span class="w">  </span><span class="nt">condition</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">condition</span>
+<span class="w">  </span><span class="nt">levels</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">pre</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">post</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">interest</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">group</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">age</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">interactions</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[[</span><span class="nv">group</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">age</span><span class="p p-Indicator">]]</span>
+<span class="w">  </span><span class="nt">confounds</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">motion</span><span class="p p-Indicator">]</span><span class="w">           </span><span class="c1"># post - pre</span>
+<span class="w">  </span><span class="nt">subject_confounds</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">sex</span><span class="p p-Indicator">]</span><span class="w">      </span><span class="c1"># constant within subject</span>
+</pre></div>
+</div>
+<p>Paired CLI rows require exactly one observation at each listed level for every
+subject, and interest, subject confounds and sites must agree across conditions.
+Missing values, duplicate pairs and extra or absent levels raise errors.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="architecture.html" class="btn btn-neutral float-right" title="Package organization" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

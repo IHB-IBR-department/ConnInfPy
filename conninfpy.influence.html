@@ -1,0 +1,360 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.influence &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2943afd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="conninfpy.enhance" href="conninfpy.enhance.html" />
+    <link rel="prev" title="conninfpy.stats" href="conninfpy.stats.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="conninfpy.html">conninfpy</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.analysis.html">conninfpy.analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.results.html">conninfpy.results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.atlas.html">conninfpy.atlas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.interpret.html">conninfpy.interpret</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.plot.html">conninfpy.plot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.stats.html">conninfpy.stats</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">conninfpy.influence</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#contract">Contract</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#statuses-per-subject-edge-field-status">Statuses (per subject × edge, field <code class="docutils literal notranslate"><span class="pre">status</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.influence.subject_influence"><code class="docutils literal notranslate"><span class="pre">subject_influence()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#limits">Limits</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.enhance.html">conninfpy.enhance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.harmonize.html">conninfpy.harmonize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.sim.html">conninfpy.sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.defaults.html">conninfpy.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.preprocessing.html">conninfpy.preprocessing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.html#shared-array-helpers">Shared array helpers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="conninfpy.html">conninfpy</a></li>
+      <li class="breadcrumb-item active">conninfpy.influence</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/conninfpy.influence.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="conninfpy-influence">
+<h1>conninfpy.influence<a class="headerlink" href="#conninfpy-influence" title="Link to this heading"></a></h1>
+<p>Descriptive per-subject leave-one-out (LOO) influence for an explicitly chosen
+set of edges of a finished result. It refits the <em>native</em> model once per
+subject on one fewer observation and reports <code class="docutils literal notranslate"><span class="pre">Δ</span> <span class="pre">=</span> <span class="pre">c'β_full</span> <span class="pre">−</span> <span class="pre">c'β_(−s)</span></code>, the
+recomputed native statistic, its df and n, the leverage of <em>that edge’s</em>
+design, the edge’s MAD and a status per subject × edge. There is no
+permutation, no random number generation, no p-value and no selected-edge
+search; the source result is never modified.</p>
+<p id="module-conninfpy.influence">Descriptive per-subject leave-one-out influence on explicitly chosen edges.</p>
+<p>This module answers one question about a <em>finished</em> inference result: which
+subjects drive the native contrast effect <code class="docutils literal notranslate"><span class="pre">c'β</span></code> and the native statistic on
+a small, caller-chosen set of edges? Nothing is tested again. There is no
+permutation run, no random number generator, no p-value, no selected-edge
+search and no threshold; the source result is read only.</p>
+<section id="contract">
+<h2>Contract<a class="headerlink" href="#contract" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Explicit edges only.</strong> <code class="docutils literal notranslate"><span class="pre">edges</span></code> is a finite list of unique, off-diagonal
+ROI index pairs, canonicalised to <code class="docutils literal notranslate"><span class="pre">i</span> <span class="pre">&lt;</span> <span class="pre">j</span></code>, capped at <code class="xref py py-data docutils literal notranslate"><span class="pre">MAX_EDGES</span></code>
+(64). Duplicates, diagonal entries, out-of-range indices, more than 64 pairs
+and edges outside the producer’s <code class="docutils literal notranslate"><span class="pre">estimable</span></code>/<code class="docutils literal notranslate"><span class="pre">tested</span></code> provenance masks
+raise <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code></a> <em>before</em> any computation. There is no
+<code class="docutils literal notranslate"><span class="pre">select='significant'</span></code> option and no component/block aggregation. The
+report is also capped at <code class="xref py py-data docutils literal notranslate"><span class="pre">MAX_RECORDS</span></code> (4096) subject × edge records:
+the refit grows quadratically with the number of subjects, so a larger
+request is refused as <code class="docutils literal notranslate"><span class="pre">unavailable</span></code> before any refit, never run quietly.</p></li>
+<li><p><strong>Leave-one-out, not resampling.</strong> For every subject and every chosen edge
+the native model is refitted without that subject’s row: <code class="docutils literal notranslate"><span class="pre">Δ_s</span> <span class="pre">=</span> <span class="pre">c'β_full</span> <span class="pre">−</span>
+<span class="pre">c'β_(−s)</span></code> on the analysis scale, the statistic and its df recomputed with
+the <em>same</em> formula the source test used, and the leverage of <em>that edge’s</em>
+design recorded. Leverage is per edge, on the rows the edge actually uses:
+<code class="docutils literal notranslate"><span class="pre">1/n_edge</span></code> of the relevant group for a pairwise equivalent design, and
+the hat-matrix diagonal of the edge’s coverage-row design for a GLM
+(<code class="docutils literal notranslate"><span class="pre">X_pinv[:,</span> <span class="pre">s]</span> <span class="pre">·</span> <span class="pre">X[s,</span> <span class="pre">:]</span></code>, never by materialising an <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">×</span> <span class="pre">n</span></code> hat
+matrix). A row outside an edge’s coverage has no leverage on that edge and
+gets <code class="docutils literal notranslate"><span class="pre">None</span></code> with the <code class="docutils literal notranslate"><span class="pre">not_in_coverage</span></code> status; no full-design leverage
+is reported, so two designs never share one column. For a paired design the
+deletion unit is the whole subject pair (the row leaves <strong>both</strong>
+conditions).</p></li>
+<li><p><strong>Native units.</strong> Effects and <code class="docutils literal notranslate"><span class="pre">Δ</span></code> are in the response units of the
+source model (e.g. Fisher z, or the Fisher z difference <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">−</span> <span class="pre">A</span></code> for a
+paired result), never standardised and never rescaled.</p></li>
+<li><p><strong>Inputs are not reconstructed.</strong> A result carries coefficient maps and a
+design description, not the data that produced it. The caller supplies the
+tested inputs (the <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.analyze()</span></code> arguments): <code class="docutils literal notranslate"><span class="pre">group1</span></code>,
+<code class="docutils literal notranslate"><span class="pre">group2</span></code>, or <code class="docutils literal notranslate"><span class="pre">Y</span></code> plus <code class="docutils literal notranslate"><span class="pre">design_matrix</span></code>. A compatibility check refits
+the full model on those inputs and requires it to reproduce <code class="docutils literal notranslate"><span class="pre">result.beta</span></code>
+at <code class="xref py py-data docutils literal notranslate"><span class="pre">CHECK_TOLERANCE</span></code> (off-diagonal cells; the diagonal is
+structurally zero in a connectivity result, and available-case GLM edges
+are checked on their own coverage rows); a mismatch is reported as
+<code class="docutils literal notranslate"><span class="pre">unavailable</span></code> with the reason “inputs do not reproduce the tested model”.
+A positive <code class="docutils literal notranslate"><span class="pre">Δ</span></code> means the full-sample effect is larger than without that
+subject, i.e. the subject pulled the effect down. The check does not
+prove that every row is correctly aligned — row order, subject IDs and the
+analysis scale must be supplied correctly by the caller.</p></li>
+<li><p><strong>Paired alignment.</strong> When the source result recorded a non-identity
+<code class="docutils literal notranslate"><span class="pre">design['paired_alignment']</span></code>, either name the subjects with
+<code class="docutils literal notranslate"><span class="pre">ids_group1</span></code>/<code class="docutils literal notranslate"><span class="pre">ids_group2</span></code> (the subject-ID permutation is verified
+against the record and applied exactly once) or declare the inputs already
+aligned with <code class="docutils literal notranslate"><span class="pre">paired_inputs_aligned=True</span></code> (nothing is reordered, and the
+β reproduction check catches a wrong order). For a paired design <code class="docutils literal notranslate"><span class="pre">c'β</span></code> is
+the mean <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">−</span> <span class="pre">A</span></code> and is therefore invariant to the row pairing: there the
+beta check cannot detect a wrong order, and the observed-statistic check is
+the guard. IDs without a recorded alignment, or a non-identity alignment
+without IDs or that flag, are reported as <code class="docutils literal notranslate"><span class="pre">unavailable</span></code> with the reason.</p></li>
+<li><p><strong>Harmonization is not refit.</strong> ComBat and other sample-dependent
+transforms are fixed: the caller passes the already processed inputs, and
+the report notes that LOO is conditional on the fitted harmonization.</p></li>
+<li><p><strong>Unavailable, never invented.</strong> Missing input data, legacy results without
+coefficient maps, omnibus F results, multi-row contrasts, undeclared
+<code class="docutils literal notranslate"><span class="pre">var_equal</span></code>, statistic mismatches and missing provenance masks are
+reported as <code class="docutils literal notranslate"><span class="pre">unavailable</span></code> with a reason. A subject × edge entry whose
+refit is undefined (constant values, rank loss, no residual df,
+non-estimable contrast, no coverage) gets <code class="docutils literal notranslate"><span class="pre">delta</span></code>/<code class="docutils literal notranslate"><span class="pre">t</span></code> set to <code class="docutils literal notranslate"><span class="pre">None</span></code>
+with a status, never a made-up number.</p></li>
+</ul>
+</section>
+<section id="statuses-per-subject-edge-field-status">
+<h2>Statuses (per subject × edge, field <code class="docutils literal notranslate"><span class="pre">status</span></code>)<a class="headerlink" href="#statuses-per-subject-edge-field-status" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">ok</span></code>, <code class="docutils literal notranslate"><span class="pre">zero_mad</span></code> (the edge’s MAD is 0 without its values being identical,
+i.e. majority ties plus at least one outlying value — the LOO <code class="docutils literal notranslate"><span class="pre">Δ</span></code> shows
+which), <code class="docutils literal notranslate"><span class="pre">constant</span></code> (all values identical, variance 0, t undefined),
+<code class="docutils literal notranslate"><span class="pre">rank_loss</span></code> (the design lost rank after the deletion), <code class="docutils literal notranslate"><span class="pre">not_estimable</span></code>
+(the contrast is not a combination of the rows of the reduced design),
+<code class="docutils literal notranslate"><span class="pre">no_residual_df</span></code>, <code class="docutils literal notranslate"><span class="pre">not_in_coverage</span></code> (the subject has no value on that edge;
+<code class="docutils literal notranslate"><span class="pre">Δ</span></code> is factually 0 and the statistic does not change) and <code class="docutils literal notranslate"><span class="pre">nan_edge</span></code>.
+<code class="docutils literal notranslate"><span class="pre">zero_mad</span></code> is deliberately distinct from <code class="docutils literal notranslate"><span class="pre">constant</span></code>: a zero MAD alone is
+not a constant edge. Field <code class="docutils literal notranslate"><span class="pre">loo_fit_status</span></code> keeps the raw status of the
+reduced fit, so a <code class="docutils literal notranslate"><span class="pre">zero_mad</span></code> row whose reduced data happen to be tied also
+says why its <code class="docutils literal notranslate"><span class="pre">t</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<p>This is a descriptive diagnostic. It says nothing about significance, about
+the correctness of the original inference, or about which subjects to exclude.</p>
+</section>
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.influence.subject_influence">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.influence.</span></span><span class="sig-name descname"><span class="pre">subject_influence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">edges</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.15)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">design_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">var_equal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ids_group1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.15)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ids_group2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.15)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">paired_inputs_aligned</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/influence.html#subject_influence"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.influence.subject_influence" title="Link to this definition"></a></dt>
+<dd><p>Descriptive per-subject leave-one-out influence on explicitly chosen edges.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>result</strong> (<a class="reference internal" href="conninfpy.results.html#conninfpy.results.InferenceResult" title="conninfpy.results.InferenceResult"><em>InferenceResult</em></a>) – A finished result with <code class="docutils literal notranslate"><span class="pre">beta</span></code>, <code class="docutils literal notranslate"><span class="pre">design</span></code> and
+<code class="docutils literal notranslate"><span class="pre">analysis_provenance</span></code>. It is only read: no p-value, mask, sample,
+enhancement setting or preprocessing is touched.</p></li>
+<li><p><strong>edges</strong> (<em>sequence</em><em> of </em><em>(</em><em>i</em><em>, </em><em>j</em><em>)</em>) – Explicit, unique, off-diagonal ROI index pairs (canonicalised to
+<code class="docutils literal notranslate"><span class="pre">i</span> <span class="pre">&lt;</span> <span class="pre">j</span></code>), at most <code class="xref py py-data docutils literal notranslate"><span class="pre">MAX_EDGES</span></code>. Each must lie inside the
+producer’s <code class="docutils literal notranslate"><span class="pre">estimable</span></code> and <code class="docutils literal notranslate"><span class="pre">tested</span></code> provenance masks, otherwise
+<a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code></a> is raised before any computation.</p></li>
+<li><p><strong>group1</strong> (<em>ndarray</em><em> of </em><em>shape</em><em> (</em><em>n_subjects</em><em>, </em><em>N</em><em>, </em><em>N</em><em>)</em><em>, </em><em>optional</em>) – The tested pairwise inputs on the analysis scale (Fisher z already
+applied; for a paired design the two condition matrices). <code class="docutils literal notranslate"><span class="pre">group1</span></code>
+for one-sample; <code class="docutils literal notranslate"><span class="pre">group1</span></code> and <code class="docutils literal notranslate"><span class="pre">group2</span></code> for two-sample and paired.</p></li>
+<li><p><strong>group2</strong> (<em>ndarray</em><em> of </em><em>shape</em><em> (</em><em>n_subjects</em><em>, </em><em>N</em><em>, </em><em>N</em><em>)</em><em>, </em><em>optional</em>) – The tested pairwise inputs on the analysis scale (Fisher z already
+applied; for a paired design the two condition matrices). <code class="docutils literal notranslate"><span class="pre">group1</span></code>
+for one-sample; <code class="docutils literal notranslate"><span class="pre">group1</span></code> and <code class="docutils literal notranslate"><span class="pre">group2</span></code> for two-sample and paired.</p></li>
+<li><p><strong>Y</strong> (<em>ndarray</em><em> of </em><em>shape</em><em> (</em><em>n_subjects</em><em>, </em><em>N</em><em>, </em><em>N</em><em>)</em><em>, </em><em>optional</em>) – The tested GLM response (for a paired GLM the <code class="docutils literal notranslate"><span class="pre">Δz</span></code> difference).</p></li>
+<li><p><strong>design_matrix</strong> (<em>ndarray</em><em> of </em><em>shape</em><em> (</em><em>n_subjects</em><em>, </em><em>p</em><em>)</em><em>, </em><em>optional</em>) – The tested GLM design matrix, including intercept, confounds and any
+site dummies.</p></li>
+<li><p><strong>var_equal</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – The two-sample variance assumption <strong>as used by the source test</strong>. It
+is required explicitly for a two-sample result; <code class="docutils literal notranslate"><span class="pre">None</span></code> makes the
+diagnostic unavailable instead of guessing Welch.</p></li>
+<li><p><strong>ids_group1</strong> (<em>sequence</em><em>, </em><em>optional</em>) – Subject IDs of the paired design. With a recorded non-identity
+alignment they are verified against the record and the recorded
+permutation is applied exactly once.</p></li>
+<li><p><strong>ids_group2</strong> (<em>sequence</em><em>, </em><em>optional</em>) – Subject IDs of the paired design. With a recorded non-identity
+alignment they are verified against the record and the recorded
+permutation is applied exactly once.</p></li>
+<li><p><strong>paired_inputs_aligned</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>default False</em>) – Declare <code class="docutils literal notranslate"><span class="pre">group2</span></code> already in <code class="docutils literal notranslate"><span class="pre">group1</span></code>’s row order. Nothing is
+reordered; a wrong order is caught by the β reproduction check.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>JSON-serialisable descriptive report: schema version, test type,
+units and scale, contrast, inference-unit context, the executed
+compatibility checks with their tolerance, per-edge full estimates,
+per-subject × edge <code class="docutils literal notranslate"><span class="pre">Δ</span></code>/t/df/n/leverage/MAD/status entries, a
+per-subject summary with a ranking, <code class="docutils literal notranslate"><span class="pre">unavailable</span></code> reasons and
+<code class="docutils literal notranslate"><span class="pre">limitations</span></code>. <code class="docutils literal notranslate"><span class="pre">descriptive_only</span></code> is always <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)">dict</a></p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Only the checks listed under <code class="docutils literal notranslate"><span class="pre">checks</span></code> are possible from a result plus
+the supplied inputs: design shape, full-model β reproduction, the native
+statistic on the selected edges and (with available-case output) per-edge
+coverage. Row order, subject IDs and the analysis scale are the caller’s
+responsibility; the reproduction check only catches a mismatch, it does
+not prove row-by-row identity. Multiplying the two-sample Welch degrees of
+freedom by a leave-one-out variance ratio is <em>not</em> attempted: the df are
+recomputed from the reduced sample with the same Welch–Satterthwaite
+formula.</p>
+</dd></dl>
+
+<section id="example">
+<h2>Example<a class="headerlink" href="#example" title="Link to this heading"></a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.influence</span><span class="w"> </span><span class="kn">import</span> <span class="n">subject_influence</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span><span class="n">group1</span><span class="o">=</span><span class="n">condition_a</span><span class="p">,</span> <span class="n">group2</span><span class="o">=</span><span class="n">condition_b</span><span class="p">,</span>
+                 <span class="n">test_type</span><span class="o">=</span><span class="s2">"paired"</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">"tstat"</span><span class="p">)</span><span class="o">.</span><span class="n">inference</span>
+
+<span class="n">report</span> <span class="o">=</span> <span class="n">subject_influence</span><span class="p">(</span>
+    <span class="n">result</span><span class="p">,</span>
+    <span class="n">edges</span><span class="o">=</span><span class="p">[(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">17</span><span class="p">),</span> <span class="p">(</span><span class="mi">23</span><span class="p">,</span> <span class="mi">61</span><span class="p">)],</span>          <span class="c1"># explicitly chosen ROI pairs</span>
+    <span class="n">group1</span><span class="o">=</span><span class="n">condition_a</span><span class="p">,</span>                 <span class="c1"># the tested inputs, analysis scale</span>
+    <span class="n">group2</span><span class="o">=</span><span class="n">condition_b</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">report</span><span class="p">[</span><span class="s2">"summary"</span><span class="p">][</span><span class="s2">"top_subject_by_max_abs_delta"</span><span class="p">]</span>
+<span class="n">report</span><span class="p">[</span><span class="s2">"edges"</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">"effect"</span><span class="p">],</span> <span class="n">report</span><span class="p">[</span><span class="s2">"edges"</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">"stat"</span><span class="p">]</span>
+<span class="p">[</span><span class="n">row</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">report</span><span class="p">[</span><span class="s2">"per_subject_edge"</span><span class="p">]</span> <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="s2">"status"</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">"ok"</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="limits">
+<h2>Limits<a class="headerlink" href="#limits" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Inputs are the caller’s responsibility.</strong> A result carries coefficient
+maps and a design description, not the data. Row order, subject IDs, the
+analysis scale (Fisher z already applied) and the GLM design matrix must be
+the ones that produced the result. The report refits the full model and
+requires it to reproduce <code class="docutils literal notranslate"><span class="pre">result.beta</span></code> at <code class="docutils literal notranslate"><span class="pre">1e-5</span></code>/<code class="docutils literal notranslate"><span class="pre">1e-8</span></code>; a mismatch is
+<code class="docutils literal notranslate"><span class="pre">unavailable</span></code> with the reason “inputs do not reproduce the tested model”,
+not a repaired answer.</p></li>
+<li><p><strong>Paired alignment.</strong> With a recorded non-identity
+<code class="docutils literal notranslate"><span class="pre">design['paired_alignment']</span></code>, either supply <code class="docutils literal notranslate"><span class="pre">ids_group1</span></code>/<code class="docutils literal notranslate"><span class="pre">ids_group2</span></code>
+(verified against the record and applied exactly once) or pass the aligned
+input with <code class="docutils literal notranslate"><span class="pre">paired_inputs_aligned=True</span></code>. A second reorder is never
+applied. For a paired design the mean <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">−</span> <span class="pre">A</span></code> is invariant to the row
+pairing, so the observed-statistic check, not the beta check, catches a
+wrong order.</p></li>
+<li><p><strong>Only explicit edges.</strong> At most <code class="xref py py-data docutils literal notranslate"><span class="pre">MAX_EDGES</span></code> (64)
+unique off-diagonal pairs, each inside the producer’s <code class="docutils literal notranslate"><span class="pre">estimable</span></code> and
+<code class="docutils literal notranslate"><span class="pre">tested</span></code> provenance masks; anything else raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> before any
+computation. There is no <code class="docutils literal notranslate"><span class="pre">select='significant'</span></code>. The report is capped at
+<code class="xref py py-data docutils literal notranslate"><span class="pre">MAX_RECORDS</span></code> (4096) subject × edge records: the
+refit grows with the number of subjects, so a larger request returns an
+<code class="docutils literal notranslate"><span class="pre">unavailable</span></code> report with the reason instead of running.</p></li>
+<li><p><strong>Leverage is per edge.</strong> It uses the rows that edge actually uses:
+<code class="docutils literal notranslate"><span class="pre">1/n_edge</span></code> of the relevant group for a pairwise equivalent design, and the
+hat-matrix diagonal of the edge’s coverage-row design for a GLM (one entry
+at a time, never an <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">×</span> <span class="pre">n</span></code> hat matrix). A row outside an edge’s coverage
+has no leverage there and reports <code class="docutils literal notranslate"><span class="pre">None</span></code> with <code class="docutils literal notranslate"><span class="pre">not_in_coverage</span></code>; no
+full-design leverage is mixed into the same column.</p></li>
+<li><p><strong>Inference unit.</strong> For NBS/cNBS/TFNBS results the diagnostic is allowed at
+explicit edges but the report says that these are not independent edge
+discoveries and that the p-value map belongs to the component or block.</p></li>
+<li><p><strong>Native units and no hypotheses.</strong> <code class="docutils literal notranslate"><span class="pre">Δ</span></code> and the effect stay in the
+response units of the model. The recomputed t values are descriptive, not
+tests, and are not corrected for multiplicity.</p></li>
+<li><p><strong>Statuses instead of numbers.</strong> Constant values, non-estimable
+contrasts, no residual df, no coverage and all-NaN edges are reported with
+<code class="docutils literal notranslate"><span class="pre">delta</span></code>/<code class="docutils literal notranslate"><span class="pre">t</span></code> set to <code class="docutils literal notranslate"><span class="pre">None</span></code> and a status; <code class="docutils literal notranslate"><span class="pre">zero_mad</span></code> is kept distinct
+from <code class="docutils literal notranslate"><span class="pre">constant</span></code> because a zero MAD alone can be majority ties with one
+outlying value. <code class="docutils literal notranslate"><span class="pre">rank_loss</span></code> means the reduced design rank fell below the
+full fit’s rank <strong>on the same edge</strong> (not <code class="docutils literal notranslate"><span class="pre">rank</span> <span class="pre">&lt;</span> <span class="pre">p</span></code>: a design may already
+be rank deficient); such a row keeps its <code class="docutils literal notranslate"><span class="pre">delta</span></code> but is excluded from the
+per-subject <code class="docutils literal notranslate"><span class="pre">max|Δ|</span></code>, the ranking and the <code class="docutils literal notranslate"><span class="pre">ok</span></code> counts.</p></li>
+<li><p><strong>Harmonization.</strong> ComBat and other sample-dependent transforms are fixed:
+the diagnostic is conditional on the fitted harmonization and never refits
+it.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="conninfpy.stats.html" class="btn btn-neutral float-left" title="conninfpy.stats" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="conninfpy.enhance.html" class="btn btn-neutral float-right" title="conninfpy.enhance" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,257 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Package organization &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2943afd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="How Inference Works" href="approach.html" />
+    <link rel="prev" title="Usage" href="usage.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Package organization</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#atlas-data-and-interpretation">Atlas data and interpretation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#compatibility-and-v2-0-migration">Compatibility and v2.0 migration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#process-and-thread-execution">Process and thread execution</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Package organization</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/architecture.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="package-organization">
+<h1>Package organization<a class="headerlink" href="#package-organization" title="Link to this heading"></a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">conninfpy.analyze</span></code> is the main entry point. Its orchestration stays in
+<code class="docutils literal notranslate"><span class="pre">analysis.py</span></code>; result containers stay in <code class="docutils literal notranslate"><span class="pre">results.py</span></code>. Implementations are
+grouped by responsibility:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 80.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Package</p></th>
+<th class="head"><p>Responsibility</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">stats</span></code></p></td>
+<td><p>Pairwise and GLM inference, design/estimability, missing-data paths,
+permutation execution, correction and accelerated tails.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">enhance</span></code></p></td>
+<td><p>Pure enhancement scores and the public <code class="docutils literal notranslate"><span class="pre">apply_*</span></code> wrappers.
+<code class="docutils literal notranslate"><span class="pre">tfnbs.py</span></code>, <code class="docutils literal notranslate"><span class="pre">ni_tfnbs.py</span></code> and <code class="docutils literal notranslate"><span class="pre">fbc_tfnbs.py</span></code> hold the three TFNBS
+variants; <code class="docutils literal notranslate"><span class="pre">nbs.py</span></code> holds NBS/cNBS and the legacy BCT wrapper.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">atlas</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">metadata.py</span></code> holds <code class="docutils literal notranslate"><span class="pre">AtlasInfo</span></code>; <code class="docutils literal notranslate"><span class="pre">brainnetome.py</span></code> holds
+<code class="docutils literal notranslate"><span class="pre">BrainnetomeReference</span></code>; <code class="docutils literal notranslate"><span class="pre">resources.py</span></code> locates and reads reference data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">interpret</span></code></p></td>
+<td><p>ROI/edge annotation, descriptive anatomical/network summaries, evidence
+packets and interpretation reports.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">harmonize</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">combat.py</span></code> implements ComBat; <code class="docutils literal notranslate"><span class="pre">diagnostics.py</span></code> contains design
+checks; <code class="docutils literal notranslate"><span class="pre">_arrays.py</span></code> converts between matrices and edge features.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sim</span></code></p></td>
+<td><p>Synthetic datasets and topology scenarios.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plot</span></code></p></td>
+<td><p>Matrix, network and connectogram rendering; <code class="docutils literal notranslate"><span class="pre">summary.py</span></code> composes panels.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">loaders</span></code></p></td>
+<td><p>Reusable input adapters, manifest parsing and input validation.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Shared array/scale and random-state helpers live in <code class="docutils literal notranslate"><span class="pre">_shared</span></code>. Result types,
+tail containers, numerical defaults, input preparation and exports keep their
+existing locations. Inference consumes enhancement scores; interpretation and
+plotting consume results. Study-specific protocols belong outside the library.</p>
+<section id="atlas-data-and-interpretation">
+<h2>Atlas data and interpretation<a class="headerlink" href="#atlas-data-and-interpretation" title="Link to this heading"></a></h2>
+<p>Small versioned resources remain in <code class="docutils literal notranslate"><span class="pre">conninfpy/atlas_data/</span></code>. Atlas
+constructors, manifest <code class="docutils literal notranslate"><span class="pre">BUILTIN:</span></code> tokens and Brainnetome annotation use
+<code class="docutils literal notranslate"><span class="pre">atlas.resources</span></code> for access. Materialized package-resource paths remain
+valid for the process lifetime, including lazy NIfTI image reads.</p>
+<p>Optional originals use <code class="docutils literal notranslate"><span class="pre">atlas.resources.brainnetome_data_dir()</span></code>. Resolution
+is explicit <code class="docutils literal notranslate"><span class="pre">data_dir</span></code>, then the direct legacy <code class="docutils literal notranslate"><span class="pre">CONNINFPY_BNA_DIR</span></code> override,
+then <code class="docutils literal notranslate"><span class="pre">CONNINFPY_DATA/brainnetome</span></code> (default <code class="docutils literal notranslate"><span class="pre">~/conninfpy_data/brainnetome</span></code>).
+The caller’s working directory is not searched. PM/SC maps occupy this directory;
+hierarchy-build tables occupy its <code class="docutils literal notranslate"><span class="pre">sources/</span></code> subdirectory. The bundled
+<code class="docutils literal notranslate"><span class="pre">brainnetome_external.json</span></code> records the reference originals’ locally computed
+SHA256 values, not provider-published checksums. Different source versions
+are rejected when used, rather than silently changing an interpretation.
+<code class="docutils literal notranslate"><span class="pre">brainnetome_resource_path(...,</span> <span class="pre">required=True)</span></code> explains manual acquisition
+when a file is missing. No implicit atlas download occurs.</p>
+<p>Derived arrays use <code class="docutils literal notranslate"><span class="pre">cache_dir</span></code> / <code class="docutils literal notranslate"><span class="pre">CONNINFPY_CACHE</span></code> separately, defaulting to
+<code class="docutils literal notranslate"><span class="pre">~/.cache/conninfpy/bna246</span></code>. Ordinary BrainMap profile loading uses bundled
+snapshots; the explicit profile-refresh API retains its download/cache behavior.
+ENIGMA Schaefer SC fixtures belong to <code class="docutils literal notranslate"><span class="pre">examples/simulations/sc_prior/data/</span></code>.
+<code class="docutils literal notranslate"><span class="pre">datasets/</span></code> contains study inputs and manifests, not package atlas copies.</p>
+<p><code class="docutils literal notranslate"><span class="pre">scripts/build_bna_hierarchy.py</span></code> reads configured external sources by default
+and supports <code class="docutils literal notranslate"><span class="pre">--source-dir</span></code> and <code class="docutils literal notranslate"><span class="pre">--output</span></code> for explicit rebuilds.</p>
+<p><code class="docutils literal notranslate"><span class="pre">interpret</span></code> annotates the ROIs/edges of the supplied result. Anatomical
+summaries do not change its parcellation, p-values or inference unit.</p>
+</section>
+<section id="compatibility-and-v2-0-migration">
+<h2>Compatibility and v2.0 migration<a class="headerlink" href="#compatibility-and-v2-0-migration" title="Link to this heading"></a></h2>
+<p>Top-level package entry points (<code class="docutils literal notranslate"><span class="pre">conninfpy.analyze</span></code>, <code class="docutils literal notranslate"><span class="pre">compute_p_val</span></code>,
+<code class="docutils literal notranslate"><span class="pre">compute_p_val_glm</span></code>, <code class="docutils literal notranslate"><span class="pre">InferenceResult</span></code>, <code class="docutils literal notranslate"><span class="pre">ResultBundle</span></code>, etc.) remain
+importable directly from <code class="docutils literal notranslate"><span class="pre">conninfpy</span></code>.</p>
+<p>In v2.0, the 18 legacy root compatibility shims were removed in favour of the
+canonical domain subpackages:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">conninfpy.pairwise_stats</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">conninfpy.stats.pairwise</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conninfpy.glm_stats</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">conninfpy.stats.glm</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conninfpy.acceleration</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">conninfpy.stats.acceleration</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conninfpy.tfnbs_score</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">conninfpy.enhance.tfnbs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conninfpy.nbs_score</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">conninfpy.enhance.nbs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conninfpy.brainnetome</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">conninfpy.atlas.brainnetome</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conninfpy.annotate</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">conninfpy.interpret.annotate</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conninfpy.synth_datasets</span></code> / <code class="docutils literal notranslate"><span class="pre">conninfpy.topologies</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">conninfpy.sim.datasets</span></code> / <code class="docutils literal notranslate"><span class="pre">conninfpy.sim.topologies</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conninfpy.utils</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">conninfpy._shared.utils</span></code> / <code class="docutils literal notranslate"><span class="pre">conninfpy.preprocessing</span></code></p></li>
+</ul>
+<p>Serialization and security migration in v2.0:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ResultBundle.save()</span></code> / <code class="docutils literal notranslate"><span class="pre">ResultBundle.load()</span></code> now use a deterministic,
+pickle-free ZIP archive (JSON manifest + NPY arrays). Legacy <code class="docutils literal notranslate"><span class="pre">.pkl</span></code> bundles
+are rejected by default instead of calling <code class="docutils literal notranslate"><span class="pre">pickle.load</span></code>.</p></li>
+<li><p>NumPy loaders and <code class="docutils literal notranslate"><span class="pre">conninfpy</span> <span class="pre">init-manifest</span></code> default to <code class="docutils literal notranslate"><span class="pre">allow_pickle=False</span></code>
+(pass <code class="docutils literal notranslate"><span class="pre">trust_pickle=True</span></code> / <code class="docutils literal notranslate"><span class="pre">--trust-pickle</span></code> only for trusted legacy files).</p></li>
+<li><p>Third-party Brainnetome BNA-246 and SUIT cerebellar atlases are no longer
+bundled in the MIT wheel; fetch them into <code class="docutils literal notranslate"><span class="pre">CONNINFPY_ATLAS_DIR</span></code> (default
+<code class="docutils literal notranslate"><span class="pre">~/.cache/conninfpy/atlases</span></code>) with <code class="docutils literal notranslate"><span class="pre">scripts/download_atlases.py</span></code>.</p></li>
+</ul>
+<p>Private helpers extracted into shared modules should be patched at their
+canonical call site in development tests.</p>
+</section>
+<section id="process-and-thread-execution">
+<h2>Process and thread execution<a class="headerlink" href="#process-and-thread-execution" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">stats._workers</span></code> owns the shared permutation pool for pairwise, GLM,
+available-case and legacy NBS inference. By default <code class="docutils literal notranslate"><span class="pre">use_mp=True</span></code> uses
+forkserver where available, otherwise spawn. The default pool size is the
+usable logical CPU count (including affinity/container quota and
+<code class="docutils literal notranslate"><span class="pre">LOKY_MAX_CPU_COUNT</span></code>), capped at the number of permutations. One worker
+or one permutation runs directly; calls from child processes run serially.
+<code class="docutils literal notranslate"><span class="pre">n_processes</span></code> must be a positive integer when multiprocessing is requested.</p>
+<p>Each worker loads its task and associated data once. The work queue then
+contains only permutation seeds, with the same seed order and randomization
+as serial execution. Data are copied per process, so reduce <code class="docutils literal notranslate"><span class="pre">n_processes</span></code>
+when memory is limited. Progress reporting uses the same chunking as silent
+execution and can advance in bursts as chunks finish.</p>
+<p>Workers limit loaded BLAS/OpenMP libraries to one thread through
+<code class="docutils literal notranslate"><span class="pre">threadpoolctl</span></code>. TFNBS Numba kernels use serial <code class="docutils literal notranslate"><span class="pre">njit</span></code>; the process pool
+supplies their parallelism. Parent thread settings are preserved. Pool startup
+is protected when analyses are launched from concurrent background threads;
+this does not impose a global CPU budget across independent analyses.</p>
+<p>For small graphs or inexpensive statistics, process startup can cost more
+than the permutations. Use <code class="docutils literal notranslate"><span class="pre">use_mp=False</span></code> for such runs, or explicitly set
+<code class="docutils literal notranslate"><span class="pre">n_processes</span></code> to control CPU and memory use. For CLI runs these settings
+belong in the YAML <code class="docutils literal notranslate"><span class="pre">inference</span></code> section; <code class="docutils literal notranslate"><span class="pre">--no-mp</span></code> also selects serial
+execution. Statistical defaults (permutation count, thresholds and enhancement
+parameters) are independent of these execution settings.</p>
+<p>Package tasks can run from an unguarded script. Custom functions/classes
+defined in a caller’s script still require Python’s usual
+<code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">__name__</span> <span class="pre">==</span> <span class="pre">&quot;__main__&quot;:</span></code> guard for spawn/forkserver execution.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="usage.html" class="btn btn-neutral float-left" title="Usage" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="approach.html" class="btn btn-neutral float-right" title="How Inference Works" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

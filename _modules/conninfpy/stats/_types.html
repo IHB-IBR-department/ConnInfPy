@@ -1,0 +1,261 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.stats._types &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.stats._types</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.stats._types</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Inference methods, test types and parameter-grid metadata."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">enhancement_provenance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">start_thres</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                           <span class="n">normalization</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">min_cluster_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                           <span class="n">actual_backend</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Serializable effective TFNBS parameters, not inferred historical values."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">plain</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">value</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="k">else</span> <span class="n">value</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"integration"</span><span class="p">:</span> <span class="s2">"exact"</span> <span class="k">if</span> <span class="n">n</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"right-grid"</span><span class="p">,</span>
+              <span class="s2">"n"</span><span class="p">:</span> <span class="n">n</span><span class="p">,</span> <span class="s2">"e"</span><span class="p">:</span> <span class="n">plain</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="s2">"h"</span><span class="p">:</span> <span class="n">plain</span><span class="p">(</span><span class="n">h</span><span class="p">),</span> <span class="s2">"start_thres"</span><span class="p">:</span> <span class="n">start_thres</span><span class="p">,</span>
+              <span class="s2">"backend"</span><span class="p">:</span> <span class="s2">"auto"</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">actual_backend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">"actual_backend"</span><span class="p">]</span> <span class="o">=</span> <span class="n">actual_backend</span>
+    <span class="k">if</span> <span class="n">method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">method</span> <span class="o">=</span> <span class="n">method</span><span class="o">.</span><span class="n">value</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">)</span> <span class="k">else</span> <span class="n">method</span>
+        <span class="n">result</span><span class="p">[</span><span class="s2">"method"</span><span class="p">]</span> <span class="o">=</span> <span class="n">method</span>
+        <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">"ni_tfnbs"</span><span class="p">:</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">"normalization"</span><span class="p">]</span> <span class="o">=</span> <span class="n">normalization</span>
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">"fbc_tfnbs"</span><span class="p">:</span>
+            <span class="n">result</span><span class="p">[</span><span class="s2">"min_cluster_size"</span><span class="p">]</span> <span class="o">=</span> <span class="n">min_cluster_size</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">resolve_f_threshold</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">df1</span><span class="p">,</span> <span class="n">dfs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Resolve a common F threshold against the tested residual df values."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">f</span>
+
+    <span class="n">dfs</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">df</span><span class="p">)</span> <span class="k">for</span> <span class="n">df</span> <span class="ow">in</span> <span class="n">dfs</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">dfs</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"No tested residual degrees of freedom for the F threshold."</span><span class="p">)</span>
+    <span class="n">critical</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">ppf</span><span class="p">(</span><span class="mf">0.90</span><span class="p">,</span> <span class="n">df1</span><span class="p">,</span> <span class="n">df</span><span class="p">))</span> <span class="k">for</span> <span class="n">df</span> <span class="ow">in</span> <span class="n">dfs</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dfs</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"F TFNBS with differing tested residual degrees of freedom "</span>
+                             <span class="s2">"requires an explicit common start_thres."</span><span class="p">)</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">critical</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">source</span> <span class="o">=</span> <span class="s2">"F0.90"</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">start</span><span class="p">)</span>
+        <span class="n">source</span> <span class="o">=</span> <span class="s2">"explicit"</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">value</span> <span class="o">&lt;</span> <span class="n">cutoff</span> <span class="k">for</span> <span class="n">cutoff</span> <span class="ow">in</span> <span class="n">critical</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">"Explicit F start_thres is below F0.90 for at least one "</span>
+                          <span class="s2">"tested residual degree of freedom."</span><span class="p">,</span> <span class="ne">RuntimeWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">value</span><span class="p">,</span> <span class="p">{</span><span class="s2">"df1"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">df1</span><span class="p">),</span> <span class="s2">"df2"</span><span class="p">:</span> <span class="n">dfs</span><span class="p">,</span> <span class="s2">"f_critical_0.90"</span><span class="p">:</span> <span class="n">critical</span><span class="p">,</span>
+                   <span class="s2">"threshold_source"</span><span class="p">:</span> <span class="n">source</span><span class="p">}</span>
+
+
+<div class="viewcode-block" id="TestType">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.TestType">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestType</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Statistical test types for permutation testing."""</span>
+
+    <span class="n">PAIRED</span> <span class="o">=</span> <span class="s2">"paired"</span>
+<span class="w">    </span><span class="sd">"""Paired samples t-test (within-subjects design)."""</span>
+
+    <span class="n">ONE_SAMPLE</span> <span class="o">=</span> <span class="s2">"one-sample"</span>
+<span class="w">    </span><span class="sd">"""One-sample t-test against zero."""</span>
+
+    <span class="n">TWO_SAMPLE</span> <span class="o">=</span> <span class="s2">"two-sample"</span>
+<span class="w">    </span><span class="sd">"""Independent samples t-test (between-subjects design)."""</span></div>
+
+
+
+<div class="viewcode-block" id="StatMethod">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.StatMethod">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StatMethod</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Statistical method for network analysis."""</span>
+
+    <span class="n">TFNBS</span> <span class="o">=</span> <span class="s2">"tfnbs"</span>
+<span class="w">    </span><span class="sd">"""Threshold-Free Network-Based Statistics (TFCE-style)."""</span>
+
+    <span class="n">TSTAT</span> <span class="o">=</span> <span class="s2">"tstat"</span>
+<span class="w">    </span><span class="sd">"""Raw t-statistics without enhancement."""</span>
+
+    <span class="n">NBS</span> <span class="o">=</span> <span class="s2">"nbs"</span>
+<span class="w">    </span><span class="sd">"""Classical Network-Based Statistics with fixed threshold."""</span>
+
+    <span class="n">CNBS</span> <span class="o">=</span> <span class="s2">"cnbs"</span>
+<span class="w">    </span><span class="sd">"""Constrained NBS with predefined network partitions."""</span>
+
+    <span class="n">NI_TFNBS</span> <span class="o">=</span> <span class="s2">"ni_tfnbs"</span>
+<span class="w">    </span><span class="sd">"""Network-Informed TFNBS with functional block density weighting."""</span>
+
+    <span class="n">FBC_TFNBS</span> <span class="o">=</span> <span class="s2">"fbc_tfnbs"</span>
+<span class="w">    </span><span class="sd">"""Functional Block Clustering TFNBS (block-defined clustering)."""</span>
+
+    <span class="n">BONFERRONI</span> <span class="o">=</span> <span class="s2">"bonferroni"</span>
+<span class="w">    </span><span class="sd">"""Parametric Bonferroni correction (no permutation testing)."""</span>
+
+    <span class="n">BH_FDR</span> <span class="o">=</span> <span class="s2">"bh_fdr"</span>
+<span class="w">    </span><span class="sd">"""Parametric Benjamini-Hochberg FDR correction (no permutation testing)."""</span>
+
+    <span class="n">BH_FDR_PERM</span> <span class="o">=</span> <span class="s2">"bh_fdr_perm"</span>
+<span class="w">    </span><span class="sd">"""Permutation-based BH-FDR correction (per-edge permutation p-values)."""</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_grid_from_kwargs</span><span class="p">(</span>
+    <span class="n">method_enum</span><span class="p">:</span> <span class="s2">"StatMethod"</span><span class="p">,</span>
+    <span class="n">enhance_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]],</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]]:</span>
+<span class="w">    </span><span class="sd">"""Return ``(e_grid, h_grid)`` arrays iff ``e``/``h`` were arrays.</span>
+
+<span class="sd">    Used to label the parameter axis of multi-(E, H) :class:`InferenceResult`</span>
+<span class="sd">    p-maps. Returns ``(None, None)`` for scalar (E, H) calls or</span>
+<span class="sd">    non-TFNBS-family methods.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">method_enum</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">TFNBS_FAMILY</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="n">e</span> <span class="o">=</span> <span class="n">enhance_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"e"</span><span class="p">)</span>
+    <span class="n">h</span> <span class="o">=</span> <span class="n">enhance_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"h"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">e</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">h</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isscalar</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isscalar</span><span class="p">(</span><span class="n">h</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="GLMStatType">
+<a class="viewcode-back" href="../../../conninfpy.stats.html#conninfpy.stats.GLMStatType">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GLMStatType</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Statistic type for GLM inference."""</span>
+
+    <span class="n">TSTAT</span> <span class="o">=</span> <span class="s2">"tstat"</span>
+<span class="w">    </span><span class="sd">"""t-statistic: beta / SE(beta). Scale-invariant, start_thres=1.65 valid."""</span>
+
+    <span class="n">BETA</span> <span class="o">=</span> <span class="s2">"beta"</span>
+<span class="w">    </span><span class="sd">"""Raw regression coefficient. Interpretable, needs adapted threshold."""</span>
+
+    <span class="n">FSTAT</span> <span class="o">=</span> <span class="s2">"fstat"</span>
+<span class="w">    </span><span class="sd">"""F-statistic for an omnibus (multi-row) contrast.</span>
+
+<span class="sd">    Non-negative by construction — the enhancement pipeline sees a single</span>
+<span class="sd">    ``'omnibus'`` key instead of a ``positive``/``negative`` split. For a</span>
+<span class="sd">    single-row contrast, F == t² (same rejection regions, same rankings)."""</span></div>
+
+
+
+<span class="n">CONSTRAINED_METHODS</span> <span class="o">=</span> <span class="p">{</span><span class="n">StatMethod</span><span class="o">.</span><span class="n">CNBS</span><span class="p">,</span> <span class="n">StatMethod</span><span class="o">.</span><span class="n">NI_TFNBS</span><span class="p">,</span> <span class="n">StatMethod</span><span class="o">.</span><span class="n">FBC_TFNBS</span><span class="p">}</span>
+<span class="n">PARAMETRIC_METHODS</span> <span class="o">=</span> <span class="p">{</span><span class="n">StatMethod</span><span class="o">.</span><span class="n">BONFERRONI</span><span class="p">,</span> <span class="n">StatMethod</span><span class="o">.</span><span class="n">BH_FDR</span><span class="p">}</span>
+<span class="n">TFNBS_FAMILY</span> <span class="o">=</span> <span class="p">{</span><span class="n">StatMethod</span><span class="o">.</span><span class="n">TFNBS</span><span class="p">,</span> <span class="n">StatMethod</span><span class="o">.</span><span class="n">NI_TFNBS</span><span class="p">,</span> <span class="n">StatMethod</span><span class="o">.</span><span class="n">FBC_TFNBS</span><span class="p">}</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

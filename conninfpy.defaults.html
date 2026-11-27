@@ -1,0 +1,275 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.defaults &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2943afd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="conninfpy.preprocessing" href="conninfpy.preprocessing.html" />
+    <link rel="prev" title="conninfpy.sim" href="conninfpy.sim.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="conninfpy.html">conninfpy</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.analysis.html">conninfpy.analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.results.html">conninfpy.results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.atlas.html">conninfpy.atlas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.interpret.html">conninfpy.interpret</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.plot.html">conninfpy.plot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.stats.html">conninfpy.stats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.influence.html">conninfpy.influence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.enhance.html">conninfpy.enhance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.harmonize.html">conninfpy.harmonize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.sim.html">conninfpy.sim</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">conninfpy.defaults</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.DEFAULT_EXTENT_EXPONENT"><code class="docutils literal notranslate"><span class="pre">DEFAULT_EXTENT_EXPONENT</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.DEFAULT_HEIGHT_EXPONENT"><code class="docutils literal notranslate"><span class="pre">DEFAULT_HEIGHT_EXPONENT</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.DEFAULT_START_THRESHOLD"><code class="docutils literal notranslate"><span class="pre">DEFAULT_START_THRESHOLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.DEFAULT_N_THRESHOLDS_SCORING"><code class="docutils literal notranslate"><span class="pre">DEFAULT_N_THRESHOLDS_SCORING</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.DEFAULT_N_THRESHOLDS_PERMUTATION"><code class="docutils literal notranslate"><span class="pre">DEFAULT_N_THRESHOLDS_PERMUTATION</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.DEFAULT_N_PERMUTATIONS"><code class="docutils literal notranslate"><span class="pre">DEFAULT_N_PERMUTATIONS</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.DEFAULT_ACCELERATION"><code class="docutils literal notranslate"><span class="pre">DEFAULT_ACCELERATION</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.DEFAULT_NBS_THRESHOLD"><code class="docutils literal notranslate"><span class="pre">DEFAULT_NBS_THRESHOLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.DEFAULT_NBS_STAT"><code class="docutils literal notranslate"><span class="pre">DEFAULT_NBS_STAT</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.DEFAULT_MIN_CLUSTER_SIZE"><code class="docutils literal notranslate"><span class="pre">DEFAULT_MIN_CLUSTER_SIZE</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.warn_low_nbs_threshold"><code class="docutils literal notranslate"><span class="pre">warn_low_nbs_threshold()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.format_bh_permutation_resolution_warning"><code class="docutils literal notranslate"><span class="pre">format_bh_permutation_resolution_warning()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy.defaults.warn_bh_permutation_resolution"><code class="docutils literal notranslate"><span class="pre">warn_bh_permutation_resolution()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.preprocessing.html">conninfpy.preprocessing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.html#shared-array-helpers">Shared array helpers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="conninfpy.html">conninfpy</a></li>
+      <li class="breadcrumb-item active">conninfpy.defaults</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/conninfpy.defaults.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="conninfpy-defaults">
+<h1>conninfpy.defaults<a class="headerlink" href="#conninfpy-defaults" title="Link to this heading"></a></h1>
+<p>TFNBS-family scoring defaults to E=0.4, H=3.0 and exact integration of
+its piecewise support function (<code class="docutils literal notranslate"><span class="pre">n=None</span></code>). A positive integer <code class="docutils literal notranslate"><span class="pre">n</span></code>
+selects the historical right-endpoint grid from <code class="docutils literal notranslate"><span class="pre">start_thres</span> <span class="pre">+</span> <span class="pre">dh</span></code> to
+<code class="docutils literal notranslate"><span class="pre">max(statistic)</span></code>, where <code class="docutils literal notranslate"><span class="pre">dh</span> <span class="pre">=</span> <span class="pre">(max</span> <span class="pre">-</span> <span class="pre">start_thres)</span> <span class="pre">/</span> <span class="pre">n</span></code>. Active edges
+satisfy <code class="docutils literal notranslate"><span class="pre">weight</span> <span class="pre">&gt;=</span> <span class="pre">threshold</span></code> after the initial strict <code class="docutils literal notranslate"><span class="pre">weight</span> <span class="pre">&gt;</span> <span class="pre">start</span></code>
+filter. Inputs are rounded to ten decimal places before integration.</p>
+<p>Record E, H, n, the start threshold, statistic scale and software version to
+reproduce an earlier run. Explicit <code class="docutils literal notranslate"><span class="pre">n</span></code> retains the old grid; exact scores
+and p-values need not equal finite-grid results. <code class="docutils literal notranslate"><span class="pre">bh_fdr_perm</span></code> uses raw
+edge statistics and does not use TFNBS integration settings. T and beta tails
+are enhanced separately; an F statistic is a single omnibus map.</p>
+<p>For F with TFNBS and no start supplied, the start is F’s 0.90 quantile with
+the numerator and residual degrees of freedom. With available-case data and
+different tested residual degrees of freedom, provide one common start
+explicitly. An explicitly supplied F start below any applicable quantile emits
+a warning. Beta thresholds remain in coefficient units.</p>
+<p id="module-conninfpy.defaults">Unified default parameters for ConnInfPy.</p>
+<p>Single source of truth for all default constants used across modules.</p>
+<p>TFNBS defaults use E=0.4 and H=3.0. By default n=None integrates the
+piecewise support exactly, independently for each tail. An explicit positive
+integer n selects the historical right-endpoint grid, with threshold levels
+start + i * (max - start) / n and inclusive active edges at each level.
+Legacy finite-grid scores and the exact integral need not be equal. Record
+E, H, n and start explicitly when reproducing historical results.</p>
+<p>The permutation-based BH-FDR method uses raw edge statistics and does not
+apply TFNBS enhancement or its integration settings.</p>
+<p class="rubric">References</p>
+<ul class="simple">
+<li><p>Smith &amp; Nichols (2009). Threshold-free cluster enhancement.
+NeuroImage 44(1):83-98.</p></li>
+<li><p>Baggio et al. (2018). Statistical inference in brain graphs using
+threshold-free network-based statistics. Hum Brain Mapp 39(6):2289-2302.
+doi:10.1002/hbm.24007.</p></li>
+<li><p>Vinokur, L., Smith, R. E., Dhollander, T., Vaughan, D., Jackson, G. D., &amp;
+Connelly, A. (2023). Parameter Sensitivity of Network-Based Statistical
+Inference. Research Square (preprint), doi:10.21203/rs.3.rs-3081615/v1.</p></li>
+<li><p>Hao, Z., Wang, P., Xia, X., Pan, Y., &amp; Dou, W. (2024). Threshold-Free
+Network-Oriented Statistics in Neuroscience (TFNOS). bioRxiv (preprint),
+doi:10.1101/2024.01.03.574016. For edge-wise t-statistics in TFNOS-TT,
+<code class="docutils literal notranslate"><span class="pre">E=0.4,</span> <span class="pre">H=3.0</span></code> yielded empirical FDR &lt; 10% and <code class="docutils literal notranslate"><span class="pre">E=0.4,</span> <span class="pre">H=7.0</span></code>
+empirical FDR &lt; 5%; earlier voxel/network defaults such as Baggio 2018
+were overly liberal in the reported conditions.</p></li>
+</ul>
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.defaults.DEFAULT_EXTENT_EXPONENT">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_EXTENT_EXPONENT</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.4</span></span><a class="headerlink" href="#conninfpy.defaults.DEFAULT_EXTENT_EXPONENT" title="Link to this definition"></a></dt>
+<dd><p>Default extent exponent E.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.defaults.DEFAULT_HEIGHT_EXPONENT">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_HEIGHT_EXPONENT</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3.0</span></span><a class="headerlink" href="#conninfpy.defaults.DEFAULT_HEIGHT_EXPONENT" title="Link to this definition"></a></dt>
+<dd><p>Default height exponent H.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.defaults.DEFAULT_START_THRESHOLD">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_START_THRESHOLD</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.65</span></span><a class="headerlink" href="#conninfpy.defaults.DEFAULT_START_THRESHOLD" title="Link to this definition"></a></dt>
+<dd><p>Initial t-threshold for cluster formation (asymptotic normal z ≈ 1.645 reference, one-tailed p ≈ 0.05 at large df; not a universal finite-df p-value).</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.defaults.DEFAULT_N_THRESHOLDS_SCORING">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_N_THRESHOLDS_SCORING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#conninfpy.defaults.DEFAULT_N_THRESHOLDS_SCORING" title="Link to this definition"></a></dt>
+<dd><p>None selects exact integration; a positive integer selects the legacy grid.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.defaults.DEFAULT_N_THRESHOLDS_PERMUTATION">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_N_THRESHOLDS_PERMUTATION</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#conninfpy.defaults.DEFAULT_N_THRESHOLDS_PERMUTATION" title="Link to this definition"></a></dt>
+<dd><p>None selects exact integration inside the permutation loop.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.defaults.DEFAULT_N_PERMUTATIONS">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_N_PERMUTATIONS</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1000</span></span><a class="headerlink" href="#conninfpy.defaults.DEFAULT_N_PERMUTATIONS" title="Link to this definition"></a></dt>
+<dd><p>Default number of permutations for null distribution.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.defaults.DEFAULT_ACCELERATION">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_ACCELERATION</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#conninfpy.defaults.DEFAULT_ACCELERATION" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">None</span></code> (exact empirical permutation p-values).</p>
+<p><code class="docutils literal notranslate"><span class="pre">'gpd'</span></code> / <code class="docutils literal notranslate"><span class="pre">'gamma'</span></code> are opt-in for exploration with ~200 permutations: a
+fitted tail replaces the p-values that fewer than 10 permutations reach
+(Winkler 2016); all others stay exact.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Default tail acceleration</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.defaults.DEFAULT_NBS_THRESHOLD">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_NBS_THRESHOLD</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3.0</span></span><a class="headerlink" href="#conninfpy.defaults.DEFAULT_NBS_THRESHOLD" title="Link to this definition"></a></dt>
+<dd><p>Default t-statistic threshold for classical NBS edge inclusion.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.defaults.DEFAULT_NBS_STAT">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_NBS_STAT</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'extent'</span></span><a class="headerlink" href="#conninfpy.defaults.DEFAULT_NBS_STAT" title="Link to this definition"></a></dt>
+<dd><p>Default cluster statistic type for NBS (‘extent’ or ‘intensity’).</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="conninfpy.defaults.DEFAULT_MIN_CLUSTER_SIZE">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_MIN_CLUSTER_SIZE</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3</span></span><a class="headerlink" href="#conninfpy.defaults.DEFAULT_MIN_CLUSTER_SIZE" title="Link to this definition"></a></dt>
+<dd><p>Default minimum edges in a functional block to form a cluster (for FBC-TFNBS).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.defaults.warn_low_nbs_threshold">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">warn_low_nbs_threshold</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">method</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/defaults.html#warn_low_nbs_threshold"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.defaults.warn_low_nbs_threshold" title="Link to this definition"></a></dt>
+<dd><p>Warn about interpretation of components at a low NBS threshold.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.defaults.format_bh_permutation_resolution_warning">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">format_bh_permutation_resolution_warning</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_permutations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/conninfpy/defaults.html#format_bh_permutation_resolution_warning"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.defaults.format_bh_permutation_resolution_warning" title="Link to this definition"></a></dt>
+<dd><p>Return warning text when permutation resolution cannot support sparse BH rejections.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.defaults.warn_bh_permutation_resolution">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.defaults.</span></span><span class="sig-name descname"><span class="pre">warn_bh_permutation_resolution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_permutations</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/defaults.html#warn_bh_permutation_resolution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.defaults.warn_bh_permutation_resolution" title="Link to this definition"></a></dt>
+<dd><p>Warn when permutation resolution cannot support sparse BH rejections.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="conninfpy.sim.html" class="btn btn-neutral float-left" title="conninfpy.sim" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="conninfpy.preprocessing.html" class="btn btn-neutral float-right" title="conninfpy.preprocessing" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

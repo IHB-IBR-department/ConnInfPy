@@ -1,0 +1,677 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How Inference Works &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2943afd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Recommended Workflows" href="workflows.html" />
+    <link rel="prev" title="Package organization" href="architecture.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Package organization</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How Inference Works</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#rationale-for-permutation-testing">Rationale for permutation testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-1-a-statistic-at-each-edge">Step 1 — a statistic at each edge</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-2-network-enhancement">Step 2 — network enhancement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#no-enhancement-tstat">No enhancement — <code class="docutils literal notranslate"><span class="pre">tstat</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fixed-threshold-nbs">Fixed threshold — <code class="docutils literal notranslate"><span class="pre">nbs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#threshold-free-tfnbs-the-default">Threshold-free — <code class="docutils literal notranslate"><span class="pre">tfnbs</span></code> (the default)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#using-a-known-network-partition-cnbs-ni-tfnbs-fbc-tfnbs">Using a known network partition — <code class="docutils literal notranslate"><span class="pre">cnbs</span></code>, <code class="docutils literal notranslate"><span class="pre">ni_tfnbs</span></code>, <code class="docutils literal notranslate"><span class="pre">fbc_tfnbs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#choosing-an-operator">Choosing an operator</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#step-3-the-null-distribution-from-relabelling-permutation-schemes">Step 3 — the null distribution from relabelling (permutation schemes)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#two-groups-shuffle-the-group-labels">Two groups — shuffle the group labels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#paired-conditions-sign-flip-each-subject-s-difference">Paired conditions — sign-flip each subject’s difference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#predictor-with-confounds-freedmanlane">Predictor with confounds — Freedman–Lane</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#repeated-measures-with-condition-varying-confounds">Repeated measures with condition-varying confounds</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#several-predictors-at-once">Several predictors at once</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multiple-sites-permute-within-site">Multiple sites — permute within site</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#step-4-comparison-of-observed-to-null">Step 4 — comparison of observed to null</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#auxiliary-components-harmonization-and-acceleration">Auxiliary components: harmonization and acceleration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#end-to-end-example">End-to-end example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#after-inference-anatomical-reading">After inference: anatomical reading</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How Inference Works</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/approach.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-inference-works">
+<h1>How Inference Works<a class="headerlink" href="#how-inference-works" title="Link to this heading"></a></h1>
+<p>This page explains the <strong>approach</strong> behind ConnInfPy — the reasoning that
+connects “connectivity matrices and a hypothesis” to “these edges are
+significant.” It is conceptual rather than formal: the aim is to make clear
+<em>why</em> each step is present. For the recipes (which function to call) see
+<a class="reference internal" href="workflows.html"><span class="doc">Recommended Workflows</span></a>; for the equations and citations see <a class="reference internal" href="references.html"><span class="doc">References</span></a>.</p>
+<p>The package applies a single inferential scheme across designs:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>a statistic at each edge  →  network enhancement  →
+a null distribution from relabelling  →  comparison of observed to null
+</pre></div>
+</div>
+<p>The remainder of this page covers each of these four steps and the reasoning
+behind it.</p>
+<section id="rationale-for-permutation-testing">
+<h2>Rationale for permutation testing<a class="headerlink" href="#rationale-for-permutation-testing" title="Link to this heading"></a></h2>
+<p>A connectome has many edges (<span class="math notranslate nohighlight">\(N(N{-}1)/2\)</span>), and they are <strong>not
+independent</strong>: neighbouring regions covary, hubs participate in many edges, and
+the correlations are bounded and non-normal. A parametric per-edge p-value
+assumes a known distribution and independent tests; neither holds here, and
+across thousands of edges even a small per-edge error rate yields many false
+positives.</p>
+<p>Permutation testing avoids both assumptions. Rather than <em>assume</em> a null
+distribution, the method <strong>constructs</strong> one: the data are relabelled so that
+the effect is removed, the full statistic is recomputed, and the process is
+repeated. The only requirement is <strong>exchangeability</strong> — under the null, the
+relabelled data are as probable as the observed data. This is a substantially
+weaker assumption than normality, and the resulting null automatically reflects
+the empirical covariance among edges.</p>
+</section>
+<section id="step-1-a-statistic-at-each-edge">
+<h2>Step 1 — a statistic at each edge<a class="headerlink" href="#step-1-a-statistic-at-each-edge" title="Link to this heading"></a></h2>
+<p>At every edge a single statistic quantifies the strength and reliability of the
+effect. The choice of statistic follows the design:</p>
+<ul class="simple">
+<li><p><strong>Two groups</strong> → a <em>t</em>-statistic of the difference in means: Welch’s by
+default (separate group variances), or Student’s with <code class="docutils literal notranslate"><span class="pre">var_equal=True</span></code>
+(pooled variance, as in the MATLAB NBS toolbox). The group-label
+permutation is the same for both; with equal group sizes they coincide.</p></li>
+<li><p><strong>Same subjects, two conditions</strong> → a one-sample <em>t</em> of the within-subject
+differences.</p></li>
+<li><p><strong>A predictor with confounds</strong> (e.g. age, controlling for motion and sex) →
+a linear model fit at each edge, reading off the <em>t</em> for the predictor of
+interest.</p></li>
+</ul>
+<p>Direction is meaningful, so ConnInfPy always splits the statistic into two
+<strong>separate</strong> tails — <code class="docutils literal notranslate"><span class="pre">positive</span></code> (e.g. group2 &gt; group1, or predictor ↑ →
+connectivity ↑) and <code class="docutils literal notranslate"><span class="pre">negative</span></code> — and propagates them independently. Testing a
+single two-sided statistic would allow a positive and a negative block to
+cancel.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_t_stat</span><span class="p">,</span> <span class="n">fisher_r_to_z</span>
+<span class="n">t</span> <span class="o">=</span> <span class="n">compute_t_stat</span><span class="p">(</span><span class="n">fisher_r_to_z</span><span class="p">(</span><span class="n">g1</span><span class="p">),</span> <span class="n">fisher_r_to_z</span><span class="p">(</span><span class="n">g2</span><span class="p">),</span>
+                   <span class="n">test_type</span><span class="o">=</span><span class="s1">'two-sample'</span><span class="p">)</span>
+<span class="c1"># t['g2&gt;g1'] is the per-edge statistic for "group2 &gt; group1"</span>
+</pre></div>
+</div>
+<p>Step 1 thus reduces the data to one strength-map per direction.</p>
+</section>
+<section id="step-2-network-enhancement">
+<h2>Step 2 — network enhancement<a class="headerlink" href="#step-2-network-enhancement" title="Link to this heading"></a></h2>
+<p>A connectivity effect rarely appears as a single isolated edge; it typically
+appears as a <strong>connected set</strong> of edges that covary. An isolated edge with a
+large statistic may be noise, whereas a coherent set of moderate edges is more
+convincing evidence. <strong>Enhancement</strong> rewrites each edge’s score to reflect the
+network structure it participates in; the operators differ in how they define
+and summarise that structure.</p>
+<p>A useful way to picture enhancement: take the strength-map from step 1 and
+progressively raise a threshold (a “water level”). At a low threshold most
+edges are supra-threshold and form large connected components; as the threshold
+rises, only the strongest edges remain, in small components. The operators
+differ in how they read these components.</p>
+<section id="no-enhancement-tstat">
+<h3>No enhancement — <code class="docutils literal notranslate"><span class="pre">tstat</span></code><a class="headerlink" href="#no-enhancement-tstat" title="Link to this heading"></a></h3>
+<p>Each edge is tested on its own, with no network aggregation. Useful as a
+baseline and for strong focal effects, but insensitive to the distributed weak
+effects typical of brain connectivity — which the operators below are designed
+to recover.</p>
+</section>
+<section id="fixed-threshold-nbs">
+<h3>Fixed threshold — <code class="docutils literal notranslate"><span class="pre">nbs</span></code><a class="headerlink" href="#fixed-threshold-nbs" title="Link to this heading"></a></h3>
+<p>Classical Network-Based Statistics. Fix a single threshold, identify the
+connected components above it, and score each edge by the size of its component
+(extent) or by the summed excess of the statistic over the threshold,
+<span class="math notranslate nohighlight">\(\sum (t - \tau)\)</span>, within it (intensity — only the excess above
+<span class="math notranslate nohighlight">\(\tau\)</span> counts, so an edge just above the threshold adds almost nothing
+and a small cluster of strong edges can outrank a large cluster of weak ones).
+It is most powerful when the effect forms a large connected component above
+the chosen threshold.
+The threshold is arbitrary, however, and results can vary substantially with it
+(Vinokur et al. 2023 report up to 75-fold variation in detected edges across
+reasonable thresholds); report results at several thresholds when using it.</p>
+<p>The inference unit is the component. Its statistic is compared with the
+permutation distribution of the <em>largest</em> component statistic (family-wise
+error control over components; see Step 4): with <code class="docutils literal notranslate"><span class="pre">two_tailed=True</span></code> (the <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> default) the two
+tails share one null, the larger of the two tails’ maxima in every
+permutation; with separate one-sided families (explicit <code class="docutils literal notranslate"><span class="pre">two_tailed=False</span></code>) each tail has its own null of maxima. Every
+edge of a component carries the
+component’s p-value, so a significant component is a claim about the set, not
+about each of its edges. <code class="docutils literal notranslate"><span class="pre">result.component_report</span></code> (and
+<code class="docutils literal notranslate"><span class="pre">result.component_table(atlas)</span></code>) lists every observed component of each tail:
+its <code class="docutils literal notranslate"><span class="pre">component_id</span></code> (numbered within the tail by decreasing statistic), edges,
+ROIs, extent or intensity, and <code class="docutils literal notranslate"><span class="pre">p_fwer</span></code>; with an atlas also the ROI names and
+the networks and network pairs it spans. Components that are not significant
+are listed too (<code class="docutils literal notranslate"><span class="pre">significant</span></code> marks <code class="docutils literal notranslate"><span class="pre">p_fwer</span> <span class="pre">&lt;=</span> <span class="pre">alpha</span></code>); a single
+suprathreshold edge is a component of one edge. The <code class="docutils literal notranslate"><span class="pre">component_id</span></code> column of
+<code class="docutils literal notranslate"><span class="pre">significant_edges()</span></code> and of the CSV export gives the component of each edge.
+The p-values are those of the p-value map: the report recomputes nothing.
+<code class="docutils literal notranslate"><span class="pre">result.node_summary(atlas)</span></code> describes the same detections per ROI (which ROIs
+gather them): for edge-wise methods the significant edges of each ROI out of its
+<em>tested</em> incident edges; for <code class="docutils literal notranslate"><span class="pre">nbs</span></code> and <code class="docutils literal notranslate"><span class="pre">cnbs</span></code>, whose edges in a component or
+block share one p-value, the significant components or blocks containing the ROI
+and how many of its edges lie in them, never a count of “significant edges” or a
+mass of -log10 p. It is descriptive and adds no significance.</p>
+</section>
+<section id="threshold-free-tfnbs-the-default">
+<h3>Threshold-free — <code class="docutils literal notranslate"><span class="pre">tfnbs</span></code> (the default)<a class="headerlink" href="#threshold-free-tfnbs-the-default" title="Link to this heading"></a></h3>
+<p>Rather than fix a single threshold, TFNBS integrates the cluster evidence over
+the full range of thresholds:</p>
+<div class="math notranslate nohighlight">
+\[\text{score}(e) \;=\; \int_{h_0}^{w_e}
+    (\text{edge count in the component containing } e \text{ at } h)^{E}\, h^{H}\, dh\]</div>
+<p>At low thresholds an edge accrues weight from belonging to a spatially extended
+component; at high thresholds from its own magnitude. Summing across thresholds
+rewards an edge that is extended <em>or</em> strong, removing the dependence on any
+single cutoff. <code class="docutils literal notranslate"><span class="pre">E</span></code> controls the contribution of component size and <code class="docutils literal notranslate"><span class="pre">H</span></code> that
+of statistic height; they act as sensitivity parameters rather than fixed
+constants, and can be swept in one permutation pass to report stability
+(<a class="reference internal" href="workflows.html#wf-eh-stability"><span class="std std-ref">Inference stability: sweep (E, H) in one call</span></a>). This is the recommended default when there is no
+strong prior about where the effect is located.</p>
+</section>
+<section id="using-a-known-network-partition-cnbs-ni-tfnbs-fbc-tfnbs">
+<h3>Using a known network partition — <code class="docutils literal notranslate"><span class="pre">cnbs</span></code>, <code class="docutils literal notranslate"><span class="pre">ni_tfnbs</span></code>, <code class="docutils literal notranslate"><span class="pre">fbc_tfnbs</span></code><a class="headerlink" href="#using-a-known-network-partition-cnbs-ni-tfnbs-fbc-tfnbs" title="Link to this heading"></a></h3>
+<p>Given an atlas partition (e.g. Yeo-7 networks, lobes, or modules), the operator
+can be directed to expect effects that respect those blocks:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cnbs</span></code> (constrained NBS; Noble &amp; Scheinost, 2020) — averages the
+<strong>signed</strong> edge statistic over every edge of each within- and
+between-network block, tests each block against its own permutation null
+(the same block’s mean in every permuted map), and corrects the block
+p-values across blocks (<code class="docutils literal notranslate"><span class="pre">cnbs_correction='bonferroni'</span></code> for FWER, the
+default, or <code class="docutils literal notranslate"><span class="pre">'bh'</span></code> for FDR). The inference unit is the block: every
+edge of a significant block carries the block’s p-value, and
+<code class="docutils literal notranslate"><span class="pre">result.block_report</span></code> lists the blocks. A significant block means its
+<em>mean</em> effect is nonzero, not that each of its edges is affected; edges
+that go in opposite directions cancel. Most powerful for block-aligned
+effects such as within-network hypoconnectivity; it can miss effects that
+are small parts of large blocks. With K blocks and Bonferroni the
+smallest attainable p-value is K/(B+1), so use enough permutations.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ni_tfnbs</span></code> (network-informed, <strong>soft</strong> prior) — integrates an edge-level
+block-density score over thresholds, without connected-component clustering.
+At threshold h, k_b(h) eligible edges are active in block b and the extent
+weight is k_b(h)/sqrt(M_b) by default (<code class="docutils literal notranslate"><span class="pre">normalization='linear'</span></code> uses
+k_b(h)/M_b; <code class="docutils literal notranslate"><span class="pre">'none'</span></code> uses k_b(h)). M_b is the fixed number of eligible
+undirected opportunities: n_a*n_b between networks and n_a*(n_a-1)/2 within
+a network when all pairs are eligible. Available-case inference excludes
+untested pairs from both capacity and active counts. The same capacity is
+used for observed and permuted maps. Its behavior depends on the partition;
+a misspecified partition does not generally reproduce plain TFNBS.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fbc_tfnbs</span></code> (functional-block-clustering, <strong>hard</strong> prior) — treats each
+block as a single atomic cluster and requires a minimum number of active
+edges per block. It targets diffuse, block-confined effects that are spread
+too thinly to form a strong connected component.</p></li>
+</ul>
+</section>
+<section id="choosing-an-operator">
+<h3>Choosing an operator<a class="headerlink" href="#choosing-an-operator" title="Link to this heading"></a></h3>
+<p>No operator is universally optimal: each encodes an assumption about the
+<em>spatial shape</em> of the effect, and is strongest when that assumption holds and
+weakest otherwise.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 18.0%" />
+<col style="width: 30.0%" />
+<col style="width: 30.0%" />
+<col style="width: 22.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Operator</p></th>
+<th class="head"><p>Assumes the effect is…</p></th>
+<th class="head"><p>Best for</p></th>
+<th class="head"><p>Prior needed</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tstat</span></code></p></td>
+<td><p>focal / very strong</p></td>
+<td><p>baseline reference</p></td>
+<td><p>none</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nbs</span></code></p></td>
+<td><p>one large connected component</p></td>
+<td><p>strong connected effects</p></td>
+<td><p>a threshold</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tfnbs</span></code></p></td>
+<td><p>connected at <em>some</em> scale</p></td>
+<td><p>mixed focal + extended (default)</p></td>
+<td><p>none</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cnbs</span></code></p></td>
+<td><p>a block’s mean effect (inference per block)</p></td>
+<td><p>block-wide effects, high power</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">net_labels</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ni_tfnbs</span></code></p></td>
+<td><p>block-concentrated (soft)</p></td>
+<td><p>low false-discovery priority</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">net_labels</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fbc_tfnbs</span></code></p></td>
+<td><p>diffuse within a block (hard)</p></td>
+<td><p>thin, block-confined effects</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">net_labels</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>Because the choice encodes an assumption, the recommended practice is to report
+two operators: a topology-agnostic reference (<code class="docutils literal notranslate"><span class="pre">tfnbs</span></code>) and the network-aware
+operator matching the prior. Agreement between them strengthens a finding;
+disagreement is itself informative about the effect’s spatial shape.</p>
+</section>
+</section>
+<section id="step-3-the-null-distribution-from-relabelling-permutation-schemes">
+<h2>Step 3 — the null distribution from relabelling (permutation schemes)<a class="headerlink" href="#step-3-the-null-distribution-from-relabelling-permutation-schemes" title="Link to this heading"></a></h2>
+<p>Given the enhanced score-map from the observed data, its significance is
+assessed against the distribution expected under the null. That distribution is
+constructed by relabelling the data so as to remove the effect while preserving
+all other structure, rerunning steps 1–2, and repeating many times to obtain a
+collection of null score-maps.</p>
+<p>The principle underlying every scheme is <strong>exchangeability</strong>: under the null,
+certain labels are interchangeable, and a valid permutation is any reshuffle
+that respects that interchangeability. The correct scheme is the relabelling
+that removes exactly the tested effect while leaving every nuisance structure
+intact — too little randomisation leaves the effect in the null (low power);
+too much scrambles structure that should be held fixed (mis-calibrated
+false-positive rate). Each design has its own scheme.</p>
+<section id="two-groups-shuffle-the-group-labels">
+<h3>Two groups — shuffle the group labels<a class="headerlink" href="#two-groups-shuffle-the-group-labels" title="Link to this heading"></a></h3>
+<p><em>Removes:</em> the association between subject and group label. <em>Preserves:</em> each
+subject’s connectivity matrix. Under the null the two groups are exchangeable,
+so the observed assignment is one of many equally probable assignments; the
+null is generated by drawing other assignments and recomputing.</p>
+</section>
+<section id="paired-conditions-sign-flip-each-subject-s-difference">
+<h3>Paired conditions — sign-flip each subject’s difference<a class="headerlink" href="#paired-conditions-sign-flip-each-subject-s-difference" title="Link to this heading"></a></h3>
+<p><em>Removes:</em> the direction of each within-subject change. <em>Preserves:</em> the
+pairing and each subject’s magnitude. The response is the per-subject
+difference <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">−</span> <span class="pre">A</span></code> (<code class="docutils literal notranslate"><span class="pre">group2</span> <span class="pre">−</span> <span class="pre">group1</span></code>) on the analysis scale — for
+correlations, Fisher z of each condition before the subtraction. If the two
+conditions are interchangeable within each subject, the labelling of each
+subject’s difference as “A−B” or “B−A” is equiprobable, so each subject’s
+difference matrix is randomly negated, subject by subject, independently.</p>
+<p>What the null needs is an <strong>invariance of the joint law</strong>: the stacked
+difference matrices of all subjects must have the same distribution after
+any pattern of per-subject sign flips. Independent subjects whose difference
+matrices are centrally symmetric (each matrix distributed like its own
+negation) satisfy this; within-subject exchangeability of A and B is one way
+to get there. Unequal variances of A and B do not by themselves break it — a
+symmetric difference can have asymmetric condition marginals — and nothing
+else about the marginal laws is assumed. Without the invariance, exactness
+and Type-I control of the sign-flip test are not guaranteed, and a
+condition-varying covariate does not repair that (the Freedman–Lane route
+below rests on its own, approximate, premise). With all <span class="math notranslate nohighlight">\(2^n\)</span> sign
+patterns enumerated the test is exact under the invariance; the engine
+samples patterns at random, which gives the Monte Carlo form of Step 4. For
+edge-wise methods (<code class="docutils literal notranslate"><span class="pre">tstat</span></code>, the TFNBS family) the hypothesis is about the
+<strong>mean</strong> difference: a significant edge means that the average within-subject
+change differs from zero, not that every subject changes.</p>
+</section>
+<section id="predictor-with-confounds-freedmanlane">
+<h3>Predictor with confounds — Freedman–Lane<a class="headerlink" href="#predictor-with-confounds-freedmanlane" title="Link to this heading"></a></h3>
+<p>A natural but incorrect approach is to shuffle the predictor of interest
+directly. When the predictor is correlated with the confounds (e.g. age with
+motion), shuffling it also destroys that correlation, so the permuted data no
+longer match the model under the null and the test is mis-calibrated.
+Freedman–Lane permutes only the part of the data the confounds cannot account
+for:</p>
+<ol class="arabic simple">
+<li><p>Fit the reduced model (confounds only). Decompose each edge’s data into the
+fitted part (explained by the confounds) and the residual.</p></li>
+<li><p>Permute the residuals, then add the fitted part back, unchanged.</p></li>
+<li><p>Recompute the predictor’s statistic on the reconstructed data.</p></li>
+</ol>
+<p><em>Removes:</em> any genuine predictor effect (the residuals are now in random
+subject order). <em>Preserves:</em> the confound structure, held fixed. Only the
+residual — the component of the data the predictor of interest could explain —
+is permuted, so the resulting null isolates the tested effect while controlling
+the confounds.</p>
+</section>
+<section id="repeated-measures-with-condition-varying-confounds">
+<h3>Repeated measures with condition-varying confounds<a class="headerlink" href="#repeated-measures-with-condition-varying-confounds" title="Link to this heading"></a></h3>
+<p>The within-subject difference is formed first. Any quantity constant per
+subject — including additive <strong>site</strong> effects — cancels in the subtraction.
+Freedman–Lane is then applied to the differences to partial out the component
+of the confound that varies between conditions. The two adjustments are applied
+in the order that makes each straightforward.</p>
+</section>
+<section id="several-predictors-at-once">
+<h3>Several predictors at once<a class="headerlink" href="#several-predictors-at-once" title="Link to this heading"></a></h3>
+<p>Each predictor is tested against its own Freedman–Lane null: its reduced
+model keeps the other predictors as nuisance, so a real effect of one
+predictor stays in the fitted part while another is tested. The permutations
+are shared across predictors, so each result equals a separate single-predictor
+run with the same seed (see <a class="reference internal" href="workflows.html#wf-multi-interest"><span class="std std-ref">Several predictors in one pass</span></a>). A single reduced model
+that removes every predictor at once would test the joint null “all of them
+are zero” instead, which is conservative when one of them has an effect.</p>
+</section>
+<section id="multiple-sites-permute-within-site">
+<h3>Multiple sites — permute within site<a class="headerlink" href="#multiple-sites-permute-within-site" title="Link to this heading"></a></h3>
+<p>Subjects from different scanners are <strong>not</strong> freely exchangeable, since a site
+can shift the connectivity baseline. Passing <code class="docutils literal notranslate"><span class="pre">sites=</span></code> confines every
+permutation to occur within each site block, never across blocks. <em>Removes:</em>
+the effect, within each site. <em>Preserves:</em> the between-site differences, which
+therefore remain in the null rather than leaking into the effect and inflating
+false positives. This is the permutation component of multi-site handling;
+ComBat (below) is the complementary harmonization component.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_p_val</span><span class="p">,</span> <span class="n">compute_p_val_glm</span><span class="p">,</span> <span class="n">fisher_r_to_z</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># two groups: group labels are permuted internally</span>
+<span class="n">compute_p_val</span><span class="p">(</span><span class="n">g1</span><span class="p">,</span> <span class="n">g2</span><span class="p">,</span> <span class="n">test_type</span><span class="o">=</span><span class="s1">'two-sample'</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+
+<span class="c1"># paired: each subject's difference is sign-flipped internally (Monte Carlo sign-flip null)</span>
+<span class="n">compute_p_val</span><span class="p">(</span><span class="n">rest</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">test_type</span><span class="o">=</span><span class="s1">'paired'</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+
+<span class="c1"># predictor + confounds: Freedman–Lane handles the relabelling</span>
+<span class="n">compute_p_val_glm</span><span class="p">(</span><span class="n">fisher_r_to_z</span><span class="p">(</span><span class="n">Y</span><span class="p">),</span> <span class="n">interest</span><span class="o">=</span><span class="n">age</span><span class="p">,</span>
+                  <span class="n">confounds</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">sex</span><span class="p">,</span> <span class="n">motion</span><span class="p">]),</span>
+                  <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+
+<span class="c1"># multi-site: pass sites= and permutation stays within each site block</span>
+<span class="n">compute_p_val_glm</span><span class="p">(</span><span class="n">fisher_r_to_z</span><span class="p">(</span><span class="n">Y</span><span class="p">),</span> <span class="n">interest</span><span class="o">=</span><span class="n">age</span><span class="p">,</span>
+                  <span class="n">confounds</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">sex</span><span class="p">,</span> <span class="n">motion</span><span class="p">]),</span>
+                  <span class="n">sites</span><span class="o">=</span><span class="n">site</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="step-4-comparison-of-observed-to-null">
+<h2>Step 4 — comparison of observed to null<a class="headerlink" href="#step-4-comparison-of-observed-to-null" title="Link to this heading"></a></h2>
+<p>The max-statistic methods — <code class="docutils literal notranslate"><span class="pre">tstat</span></code>, the TFNBS family and <code class="docutils literal notranslate"><span class="pre">nbs</span></code> — retain
+a single value from each relabelled null map: the maximum enhanced score over
+all edges (for <code class="docutils literal notranslate"><span class="pre">nbs</span></code> the enhancement has already copied each component’s
+statistic onto its edges, so this is the largest component statistic). Across
+permutations these maxima form the null distribution of the largest score
+attributable to noise alone. A unit is declared significant when its corrected
+p-value (the rule below) is at most the chosen α, and that p-value is written
+onto every edge of the unit. The unit is
+<code class="docutils literal notranslate"><span class="pre">result.inference_unit</span></code>: <code class="docutils literal notranslate"><span class="pre">'edge'</span></code> for <code class="docutils literal notranslate"><span class="pre">tstat</span></code> and the TFNBS family,
+<code class="docutils literal notranslate"><span class="pre">'component'</span></code> for <code class="docutils literal notranslate"><span class="pre">nbs</span></code>. The p-value of a unit counts the permutation
+maxima that match or exceed its statistic, with the observed statistic added
+to both the count and the number of permutations — not a bare proportion:</p>
+<div class="math notranslate nohighlight">
+\[p(e) \;=\; \frac{1 + \#\{\text{permutations whose max} \ge \text{score}(e)\}}
+                 {1 + (\text{number of permutations})}\]</div>
+<p>Two methods stand outside this formula. <code class="docutils literal notranslate"><span class="pre">cnbs</span></code> compares every block’s
+statistic with that block’s <em>own</em> permutation null (the same block’s value
+in every permuted map, in absolute value under <code class="docutils literal notranslate"><span class="pre">two_tailed=True</span></code>) and then
+corrects the block p-values across blocks with Bonferroni (FWER over blocks)
+or Benjamini–Hochberg (FDR over blocks) — given valid marginal block
+p-values, single-step Bonferroni bounds the FWER over blocks strongly, without
+any subset-pivotality argument, and BH gives FDR over blocks under its own
+premises; its unit is <code class="docutils literal notranslate"><span class="pre">'block'</span></code>.
+<code class="docutils literal notranslate"><span class="pre">bh_fdr_perm</span></code> keeps a per-edge marginal permutation p-value and applies
+Benjamini–Hochberg across the eligible edges; <code class="docutils literal notranslate"><span class="pre">bh_fdr</span></code> and <code class="docutils literal notranslate"><span class="pre">bonferroni</span></code>
+are parametric and use no permutations.</p>
+<p>Three design choices are embedded in the formula:</p>
+<ul class="simple">
+<li><p><strong>Why the maximum?</strong> Comparing every unit to the distribution of the
+<em>largest</em> null score keeps the probability of <strong>any</strong> false positive at the
+inference unit at most α <strong>under the global null</strong> (no effect anywhere) —
+weak family-wise error control — without requiring knowledge of the
+inter-edge covariance, which is already reflected in the permutations.
+Whether a p-value ≤ α means this in the data at hand — here and for the
+FDR variants — depends on the permutation scheme being valid: the
+relabelling of Step 3 must leave the data, under the null, distributed as
+the observed data, and the reconstructed null maps must reproduce the
+sampling law of the statistics. Sign-flip and group-label permutation do
+this under their exchangeability premises; Freedman–Lane is an
+approximation (Winkler et al. 2014), so GLM p-values computed with
+Freedman–Lane inherit that approximation (the argument does not extend to
+other valid schemes a GLM could use). <strong>Strong</strong> control (the same bound under any mix of true
+and false nulls) needs more: the <em>joint</em> distribution of the true-null
+units’ statistics must be the same whatever the other units are — subset
+pivotality (Westfall &amp; Troendle 2008; Rempala &amp; Yang 2013) — on top of a
+valid scheme. Invariance of each marginal null law alone is not enough,
+and an edge-wise <em>t</em> by itself does not establish it for these statistics;
+for the TFNBS family an edge’s enhanced score depends on its neighbours’
+statistics, and for <code class="docutils literal notranslate"><span class="pre">nbs</span></code> the unit is the component, so a significant
+component is a claim about the set and never about each of its edges. No
+unconditional guarantee of strong control is given for this max-statistic
+path; read detections at
+<code class="docutils literal notranslate"><span class="pre">result.inference_unit</span></code>, which <code class="docutils literal notranslate"><span class="pre">component_report</span></code> / <code class="docutils literal notranslate"><span class="pre">component_table</span></code>
+and <code class="docutils literal notranslate"><span class="pre">node_summary</span></code> keep.</p></li>
+<li><p><strong>Why the</strong> <code class="docutils literal notranslate"><span class="pre">+1</span></code><strong>?</strong> The observed statistic is itself one admissible
+relabelling and is counted (Phipson &amp; Smyth 2010; Hemerik &amp; Goeman 2017).
+With relabellings drawn at random with replacement the test is a Monte
+Carlo test: the <code class="docutils literal notranslate"><span class="pre">+1</span></code> rule keeps it valid at level α given a valid scheme
+and keeps the p-value strictly positive, whereas the naive proportion is
+slightly liberal. It does not turn a sampled null into the enumerated one —
+exhaustive enumeration of all relabellings is a different procedure, exact
+under its premises, and is not what the engine does.</p></li>
+</ul>
+<p>To control the <em>false-discovery rate</em> instead (greater sensitivity at the cost
+of some false positives), <code class="docutils literal notranslate"><span class="pre">method='bh_fdr_perm'</span></code> replaces the max-statistic
+step with a per-edge permutation p-value and a Benjamini–Hochberg procedure.</p>
+</section>
+<section id="auxiliary-components-harmonization-and-acceleration">
+<h2>Auxiliary components: harmonization and acceleration<a class="headerlink" href="#auxiliary-components-harmonization-and-acceleration" title="Link to this heading"></a></h2>
+<p><strong>ComBat (multi-site harmonization).</strong> Different scanners introduce additive
+and multiplicative offsets that can exceed the biological signal. ComBat
+estimates and removes these per-site offsets <em>before</em> step 1, while preserving
+the covariates of interest, and excludes the <em>tested</em> variable from its model
+so that the harmonization never incorporates the labels the permutation will
+later shuffle (which would otherwise inflate false positives). The site
+strategies and their trade-offs are described in <a class="reference internal" href="workflows.html#wf-glm-sites"><span class="std std-ref">Multi-site GLM with ComBat harmonization</span></a>.</p>
+<p><strong>Acceleration (GPD / gamma tail, opt-in).</strong> With J permutations the empirical
+p-value of a unit rests on how many null maxima reach its statistic, and its
+resolution is 1/(J+1). <code class="docutils literal notranslate"><span class="pre">acceleration='gpd'</span></code> (default <code class="docutils literal notranslate"><span class="pre">None</span></code>) fits a
+generalized Pareto distribution to the exceedances over a sequence of
+thresholds, starting at the upper quartile of the null maxima and moving
+upwards until a method-of-moments fit passes an Anderson–Darling check
+(Winkler et al., 2016; Knijnenburg et al., 2009); <code class="docutils literal notranslate"><span class="pre">acceleration='gamma'</span></code>
+fits a gamma distribution to all null maxima by their moments. Either replaces
+the p-value <strong>only of units that fewer than 10 null maxima reach</strong> (for the
+GPD, only units at or above the fitted threshold); every other p-value stays
+the empirical permutation p-value, a failed fit leaves the empirical p in
+place, and no binomial interval is reported for an accelerated result.
+The replaced values are model-based tail estimates that can be smaller than
+1/(J+1); their accuracy is not established by the number of permutations, and
+the option exists for exploration with a few hundred permutations — reported
+results use the empirical default. Known limits of the 2.0 implementation:
+a replaced p-value is capped at min(1, (min_exceedances + 1)/(J + 1)), which
+can be <em>larger</em> than the empirical p-value of the same unit — the replacement
+can raise a p, for GPD and gamma alike; the gamma branch has no
+goodness-of-fit check and no eligibility filter, and a statistic below its
+fitted support gets a tail survival function of 1, recorded as that cap —
+which is 1 when J equals min_exceedances (reproduced in a helper-level example
+with J = 10; not observed at J = 200/1000 in a limited check); with a bounded
+(ξ &lt; 0) GPD fit, one unit beyond the fitted endpoint cancels the fit for the
+whole matrix at that threshold, and when no threshold is accepted the
+empirical p-values are returned unchanged; in the GLM and missing-data paths
+the acceleration is applied to every statistic type without a mode check,
+unlike the pairwise max-statistic path; and with <code class="docutils literal notranslate"><span class="pre">method='cnbs'</span></code> it is not
+applied (a warning is logged). The Anderson–Darling threshold 2.5 is a lenient
+heuristic filter that has not been calibrated for the method-of-moments fit,
+and the moment conditions on the shape parameter are not checked. No FWER,
+power or anti-conservativeness claim is made for accelerated p-values.</p>
+<p><strong>Directional families.</strong> <code class="docutils literal notranslate"><span class="pre">two_tailed=True</span></code> declares one two-sided family
+for pairwise and GLM inference. Max-statistic methods pool positive/negative
+null maxima, cNBS tests absolute block means before across-block correction,
+and pairwise BH methods correct two-sided marginal p-values across eligible
+edges. Directional maps retain the p-value in the observed direction and 1
+in the opposite direction. <a class="reference internal" href="conninfpy.analysis.html#conninfpy.analysis.analyze" title="conninfpy.analysis.analyze"><code class="xref py py-func docutils literal notranslate"><span class="pre">analyze()</span></code></a> defaults to
+this two-sided family: one nominal α applies to the error measure of the
+chosen method — FWER for the max-statistic methods and <code class="docutils literal notranslate"><span class="pre">bonferroni</span></code>, and
+for <code class="docutils literal notranslate"><span class="pre">cnbs</span></code> with <code class="docutils literal notranslate"><span class="pre">cnbs_correction='bonferroni'</span></code>; FDR for the BH variants
+and for <code class="docutils literal notranslate"><span class="pre">cnbs</span></code> with <code class="docutils literal notranslate"><span class="pre">cnbs_correction='bh'</span></code> — over both directions
+jointly, and only under that
+measure’s premises (above). Its <code class="docutils literal notranslate"><span class="pre">two_tailed=False</span></code> keeps the legacy
+separate one-sided families, each corrected at the nominal α; two families
+at α = 0.05 do not promise a combined-direction FWER of 0.05 — for FWER,
+α/2 per tail bounds the combined FWER at α by Bonferroni (under the same
+premises); this is not an FDR statement. The low-level
+<code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val()</span></code> / <code class="xref py py-func docutils literal notranslate"><span class="pre">compute_p_val_glm()</span></code>
+entry-points also default to <code class="docutils literal notranslate"><span class="pre">two_tailed=True</span></code>.</p>
+<p>For a single prespecified direction (e.g. controls &gt; patients, as in the
+MATLAB NBS toolbox’s t-test), declare it before the run:
+<code class="docutils literal notranslate"><span class="pre">analyze(...,</span> <span class="pre">tested_tail='positive')</span></code> (or <code class="docutils literal notranslate"><span class="pre">'negative'</span></code>). The run uses
+per-tail nulls, the tested tail keeps its own-null p-values at the nominal
+alpha, the other direction is reported as not tested (p = 1), and the
+result records <code class="docutils literal notranslate"><span class="pre">tail_policy</span> <span class="pre">=</span> <span class="pre">'one-sided-positive'</span></code> with
+<code class="docutils literal notranslate"><span class="pre">tail_selection</span> <span class="pre">=</span> <span class="pre">'prespecified'</span></code>, which provenance, exports and the app
+carry through. Choosing a direction only after inspecting a finished run is
+a post hoc selection: <code class="docutils literal notranslate"><span class="pre">result.one_sided('positive')</span></code> performs it and is
+marked <code class="docutils literal notranslate"><span class="pre">tail_selection</span> <span class="pre">=</span> <span class="pre">'post-hoc'</span></code> instead, so a restriction made after
+seeing the p-values is never reported as a hypothesis fixed in advance.
+Each enhancement setting and contrast is corrected separately; selecting
+among settings or contrasts requires an additional declared correction.</p>
+</section>
+<section id="end-to-end-example">
+<h2>End-to-end example<a class="headerlink" href="#end-to-end-example" title="Link to this heading"></a></h2>
+<p>A single <code class="docutils literal notranslate"><span class="pre">analyze()</span></code> call runs all four steps, with ComBat and within-site
+permutation included:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">analyze</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">out</span> <span class="o">=</span> <span class="n">analyze</span><span class="p">(</span>
+    <span class="n">Y</span><span class="p">,</span>                                   <span class="c1"># raw correlations (Fisher-z applied)</span>
+    <span class="n">interest</span><span class="o">=</span><span class="n">diagnosis</span><span class="p">,</span>                  <span class="c1"># step 1: a t at each edge</span>
+    <span class="n">confounds</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">age</span><span class="p">,</span> <span class="n">sex</span><span class="p">,</span> <span class="n">mean_fd</span><span class="p">]),</span>
+    <span class="n">sites</span><span class="o">=</span><span class="n">site</span><span class="p">,</span>                          <span class="c1"># ComBat + within-site permutation</span>
+    <span class="n">harmonize</span><span class="o">=</span><span class="s1">'combat_site_dummies_glm'</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">'tfnbs'</span><span class="p">,</span>                      <span class="c1"># step 2: threshold-free enhancement</span>
+    <span class="n">n_permutations</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span> <span class="n">acceleration</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>   <span class="c1"># steps 3–4: empirical null</span>
+    <span class="n">rng</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">out</span><span class="o">.</span><span class="n">inference</span><span class="p">[</span><span class="s1">'positive'</span><span class="p">]</span>                <span class="c1"># FWER p-map, diagnosis ↑ → conn ↑</span>
+</pre></div>
+</div>
+<p>The call composes the four steps: a <em>t</em>-statistic at each edge (controlling for
+age, sex, and motion) → TFNBS enhancement over connected components → a
+within-site Freedman–Lane null on the harmonized data → a family-wise-corrected
+p-value from the max-statistic distribution with the <code class="docutils literal notranslate"><span class="pre">+1</span></code> correction. See
+<a class="reference internal" href="workflows.html"><span class="doc">Recommended Workflows</span></a> for the design variants and <a class="reference internal" href="references.html"><span class="doc">References</span></a> for the
+supporting literature.</p>
+</section>
+<section id="after-inference-anatomical-reading">
+<h2>After inference: anatomical reading<a class="headerlink" href="#after-inference-anatomical-reading" title="Link to this heading"></a></h2>
+<p>The four steps end with corrected p-values on the parcellation the signals
+were measured with. Reading the result anatomically
+(<a class="reference internal" href="conninfpy.interpret.html#module-conninfpy.interpret" title="conninfpy.interpret"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.interpret</span></code></a>; <a class="reference internal" href="usage.html#usage-interpret"><span class="std std-ref">Anatomical interpretation — conninfpy.interpret</span></a>) is a descriptive layer
+that changes none of them:</p>
+<ul class="simple">
+<li><p><strong>The tissue, not the centre point.</strong> Each ROI is described by its overlap
+with the 246 regions of the Brainnetome atlas (Fan et al., 2016) over the
+sphere or parcel that produced its signal. A 6 mm sphere usually covers 2–4
+Brainnetome regions and a Schaefer parcel often spans several subregions,
+so a label is given only at the finest level of the hierarchy (subregion →
+gyrus → lobe) that holds at least half of the ROI’s labelled tissue; below
+that the ROI is <code class="docutils literal notranslate"><span class="pre">mixed</span></code>.</p></li>
+<li><p><strong>The inference unit stays.</strong> Grouping detections by lobe, gyrus, circuit
+class, hemispheric or network relation re-describes them. It adds no test,
+and an edge of a significant component or block does not become
+individually significant.</p></li>
+<li><p><strong>Against what was tested.</strong> Detections are shown next to the tested
+opportunities in each category, because categories differ in size (there
+are far more cortico-cortical than thalamo-cortical pairs).</p></li>
+<li><p><strong>Literature context, not function.</strong> BrainMap behavioural-domain terms are
+forward-inference associations of each region in published activation
+studies (Laird et al., 2005); they are listed per region and never ranked
+into “the function” of a region or a connection.</p></li>
+</ul>
+<p>Measuring the signals in Brainnetome regions (native parcellation) is a
+different analysis: it changes the signals and the tested edge family.
+<code class="docutils literal notranslate"><span class="pre">examples/open_close/atlas_stability</span></code> compares the two on the Open-Close
+contrast.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="architecture.html" class="btn btn-neutral float-left" title="Package organization" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="workflows.html" class="btn btn-neutral float-right" title="Recommended Workflows" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

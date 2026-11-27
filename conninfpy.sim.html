@@ -1,0 +1,536 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.sim &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2943afd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="conninfpy.defaults" href="conninfpy.defaults.html" />
+    <link rel="prev" title="conninfpy.harmonize" href="conninfpy.harmonize.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="conninfpy.html">conninfpy</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.analysis.html">conninfpy.analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.results.html">conninfpy.results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.atlas.html">conninfpy.atlas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.interpret.html">conninfpy.interpret</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.plot.html">conninfpy.plot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.stats.html">conninfpy.stats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.influence.html">conninfpy.influence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.enhance.html">conninfpy.enhance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.harmonize.html">conninfpy.harmonize</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">conninfpy.sim</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#module-conninfpy.sim.datasets">Synthetic datasets — <code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.sim.datasets</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.sim.datasets.generate_fc_matrices"><code class="docutils literal notranslate"><span class="pre">generate_fc_matrices()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.sim.datasets.generate_multisite_glm_dataset"><code class="docutils literal notranslate"><span class="pre">generate_multisite_glm_dataset()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.sim.datasets.ModularDatasetGenerator"><code class="docutils literal notranslate"><span class="pre">ModularDatasetGenerator</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#topology-scenarios-conninfpy-sim-topologies">Topology scenarios — <code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.sim.topologies</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#public-api">Public API</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario"><code class="docutils literal notranslate"><span class="pre">TopologyScenario</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.sim.topologies.TopologyDataset"><code class="docutils literal notranslate"><span class="pre">TopologyDataset</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.sim.topologies.TopologyDatasetGenerator"><code class="docutils literal notranslate"><span class="pre">TopologyDatasetGenerator</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.sim.topologies.list_scenarios"><code class="docutils literal notranslate"><span class="pre">list_scenarios()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.sim.topologies.get_scenarios"><code class="docutils literal notranslate"><span class="pre">get_scenarios()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#conninfpy.sim.topologies.get_scenario"><code class="docutils literal notranslate"><span class="pre">get_scenario()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.defaults.html">conninfpy.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.preprocessing.html">conninfpy.preprocessing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.html#shared-array-helpers">Shared array helpers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="conninfpy.html">conninfpy</a></li>
+      <li class="breadcrumb-item active">conninfpy.sim</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/conninfpy.sim.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="conninfpy-sim">
+<h1>conninfpy.sim<a class="headerlink" href="#conninfpy-sim" title="Link to this heading"></a></h1>
+<p>Synthetic connectivity data with planted effects and the 20-scenario
+topology library used by the examples, simulation validation and benchmarks.</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#conninfpy.sim.datasets.generate_fc_matrices" title="conninfpy.sim.datasets.generate_fc_matrices"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_fc_matrices()</span></code></a> — two groups (or paired conditions) of correlation matrices with a masked effect</p></li>
+<li><p><a class="reference internal" href="#conninfpy.sim.datasets.generate_multisite_glm_dataset" title="conninfpy.sim.datasets.generate_multisite_glm_dataset"><code class="xref py py-func docutils literal notranslate"><span class="pre">generate_multisite_glm_dataset()</span></code></a> — multi-site GLM data with site offsets and site/regressor imbalance</p></li>
+<li><p><a class="reference internal" href="#conninfpy.sim.datasets.ModularDatasetGenerator" title="conninfpy.sim.datasets.ModularDatasetGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModularDatasetGenerator</span></code></a> — modular network generator</p></li>
+</ul>
+<section id="module-conninfpy.sim.datasets">
+<span id="synthetic-datasets-conninfpy-sim-datasets"></span><h2>Synthetic datasets — <a class="reference internal" href="#module-conninfpy.sim.datasets" title="conninfpy.sim.datasets"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.sim.datasets</span></code></a><a class="headerlink" href="#module-conninfpy.sim.datasets" title="Link to this heading"></a></h2>
+<p>Synthetic connectivity datasets for benchmarking and testing.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.sim.datasets.generate_fc_matrices">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.sim.datasets.</span></span><span class="sig-name descname"><span class="pre">generate_fc_matrices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">N</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">effect_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples_group1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples_group2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">repeated_measures</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/sim/datasets.html#generate_fc_matrices"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.datasets.generate_fc_matrices" title="Link to this definition"></a></dt>
+<dd><p>Generate synthetic functional connectivity correlation matrices for groupwise comparisons
+or repeated measures.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>N</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Number of ROIs (regions of interest), i.e. an <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">x</span> <span class="pre">N</span></code> matrix.</p></li>
+<li><p><strong>effect_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Magnitude of correlation difference between groups.</p></li>
+<li><p><strong>mask</strong> (<em>np.ndarray</em><em>, </em><em>optional</em>) – Binary mask <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">N)</span></code> to apply correlation differences.</p></li>
+<li><p><strong>n_samples_group1</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Number of matrices in group 1 (default: 50).</p></li>
+<li><p><strong>n_samples_group2</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Number of matrices in group 2 (default: 50).</p></li>
+<li><p><strong>repeated_measures</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – If True, generate within-subject repeated-measures (paired) data:
+each subject has its own correlation structure around the population
+one (estimated from <code class="docutils literal notranslate"><span class="pre">4</span> <span class="pre">N</span></code> draws), shared by both conditions, and the
+second condition adds the masked effect to it. Uses
+<code class="docutils literal notranslate"><span class="pre">n_samples_group1</span></code> subjects. Otherwise independent groups
+(default: False).</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – Random seed for reproducibility.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>group1</strong> (<em>np.ndarray</em>) – Array of FC matrices for group 1, shape <code class="docutils literal notranslate"><span class="pre">(n_samples_group1,</span> <span class="pre">N,</span> <span class="pre">N)</span></code>.</p></li>
+<li><p><strong>group2</strong> (<em>np.ndarray</em>) – Array of FC matrices for group 2, shape <code class="docutils literal notranslate"><span class="pre">(n_samples_group2,</span> <span class="pre">N,</span> <span class="pre">N)</span></code>.</p></li>
+<li><p><strong>(base_cov, mod_cov)</strong> (<em>tuple of np.ndarray</em>) – Original covariance matrix and modified covariance matrix with the
+<code class="docutils literal notranslate"><span class="pre">effect_size</span></code> introduced; used for group 1 and group 2 matrices
+respectively. Masked entries move by <code class="docutils literal notranslate"><span class="pre">effect_size</span> <span class="pre">*</span> <span class="pre">(1</span> <span class="pre">+</span> <span class="pre">|u|)</span></code>
+(<code class="docutils literal notranslate"><span class="pre">u</span> <span class="pre">~</span> <span class="pre">N(0,</span> <span class="pre">0.25)</span></code> for +1, <code class="docutils literal notranslate"><span class="pre">N(0,</span> <span class="pre">0.5)</span></code> for -1 entries) in the mask’s
+direction, then the matrix is projected to SPD (which can move
+unmasked entries slightly). With <code class="docutils literal notranslate"><span class="pre">effect_size=0</span></code> it equals
+<code class="docutils literal notranslate"><span class="pre">base_cov</span></code> exactly: a null.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">N</span> <span class="o">=</span> <span class="mi">6</span><span class="p">;</span> <span class="n">e</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">;</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">N</span><span class="p">,</span> <span class="n">N</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mask</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">mask</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">g1</span><span class="p">,</span> <span class="n">g2</span><span class="p">,</span> <span class="p">(</span><span class="n">c1</span><span class="p">,</span> <span class="n">c2</span><span class="p">)</span> <span class="o">=</span> <span class="n">generate_fc_matrices</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">mask</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">g1</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">g2</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">c1</span><span class="p">,</span> <span class="n">c1</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.sim.datasets.generate_multisite_glm_dataset">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.sim.datasets.</span></span><span class="sig-name descname"><span class="pre">generate_multisite_glm_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_subjects</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_sites</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">effect_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">site_shift_sigma</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">corr_site_interest</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_signal_edges</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_corr_sparsity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.9</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a></span></span><a class="reference internal" href="_modules/conninfpy/sim/datasets.html#generate_multisite_glm_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.datasets.generate_multisite_glm_dataset" title="Link to this definition"></a></dt>
+<dd><p>Multi-site GLM connectivity dataset, sized to mimic a Schaefer-100 study.</p>
+<p>Built for compact full-pipeline calibration tests and matrix-level
+structural-prior validation experiments.</p>
+<p>Output is in <strong>Fisher-z</strong> units already (so callers should pass
+<code class="docutils literal notranslate"><span class="pre">fisher_z=False</span></code> to <code class="docutils literal notranslate"><span class="pre">analyze()</span></code>). Site effects are additive on
+Fisher-z; signal is linear in the regressor of interest at a fixed
+set of signal edges.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_subjects</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default 30</em>) – Total subjects, evenly distributed across <code class="docutils literal notranslate"><span class="pre">n_sites</span></code>.</p></li>
+<li><p><strong>N</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default 100</em>) – Number of ROIs. Default 100 mimics Schaefer-100.</p></li>
+<li><p><strong>n_sites</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default 3</em>) – Number of distinct sites; each contributes a fixed symmetric
+Fisher-z offset on all edges.</p></li>
+<li><p><strong>effect_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default 0.0</em>) – Slope of the linear-in-interest perturbation at signal edges.
+Set to <code class="docutils literal notranslate"><span class="pre">0.0</span></code> for an H₀ dataset (no group / regressor effect).</p></li>
+<li><p><strong>site_shift_sigma</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default 0.2</em>) – Scale of the per-site additive Fisher-z offset. Each site’s
+offset is drawn from <code class="docutils literal notranslate"><span class="pre">N(0,</span> <span class="pre">σ_site²)</span></code> once per simulation.</p></li>
+<li><p><strong>corr_site_interest</strong> (<em>float in</em><em> [</em><em>0</em><em>, </em><em>1</em><em>]</em><em>, </em><em>default 0.0</em>) – Population correlation between <code class="docutils literal notranslate"><span class="pre">sites</span></code> (as an integer code)
+and the <code class="docutils literal notranslate"><span class="pre">interest</span></code> regressor. <code class="docutils literal notranslate"><span class="pre">0.0</span></code> = independent (the
+H₀-friendly regime); <code class="docutils literal notranslate"><span class="pre">0.6</span></code> = the regime where unrestricted
+permutation after harmonisation leaks Type-I.</p></li>
+<li><p><strong>n_signal_edges</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default 0</em>) – Number of edges carrying the planted signal. Ignored when
+<code class="docutils literal notranslate"><span class="pre">effect_size</span> <span class="pre">==</span> <span class="pre">0</span></code>. Edges are drawn uniformly from the upper
+triangle (excluding diagonal).</p></li>
+<li><p><strong>base_corr_sparsity</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default 0.9</em>) – <code class="docutils literal notranslate"><span class="pre">alpha</span></code> for <code class="docutils literal notranslate"><span class="pre">make_sparse_spd_matrix</span></code> controlling baseline
+connectivity sparsity (higher → sparser).</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – Reproducibility handle.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;Y&quot;</span></code> — <code class="docutils literal notranslate"><span class="pre">(n_subjects,</span> <span class="pre">N,</span> <span class="pre">N)</span></code> Fisher-z connectivity tensor,
+symmetric with zero diagonal.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;interest&quot;</span></code> — <code class="docutils literal notranslate"><span class="pre">(n_subjects,)</span></code> regressor of interest.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;sites&quot;</span></code> — <code class="docutils literal notranslate"><span class="pre">(n_subjects,)</span></code> integer site labels.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;signal_mask&quot;</span></code> — <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">N)</span></code> boolean upper-triangle mask of
+true positive edges (all False when <code class="docutils literal notranslate"><span class="pre">effect_size</span> <span class="pre">==</span> <span class="pre">0</span></code> or
+<code class="docutils literal notranslate"><span class="pre">n_signal_edges</span> <span class="pre">==</span> <span class="pre">0</span></code>).</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict with keys</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Designed for end-to-end exercise of
+<code class="docutils literal notranslate"><span class="pre">analyze(Y,</span> <span class="pre">interest=...,</span> <span class="pre">sites=...)</span></code>: it triggers the auto-
+preserve, auto-strata, ComBat-with-preserve, Freedman-Lane with
+within-block exchangeability path in a single call. Calibration
+tests use <code class="docutils literal notranslate"><span class="pre">effect_size=0.0</span></code> (H₀); strata-vs-no-strata sanity
+tests use <code class="docutils literal notranslate"><span class="pre">corr_site_interest</span> <span class="pre">&gt;</span> <span class="pre">0</span></code> to bring the leak into view.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">generate_multisite_glm_dataset</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">n_subjects</span><span class="o">=</span><span class="mi">24</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">n_sites</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">site_shift_sigma</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">corr_site_interest</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="s2">"Y"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(24, 20, 20)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="s2">"sites"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="s2">"interest"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">((24,), (24,))</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="conninfpy.sim.datasets.ModularDatasetGenerator">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">conninfpy.sim.datasets.</span></span><span class="sig-name descname"><span class="pre">ModularDatasetGenerator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">N</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_modules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intra_corr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inter_corr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/sim/datasets.html#ModularDatasetGenerator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.datasets.ModularDatasetGenerator" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>A generator for synthetic functional connectivity data with a modular (block) structure.</p>
+<p>This class simulates brain connectivity matrices where nodes are organized into
+distinct functional modules (e.g., Visual, DMN, Motor). It allows for the
+injection of specific topological effects (within-module or between-module changes)
+to simulate pathological conditions.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.sim.datasets.ModularDatasetGenerator.get_mask_within_module">
+<span class="sig-name descname"><span class="pre">get_mask_within_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span></span><a class="reference internal" href="_modules/conninfpy/sim/datasets.html#ModularDatasetGenerator.get_mask_within_module"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.datasets.ModularDatasetGenerator.get_mask_within_module" title="Link to this definition"></a></dt>
+<dd><p>Returns a binary mask for all edges WITHIN a specific module.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.sim.datasets.ModularDatasetGenerator.get_mask_between_modules">
+<span class="sig-name descname"><span class="pre">get_mask_between_modules</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module_idx_A</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">module_idx_B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span></span><a class="reference internal" href="_modules/conninfpy/sim/datasets.html#ModularDatasetGenerator.get_mask_between_modules"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.datasets.ModularDatasetGenerator.get_mask_between_modules" title="Link to this definition"></a></dt>
+<dd><p>Returns a binary mask for all edges connecting module A and module B.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.sim.datasets.ModularDatasetGenerator.generate_data">
+<span class="sig-name descname"><span class="pre">generate_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">effect_mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">effect_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples_g1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples_g2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_points</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_population</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/sim/datasets.html#ModularDatasetGenerator.generate_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.datasets.ModularDatasetGenerator.generate_data" title="Link to this definition"></a></dt>
+<dd><p>Generates sample correlation matrices for two groups.</p>
+<p>Group 1 is sampled from the base modular covariance.
+Group 2 is sampled from a modified covariance (base + effect).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>effect_mask</strong> (<em>np.ndarray</em>) – <p>Effect mask matrix of shape (N, N).</p>
+<ul>
+<li><p>0 means “no effect” for that edge.</p></li>
+<li><p>Non-zero values scale the effect magnitude per edge.</p></li>
+<li><p>The sign of the value controls effect direction (positive/negative).</p></li>
+</ul>
+<p>The matrix is treated as undirected: it will be symmetrized internally
+and its diagonal will be set to 0.</p>
+</p></li>
+<li><p><strong>effect_size</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Shift of the population correlation on masked edges (Delta r, not
+Cohen’s d). Positive values increase correlation, negative values
+decrease it. If the shifted matrix is not positive definite it is
+projected back, which attenuates the shift and moves some
+unmasked edges; <code class="docutils literal notranslate"><span class="pre">return_population=True</span></code> exposes the result.</p></li>
+<li><p><strong>n_samples_g1</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Number of subjects in Group 1 (Control).</p></li>
+<li><p><strong>n_samples_g2</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Number of subjects in Group 2 (Test).</p></li>
+<li><p><strong>time_points</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Length of the simulated BOLD time-series. Higher values reduce sampling noise.</p></li>
+<li><p><strong>return_population</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – Also return the two population correlation matrices.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>g1_data</strong> (<em>np.ndarray (n_samples_g1, N, N)</em>) – Correlation matrices for Group 1.</p></li>
+<li><p><strong>g2_data</strong> (<em>np.ndarray (n_samples_g2, N, N)</em>) – Correlation matrices for Group 2.</p></li>
+<li><p><strong>labels</strong> (<em>np.ndarray (N,)</em>) – Vector of module assignments for nodes.</p></li>
+<li><p><strong>cov_g1, cov_g2</strong> (<em>np.ndarray (N, N)</em>) – Population correlation matrices of the two groups; only returned
+when <code class="docutils literal notranslate"><span class="pre">return_population=True</span></code>.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="topology-scenarios-conninfpy-sim-topologies">
+<h2>Topology scenarios — <a class="reference internal" href="#module-conninfpy.sim.topologies" title="conninfpy.sim.topologies"><code class="xref py py-mod docutils literal notranslate"><span class="pre">conninfpy.sim.topologies</span></code></a><a class="headerlink" href="#topology-scenarios-conninfpy-sim-topologies" title="Link to this heading"></a></h2>
+<p>Named topology scenarios for benchmarking enhancement methods on
+synthetic connectivity. Promoted from <code class="docutils literal notranslate"><span class="pre">examples/</span></code> to the public API
+on 2026-04-18.</p>
+<p>Provides 19 named scenarios covering the topologies most likely to
+arise in real connectivity data: within-module-dense,
+between-modules-dense, hub, rich-club, scattered, chain,
+gradient-core-periphery, partial-bipartite, fragmented-within-module,
+cross-block-connected-chain, plus secondary variants.</p>
+<p>Public surface:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#conninfpy.sim.topologies.TopologyDatasetGenerator" title="conninfpy.sim.topologies.TopologyDatasetGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyDatasetGenerator</span></code></a> — main generator class</p></li>
+<li><p><a class="reference internal" href="#conninfpy.sim.topologies.TopologyDataset" title="conninfpy.sim.topologies.TopologyDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyDataset</span></code></a> — output container (<code class="docutils literal notranslate"><span class="pre">.group1</span></code>, <code class="docutils literal notranslate"><span class="pre">.group2</span></code>,
+<code class="docutils literal notranslate"><span class="pre">.mask</span></code>, <code class="docutils literal notranslate"><span class="pre">.net_labels</span></code>, <code class="docutils literal notranslate"><span class="pre">.scenario</span></code>)</p></li>
+<li><p><a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario" title="conninfpy.sim.topologies.TopologyScenario"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyScenario</span></code></a> — scenario specification</p></li>
+<li><p><a class="reference internal" href="#conninfpy.sim.topologies.list_scenarios" title="conninfpy.sim.topologies.list_scenarios"><code class="xref py py-func docutils literal notranslate"><span class="pre">list_scenarios()</span></code></a> — return all scenario names</p></li>
+<li><p><a class="reference internal" href="#conninfpy.sim.topologies.get_scenarios" title="conninfpy.sim.topologies.get_scenarios"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_scenarios()</span></code></a> — return all scenario specs</p></li>
+<li><p><a class="reference internal" href="#conninfpy.sim.topologies.get_scenario" title="conninfpy.sim.topologies.get_scenario"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_scenario()</span></code></a> — look up a specific scenario by name</p></li>
+</ul>
+<p>Power benchmarks (<code class="docutils literal notranslate"><span class="pre">examples/simulations/power/</span></code>) compare methods across
+the topologies selected in each YAML configuration.</p>
+<p id="module-conninfpy.sim.topologies">Topology-based synthetic connectivity scenarios.</p>
+<p>Built on top of <a class="reference internal" href="#conninfpy.sim.datasets.ModularDatasetGenerator" title="conninfpy.sim.datasets.ModularDatasetGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">conninfpy.sim.datasets.ModularDatasetGenerator</span></code></a>,
+this module adds a library of named topological effect patterns (hub,
+chain, rich-club, checkerboard, gradient, etc.) plus a scenario registry
+so callers can request a scenario by name.</p>
+<section id="public-api">
+<h3>Public API<a class="headerlink" href="#public-api" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario" title="conninfpy.sim.topologies.TopologyScenario"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyScenario</span></code></a> — scenario specification</p></li>
+<li><p><a class="reference internal" href="#conninfpy.sim.topologies.TopologyDataset" title="conninfpy.sim.topologies.TopologyDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyDataset</span></code></a>  — generated output container</p></li>
+<li><p><a class="reference internal" href="#conninfpy.sim.topologies.TopologyDatasetGenerator" title="conninfpy.sim.topologies.TopologyDatasetGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyDatasetGenerator</span></code></a> — the main entry point</p></li>
+<li><p><a class="reference internal" href="#conninfpy.sim.topologies.list_scenarios" title="conninfpy.sim.topologies.list_scenarios"><code class="xref py py-func docutils literal notranslate"><span class="pre">list_scenarios()</span></code></a>, <a class="reference internal" href="#conninfpy.sim.topologies.get_scenario" title="conninfpy.sim.topologies.get_scenario"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_scenario()</span></code></a>, <a class="reference internal" href="#conninfpy.sim.topologies.get_scenarios" title="conninfpy.sim.topologies.get_scenarios"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_scenarios()</span></code></a> — registry</p></li>
+</ul>
+<p>Mask generator functions (<code class="docutils literal notranslate"><span class="pre">_mask_*</span></code>, <code class="docutils literal notranslate"><span class="pre">_scenario_mask_*</span></code>) are private;
+access them indirectly via the scenario registry.</p>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.sim.topologies</span><span class="w"> </span><span class="kn">import</span> <span class="n">TopologyDatasetGenerator</span><span class="p">,</span> <span class="n">list_scenarios</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">list_scenarios</span><span class="p">()[:</span><span class="mi">3</span><span class="p">]</span>
+<span class="go">['within_module_dense', 'between_modules_dense', 'hub']</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gen</span> <span class="o">=</span> <span class="n">TopologyDatasetGenerator</span><span class="p">(</span><span class="n">n_nodes</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">n_modules</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="s2">"chain"</span><span class="p">,</span> <span class="n">effect_size</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">time_points</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">group1</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(20, 60, 60)</span>
+</pre></div>
+</div>
+</section>
+<dl class="py class">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyScenario">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">conninfpy.sim.topologies.</span></span><span class="sig-name descname"><span class="pre">TopologyScenario</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">name:</span> <span class="pre">str,</span> <span class="pre">base_kind:</span> <span class="pre">str,</span> <span class="pre">mask_fn:</span> <span class="pre">~typing.Callable[[...],</span> <span class="pre">~numpy.ndarray],</span> <span class="pre">mask_params:</span> <span class="pre">~typing.Dict[str,</span> <span class="pre">object]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">labels_fn:</span> <span class="pre">~typing.Callable[[int,</span> <span class="pre">int],</span> <span class="pre">~numpy.ndarray]</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">TopologyScenario.&lt;lambda&gt;&gt;</span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/sim/topologies.html#TopologyScenario"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.topologies.TopologyScenario" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Scenario specification: how to build labels + an effect mask topology.</p>
+<ul class="simple">
+<li><p><cite>mask_fn(labels, rng=…, **mask_params)</cite> returns a symmetric (N, N) matrix where:
+0 means “no effect” and non-zero values scale the effect magnitude per edge.</p></li>
+<li><p><cite>labels_fn(n_nodes, n_modules)</cite> returns <cite>net_labels</cite> (shape (N,)).</p></li>
+</ul>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyScenario.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyScenario.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyScenario.base_kind">
+<span class="sig-name descname"><span class="pre">base_kind</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyScenario.base_kind" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyScenario.mask_fn">
+<span class="sig-name descname"><span class="pre">mask_fn</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Callable" title="(in Python v3.15)"><span class="pre">Callable</span></a><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyScenario.mask_fn" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyScenario.mask_params">
+<span class="sig-name descname"><span class="pre">mask_params</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><span class="pre">object</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyScenario.mask_params" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyScenario.labels_fn">
+<span class="sig-name descname"><span class="pre">labels_fn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_modules</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyScenario.labels_fn" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyScenario.with_mask_params">
+<span class="sig-name descname"><span class="pre">with_mask_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">overrides</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><span class="pre">object</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario" title="conninfpy.sim.topologies.TopologyScenario"><span class="pre">TopologyScenario</span></a></span></span><a class="reference internal" href="_modules/conninfpy/sim/topologies.html#TopologyScenario.with_mask_params"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.topologies.TopologyScenario.with_mask_params" title="Link to this definition"></a></dt>
+<dd><p>Copy of this scenario with <code class="docutils literal notranslate"><span class="pre">mask_params</span></code> overridden.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDataset">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">conninfpy.sim.topologies.</span></span><span class="sig-name descname"><span class="pre">TopologyDataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">group2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">net_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">effect_mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">effect_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">scenario</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario" title="conninfpy.sim.topologies.TopologyScenario"><span class="pre">TopologyScenario</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">meta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">object]</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">population_diff</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/sim/topologies.html#TopologyDataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDataset" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Output of a topology simulation, ready for TFNBS/NBS pipelines.</p>
+<ul class="simple">
+<li><p><cite>group1</cite>/<cite>group2</cite> are arrays of shape (n_samples, N, N) with zero diagonal.</p></li>
+<li><p><cite>net_labels</cite> can be passed to cNBS/NI/FBC methods.</p></li>
+<li><p><cite>effect_mask</cite> is the signed/weighted topology mask (not multiplied by effect_size).</p></li>
+<li><p><cite>population_diff</cite> is the population correlation of group 2 minus that of
+group 1. It equals <code class="docutils literal notranslate"><span class="pre">effect_size</span> <span class="pre">*</span> <span class="pre">effect_mask</span></code> (plus the per-edge effect
+noise) unless the positive-definite projection had to move it.</p></li>
+</ul>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDataset.group1">
+<span class="sig-name descname"><span class="pre">group1</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDataset.group1" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDataset.group2">
+<span class="sig-name descname"><span class="pre">group2</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDataset.group2" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDataset.net_labels">
+<span class="sig-name descname"><span class="pre">net_labels</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDataset.net_labels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDataset.effect_mask">
+<span class="sig-name descname"><span class="pre">effect_mask</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDataset.effect_mask" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDataset.effect_size">
+<span class="sig-name descname"><span class="pre">effect_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDataset.effect_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDataset.scenario">
+<span class="sig-name descname"><span class="pre">scenario</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario" title="conninfpy.sim.topologies.TopologyScenario"><span class="pre">TopologyScenario</span></a></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDataset.scenario" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDataset.meta">
+<span class="sig-name descname"><span class="pre">meta</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><span class="pre">object</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDataset.meta" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDataset.population_diff">
+<span class="sig-name descname"><span class="pre">population_diff</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDataset.population_diff" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDataset.fisher_z">
+<span class="sig-name descname"><span class="pre">fisher_z</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/sim/topologies.html#TopologyDataset.fisher_z"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDataset.fisher_z" title="Link to this definition"></a></dt>
+<dd><p>Element-wise Fisher r-to-z transform (upper triangle helper).</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDatasetGenerator">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">conninfpy.sim.topologies.</span></span><span class="sig-name descname"><span class="pre">TopologyDatasetGenerator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_nodes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_modules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intra_corr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inter_corr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">uniform_corr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">42</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/sim/topologies.html#TopologyDatasetGenerator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDatasetGenerator" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Reusable dataset generator for topology scenarios.</p>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">gen</span> <span class="o">=</span> <span class="n">TopologyDatasetGenerator</span><span class="p">(</span><span class="n">n_nodes</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">n_modules</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="s2">"chain"</span><span class="p">,</span> <span class="n">effect_size</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">time_points</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span><span class="o">.</span><span class="n">group1</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(20, 60, 60)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.TopologyDatasetGenerator.generate">
+<span class="sig-name descname"><span class="pre">generate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scenario</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario" title="conninfpy.sim.topologies.TopologyScenario"><span class="pre">TopologyScenario</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">effect_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples_g1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples_g2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_points</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scenario_params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><span class="pre">object</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zero_diagonal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.sim.topologies.TopologyDataset" title="conninfpy.sim.topologies.TopologyDataset"><span class="pre">TopologyDataset</span></a></span></span><a class="reference internal" href="_modules/conninfpy/sim/topologies.html#TopologyDatasetGenerator.generate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.topologies.TopologyDatasetGenerator.generate" title="Link to this definition"></a></dt>
+<dd><p>Generate the scenario’s effect mask on an (N, N) grid.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.list_scenarios">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.sim.topologies.</span></span><span class="sig-name descname"><span class="pre">list_scenarios</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/sim/topologies.html#list_scenarios"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.topologies.list_scenarios" title="Link to this definition"></a></dt>
+<dd><p>Names of all built-in topology scenarios.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.get_scenarios">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.sim.topologies.</span></span><span class="sig-name descname"><span class="pre">get_scenarios</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario" title="conninfpy.sim.topologies.TopologyScenario"><span class="pre">TopologyScenario</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/sim/topologies.html#get_scenarios"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.topologies.get_scenarios" title="Link to this definition"></a></dt>
+<dd><p>All built-in <a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario" title="conninfpy.sim.topologies.TopologyScenario"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyScenario</span></code></a> instances.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy.sim.topologies.get_scenario">
+<span class="sig-prename descclassname"><span class="pre">conninfpy.sim.topologies.</span></span><span class="sig-name descname"><span class="pre">get_scenario</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scenario</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario" title="conninfpy.sim.topologies.TopologyScenario"><span class="pre">TopologyScenario</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#conninfpy.sim.topologies.TopologyScenario" title="conninfpy.sim.topologies.TopologyScenario"><span class="pre">TopologyScenario</span></a></span></span><a class="reference internal" href="_modules/conninfpy/sim/topologies.html#get_scenario"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy.sim.topologies.get_scenario" title="Link to this definition"></a></dt>
+<dd><p>One built-in scenario by name.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="conninfpy.harmonize.html" class="btn btn-neutral float-left" title="conninfpy.harmonize" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="conninfpy.defaults.html" class="btn btn-neutral float-right" title="conninfpy.defaults" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

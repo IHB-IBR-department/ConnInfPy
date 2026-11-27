@@ -1,0 +1,337 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.enhance &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.enhance</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.enhance</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""</span>
+<span class="sd">Network enhancement: the ``apply_*`` wrappers plus the raw scoring functions.</span>
+
+<span class="sd">The ``apply_*`` wrappers are shared by the t-test and GLM pipelines. Each wrapper is a pure transformation: ``stat_dict → score_dict``. It takes a</span>
+<span class="sd">per-direction statistic dict (``{'positive': ..., 'negative': ...}``) and</span>
+<span class="sd">applies the corresponding network-based enhancement to each direction</span>
+<span class="sd">independently.</span>
+
+<span class="sd">Wrappers accept the legacy keys ``'g2&gt;g1'`` / ``'g1&gt;g2'`` from the v1.x</span>
+<span class="sd">t-test pipeline (silently remapped via :func:`conninfpy._compat.normalize_keys`</span>
+<span class="sd">) and return a :class:`~conninfpy._compat.TailResult` with canonical</span>
+<span class="sd">``'positive'`` / ``'negative'`` keys (a plain dict keyed ``'omnibus'`` for an</span>
+<span class="sd">F-stat map). The legacy keys remain readable on the result with a</span>
+<span class="sd">:class:`DeprecationWarning` until v2.1.</span>
+
+<span class="sd">Wrappers do NOT compute statistics internally — the caller is responsible for</span>
+<span class="sd">providing the raw statistic (t-stat, β, etc.). This matches the design</span>
+<span class="sd">pattern documented in developer guide.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._compat</span><span class="w"> </span><span class="kn">import</span> <span class="n">TailResult</span><span class="p">,</span> <span class="n">make_tail_result</span><span class="p">,</span> <span class="n">normalize_keys</span>
+
+<span class="c1">#: Enhanced statistics: a :class:`~conninfpy._compat.TailResult` for the t / β</span>
+<span class="c1">#: tails, or a plain dict for the omnibus (F) map.</span>
+<span class="n">EnhancedStats</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">TailResult</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]]</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy._shared.arrays</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_prior_weights</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.defaults</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DEFAULT_EXTENT_EXPONENT</span><span class="p">,</span>
+    <span class="n">DEFAULT_HEIGHT_EXPONENT</span><span class="p">,</span>
+    <span class="n">DEFAULT_MIN_CLUSTER_SIZE</span><span class="p">,</span>
+    <span class="n">DEFAULT_NBS_STAT</span><span class="p">,</span>
+    <span class="n">DEFAULT_NBS_THRESHOLD</span><span class="p">,</span>
+    <span class="n">DEFAULT_START_THRESHOLD</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.defaults</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_N_THRESHOLDS_PERMUTATION</span> <span class="k">as</span> <span class="n">DEFAULT_N_THRESHOLDS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.enhance._backend</span><span class="w"> </span><span class="kn">import</span> <span class="n">_enhance_call_scope</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.enhance.nbs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">cnbs_block_means</span><span class="p">,</span>
+    <span class="n">cnbs_blocks</span><span class="p">,</span>
+    <span class="n">get_nbs_score</span><span class="p">,</span>
+    <span class="n">nbs_bct</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.enhance.tfnbs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">get_fbc_tfnbs_score</span><span class="p">,</span>
+    <span class="n">get_network_informed_tfnbs_score</span><span class="p">,</span>
+    <span class="n">get_tfnbs_score</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"apply_tfnbs"</span><span class="p">,</span>
+    <span class="s2">"apply_nbs"</span><span class="p">,</span>
+    <span class="s2">"apply_cnbs"</span><span class="p">,</span>
+    <span class="s2">"apply_ni_tfnbs"</span><span class="p">,</span>
+    <span class="s2">"apply_fbc_tfnbs"</span><span class="p">,</span>
+    <span class="s2">"apply_edge_mask"</span><span class="p">,</span>
+    <span class="c1"># raw scoring (no permutation)</span>
+    <span class="s2">"get_tfnbs_score"</span><span class="p">,</span>
+    <span class="s2">"get_network_informed_tfnbs_score"</span><span class="p">,</span>
+    <span class="s2">"get_fbc_tfnbs_score"</span><span class="p">,</span>
+    <span class="s2">"create_prior_weights"</span><span class="p">,</span>
+    <span class="c1"># classical BCT-style NBS reference (own permutation loop)</span>
+    <span class="s2">"nbs_bct"</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_wrap</span><span class="p">(</span><span class="n">stat_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]],</span> <span class="n">score_fn</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"EnhancedStats"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply ``score_fn`` to each tail and wrap the result in a TailResult.</span>
+
+<span class="sd">    Accepts legacy keys via :func:`normalize_keys`; always emits canonical keys.</span>
+<span class="sd">    Falls back to a plain dict if the input has unexpected keys (e.g. F-stat</span>
+<span class="sd">    omnibus path with ``{'omnibus': ...}``).</span>
+<span class="sd">    """</span>
+    <span class="n">norm</span> <span class="o">=</span> <span class="n">normalize_keys</span><span class="p">(</span><span class="n">stat_dict</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">_enhance_call_scope</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">norm</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">==</span> <span class="p">{</span><span class="s2">"positive"</span><span class="p">,</span> <span class="s2">"negative"</span><span class="p">}:</span>
+            <span class="k">return</span> <span class="n">make_tail_result</span><span class="p">(</span>
+                <span class="n">score_fn</span><span class="p">(</span><span class="n">norm</span><span class="p">[</span><span class="s2">"positive"</span><span class="p">]),</span>
+                <span class="n">score_fn</span><span class="p">(</span><span class="n">norm</span><span class="p">[</span><span class="s2">"negative"</span><span class="p">]),</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">score_fn</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">norm</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+
+<div class="viewcode-block" id="apply_tfnbs">
+<a class="viewcode-back" href="../../conninfpy.enhance.html#conninfpy.enhance.apply_tfnbs">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">apply_tfnbs</span><span class="p">(</span>
+    <span class="n">stat_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]],</span>
+    <span class="n">e</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">DEFAULT_EXTENT_EXPONENT</span><span class="p">,</span>
+    <span class="n">h</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">DEFAULT_HEIGHT_EXPONENT</span><span class="p">,</span>
+    <span class="n">n</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_N_THRESHOLDS</span><span class="p">,</span>
+    <span class="n">start_thres</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_START_THRESHOLD</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"EnhancedStats"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply TFNBS (threshold-free cluster enhancement) to each direction."""</span>
+    <span class="k">return</span> <span class="n">_wrap</span><span class="p">(</span>
+        <span class="n">stat_dict</span><span class="p">,</span>
+        <span class="k">lambda</span> <span class="n">arr</span><span class="p">:</span> <span class="n">get_tfnbs_score</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">start_thres</span><span class="o">=</span><span class="n">start_thres</span><span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="apply_nbs">
+<a class="viewcode-back" href="../../conninfpy.enhance.html#conninfpy.enhance.apply_nbs">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">apply_nbs</span><span class="p">(</span>
+    <span class="n">stat_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]],</span>
+    <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_NBS_THRESHOLD</span><span class="p">,</span>
+    <span class="n">nbs_stat</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">DEFAULT_NBS_STAT</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"EnhancedStats"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply classical NBS (fixed threshold) to each direction."""</span>
+    <span class="k">return</span> <span class="n">_wrap</span><span class="p">(</span>
+        <span class="n">stat_dict</span><span class="p">,</span>
+        <span class="k">lambda</span> <span class="n">arr</span><span class="p">:</span> <span class="n">get_nbs_score</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span> <span class="n">stat_type</span><span class="o">=</span><span class="n">nbs_stat</span><span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="apply_cnbs">
+<a class="viewcode-back" href="../../conninfpy.enhance.html#conninfpy.enhance.apply_cnbs">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">apply_cnbs</span><span class="p">(</span>
+    <span class="n">stat_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]],</span>
+    <span class="n">net_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">],</span>
+    <span class="n">edge_mask</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"EnhancedStats"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Constrained NBS (Noble &amp; Scheinost, 2020): one statistic per block.</span>
+
+<span class="sd">    The signed edge statistic (``positive - negative``) is averaged over every</span>
+<span class="sd">    edge of each within- and between-network block. Returns block vectors of</span>
+<span class="sd">    shape (K,): the mean for the positive tail and minus the mean for the</span>
+<span class="sd">    negative tail (or the mean F for an omnibus map). Inference is per block</span>
+<span class="sd">    (see :mod:`conninfpy.stats._cnbs`), not by the maximum over edges.</span>
+<span class="sd">    """</span>
+    <span class="n">norm</span> <span class="o">=</span> <span class="n">normalize_keys</span><span class="p">(</span><span class="n">stat_dict</span><span class="p">)</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">norm</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
+    <span class="n">blocks</span> <span class="o">=</span> <span class="n">cnbs_blocks</span><span class="p">(</span><span class="n">net_labels</span><span class="p">,</span> <span class="n">first</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">norm</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">==</span> <span class="p">{</span><span class="s2">"positive"</span><span class="p">,</span> <span class="s2">"negative"</span><span class="p">}:</span>
+        <span class="n">means</span> <span class="o">=</span> <span class="n">cnbs_block_means</span><span class="p">(</span><span class="n">norm</span><span class="p">[</span><span class="s2">"positive"</span><span class="p">]</span> <span class="o">-</span> <span class="n">norm</span><span class="p">[</span><span class="s2">"negative"</span><span class="p">],</span> <span class="n">blocks</span><span class="p">,</span> <span class="n">edge_mask</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">make_tail_result</span><span class="p">(</span><span class="n">means</span><span class="p">,</span> <span class="o">-</span><span class="n">means</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">cnbs_block_means</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">blocks</span><span class="p">,</span> <span class="n">edge_mask</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">norm</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span></div>
+
+
+
+<div class="viewcode-block" id="apply_ni_tfnbs">
+<a class="viewcode-back" href="../../conninfpy.enhance.html#conninfpy.enhance.apply_ni_tfnbs">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">apply_ni_tfnbs</span><span class="p">(</span>
+    <span class="n">stat_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]],</span>
+    <span class="n">net_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">],</span>
+    <span class="n">e</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">DEFAULT_EXTENT_EXPONENT</span><span class="p">,</span>
+    <span class="n">h</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">DEFAULT_HEIGHT_EXPONENT</span><span class="p">,</span>
+    <span class="n">n</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_N_THRESHOLDS</span><span class="p">,</span>
+    <span class="n">start_thres</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_START_THRESHOLD</span><span class="p">,</span>
+    <span class="n">normalization</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"sqrt"</span><span class="p">,</span>
+    <span class="n">edge_mask</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"EnhancedStats"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply network-informed TFNBS (block-density weighted) to each direction."""</span>
+    <span class="k">return</span> <span class="n">_wrap</span><span class="p">(</span>
+        <span class="n">stat_dict</span><span class="p">,</span>
+        <span class="k">lambda</span> <span class="n">arr</span><span class="p">:</span> <span class="n">get_network_informed_tfnbs_score</span><span class="p">(</span>
+            <span class="n">arr</span><span class="p">,</span>
+            <span class="n">net_labels</span><span class="p">,</span>
+            <span class="n">e</span><span class="p">,</span>
+            <span class="n">h</span><span class="p">,</span>
+            <span class="n">n</span><span class="p">,</span>
+            <span class="n">start_thres</span><span class="o">=</span><span class="n">start_thres</span><span class="p">,</span>
+            <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span>
+            <span class="n">edge_mask</span><span class="o">=</span><span class="n">edge_mask</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="apply_fbc_tfnbs">
+<a class="viewcode-back" href="../../conninfpy.enhance.html#conninfpy.enhance.apply_fbc_tfnbs">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">apply_fbc_tfnbs</span><span class="p">(</span>
+    <span class="n">stat_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]],</span>
+    <span class="n">net_labels</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">],</span>
+    <span class="n">e</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">DEFAULT_EXTENT_EXPONENT</span><span class="p">,</span>
+    <span class="n">h</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">DEFAULT_HEIGHT_EXPONENT</span><span class="p">,</span>
+    <span class="n">n</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_N_THRESHOLDS</span><span class="p">,</span>
+    <span class="n">start_thres</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DEFAULT_START_THRESHOLD</span><span class="p">,</span>
+    <span class="n">min_cluster_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DEFAULT_MIN_CLUSTER_SIZE</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"EnhancedStats"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply functional-block-clustering TFNBS to each direction."""</span>
+    <span class="k">return</span> <span class="n">_wrap</span><span class="p">(</span>
+        <span class="n">stat_dict</span><span class="p">,</span>
+        <span class="k">lambda</span> <span class="n">arr</span><span class="p">:</span> <span class="n">get_fbc_tfnbs_score</span><span class="p">(</span>
+            <span class="n">arr</span><span class="p">,</span>
+            <span class="n">net_labels</span><span class="p">,</span>
+            <span class="n">e</span><span class="p">,</span>
+            <span class="n">h</span><span class="p">,</span>
+            <span class="n">n</span><span class="p">,</span>
+            <span class="n">start_thres</span><span class="o">=</span><span class="n">start_thres</span><span class="p">,</span>
+            <span class="n">min_cluster_size</span><span class="o">=</span><span class="n">min_cluster_size</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="apply_edge_mask">
+<a class="viewcode-back" href="../../conninfpy.enhance.html#conninfpy.enhance.apply_edge_mask">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">apply_edge_mask</span><span class="p">(</span>
+    <span class="n">stat_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]],</span>
+    <span class="n">edge_mask</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">],</span>
+    <span class="n">inner</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"EnhancedStats"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Restrict an enhancement to the edges of ``edge_mask`` (the tested family).</span>
+
+<span class="sd">    Statistics outside the mask are set to 0 before ``inner`` runs, so those</span>
+<span class="sd">    edges cannot join a TFNBS / NBS cluster or count toward an NI-TFNBS block</span>
+<span class="sd">    density; their score is 0 and never sets a permutation maximum, which</span>
+<span class="sd">    makes the max-statistic FWER apply to the masked family. ``edge_mask`` is</span>
+<span class="sd">    also passed to ``inner`` (NI-TFNBS counts block capacity over it). With</span>
+<span class="sd">    ``inner=None`` the raw statistic is masked (``method='tstat'``).</span>
+<span class="sd">    Module-level so it pickles to worker processes.</span>
+<span class="sd">    """</span>
+    <span class="k">with</span> <span class="n">_enhance_call_scope</span><span class="p">():</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">edge_mask</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">masked</span> <span class="o">=</span> <span class="n">_wrap</span><span class="p">(</span><span class="n">stat_dict</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">arr</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">arr</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">masked</span> <span class="k">if</span> <span class="n">inner</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">inner</span><span class="p">(</span><span class="n">masked</span><span class="p">,</span> <span class="n">edge_mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,1026 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.atlas.metadata &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.atlas.metadata</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.atlas.metadata</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Atlas / parcellation metadata for connectivity inference.</span>
+
+<span class="sd">:class:`AtlasInfo` carries per-ROI labels, resting-state-network (or lobe)</span>
+<span class="sd">assignments, MNI coordinates, hemisphere, and a free-text provenance</span>
+<span class="sd">string. It is consumed by the export and plotting helpers</span>
+<span class="sd">(``InferenceResult.significant_edges``, ``plot_effect_matrix``,</span>
+<span class="sd">``summary_figure``) so significant edges can be reported with ROI names</span>
+<span class="sd">and network context rather than bare indices.</span>
+
+<span class="sd">Two built-in atlas families are supported in v2.0:</span>
+
+<span class="sd">* **Bundled:** :meth:`AtlasInfo.schaefer_100_yeo7`,</span>
+<span class="sd">  :meth:`AtlasInfo.schaefer_200_yeo7`,</span>
+<span class="sd">  :meth:`AtlasInfo.schaefer_400_yeo7` — Schaefer 2018 cortical</span>
+<span class="sd">  parcellations at three resolutions with Yeo 7-network labels and</span>
+<span class="sd">  MNI152 centroid coordinates (shipped with the package).</span>
+<span class="sd">* **On-demand (downloaded separately):** :meth:`AtlasInfo.bna_246` —</span>
+<span class="sd">  Brainnetome Atlas (Fan et al. 2016) 246 cortical + subcortical regions,</span>
+<span class="sd">  with the Brainnetome Yeo-7 crosswalk by default (Yeo-17 or anatomical</span>
+<span class="sd">  lobes can also be selected), and MNI152-1mm centroids derived from</span>
+<span class="sd">  ``BN_Atlas_246_1mm.nii.gz``. Run ``conninfpy download-atlases`` to</span>
+<span class="sd">  populate the local cache before calling :meth:`AtlasInfo.bna_246`.</span>
+
+<span class="sd">Custom CSVs can be loaded via :meth:`AtlasInfo.from_csv`, any integer</span>
+<span class="sd">label image via :meth:`AtlasInfo.from_nifti`, and nilearn's deterministic</span>
+<span class="sd">atlases via :meth:`AtlasInfo.from_nilearn`.</span>
+
+<span class="sd">ROIs defined by coordinates (activation peaks, meta-analytic foci, sphere</span>
+<span class="sd">centres) are placed in a reference atlas with</span>
+<span class="sd">:meth:`AtlasInfo.from_coordinates`: each ROI gets the region it lies in (or</span>
+<span class="sd">the nearest one) and that region's network, so edge tables and</span>
+<span class="sd">``result.network_summary(atlas)`` aggregate coordinate-based ROIs by network</span>
+<span class="sd">or by atlas region.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.resources</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">atlas_resource_path</span><span class="p">,</span>
+    <span class="n">bundled_path</span><span class="p">,</span>
+    <span class="n">get_bna_246_nifti_path</span><span class="p">,</span>
+    <span class="n">read_bna_hierarchy</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_NetworkIndex</span> <span class="o">=</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="AtlasInfo">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.AtlasInfo">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AtlasInfo</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Per-ROI metadata for a brain parcellation.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    labels : list[str]</span>
+<span class="sd">        ROI names, length ``N``. Order is significant — index ``i`` in</span>
+<span class="sd">        an ``(n_subjects, N, N)`` connectivity tensor corresponds to</span>
+<span class="sd">        ``labels[i]``.</span>
+<span class="sd">    networks : list[str]</span>
+<span class="sd">        Per-ROI resting-state-network (or lobe) label.</span>
+<span class="sd">    coords : ndarray of shape (N, 3) or None</span>
+<span class="sd">        MNI millimeter centroids ``(x, y, z)``. ``None`` when the</span>
+<span class="sd">        bundled atlas did not ship coordinates.</span>
+<span class="sd">    hemisphere : list[str] or None</span>
+<span class="sd">        Per-ROI hemisphere code (``'L'`` / ``'R'`` / ``'M'`` for medial</span>
+<span class="sd">        or subcortical structures spanning the midline). Optional.</span>
+<span class="sd">    source : str or None</span>
+<span class="sd">        Provenance string. For bundled atlases this points to the</span>
+<span class="sd">        original publication and the resource the CSV was generated</span>
+<span class="sd">        from.</span>
+<span class="sd">    image : nibabel image or None</span>
+<span class="sd">        Integer label image the ROIs come from (set by :meth:`from_nifti`</span>
+<span class="sd">        and :meth:`from_nilearn`); enables voxel-exact placement of</span>
+<span class="sd">        coordinates in :meth:`from_coordinates`.</span>
+<span class="sd">    label_ids : ndarray of int or None</span>
+<span class="sd">        Label value of each ROI in ``image`` (same order as ``labels``).</span>
+<span class="sd">    assignment : pandas.DataFrame or None</span>
+<span class="sd">        For :meth:`from_coordinates`: where each coordinate was placed —</span>
+<span class="sd">        region, network, whether it lies inside a region, and the distance</span>
+<span class="sd">        to it.</span>
+<span class="sd">    """</span>
+
+    <span class="n">labels</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">networks</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">coords</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">hemisphere</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">source</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">image</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">label_ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+    <span class="n">assignment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">networks</span><span class="p">)</span> <span class="o">!=</span> <span class="n">n</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"labels and networks must be the same length; "</span>
+                <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> labels and </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">networks</span><span class="p">)</span><span class="si">}</span><span class="s2"> networks."</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coords</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">coords</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"coords must have shape (</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">, 3); got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">."</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">hemisphere</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hemisphere</span><span class="p">)</span> <span class="o">!=</span> <span class="n">n</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"hemisphere must have length </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">; got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hemisphere</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">label_ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">label_ids</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_ids</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">n</span><span class="p">,):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"label_ids must have length </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">; got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">label_ids</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">."</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">label_ids</span><span class="p">))</span> <span class="o">!=</span> <span class="n">n</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"label_ids must be unique"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AtlasInfo.network_index">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.AtlasInfo.network_index">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">network_index</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_NetworkIndex</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Integer-coded networks for ``block_mass`` / cnbs / ni_tfnbs.</span>
+
+<span class="sd">        Two ROIs share an integer iff they share a network label.</span>
+<span class="sd">        Codes are assigned in order of first appearance.</span>
+<span class="sd">        """</span>
+        <span class="n">seen</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">networks</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int_</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">networks</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">n</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+                <span class="n">seen</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">seen</span><span class="p">)</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">seen</span><span class="p">[</span><span class="n">n</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+
+<div class="viewcode-block" id="AtlasInfo.from_csv">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.AtlasInfo.from_csv">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_csv</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">label_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"name"</span><span class="p">,</span>
+        <span class="n">network_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"network"</span><span class="p">,</span>
+        <span class="n">coord_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"x"</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">,</span> <span class="s2">"z"</span><span class="p">),</span>
+        <span class="n">hemisphere_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"hemisphere"</span><span class="p">,</span>
+        <span class="n">source</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"AtlasInfo"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Load an atlas from a CSV file.</span>
+
+<span class="sd">        Required columns: ``label_col`` (default ``'name'``) and</span>
+<span class="sd">        ``network_col`` (default ``'network'``). Coordinate columns</span>
+<span class="sd">        (default ``('x', 'y', 'z')``) and ``hemisphere_col`` (default</span>
+<span class="sd">        ``'hemisphere'``) are loaded when present and non-empty;</span>
+<span class="sd">        otherwise ``coords`` / ``hemisphere`` are set to ``None``.</span>
+<span class="sd">        Rows are taken in file order.</span>
+<span class="sd">        """</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">reader</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+            <span class="n">rows</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">reader</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: no rows found."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">label_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: missing required column </span><span class="si">{</span><span class="n">label_col</span><span class="si">!r}</span><span class="s2">."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">network_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: missing required column </span><span class="si">{</span><span class="n">network_col</span><span class="si">!r}</span><span class="s2">."</span><span class="p">)</span>
+
+        <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="n">label_col</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="n">networks</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="n">network_col</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+
+        <span class="n">coords</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">coord_cols</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">coord_cols</span><span class="p">):</span>
+            <span class="n">raw</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="n">r</span><span class="p">[</span><span class="n">c</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">coord_cols</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">])</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">raw</span> <span class="o">==</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+                <span class="n">coords</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># NaN-fill any blank cells; numpy will fail otherwise.</span>
+                <span class="n">clean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">raw</span> <span class="o">==</span> <span class="s2">""</span><span class="p">,</span> <span class="s2">"nan"</span><span class="p">,</span> <span class="n">raw</span><span class="p">)</span>
+                <span class="n">coords</span> <span class="o">=</span> <span class="n">clean</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+        <span class="n">hemisphere</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">hemisphere_col</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">hemisphere_col</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">hemisphere</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="n">hemisphere_col</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">h</span> <span class="o">==</span> <span class="s2">""</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">hemisphere</span><span class="p">):</span>
+                <span class="n">hemisphere</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">labels</span><span class="o">=</span><span class="n">labels</span><span class="p">,</span>
+            <span class="n">networks</span><span class="o">=</span><span class="n">networks</span><span class="p">,</span>
+            <span class="n">coords</span><span class="o">=</span><span class="n">coords</span><span class="p">,</span>
+            <span class="n">hemisphere</span><span class="o">=</span><span class="n">hemisphere</span><span class="p">,</span>
+            <span class="n">source</span><span class="o">=</span><span class="n">source</span> <span class="ow">or</span> <span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span>
+            <span class="n">label_ids</span><span class="o">=</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s1">'roi_id'</span><span class="p">])</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+                       <span class="k">if</span> <span class="s1">'roi_id'</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">else</span>
+                       <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s1">'id'</span><span class="p">])</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+                       <span class="k">if</span> <span class="s1">'id'</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">else</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Atlases from label images</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+<div class="viewcode-block" id="AtlasInfo.from_nifti">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.AtlasInfo.from_nifti">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_nifti</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">img</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">lut</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">networks</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">exclude</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">source</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"AtlasInfo"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build an atlas from an integer label image (NIfTI path or nibabel image).</span>
+
+<span class="sd">        ROIs are the non-zero label values in ascending order — the order in</span>
+<span class="sd">        which nilearn's ``NiftiLabelsMasker`` extracts them.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        img : str, Path or nibabel image</span>
+<span class="sd">            3-D image of integer labels (0 = background). Probabilistic</span>
+<span class="sd">            (4-D) atlases are not label images and are rejected.</span>
+<span class="sd">        lut : DataFrame, dict, str or Path, optional</span>
+<span class="sd">            Region names (and optionally networks) per label value: a</span>
+<span class="sd">            DataFrame or CSV / TSV with an id column (``index``, ``id``,</span>
+<span class="sd">            ``roi_id`` or ``label``), a ``name`` column and optionally a</span>
+<span class="sd">            ``network`` column (nilearn's ``lut`` works as is); a</span>
+<span class="sd">            FreeSurfer-style text LUT (``id name r g b a`` per line); or a</span>
+<span class="sd">            dict ``{id: name}``. Unnamed labels become ``region_&lt;id&gt;``.</span>
+<span class="sd">        networks : dict, sequence or callable, optional</span>
+<span class="sd">            Network per ROI: ``{id or name: network}``, one value per ROI in</span>
+<span class="sd">            label order, or a function of the region name. Without it the</span>
+<span class="sd">            LUT's ``network`` column is used, and without that each region is</span>
+<span class="sd">            its own group (``networks == labels``).</span>
+<span class="sd">        exclude : sequence of str</span>
+<span class="sd">            Region names to drop (e.g. white matter or ventricles in the</span>
+<span class="sd">            Harvard-Oxford subcortical atlas). Their voxels are set to 0 in</span>
+<span class="sd">            ``atlas.image``, so extraction with that image skips them too.</span>
+<span class="sd">        source : str, optional</span>
+<span class="sd">            Provenance string.</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        The atlas keeps what the label image and the LUT state, and nothing</span>
+<span class="sd">        else. Label values are read in ascending order (the order nilearn's</span>
+<span class="sd">        ``NiftiLabelsMasker`` extracts them) and ``label_ids`` keeps the</span>
+<span class="sd">        original values, which need not start at 1 or be consecutive. LUT</span>
+<span class="sd">        columns other than the id, ``name`` and ``network`` — a ``structure``</span>
+<span class="sd">        column included — are not carried, because :class:`AtlasInfo` has no</span>
+<span class="sd">        such field. A label without a LUT record is named ``region_&lt;id&gt;`` and</span>
+<span class="sd">        gets the network ``'unassigned'`` when the LUT carries network labels</span>
+<span class="sd">        at all; a network value such as ``'unknown'`` or ``'not_applicable'``</span>
+<span class="sd">        is kept verbatim and never replaced by a guess. No template is</span>
+<span class="sd">        recorded: the image is assumed to be on the reference grid the caller</span>
+<span class="sd">        annotates with.</span>
+<span class="sd">        """</span>
+        <span class="n">nib_img</span><span class="p">,</span> <span class="n">data</span> <span class="o">=</span> <span class="n">_load_label_image</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">_read_lut</span><span class="p">(</span><span class="n">lut</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">ids</span><span class="p">[</span><span class="n">ids</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">table</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"name"</span><span class="p">)</span> <span class="ow">or</span> <span class="sa">f</span><span class="s2">"region_</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">]</span>
+
+        <span class="n">drop</span> <span class="o">=</span> <span class="p">{</span><span class="n">e</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">exclude</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">drop</span><span class="p">:</span>
+            <span class="n">unknown</span> <span class="o">=</span> <span class="n">drop</span> <span class="o">-</span> <span class="p">{</span><span class="n">n</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">names</span><span class="p">}</span>
+            <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"exclude: no region named </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="n">keep</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">n</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">drop</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">names</span><span class="p">])</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">ids</span><span class="p">[</span><span class="o">~</span><span class="n">keep</span><span class="p">]),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+            <span class="n">ids</span> <span class="o">=</span> <span class="n">ids</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
+            <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">names</span><span class="p">,</span> <span class="n">keep</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">if</span> <span class="n">k</span><span class="p">]</span>
+            <span class="n">nib_img</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">nib_img</span><span class="p">)(</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span> <span class="n">nib_img</span><span class="o">.</span><span class="n">affine</span><span class="p">,</span> <span class="n">nib_img</span><span class="o">.</span><span class="n">header</span>
+            <span class="p">)</span>
+            <span class="n">nib_img</span><span class="o">.</span><span class="n">set_data_dtype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the label image has no non-zero labels."</span><span class="p">)</span>
+
+        <span class="n">nets</span> <span class="o">=</span> <span class="n">_resolve_networks</span><span class="p">(</span><span class="n">networks</span><span class="p">,</span> <span class="n">ids</span><span class="p">,</span> <span class="n">names</span><span class="p">,</span> <span class="n">table</span><span class="p">)</span>
+        <span class="n">coords</span> <span class="o">=</span> <span class="n">_label_centroids</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">ids</span><span class="p">,</span> <span class="n">nib_img</span><span class="o">.</span><span class="n">affine</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">labels</span><span class="o">=</span><span class="n">names</span><span class="p">,</span>
+            <span class="n">networks</span><span class="o">=</span><span class="n">nets</span><span class="p">,</span>
+            <span class="n">coords</span><span class="o">=</span><span class="n">coords</span><span class="p">,</span>
+            <span class="n">hemisphere</span><span class="o">=</span><span class="n">_hemisphere</span><span class="p">(</span><span class="n">coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]),</span>
+            <span class="n">source</span><span class="o">=</span><span class="n">source</span>
+            <span class="ow">or</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">img</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">))</span> <span class="k">else</span> <span class="s2">"label image"</span><span class="p">),</span>
+            <span class="n">image</span><span class="o">=</span><span class="n">nib_img</span><span class="p">,</span>
+            <span class="n">label_ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AtlasInfo.from_nilearn">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.AtlasInfo.from_nilearn">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_nilearn</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">atlas</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">networks</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="s2">"auto"</span><span class="p">,</span>
+        <span class="n">exclude</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"AtlasInfo"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build an atlas from a nilearn ``fetch_atlas_*`` result.</span>
+
+<span class="sd">        Needs a deterministic atlas and nilearn &gt;= 0.13 (its ``lut`` table).</span>
+<span class="sd">        ``networks='auto'`` reads the Yeo network from Schaefer region names</span>
+<span class="sd">        (``7Networks_LH_Vis_1`` -&gt; ``Visual``, matching</span>
+<span class="sd">        :meth:`schaefer_100_yeo7`); other atlases have no networks, so each</span>
+<span class="sd">        region is its own group unless ``networks`` is given (see</span>
+<span class="sd">        :meth:`from_nifti`).</span>
+
+<span class="sd">        Example</span>
+<span class="sd">        -------</span>
+<span class="sd">        &gt;&gt;&gt; from nilearn import datasets</span>
+<span class="sd">        &gt;&gt;&gt; ho = datasets.fetch_atlas_harvard_oxford("cort-maxprob-thr25-2mm", symmetric_split=True)</span>
+<span class="sd">        &gt;&gt;&gt; atlas = AtlasInfo.from_nilearn(ho)</span>
+<span class="sd">        """</span>
+        <span class="n">get</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">(</span><span class="k">lambda</span> <span class="n">k</span><span class="p">:</span> <span class="n">atlas</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">))</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span>
+            <span class="k">else</span> <span class="p">(</span><span class="k">lambda</span> <span class="n">k</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">get</span><span class="p">(</span><span class="s2">"atlas_type"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"probabilistic"</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"probabilistic atlases (maps of weights) are not label images; "</span>
+                <span class="s2">"use a deterministic atlas or a coordinate set."</span>
+            <span class="p">)</span>
+        <span class="n">lut</span> <span class="o">=</span> <span class="n">get</span><span class="p">(</span><span class="s2">"lut"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">lut</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"this atlas has no 'lut' table; nilearn &gt;= 0.13 is required "</span>
+                <span class="s2">"(or pass the image and names to AtlasInfo.from_nifti)."</span>
+            <span class="p">)</span>
+        <span class="n">lut</span> <span class="o">=</span> <span class="n">lut</span><span class="p">[</span><span class="n">lut</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">!=</span> <span class="s2">"background"</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">networks</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">networks</span> <span class="o">==</span> <span class="s2">"auto"</span><span class="p">:</span>
+            <span class="n">networks</span> <span class="o">=</span> <span class="n">_schaefer_networks</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">lut</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)))</span>
+        <span class="n">template</span> <span class="o">=</span> <span class="n">get</span><span class="p">(</span><span class="s2">"template"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_nifti</span><span class="p">(</span>
+            <span class="n">get</span><span class="p">(</span><span class="s2">"maps"</span><span class="p">),</span>
+            <span class="n">lut</span><span class="o">=</span><span class="n">lut</span><span class="p">,</span>
+            <span class="n">networks</span><span class="o">=</span><span class="n">networks</span><span class="p">,</span>
+            <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">,</span>
+            <span class="n">source</span><span class="o">=</span><span class="sa">f</span><span class="s2">"nilearn atlas</span><span class="si">{</span><span class="sa">f</span><span class="s1">' (</span><span class="si">{</span><span class="n">template</span><span class="si">}</span><span class="s1">)'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">template</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">''</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">get</span><span class="p">(</span><span class="s1">'maps'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Coordinate-defined ROIs</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+<div class="viewcode-block" id="AtlasInfo.from_coordinates">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.AtlasInfo.from_coordinates">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_coordinates</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">coords</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">reference</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">networks</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">group_by</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"auto"</span><span class="p">,</span>
+        <span class="n">max_distance</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">source</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">space</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reference_space</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">units</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"AtlasInfo"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Describe ROIs given by MNI coordinates, placed in a reference atlas.</span>
+
+<span class="sd">        Typical use: ROIs centred on activation peaks, with time series</span>
+<span class="sd">        extracted around them (e.g. spheres). Each coordinate is assigned to</span>
+<span class="sd">        the reference region that contains it, or to the nearest region</span>
+<span class="sd">        within ``max_distance`` mm; farther ones are ``'unassigned'``. The</span>
+<span class="sd">        resulting atlas groups the ROIs for ``network_summary`` and edge</span>
+<span class="sd">        tables.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        coords : array of shape (n_rois, 3)</span>
+<span class="sd">            MNI coordinates (mm), in the order of the connectivity matrix.</span>
+<span class="sd">        reference : AtlasInfo, NIfTI path, nibabel image, nilearn atlas, or a list of them</span>
+<span class="sd">            Atlas to place the coordinates in. With a label image the</span>
+<span class="sd">            placement is voxel-exact; an :class:`AtlasInfo` without an image</span>
+<span class="sd">            (e.g. the bundled Schaefer tables) falls back to the nearest</span>
+<span class="sd">            region centroid, with a warning. A list is tried in order —</span>
+<span class="sd">            e.g. a cortical atlas, then a subcortical one — and each</span>
+<span class="sd">            coordinate takes the first atlas that assigns it.</span>
+<span class="sd">        names : sequence of str, optional</span>
+<span class="sd">            ROI names; default ``ROI_01``, ``ROI_02``, ...</span>
+<span class="sd">        networks : sequence of str, optional</span>
+<span class="sd">            Network per ROI when you already have one (e.g. from the study</span>
+<span class="sd">            that defined the coordinates). Overrides the grouping from the</span>
+<span class="sd">            reference; the region assignment is still recorded.</span>
+<span class="sd">        group_by : {'auto', 'network', 'region'}</span>
+<span class="sd">            How ROIs are grouped. ``'auto'`` uses the reference's networks</span>
+<span class="sd">            when it has them, else its regions.</span>
+<span class="sd">        max_distance : float, optional</span>
+<span class="sd">            Opt-in maximum distance (mm) to a labelled voxel or, when no image</span>
+<span class="sd">            exists, a centroid. The default leaves unmatched points unassigned.</span>
+<span class="sd">        space, reference_space : str</span>
+<span class="sd">            Declared, matching coordinate and reference templates. No</span>
+<span class="sd">            registration or template conversion is performed.</span>
+<span class="sd">        units : {'mm'}</span>
+<span class="sd">            Coordinates are world coordinates in millimetres.</span>
+<span class="sd">        source : str, optional</span>
+<span class="sd">            Provenance string.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        AtlasInfo</span>
+<span class="sd">            ``networks`` holds the group of each ROI; ``assignment`` holds</span>
+<span class="sd">            the placement table (region, network, inside, distance_mm,</span>
+<span class="sd">            method).</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">space</span> <span class="ow">or</span> <span class="n">units</span> <span class="o">!=</span> <span class="s2">"mm"</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"declare the source coordinate space and units='mm'"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reference</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">reference_space</span> <span class="ow">or</span> <span class="n">reference_space</span> <span class="o">!=</span> <span class="n">space</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"declare matching source and reference spaces; no registration is performed"</span><span class="p">)</span>
+        <span class="n">coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"coords must have shape (n_rois, 3); got </span><span class="si">{</span><span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"coords must be finite"</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">names</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">n</span><span class="p">))</span>
+            <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"ROI_</span><span class="si">{</span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">:</span><span class="s2">0</span><span class="si">{</span><span class="n">width</span><span class="si">}</span><span class="s2">d</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)]</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">names</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">names</span><span class="p">)</span> <span class="o">!=</span> <span class="n">n</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"names must have length </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">; got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">names</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">group_by</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"auto"</span><span class="p">,</span> <span class="s2">"network"</span><span class="p">,</span> <span class="s2">"region"</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"group_by must be 'auto', 'network' or 'region'."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reference</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">networks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"give a reference atlas or the ROI networks."</span><span class="p">)</span>
+
+        <span class="n">table</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">groups</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">reference</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">refs</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">_as_atlas</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="p">(</span>
+                    <span class="n">reference</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="k">else</span> <span class="p">[</span><span class="n">reference</span><span class="p">]</span>
+                <span class="p">)</span>
+            <span class="p">]</span>
+            <span class="n">table</span> <span class="o">=</span> <span class="n">assign_coordinates</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">refs</span><span class="p">,</span> <span class="n">max_distance</span><span class="o">=</span><span class="n">max_distance</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="n">space</span><span class="p">,</span>
+                                       <span class="n">reference_space</span><span class="o">=</span><span class="n">reference_space</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="n">units</span><span class="p">)</span>
+            <span class="n">table</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">"roi"</span><span class="p">,</span> <span class="n">names</span><span class="p">)</span>
+            <span class="n">mode</span> <span class="o">=</span> <span class="n">group_by</span>
+            <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">"auto"</span><span class="p">:</span>
+                <span class="n">has_networks</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">networks</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">list</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">labels</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">refs</span><span class="p">)</span>
+                <span class="n">mode</span> <span class="o">=</span> <span class="s2">"network"</span> <span class="k">if</span> <span class="n">has_networks</span> <span class="k">else</span> <span class="s2">"region"</span>
+            <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">"region"</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">refs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">networks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mapped</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="n">table</span><span class="p">[</span><span class="s2">"atlas"</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">]</span>
+                <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">g</span><span class="p">[</span><span class="s2">"atlas"</span><span class="p">]))</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">mapped</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"region"</span><span class="p">)):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"region names collide across references; supply distinct explicit group labels"</span><span class="p">)</span>
+            <span class="n">groups</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="n">mode</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">networks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">groups</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">networks</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">groups</span><span class="p">)</span> <span class="o">!=</span> <span class="n">n</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"networks must have length </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">; got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">groups</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">table</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">table</span><span class="p">[</span><span class="s2">"selected_network"</span><span class="p">]</span> <span class="o">=</span> <span class="n">groups</span>
+
+        <span class="n">ref_src</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">" + "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">source</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">refs</span><span class="p">)</span> <span class="k">if</span> <span class="n">reference</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">labels</span><span class="o">=</span><span class="n">names</span><span class="p">,</span>
+            <span class="n">networks</span><span class="o">=</span><span class="n">groups</span><span class="p">,</span>
+            <span class="n">coords</span><span class="o">=</span><span class="n">coords</span><span class="p">,</span>
+            <span class="n">hemisphere</span><span class="o">=</span><span class="n">_hemisphere</span><span class="p">(</span><span class="n">coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]),</span>
+            <span class="n">source</span><span class="o">=</span><span class="n">source</span>
+            <span class="ow">or</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> coordinates placed in </span><span class="si">{</span><span class="n">ref_src</span><span class="si">}</span><span class="s2">"</span>
+                <span class="k">if</span> <span class="n">ref_src</span>
+                <span class="k">else</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> coordinates"</span>
+            <span class="p">),</span>
+            <span class="n">assignment</span><span class="o">=</span><span class="n">table</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Bundled atlases</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+<div class="viewcode-block" id="AtlasInfo.schaefer_100_yeo7">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.AtlasInfo.schaefer_100_yeo7">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">schaefer_100_yeo7</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"AtlasInfo"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Schaefer-2018 100-parcel atlas with Yeo-7 networks.</span>
+
+<span class="sd">        Source: ThomasYeoLab/CBIG Schaefer 2018 release. Labels and</span>
+<span class="sd">        Yeo-7 network assignments follow the upstream naming</span>
+<span class="sd">        (``7Networks_LH_Vis_1`` etc.); ``coords`` are MNI152 2mm</span>
+<span class="sd">        centroids derived from the published parcellation image.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">_load_bundled</span><span class="p">(</span><span class="s2">"schaefer100_yeo7.csv"</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">_SCHAEFER_SRC</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AtlasInfo.schaefer_200_yeo7">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.AtlasInfo.schaefer_200_yeo7">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">schaefer_200_yeo7</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"AtlasInfo"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Schaefer-2018 200-parcel atlas with Yeo-7 networks.</span>
+
+<span class="sd">        Same source and conventions as :meth:`schaefer_100_yeo7`, at</span>
+<span class="sd">        the 200-parcel resolution.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">_load_bundled</span><span class="p">(</span><span class="s2">"schaefer200_yeo7.csv"</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">_SCHAEFER_SRC</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AtlasInfo.schaefer_400_yeo7">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.AtlasInfo.schaefer_400_yeo7">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">schaefer_400_yeo7</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"AtlasInfo"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Schaefer-2018 400-parcel atlas with Yeo-7 networks.</span>
+
+<span class="sd">        Same source and conventions as :meth:`schaefer_100_yeo7`, at</span>
+<span class="sd">        the 400-parcel resolution.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">_load_bundled</span><span class="p">(</span><span class="s2">"schaefer400_yeo7.csv"</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">_SCHAEFER_SRC</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AtlasInfo.bna_246">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.AtlasInfo.bna_246">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bna_246</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">with_image</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">networks</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"yeo7"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"AtlasInfo"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Brainnetome Atlas (Fan et al. 2016) 246-region parcellation.</span>
+
+<span class="sd">        Names follow ``BN_Atlas_246_LUT.txt``. MNI coordinates are voxel-mass</span>
+<span class="sd">        centroids computed from the ``BN_Atlas_246_1mm.nii.gz`` parcellation</span>
+<span class="sd">        (atlas.brainnetome.org).</span>
+
+<span class="sd">        ``networks`` selects the grouping carried in ``networks``: the</span>
+<span class="sd">        Brainnetome division of the regions (``'yeo7'``, default, or</span>
+<span class="sd">        ``'yeo17'``; from ``bna246_hierarchy.csv``, i.e. the Brainnetome</span>
+<span class="sd">        Center's subregion-to-network table; subcortical regions, which the</span>
+<span class="sd">        division leaves unassigned, are 'Subcortical'), or ``'lobe'`` (the</span>
+<span class="sd">        seven-lobe grouping Frontal / Temporal / Parietal / Insular / Limbic /</span>
+<span class="sd">        Occipital / Subcortical). Changed in October 2026: the default was</span>
+<span class="sd">        the lobe grouping; pass ``networks='lobe'`` to keep it.</span>
+
+<span class="sd">        ``with_image=True`` also attaches the bundled 1 mm label image, so</span>
+<span class="sd">        :meth:`from_coordinates` can place coordinates voxel-exactly.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">networks</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"yeo7"</span><span class="p">,</span> <span class="s2">"yeo17"</span><span class="p">,</span> <span class="s2">"lobe"</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"networks must be 'yeo7', 'yeo17' or 'lobe'; got </span><span class="si">{</span><span class="n">networks</span><span class="si">!r}</span><span class="s2">."</span>
+            <span class="p">)</span>
+        <span class="n">grouping</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">"BNA seven-lobe grouping"</span>
+            <span class="k">if</span> <span class="n">networks</span> <span class="o">==</span> <span class="s2">"lobe"</span>
+            <span class="k">else</span> <span class="sa">f</span><span class="s2">"Brainnetome division (</span><span class="si">{</span><span class="n">networks</span><span class="si">}</span><span class="s2">, bna246_hierarchy.csv)"</span>
+        <span class="p">)</span>
+        <span class="n">bna_csv</span> <span class="o">=</span> <span class="n">atlas_resource_path</span><span class="p">(</span><span class="s2">"bna246.csv"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">with_image</span><span class="p">:</span>
+            <span class="n">atlas</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_nifti</span><span class="p">(</span>
+                <span class="n">get_bna_246_nifti_path</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
+                <span class="n">lut</span><span class="o">=</span><span class="n">bna_csv</span><span class="p">,</span>
+                <span class="n">source</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Fan et al. 2016 Brainnetome Atlas (BN_Atlas_246_1mm.nii.gz); networks = </span><span class="si">{</span><span class="n">grouping</span><span class="si">}</span><span class="s2">."</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">atlas</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_csv</span><span class="p">(</span>
+                <span class="n">bna_csv</span><span class="p">,</span>
+                <span class="n">source</span><span class="o">=</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Fan et al. 2016 Brainnetome Atlas; networks = </span><span class="si">{</span><span class="n">grouping</span><span class="si">}</span><span class="s2">; centroids "</span>
+                    <span class="s2">"from BN_Atlas_246_1mm.nii.gz."</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">networks</span> <span class="o">==</span> <span class="s2">"lobe"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">atlas</span>
+
+        <span class="n">h</span> <span class="o">=</span> <span class="n">read_bna_hierarchy</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="s2">"name"</span><span class="p">)</span>
+        <span class="n">division</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">lab</span><span class="p">,</span> <span class="n">networks</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">h</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">lab</span><span class="p">,</span> <span class="s2">"structure"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"cortex"</span>
+            <span class="k">else</span> <span class="s2">"Subcortical"</span>
+            <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">atlas</span><span class="o">.</span><span class="n">labels</span>
+        <span class="p">]</span>
+        <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">atlas</span><span class="p">,</span> <span class="n">networks</span><span class="o">=</span><span class="n">division</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="n">_SCHAEFER_SRC</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">"Schaefer et al. 2018 (ThomasYeoLab/CBIG release); "</span>
+    <span class="s2">"centroids from FSLMNI152 2mm parcellation."</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_load_bundled</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtlasInfo</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Load a packaged CSV via ``importlib.resources``."""</span>
+    <span class="k">return</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">from_csv</span><span class="p">(</span><span class="n">bundled_path</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">source</span><span class="o">=</span><span class="n">source</span><span class="p">)</span>
+
+
+<span class="c1"># ----------------------------------------------------------------------</span>
+<span class="c1"># Helpers: label images, LUTs, coordinate placement</span>
+<span class="c1"># ----------------------------------------------------------------------</span>
+<span class="n">_YEO7_NAMES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"Vis"</span><span class="p">:</span> <span class="s2">"Visual"</span><span class="p">}</span>  <span class="c1"># as in the bundled Schaefer tables</span>
+<span class="n">_SCHAEFER_RE</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^(7|17)Networks_(LH|RH)_([A-Za-z]+)"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_load_label_image</span><span class="p">(</span><span class="n">img</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Load a 3-D integer label image; return (nibabel image, int labels)."""</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">nibabel</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nib</span>
+    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover - nibabel is a core dependency</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">"reading label images needs nibabel (pip install nibabel)."</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">)):</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">nib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">img</span><span class="p">))</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">img</span><span class="o">.</span><span class="n">dataobj</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">4</span> <span class="ow">and</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"expected a 3-D label image, got shape </span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">; probabilistic "</span>
+            <span class="s2">"(4-D) atlases are not supported."</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the label image must contain finite labels"</span><span class="p">)</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">labels</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the label image must hold integer labels."</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">img</span><span class="p">,</span> <span class="n">labels</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+
+<span class="n">_ID_COLUMNS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"index"</span><span class="p">,</span> <span class="s2">"id"</span><span class="p">,</span> <span class="s2">"roi_id"</span><span class="p">,</span> <span class="s2">"label"</span><span class="p">,</span> <span class="s2">"label_id"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_read_lut</span><span class="p">(</span><span class="n">lut</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Normalise a LUT to ``{label id: {'name': ..., 'network': ...}}``."""</span>
+    <span class="k">if</span> <span class="n">lut</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lut</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="n">out</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">lut</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+                <span class="n">out</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="p">)]</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">"name"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+                    <span class="o">**</span><span class="p">({</span><span class="s2">"network"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="mi">1</span><span class="p">])}</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="p">{}),</span>
+                <span class="p">}</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">out</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="p">)]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)}</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lut</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">)):</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">lut</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">".csv"</span><span class="p">,</span> <span class="s2">".tsv"</span><span class="p">):</span>
+            <span class="n">lut</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="s2">"</span><span class="se">\t</span><span class="s2">"</span> <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">".tsv"</span> <span class="k">else</span> <span class="s2">","</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># FreeSurfer-style colour LUT: "id name r g b a"</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+                <span class="n">parts</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"#"</span><span class="p">)</span>
+                    <span class="ow">and</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">"-"</span><span class="p">)</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()</span>
+                <span class="p">):</span>
+                    <span class="n">out</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">])]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span>
+            <span class="k">return</span> <span class="n">out</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lut</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"lut must be a DataFrame, CSV/TSV/LUT path or {id: name} dict."</span><span class="p">)</span>
+    <span class="n">cols</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">lut</span><span class="o">.</span><span class="n">columns</span><span class="p">}</span>
+    <span class="n">id_col</span> <span class="o">=</span> <span class="nb">next</span><span class="p">((</span><span class="n">cols</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">_ID_COLUMNS</span> <span class="k">if</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cols</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">id_col</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="s2">"name"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cols</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"lut needs an id column (</span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_ID_COLUMNS</span><span class="p">)</span><span class="si">}</span><span class="s2">) and a 'name' column."</span>
+        <span class="p">)</span>
+    <span class="n">net_col</span> <span class="o">=</span> <span class="n">cols</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"network"</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">lut</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+        <span class="n">entry</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="n">cols</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]])}</span>
+        <span class="k">if</span> <span class="n">net_col</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="n">net_col</span><span class="p">],</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">row</span><span class="p">[</span><span class="n">net_col</span><span class="p">]:</span>
+            <span class="n">entry</span><span class="p">[</span><span class="s2">"network"</span><span class="p">]</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="n">net_col</span><span class="p">]</span>
+        <span class="n">out</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="n">id_col</span><span class="p">])]</span> <span class="o">=</span> <span class="n">entry</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_networks</span><span class="p">(</span>
+    <span class="n">networks</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">ids</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
+    <span class="n">names</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">table</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Network per ROI from an explicit spec, the LUT, or the region itself."""</span>
+    <span class="k">if</span> <span class="n">networks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="s2">"network"</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="p">{})</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">table</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"network"</span><span class="p">,</span> <span class="s2">"unassigned"</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">names</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">networks</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">networks</span><span class="p">(</span><span class="n">n</span><span class="p">))</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">names</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">networks</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">networks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="n">networks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="s2">"unassigned"</span><span class="p">)))</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">names</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">]</span>
+    <span class="n">nets</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">networks</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">nets</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"networks must have one entry per region (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span><span class="si">}</span><span class="s2">); got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">nets</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">nets</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_schaefer_networks</span><span class="p">(</span><span class="n">names</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Yeo network from Schaefer names, or None when the names are not Schaefer's."""</span>
+    <span class="n">matches</span> <span class="o">=</span> <span class="p">[</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="p">(</span><span class="n">_SCHAEFER_RE</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">names</span><span class="p">)</span> <span class="k">if</span> <span class="n">m</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">names</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">matches</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">names</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="n">_YEO7_NAMES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"7"</span> <span class="k">else</span> <span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">matches</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_label_centroids</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
+    <span class="n">ids</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
+    <span class="n">affine</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Voxel-mass centroid of each label, in world (mm) coordinates."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndimage</span>
+
+    <span class="n">vox</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">ndimage</span><span class="o">.</span><span class="n">center_of_mass</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="n">data</span><span class="p">,</span> <span class="n">ids</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">vox</span> <span class="o">@</span> <span class="n">affine</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_hemisphere</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">midline_mm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""'L' / 'R' from the x coordinate (MNI: negative = left); 'M' near the midline."""</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="s2">"M"</span> <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">midline_mm</span> <span class="k">else</span> <span class="p">(</span><span class="s2">"L"</span> <span class="k">if</span> <span class="n">v</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">"R"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_as_atlas</span><span class="p">(</span><span class="n">reference</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AtlasInfo</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Accept an AtlasInfo, a label-image path / nibabel image, or a nilearn atlas."""</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">AtlasInfo</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">reference</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">))</span> <span class="ow">or</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="s2">"affine"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">from_nifti</span><span class="p">(</span><span class="n">reference</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="s2">"maps"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">from_nilearn</span><span class="p">(</span><span class="n">reference</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"reference must be an AtlasInfo, a label image or a nilearn atlas."</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="assign_coordinates">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.assign_coordinates">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">assign_coordinates</span><span class="p">(</span>
+    <span class="n">coords</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">reference</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">max_distance</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">space</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">reference_space</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">units</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"Any"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Place MNI coordinates in a reference atlas (or a list of atlases, in order).</span>
+
+<span class="sd">    Returns a table with one row per coordinate: ``x, y, z``, the assigned</span>
+<span class="sd">    ``region``, its ``network`` (the region itself when the atlas has no</span>
+<span class="sd">    networks), ``label_id``, ``inside`` (the coordinate lies in that</span>
+<span class="sd">    region), ``distance_mm`` (0 inside; else to the nearest labelled voxel,</span>
+<span class="sd">    or to the region centroid without an image), ``method`` (``'voxel'``,</span>
+<span class="sd">    ``'nearest voxel'``, ``'centroid'`` or ``'unassigned'``) and, for a</span>
+<span class="sd">    list of atlases, ``atlas`` (the position of the atlas that assigned it).</span>
+<span class="sd">    With a list, exact containment is tried across all references first,</span>
+<span class="sd">    followed by opt-in bounded nearest-voxel and centroid approximations.</span>
+<span class="sd">    Declare identical source/reference spaces and mm units; this function</span>
+<span class="sd">    does not register images or infer templates.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">space</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">reference_space</span> <span class="ow">or</span> <span class="n">space</span> <span class="o">!=</span> <span class="n">reference_space</span> <span class="ow">or</span> <span class="n">units</span> <span class="o">!=</span> <span class="s2">"mm"</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"declare matching coordinate/reference spaces and units='mm'; no registration is performed"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">max_distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">max_distance</span><span class="p">)</span> <span class="ow">or</span> <span class="n">max_distance</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"max_distance must be a positive finite distance or None"</span><span class="p">)</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">c</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">3</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"coords must be finite with shape (n, 3)"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">reference</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"reference list cannot be empty"</span><span class="p">)</span>
+        <span class="n">tables</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">assign_coordinates</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">max_distance</span><span class="o">=</span><span class="n">max_distance</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="n">space</span><span class="p">,</span>
+                               <span class="n">reference_space</span><span class="o">=</span><span class="n">reference_space</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="n">units</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">reference</span>
+        <span class="p">]</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">tables</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">out</span><span class="p">[</span><span class="s2">"region"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"unassigned"</span>
+        <span class="n">out</span><span class="p">[</span><span class="s2">"network"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"unassigned"</span>
+        <span class="n">out</span><span class="p">[</span><span class="s2">"label_id"</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">out</span><span class="p">[</span><span class="s2">"inside"</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">out</span><span class="p">[</span><span class="s2">"distance_mm"</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+        <span class="n">out</span><span class="p">[</span><span class="s2">"method"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"unassigned"</span>
+        <span class="n">out</span><span class="p">[</span><span class="s2">"atlas"</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="k">for</span> <span class="n">rank</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"voxel"</span><span class="p">,</span> <span class="s2">"nearest voxel"</span><span class="p">,</span> <span class="s2">"centroid"</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">tables</span><span class="p">):</span>
+                <span class="n">take</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"method"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"unassigned"</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="s2">"method"</span><span class="p">]</span> <span class="o">==</span> <span class="n">rank</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">out</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">take</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">take</span><span class="p">]</span>
+                <span class="n">out</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">take</span><span class="p">,</span> <span class="s2">"atlas"</span><span class="p">]</span> <span class="o">=</span> <span class="n">k</span>
+        <span class="n">out</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">"space"</span><span class="p">:</span> <span class="n">space</span><span class="p">,</span> <span class="s2">"reference_space"</span><span class="p">:</span> <span class="n">reference_space</span><span class="p">,</span>
+                          <span class="s2">"units"</span><span class="p">:</span> <span class="n">units</span><span class="p">,</span> <span class="s2">"max_distance_mm"</span><span class="p">:</span> <span class="n">max_distance</span><span class="p">})</span>
+        <span class="k">return</span> <span class="n">out</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">_assign_one</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">reference</span><span class="p">,</span> <span class="n">max_distance</span><span class="o">=</span><span class="n">max_distance</span><span class="p">)</span>
+    <span class="n">out</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">"space"</span><span class="p">:</span> <span class="n">space</span><span class="p">,</span> <span class="s2">"reference_space"</span><span class="p">:</span> <span class="n">reference_space</span><span class="p">,</span>
+                      <span class="s2">"units"</span><span class="p">:</span> <span class="n">units</span><span class="p">,</span> <span class="s2">"max_distance_mm"</span><span class="p">:</span> <span class="n">max_distance</span><span class="p">})</span>
+    <span class="k">return</span> <span class="n">out</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_assign_one</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">reference</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_distance</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="s2">"Any"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">""":func:`assign_coordinates` for a single reference atlas."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">ref</span> <span class="o">=</span> <span class="n">_as_atlas</span><span class="p">(</span><span class="n">reference</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">inside</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="n">dist</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+    <span class="n">method</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">"unassigned"</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">ref</span><span class="o">.</span><span class="n">image</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">ref</span><span class="o">.</span><span class="n">label_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">data</span> <span class="o">=</span> <span class="n">_load_label_image</span><span class="p">(</span><span class="n">ref</span><span class="o">.</span><span class="n">image</span><span class="p">)</span>
+        <span class="n">affine</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">image</span><span class="o">.</span><span class="n">affine</span>
+        <span class="n">pos</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">):</span> <span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">ref</span><span class="o">.</span><span class="n">label_ids</span><span class="p">)}</span>
+        <span class="n">vox</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">coords</span> <span class="o">-</span> <span class="n">affine</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">affine</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">in_box</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">((</span><span class="n">vox</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">vox</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">)),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">lab</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">lab</span><span class="p">[</span><span class="n">in_box</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">vox</span><span class="p">[</span><span class="n">in_box</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">)]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">lab</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="ow">in</span> <span class="n">pos</span><span class="p">:</span>
+                <span class="n">idx</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">inside</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">dist</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">method</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">pos</span><span class="p">[</span><span class="n">lab</span><span class="p">[</span><span class="n">i</span><span class="p">]],</span> <span class="kc">True</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">"voxel"</span>
+        <span class="n">todo</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">idx</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">todo</span><span class="o">.</span><span class="n">size</span> <span class="ow">and</span> <span class="n">max_distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial</span><span class="w"> </span><span class="kn">import</span> <span class="n">cKDTree</span>
+
+            <span class="n">labelled</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argwhere</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">ref</span><span class="o">.</span><span class="n">label_ids</span><span class="p">))</span>
+            <span class="n">world</span> <span class="o">=</span> <span class="n">labelled</span> <span class="o">@</span> <span class="n">affine</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">+</span> <span class="n">affine</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+            <span class="n">d</span><span class="p">,</span> <span class="n">j</span> <span class="o">=</span> <span class="n">cKDTree</span><span class="p">(</span><span class="n">world</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="n">todo</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">ti</span><span class="p">,</span> <span class="n">di</span><span class="p">,</span> <span class="n">ji</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">todo</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">di</span> <span class="o">&lt;=</span> <span class="n">max_distance</span><span class="p">:</span>
+                    <span class="n">idx</span><span class="p">[</span><span class="n">ti</span><span class="p">]</span> <span class="o">=</span> <span class="n">pos</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">labelled</span><span class="p">[</span><span class="n">ji</span><span class="p">])])]</span>
+                    <span class="n">dist</span><span class="p">[</span><span class="n">ti</span><span class="p">],</span> <span class="n">method</span><span class="p">[</span><span class="n">ti</span><span class="p">]</span> <span class="o">=</span> <span class="n">di</span><span class="p">,</span> <span class="s2">"nearest voxel"</span>
+    <span class="k">elif</span> <span class="n">ref</span><span class="o">.</span><span class="n">coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">max_distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"the reference atlas has no label image; each coordinate is assigned "</span>
+            <span class="s2">"to the nearest region centroid (see distance_mm). Use "</span>
+            <span class="s2">"AtlasInfo.from_nifti / from_nilearn for voxel-exact placement."</span><span class="p">,</span>
+            <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">coords</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">ref</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">nearest</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nanargmin</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">dist</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">nearest</span><span class="p">]</span>
+        <span class="n">ok</span> <span class="o">=</span> <span class="n">dist</span> <span class="o">&lt;=</span> <span class="n">max_distance</span>
+        <span class="n">idx</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span> <span class="o">=</span> <span class="n">nearest</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span>
+        <span class="n">method</span><span class="p">[</span><span class="n">ok</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"centroid"</span>
+    <span class="k">elif</span> <span class="n">ref</span><span class="o">.</span><span class="n">coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">pass</span>  <span class="c1"># a centroid is not containment; fallback must be explicit</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"the reference atlas has neither a label image nor coordinates."</span>
+        <span class="p">)</span>
+
+    <span class="n">ok</span> <span class="o">=</span> <span class="n">idx</span> <span class="o">&gt;=</span> <span class="mi">0</span>
+    <span class="n">region</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+        <span class="n">ok</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">ref</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">)[</span><span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="mi">0</span><span class="p">)],</span> <span class="s2">"unassigned"</span>
+    <span class="p">)</span>
+    <span class="n">network</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+        <span class="n">ok</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">ref</span><span class="o">.</span><span class="n">networks</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">)[</span><span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="mi">0</span><span class="p">)],</span> <span class="s2">"unassigned"</span>
+    <span class="p">)</span>
+    <span class="n">label_id</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">ok</span><span class="p">,</span> <span class="n">ref</span><span class="o">.</span><span class="n">label_ids</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="mi">0</span><span class="p">)],</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ref</span><span class="o">.</span><span class="n">label_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">"x"</span><span class="p">:</span> <span class="n">coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+            <span class="s2">"y"</span><span class="p">:</span> <span class="n">coords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+            <span class="s2">"z"</span><span class="p">:</span> <span class="n">coords</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+            <span class="s2">"region"</span><span class="p">:</span> <span class="n">region</span><span class="p">,</span>
+            <span class="s2">"network"</span><span class="p">:</span> <span class="n">network</span><span class="p">,</span>
+            <span class="s2">"label_id"</span><span class="p">:</span> <span class="n">label_id</span><span class="p">,</span>
+            <span class="s2">"inside"</span><span class="p">:</span> <span class="n">inside</span><span class="p">,</span>
+            <span class="s2">"distance_mm"</span><span class="p">:</span> <span class="n">dist</span><span class="p">,</span>
+            <span class="s2">"method"</span><span class="p">:</span> <span class="n">method</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"AtlasInfo"</span><span class="p">,</span> <span class="s2">"assign_coordinates"</span><span class="p">]</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,566 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.plot.connectograms &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.plot.connectograms</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.plot.connectograms</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Connectograms plotting helpers."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.axes</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axes</span>
+<span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pragma: no cover (env-specific)</span>
+    <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+        <span class="s2">"conninfpy.plot requires matplotlib; install via `pip install matplotlib`."</span>
+    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>  <span class="c1"># pragma: no cover - typing only</span>
+    <span class="k">pass</span>
+
+
+<span class="n">_YEO7_COLORS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"Visual"</span><span class="p">:</span> <span class="s2">"#781286"</span><span class="p">,</span>
+    <span class="s2">"Somatomotor"</span><span class="p">:</span> <span class="s2">"#4682B4"</span><span class="p">,</span>
+    <span class="s2">"Dorsal Attention"</span><span class="p">:</span> <span class="s2">"#00760E"</span><span class="p">,</span>
+    <span class="s2">"Ventral Attention"</span><span class="p">:</span> <span class="s2">"#C43AFA"</span><span class="p">,</span>
+    <span class="s2">"Limbic"</span><span class="p">:</span> <span class="s2">"#A8C66C"</span><span class="p">,</span>
+    <span class="s2">"Frontoparietal"</span><span class="p">:</span> <span class="s2">"#E69422"</span><span class="p">,</span>
+    <span class="s2">"Default"</span><span class="p">:</span> <span class="s2">"#CD3E4E"</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_YEO7_ALIASES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"Vis"</span><span class="p">:</span> <span class="s2">"Visual"</span><span class="p">,</span>
+    <span class="s2">"SomMot"</span><span class="p">:</span> <span class="s2">"Somatomotor"</span><span class="p">,</span>
+    <span class="s2">"DorsAttn"</span><span class="p">:</span> <span class="s2">"Dorsal Attention"</span><span class="p">,</span>
+    <span class="s2">"SalVentAttn"</span><span class="p">:</span> <span class="s2">"Ventral Attention"</span><span class="p">,</span>
+    <span class="s2">"Salience/Ventral Attention"</span><span class="p">:</span> <span class="s2">"Ventral Attention"</span><span class="p">,</span>
+    <span class="s2">"Cont"</span><span class="p">:</span> <span class="s2">"Frontoparietal"</span><span class="p">,</span>
+    <span class="s2">"Frontoparietal Control"</span><span class="p">:</span> <span class="s2">"Frontoparietal"</span><span class="p">,</span>
+    <span class="s2">"Default Mode"</span><span class="p">:</span> <span class="s2">"Default"</span><span class="p">,</span>
+    <span class="s2">"DMN"</span><span class="p">:</span> <span class="s2">"Default"</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_LOBES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"Frontal"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"FRO"</span><span class="p">,</span> <span class="s2">"#D9C7A7"</span><span class="p">),</span>
+    <span class="s2">"Insular"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"INS"</span><span class="p">,</span> <span class="s2">"#B9DCDC"</span><span class="p">),</span>
+    <span class="s2">"Limbic"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"LIM"</span><span class="p">,</span> <span class="s2">"#E6C5D6"</span><span class="p">),</span>
+    <span class="s2">"Temporal"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"TEM"</span><span class="p">,</span> <span class="s2">"#CADDAA"</span><span class="p">),</span>
+    <span class="s2">"Parietal"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"PAR"</span><span class="p">,</span> <span class="s2">"#AFC8E2"</span><span class="p">),</span>
+    <span class="s2">"Occipital"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"OCC"</span><span class="p">,</span> <span class="s2">"#D7C9EA"</span><span class="p">),</span>
+    <span class="s2">"Subcortical"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"SUB"</span><span class="p">,</span> <span class="s2">"#D6D6D6"</span><span class="p">),</span>
+    <span class="s2">"Cerebellum"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"CBM"</span><span class="p">,</span> <span class="s2">"#E2D2B5"</span><span class="p">),</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_network_key</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">_YEO7_ALIASES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_connectogram_layout</span><span class="p">(</span>
+    <span class="n">regions</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">lobe_gap</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.5</span><span class="p">,</span> <span class="n">hemi_gap</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">4.0</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Slot of each BNA subregion along its half of the circle, in degrees from the top.</span>
+
+<span class="sd">    The right hemisphere runs clockwise from 12 o'clock and the left mirrors it</span>
+<span class="sd">    (homologs face each other); lobes follow the Brainnetome connectogram order</span>
+<span class="sd">    and subregions their BNA ID within a lobe, so gyri are contiguous.</span>
+<span class="sd">    """</span>
+    <span class="n">rank</span> <span class="o">=</span> <span class="p">{</span><span class="n">lobe</span><span class="p">:</span> <span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">lobe</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">_LOBES</span><span class="p">)}</span>
+    <span class="n">right</span> <span class="o">=</span> <span class="n">regions</span><span class="p">[</span><span class="n">regions</span><span class="p">[</span><span class="s2">"hemisphere"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"R"</span><span class="p">]</span>
+    <span class="n">order</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">right</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">r</span><span class="p">:</span> <span class="p">(</span><span class="n">rank</span><span class="p">[</span><span class="n">right</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">r</span><span class="p">,</span> <span class="s2">"lobe"</span><span class="p">]],</span> <span class="n">r</span><span class="p">))</span>
+    <span class="n">midline</span> <span class="o">=</span> <span class="n">regions</span><span class="p">[</span><span class="n">regions</span><span class="p">[</span><span class="s2">"hemisphere"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"M"</span><span class="p">]</span>
+    <span class="n">mid_order</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">midline</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">r</span><span class="p">:</span> <span class="p">(</span><span class="n">rank</span><span class="p">[</span><span class="n">midline</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">r</span><span class="p">,</span> <span class="s2">"lobe"</span><span class="p">]],</span> <span class="n">r</span><span class="p">))</span>
+    <span class="n">s</span><span class="p">,</span> <span class="n">prev</span><span class="p">,</span> <span class="n">slots</span> <span class="o">=</span> <span class="n">hemi_gap</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">rid</span> <span class="ow">in</span> <span class="n">order</span><span class="p">:</span>
+        <span class="n">lobe</span> <span class="o">=</span> <span class="n">right</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">rid</span><span class="p">,</span> <span class="s2">"lobe"</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">prev</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">lobe</span> <span class="o">!=</span> <span class="n">prev</span><span class="p">:</span>
+            <span class="n">s</span> <span class="o">+=</span> <span class="n">lobe_gap</span>
+        <span class="n">slots</span><span class="p">[</span><span class="n">rid</span><span class="p">]</span> <span class="o">=</span> <span class="n">s</span>
+        <span class="n">s</span><span class="p">,</span> <span class="n">prev</span> <span class="o">=</span> <span class="n">s</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">lobe</span>
+    <span class="k">if</span> <span class="n">mid_order</span><span class="p">:</span>
+        <span class="n">deg</span> <span class="o">=</span> <span class="mf">180.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">s</span> <span class="o">+</span> <span class="n">lobe_gap</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">mid_order</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">)</span>
+        <span class="n">mid_start</span> <span class="o">=</span> <span class="n">s</span> <span class="o">+</span> <span class="n">lobe_gap</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">rid</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">mid_order</span><span class="p">):</span>
+            <span class="n">slots</span><span class="p">[</span><span class="n">rid</span><span class="p">]</span> <span class="o">=</span> <span class="n">mid_start</span> <span class="o">+</span> <span class="n">k</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">deg</span> <span class="o">=</span> <span class="mf">180.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">s</span> <span class="o">+</span> <span class="n">hemi_gap</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">regions</span><span class="p">[[</span><span class="s2">"name"</span><span class="p">,</span> <span class="s2">"gyrus"</span><span class="p">,</span> <span class="s2">"lobe"</span><span class="p">,</span> <span class="s2">"hemisphere"</span><span class="p">]]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">rid</span> <span class="ow">in</span> <span class="n">order</span><span class="p">:</span>
+        <span class="n">out</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">rid</span><span class="p">,</span> <span class="s2">"s0"</span><span class="p">]</span> <span class="o">=</span> <span class="n">slots</span><span class="p">[</span><span class="n">rid</span><span class="p">]</span> <span class="o">*</span> <span class="n">deg</span>
+        <span class="n">hom</span> <span class="o">=</span> <span class="n">regions</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">rid</span><span class="p">,</span> <span class="s2">"homolog_id"</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">hom</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">hom</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">hom</span><span class="p">)):</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">hom</span><span class="p">),</span> <span class="s2">"s0"</span><span class="p">]</span> <span class="o">=</span> <span class="n">slots</span><span class="p">[</span><span class="n">rid</span><span class="p">]</span> <span class="o">*</span> <span class="n">deg</span>
+    <span class="k">for</span> <span class="n">rid</span> <span class="ow">in</span> <span class="n">mid_order</span><span class="p">:</span>
+        <span class="n">out</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">rid</span><span class="p">,</span> <span class="s2">"s0"</span><span class="p">]</span> <span class="o">=</span> <span class="n">slots</span><span class="p">[</span><span class="n">rid</span><span class="p">]</span> <span class="o">*</span> <span class="n">deg</span>
+    <span class="n">out</span><span class="p">[</span><span class="s2">"s1"</span><span class="p">]</span> <span class="o">=</span> <span class="n">out</span><span class="p">[</span><span class="s2">"s0"</span><span class="p">]</span> <span class="o">+</span> <span class="n">deg</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_side_angle</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">hemisphere</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Polar angle (degrees, counter-clockwise from east) of side coordinate ``s``."""</span>
+    <span class="k">return</span> <span class="mf">90.0</span> <span class="o">-</span> <span class="n">s</span> <span class="k">if</span> <span class="n">hemisphere</span> <span class="o">==</span> <span class="s2">"R"</span> <span class="k">else</span> <span class="mf">90.0</span> <span class="o">+</span> <span class="n">s</span>
+
+
+<div class="viewcode-block" id="plot_connectogram">
+<a class="viewcode-back" href="../../../conninfpy.plot.html#conninfpy.plot.plot_connectogram">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_connectogram</span><span class="p">(</span>
+    <span class="n">result</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">rois</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">tail</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"positive"</span><span class="p">,</span>
+    <span class="n">level</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"gyrus"</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">assign</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"dominant"</span><span class="p">,</span>
+    <span class="n">networks</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">weight</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"count"</span><span class="p">,</span>
+    <span class="n">min_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">max_links</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">labels</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"gyrus"</span><span class="p">,</span>
+    <span class="n">title</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">ax</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Axes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">param_idx</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Axes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Brainnetome-style connectogram of one tail's detected connections.</span>
+
+<span class="sd">    The layout follows the BNA-246 connectogram: left hemisphere on the left,</span>
+<span class="sd">    right mirrored on the right, lobes from frontal (top) to subcortical</span>
+<span class="sd">    (bottom). Rings, from outside in: the 246 subregions (pale = not sampled by</span>
+<span class="sd">    any ROI), the gyri, and the network make-up of each unit at ``level`` (the</span>
+<span class="sd">    share of its sampled tissue that comes from ROIs of each network).</span>
+
+<span class="sd">    Connections are aggregated with</span>
+<span class="sd">    :func:`conninfpy.interpret.annotate.aggregate_connections`, split by each ROI's</span>
+<span class="sd">    network label (``networks``, default ``rois.table['network']``: the source</span>
+<span class="sd">    atlas's division, see :func:`conninfpy.interpret.annotate.annotate_rois`). By default</span>
+<span class="sd">    each ROI is placed in the unit holding most of its tissue</span>
+<span class="sd">    (``assign='dominant'``), so every chord is a whole number of connections</span>
+<span class="sd">    and none is dropped. ``assign='weighted'`` spreads each ROI over the units</span>
+<span class="sd">    its support covers; that is faithful to mixed ROIs, but splits a</span>
+<span class="sd">    connection between large parcels into many fractional chords, most below</span>
+<span class="sd">    ``min_weight`` (the footer gives the share of connections drawn).</span>
+<span class="sd">    ``aggregate_connections`` itself defaults to the fractional ``'weighted'``.</span>
+
+<span class="sd">    ROIs that ``annotate_rois`` marked ``level == 'unassigned'`` (no labelled</span>
+<span class="sd">    support in the atlas, or a labelled share below its ``min_coverage``) are</span>
+<span class="sd">    not placed: they get no tissue on the rings and none of their chords, and</span>
+<span class="sd">    the footer reports how many were left out and why, together with how many</span>
+<span class="sd">    detected connections touch such an ROI. The full counts live in the</span>
+<span class="sd">    ``attrs['coverage']`` of the underlying aggregation (see</span>
+<span class="sd">    :func:`conninfpy.interpret.annotate.aggregate_connections`).</span>
+
+<span class="sd">    A chord joins two (unit, network) slots; its colour runs from one</span>
+<span class="sd">    endpoint's network to the other's, and its width scales with the number of</span>
+<span class="sd">    detected connections (``weight='count'``) or detected / tested</span>
+<span class="sd">    (``'rate'``). Chords below ``min_weight`` connections are not drawn.</span>
+
+<span class="sd">    Descriptive only: the result's correction and inference unit are unchanged.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineCollection</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.colors</span><span class="w"> </span><span class="kn">import</span> <span class="n">to_rgba</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.lines</span><span class="w"> </span><span class="kn">import</span> <span class="n">Line2D</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.patches</span><span class="w"> </span><span class="kn">import</span> <span class="n">Wedge</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.interpret.annotate</span><span class="w"> </span><span class="kn">import</span> <span class="n">_unit_weights</span><span class="p">,</span> <span class="n">aggregate_connections</span>
+
+    <span class="k">if</span> <span class="n">tail</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"positive"</span><span class="p">,</span> <span class="s2">"negative"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"tail must be 'positive' or 'negative' (draw one connectogram per tail)."</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">weight</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"count"</span><span class="p">,</span> <span class="s2">"rate"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"weight must be 'count' or 'rate'."</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">labels</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"gyrus"</span><span class="p">,</span> <span class="s2">"subregion"</span><span class="p">,</span> <span class="s2">"none"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"labels must be 'gyrus', 'subregion' or 'none'."</span><span class="p">)</span>
+    <span class="n">regions</span> <span class="o">=</span> <span class="n">rois</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">regions</span>
+    <span class="n">lay</span> <span class="o">=</span> <span class="n">_connectogram_layout</span><span class="p">(</span><span class="n">regions</span><span class="p">)</span>
+    <span class="n">nets</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">(</span><span class="n">rois</span><span class="o">.</span><span class="n">grouping</span><span class="p">(</span><span class="s2">"network"</span><span class="p">)</span> <span class="k">if</span> <span class="n">networks</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">networks</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="n">W</span><span class="p">,</span> <span class="n">units</span> <span class="o">=</span> <span class="n">_unit_weights</span><span class="p">(</span><span class="n">rois</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">assign</span><span class="p">,</span> <span class="n">placed_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">agg</span> <span class="o">=</span> <span class="n">aggregate_connections</span><span class="p">(</span>
+        <span class="n">result</span><span class="p">,</span>
+        <span class="n">rois</span><span class="p">,</span>
+        <span class="n">level</span><span class="o">=</span><span class="n">level</span><span class="p">,</span>
+        <span class="n">tail</span><span class="o">=</span><span class="n">tail</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>
+        <span class="n">assign</span><span class="o">=</span><span class="n">assign</span><span class="p">,</span>
+        <span class="n">networks</span><span class="o">=</span><span class="n">nets</span><span class="p">,</span>
+        <span class="n">param_idx</span><span class="o">=</span><span class="n">param_idx</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">coverage</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">agg</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"coverage"</span><span class="p">,</span> <span class="p">{}))</span>
+
+    <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span> <span class="n">facecolor</span><span class="o">=</span><span class="s2">"white"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s2">"equal"</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s2">"off"</span><span class="p">)</span>
+
+    <span class="c1"># rings: subregions (sampled by placed ROIs or not) and gyri</span>
+    <span class="n">lw</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">rois</span><span class="o">.</span><span class="n">labelled_weights</span><span class="p">(),</span> <span class="n">nan</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">lw</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rois</span><span class="o">.</span><span class="n">table</span><span class="p">[</span><span class="s2">"level"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"unassigned"</span><span class="p">)]</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">sampled</span> <span class="o">=</span> <span class="n">lw</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mf">0.1</span>
+    <span class="k">for</span> <span class="n">rid</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">lay</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+        <span class="n">a0</span><span class="p">,</span> <span class="n">a1</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">_side_angle</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">s0</span><span class="p">,</span> <span class="n">r</span><span class="o">.</span><span class="n">hemisphere</span><span class="p">),</span> <span class="n">_side_angle</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">s1</span><span class="p">,</span> <span class="n">r</span><span class="o">.</span><span class="n">hemisphere</span><span class="p">))</span>
+        <span class="p">)</span>
+        <span class="n">on</span> <span class="o">=</span> <span class="n">sampled</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">rid</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span>
+            <span class="n">Wedge</span><span class="p">(</span>
+                <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                <span class="mf">1.0</span><span class="p">,</span>
+                <span class="n">a0</span><span class="p">,</span>
+                <span class="n">a1</span><span class="p">,</span>
+                <span class="n">width</span><span class="o">=</span><span class="mf">0.045</span><span class="p">,</span>
+                <span class="n">lw</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+                <span class="n">facecolor</span><span class="o">=</span><span class="n">_LOBES</span><span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">lobe</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">on</span> <span class="k">else</span> <span class="s2">"white"</span><span class="p">,</span>
+                <span class="n">edgecolor</span><span class="o">=</span><span class="s2">"white"</span> <span class="k">if</span> <span class="n">on</span> <span class="k">else</span> <span class="s2">"#C8C8C8"</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="n">gyri</span> <span class="o">=</span> <span class="n">lay</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s2">"gyrus"</span><span class="p">,</span> <span class="s2">"hemisphere"</span><span class="p">],</span> <span class="n">sort</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+        <span class="n">s0</span><span class="o">=</span><span class="p">(</span><span class="s2">"s0"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">),</span> <span class="n">s1</span><span class="o">=</span><span class="p">(</span><span class="s2">"s1"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">),</span> <span class="n">lobe</span><span class="o">=</span><span class="p">(</span><span class="s2">"lobe"</span><span class="p">,</span> <span class="s2">"first"</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="p">((</span><span class="n">g</span><span class="p">,</span> <span class="n">h</span><span class="p">),</span> <span class="n">r</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">gyri</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s2">"s0"</span><span class="p">)</span><span class="o">.</span><span class="n">iterrows</span><span class="p">()):</span>
+        <span class="n">a0</span><span class="p">,</span> <span class="n">a1</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">((</span><span class="n">_side_angle</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">s0</span><span class="p">,</span> <span class="n">h</span><span class="p">),</span> <span class="n">_side_angle</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">s1</span><span class="p">,</span> <span class="n">h</span><span class="p">)))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span>
+            <span class="n">Wedge</span><span class="p">(</span>
+                <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                <span class="mf">0.945</span><span class="p">,</span>
+                <span class="n">a0</span><span class="p">,</span>
+                <span class="n">a1</span><span class="p">,</span>
+                <span class="n">width</span><span class="o">=</span><span class="mf">0.035</span><span class="p">,</span>
+                <span class="n">lw</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
+                <span class="n">edgecolor</span><span class="o">=</span><span class="s2">"white"</span><span class="p">,</span>
+                <span class="n">facecolor</span><span class="o">=</span><span class="s2">"#4D4D4D"</span> <span class="k">if</span> <span class="n">k</span> <span class="o">%</span> <span class="mi">2</span> <span class="k">else</span> <span class="s2">"#8A8A8A"</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="c1"># network ring at the units of `level`; chords attach to each network's share</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">lay</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span> <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">"subregion"</span> <span class="k">else</span> <span class="n">lay</span><span class="p">[</span><span class="n">level</span><span class="p">]</span> <span class="o">+</span> <span class="s2">"_"</span> <span class="o">+</span> <span class="n">lay</span><span class="p">[</span><span class="s2">"hemisphere"</span><span class="p">]</span>
+    <span class="n">spans</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">lay</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">unit</span><span class="o">=</span><span class="n">key</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">())</span>
+        <span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"unit"</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="n">s0</span><span class="o">=</span><span class="p">(</span><span class="s2">"s0"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">),</span> <span class="n">s1</span><span class="o">=</span><span class="p">(</span><span class="s2">"s1"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">),</span> <span class="n">hemisphere</span><span class="o">=</span><span class="p">(</span><span class="s2">"hemisphere"</span><span class="p">,</span> <span class="s2">"first"</span><span class="p">))</span>
+    <span class="p">)</span>
+    <span class="n">net_order</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">_YEO7_COLORS</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span>
+        <span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">_network_key</span><span class="p">,</span> <span class="n">nets</span><span class="p">))</span> <span class="k">if</span> <span class="n">n</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_YEO7_COLORS</span>
+    <span class="p">]</span>
+    <span class="n">keyed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">_network_key</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">nets</span><span class="p">])</span>
+    <span class="n">attach</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">u_idx</span><span class="p">,</span> <span class="n">u</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">units</span><span class="p">):</span>
+        <span class="n">mass</span> <span class="o">=</span> <span class="p">{</span><span class="n">n</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">W</span><span class="p">[</span><span class="n">keyed</span> <span class="o">==</span> <span class="n">n</span><span class="p">,</span> <span class="n">u_idx</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">net_order</span><span class="p">}</span>
+        <span class="n">tot</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">mass</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">tot</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">u</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">spans</span><span class="o">.</span><span class="n">index</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">s0</span><span class="p">,</span> <span class="n">s1</span><span class="p">,</span> <span class="n">h</span> <span class="o">=</span> <span class="n">spans</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">u</span><span class="p">,</span> <span class="s2">"s0"</span><span class="p">],</span> <span class="n">spans</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">u</span><span class="p">,</span> <span class="s2">"s1"</span><span class="p">],</span> <span class="n">spans</span><span class="o">.</span><span class="n">at</span><span class="p">[</span><span class="n">u</span><span class="p">,</span> <span class="s2">"hemisphere"</span><span class="p">]</span>
+        <span class="n">pos</span> <span class="o">=</span> <span class="n">s0</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">net_order</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">mass</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="p">(</span><span class="n">s1</span> <span class="o">-</span> <span class="n">s0</span><span class="p">)</span> <span class="o">*</span> <span class="n">mass</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">/</span> <span class="n">tot</span>
+            <span class="n">a0</span><span class="p">,</span> <span class="n">a1</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">((</span><span class="n">_side_angle</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="n">h</span><span class="p">),</span> <span class="n">_side_angle</span><span class="p">(</span><span class="n">pos</span> <span class="o">+</span> <span class="n">width</span><span class="p">,</span> <span class="n">h</span><span class="p">)))</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span>
+                <span class="n">Wedge</span><span class="p">(</span>
+                    <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                    <span class="mf">0.895</span><span class="p">,</span>
+                    <span class="n">a0</span><span class="p">,</span>
+                    <span class="n">a1</span><span class="p">,</span>
+                    <span class="n">width</span><span class="o">=</span><span class="mf">0.03</span><span class="p">,</span>
+                    <span class="n">lw</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                    <span class="n">facecolor</span><span class="o">=</span><span class="n">_YEO7_COLORS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="s2">"#8C8C8C"</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">attach</span><span class="p">[(</span><span class="n">u</span><span class="p">,</span> <span class="n">n</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">pos</span> <span class="o">+</span> <span class="n">width</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">width</span><span class="p">)</span>
+            <span class="n">pos</span> <span class="o">+=</span> <span class="n">width</span>
+
+    <span class="c1"># chords</span>
+    <span class="n">links</span> <span class="o">=</span> <span class="n">agg</span><span class="p">[</span><span class="n">agg</span><span class="p">[</span><span class="s2">"detected"</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">min_weight</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">links</span><span class="p">[</span><span class="s2">"value"</span><span class="p">]</span> <span class="o">=</span> <span class="n">links</span><span class="p">[</span><span class="s2">"detected"</span><span class="p">]</span> <span class="k">if</span> <span class="n">weight</span> <span class="o">==</span> <span class="s2">"count"</span> <span class="k">else</span> <span class="n">links</span><span class="p">[</span><span class="s2">"rate"</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">max_links</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">links</span> <span class="o">=</span> <span class="n">links</span><span class="o">.</span><span class="n">nlargest</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">max_links</span><span class="p">),</span> <span class="s2">"value"</span><span class="p">)</span>
+    <span class="n">links</span> <span class="o">=</span> <span class="n">links</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s2">"value"</span><span class="p">)</span>
+    <span class="n">r_in</span><span class="p">,</span> <span class="n">t</span> <span class="o">=</span> <span class="mf">0.86</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mi">60</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">xy</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">h</span><span class="p">):</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">_side_angle</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">h</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">r_in</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">a</span><span class="p">),</span> <span class="n">r_in</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">a</span><span class="p">)])</span>
+
+    <span class="n">segs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">lws</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">vmax</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">links</span><span class="p">[</span><span class="s2">"value"</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">links</span><span class="p">)</span> <span class="k">else</span> <span class="mf">1.0</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">links</span><span class="o">.</span><span class="n">itertuples</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="n">na</span><span class="p">,</span> <span class="n">nb</span> <span class="o">=</span> <span class="n">_network_key</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">network_a</span><span class="p">),</span> <span class="n">_network_key</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">network_b</span><span class="p">)</span>
+        <span class="n">sa</span><span class="p">,</span> <span class="n">ha</span><span class="p">,</span> <span class="n">wa</span> <span class="o">=</span> <span class="n">attach</span><span class="p">[(</span><span class="n">row</span><span class="o">.</span><span class="n">unit_a</span><span class="p">,</span> <span class="n">na</span><span class="p">)]</span>
+        <span class="n">sb</span><span class="p">,</span> <span class="n">hb</span><span class="p">,</span> <span class="n">wb</span> <span class="o">=</span> <span class="n">attach</span><span class="p">[(</span><span class="n">row</span><span class="o">.</span><span class="n">unit_b</span><span class="p">,</span> <span class="n">nb</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">unit_a</span><span class="p">,</span> <span class="n">na</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">unit_b</span><span class="p">,</span> <span class="n">nb</span><span class="p">):</span>  <span class="c1"># within one slot: a small inward loop</span>
+            <span class="n">p0</span><span class="p">,</span> <span class="n">p2</span> <span class="o">=</span> <span class="n">xy</span><span class="p">(</span><span class="n">sa</span> <span class="o">-</span> <span class="n">wa</span> <span class="o">/</span> <span class="mi">4</span><span class="p">,</span> <span class="n">ha</span><span class="p">),</span> <span class="n">xy</span><span class="p">(</span><span class="n">sa</span> <span class="o">+</span> <span class="n">wa</span> <span class="o">/</span> <span class="mi">4</span><span class="p">,</span> <span class="n">ha</span><span class="p">)</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="mf">0.7</span> <span class="o">*</span> <span class="n">xy</span><span class="p">(</span><span class="n">sa</span><span class="p">,</span> <span class="n">ha</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">p0</span><span class="p">,</span> <span class="n">p2</span> <span class="o">=</span> <span class="n">xy</span><span class="p">(</span><span class="n">sa</span><span class="p">,</span> <span class="n">ha</span><span class="p">),</span> <span class="n">xy</span><span class="p">(</span><span class="n">sb</span><span class="p">,</span> <span class="n">hb</span><span class="p">)</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">(</span><span class="n">p0</span> <span class="o">+</span> <span class="n">p2</span><span class="p">)</span>
+                <span class="o">/</span> <span class="mi">2</span>
+                <span class="o">*</span> <span class="p">(</span><span class="mf">0.15</span> <span class="o">+</span> <span class="mf">0.6</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">p2</span> <span class="o">-</span> <span class="n">p0</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">r_in</span><span class="p">)))</span>
+            <span class="p">)</span>
+        <span class="n">pts</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">p0</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span> <span class="o">*</span> <span class="n">t</span> <span class="o">*</span> <span class="n">c</span> <span class="o">+</span> <span class="n">t</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">p2</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">value</span> <span class="o">/</span> <span class="n">vmax</span>
+        <span class="n">ca</span><span class="p">,</span> <span class="n">cb</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">to_rgba</span><span class="p">(</span><span class="n">_YEO7_COLORS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">na</span><span class="p">,</span> <span class="s2">"#8C8C8C"</span><span class="p">))),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">to_rgba</span><span class="p">(</span><span class="n">_YEO7_COLORS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">nb</span><span class="p">,</span> <span class="s2">"#8C8C8C"</span><span class="p">))),</span>
+        <span class="p">)</span>
+        <span class="n">mix</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="p">(</span>
+            <span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">14</span> <span class="o">*</span> <span class="p">(</span><span class="n">t</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">))</span>
+        <span class="p">)</span>  <span class="c1"># each half keeps its endpoint's colour</span>
+        <span class="n">grad</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">mix</span><span class="p">)</span> <span class="o">*</span> <span class="n">ca</span> <span class="o">+</span> <span class="n">mix</span> <span class="o">*</span> <span class="n">cb</span>
+        <span class="n">grad</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.3</span> <span class="o">+</span> <span class="mf">0.6</span> <span class="o">*</span> <span class="n">f</span>
+        <span class="n">segs</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">pts</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">pts</span><span class="p">[</span><span class="mi">1</span><span class="p">:]],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">cols</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">grad</span><span class="p">)</span>
+        <span class="n">lws</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="mf">0.4</span> <span class="o">+</span> <span class="mf">5.6</span> <span class="o">*</span> <span class="n">f</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">segs</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">add_collection</span><span class="p">(</span>
+            <span class="n">LineCollection</span><span class="p">(</span>
+                <span class="n">segs</span><span class="p">,</span> <span class="n">colors</span><span class="o">=</span><span class="n">cols</span><span class="p">,</span> <span class="n">linewidths</span><span class="o">=</span><span class="n">lws</span><span class="p">,</span> <span class="n">capstyle</span><span class="o">=</span><span class="s2">"butt"</span><span class="p">,</span> <span class="n">joinstyle</span><span class="o">=</span><span class="s2">"round"</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="c1"># labels</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">radial</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">_side_angle</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">h</span><span class="p">)</span>
+        <span class="n">on_right</span> <span class="o">=</span> <span class="p">(</span><span class="n">h</span> <span class="o">==</span> <span class="s2">"R"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">h</span> <span class="o">==</span> <span class="s2">"M"</span> <span class="ow">and</span> <span class="n">a</span> <span class="o">&gt;</span> <span class="mf">270.0</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+            <span class="n">r</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">a</span><span class="p">)),</span>
+            <span class="n">r</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">a</span><span class="p">)),</span>
+            <span class="n">text</span><span class="p">,</span>
+            <span class="n">fontsize</span><span class="o">=</span><span class="n">size</span><span class="p">,</span>
+            <span class="n">rotation</span><span class="o">=</span><span class="n">a</span> <span class="k">if</span> <span class="n">on_right</span> <span class="k">else</span> <span class="n">a</span> <span class="o">-</span> <span class="mi">180</span><span class="p">,</span>
+            <span class="n">rotation_mode</span><span class="o">=</span><span class="s2">"anchor"</span><span class="p">,</span>
+            <span class="n">ha</span><span class="o">=</span><span class="s2">"left"</span> <span class="k">if</span> <span class="n">on_right</span> <span class="k">else</span> <span class="s2">"right"</span><span class="p">,</span>
+            <span class="n">va</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kw</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">r_gyrus</span> <span class="o">=</span> <span class="mf">1.015</span>
+    <span class="k">if</span> <span class="n">labels</span> <span class="o">==</span> <span class="s2">"subregion"</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">lay</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+            <span class="n">nm</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
+            <span class="n">sub_lbl</span> <span class="o">=</span> <span class="n">nm</span><span class="p">[:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span> <span class="k">if</span> <span class="n">nm</span><span class="o">.</span><span class="n">endswith</span><span class="p">((</span><span class="s2">"_L"</span><span class="p">,</span> <span class="s2">"_R"</span><span class="p">))</span> <span class="k">else</span> <span class="n">nm</span>
+            <span class="n">radial</span><span class="p">(</span><span class="n">sub_lbl</span><span class="p">,</span> <span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">s0</span> <span class="o">+</span> <span class="n">r</span><span class="o">.</span><span class="n">s1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">r</span><span class="o">.</span><span class="n">hemisphere</span><span class="p">,</span> <span class="mf">1.015</span><span class="p">,</span> <span class="mf">3.2</span><span class="p">)</span>
+        <span class="n">r_gyrus</span> <span class="o">=</span> <span class="mf">1.16</span>
+    <span class="k">if</span> <span class="n">labels</span> <span class="o">!=</span> <span class="s2">"none"</span><span class="p">:</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">h</span><span class="p">),</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">gyri</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+            <span class="n">radial</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">s0</span> <span class="o">+</span> <span class="n">r</span><span class="o">.</span><span class="n">s1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">r_gyrus</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">"#333333"</span><span class="p">)</span>
+    <span class="n">r_lobe</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"gyrus"</span><span class="p">:</span> <span class="mf">1.17</span><span class="p">,</span> <span class="s2">"subregion"</span><span class="p">:</span> <span class="mf">1.33</span><span class="p">,</span> <span class="s2">"none"</span><span class="p">:</span> <span class="mf">1.08</span><span class="p">}[</span><span class="n">labels</span><span class="p">]</span>
+    <span class="n">lobes</span> <span class="o">=</span> <span class="n">lay</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s2">"lobe"</span><span class="p">,</span> <span class="s2">"hemisphere"</span><span class="p">],</span> <span class="n">sort</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+        <span class="n">s0</span><span class="o">=</span><span class="p">(</span><span class="s2">"s0"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">),</span> <span class="n">s1</span><span class="o">=</span><span class="p">(</span><span class="s2">"s1"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">lobe</span><span class="p">,</span> <span class="n">h</span><span class="p">),</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">lobes</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">_side_angle</span><span class="p">((</span><span class="n">r</span><span class="o">.</span><span class="n">s0</span> <span class="o">+</span> <span class="n">r</span><span class="o">.</span><span class="n">s1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">h</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+            <span class="n">r_lobe</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">a</span><span class="p">),</span>
+            <span class="n">r_lobe</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">a</span><span class="p">),</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_LOBES</span><span class="p">[</span><span class="n">lobe</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">h</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+            <span class="n">fontsize</span><span class="o">=</span><span class="mf">8.5</span><span class="p">,</span>
+            <span class="n">ha</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+            <span class="n">va</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+            <span class="n">color</span><span class="o">=</span><span class="s2">"#333333"</span><span class="p">,</span>
+            <span class="n">fontweight</span><span class="o">=</span><span class="s2">"bold"</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">lim</span> <span class="o">=</span> <span class="n">r_lobe</span> <span class="o">+</span> <span class="mf">0.1</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="n">lim</span><span class="p">,</span> <span class="n">lim</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="n">lim</span> <span class="o">-</span> <span class="mf">0.06</span><span class="p">,</span> <span class="n">lim</span><span class="p">)</span>
+
+    <span class="c1"># title and legends</span>
+    <span class="n">design</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="s2">"design"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">comp</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"comparison"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">title</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">n_det</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">significant_edges</span><span class="p">(</span>
+                    <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">tail</span><span class="o">=</span><span class="n">tail</span><span class="p">,</span> <span class="n">param_idx</span><span class="o">=</span><span class="n">param_idx</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">comp</span><span class="p">:</span>
+            <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">comp</span>
+            <span class="n">title</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">b</span><span class="si">}</span><span class="s2"> &gt; </span><span class="si">{</span><span class="n">a</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">tail</span> <span class="o">==</span> <span class="s2">"positive"</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">a</span><span class="si">}</span><span class="s2"> &gt; </span><span class="si">{</span><span class="n">b</span><span class="si">}</span><span class="s2">"</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">title</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">tail</span><span class="si">}</span><span class="s2"> tail"</span>
+        <span class="n">title</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">n_det</span><span class="si">}</span><span class="s2"> connections"</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">present</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">net_order</span> <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">n</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">attach</span><span class="p">)]</span>
+    <span class="n">leg</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="n">_YEO7_COLORS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="s2">"#8C8C8C"</span><span class="p">),</span> <span class="n">lw</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">present</span><span class="p">],</span>
+        <span class="n">present</span><span class="p">,</span>
+        <span class="n">loc</span><span class="o">=</span><span class="s2">"upper left"</span><span class="p">,</span>
+        <span class="n">fontsize</span><span class="o">=</span><span class="mf">6.5</span><span class="p">,</span>
+        <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">title</span><span class="o">=</span><span class="s2">"network"</span><span class="p">,</span>
+        <span class="n">title_fontsize</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">leg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">links</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">weight</span> <span class="o">==</span> <span class="s2">"count"</span><span class="p">:</span>
+            <span class="n">ticks</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="p">{</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">v</span><span class="p">))</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="p">(</span><span class="n">vmax</span><span class="p">,</span> <span class="n">vmax</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">vmax</span> <span class="o">/</span> <span class="mi">4</span><span class="p">)},</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            <span class="n">fmt</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">v</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">v</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> connection</span><span class="si">{</span><span class="s1">'s'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">''</span><span class="si">}</span><span class="s2">"</span>  <span class="c1"># noqa: E731</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ticks</span><span class="p">,</span> <span class="n">fmt</span> <span class="o">=</span> <span class="p">[</span><span class="n">vmax</span><span class="p">,</span> <span class="n">vmax</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">vmax</span> <span class="o">/</span> <span class="mi">4</span><span class="p">],</span> <span class="p">(</span><span class="k">lambda</span> <span class="n">v</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"rate </span><span class="si">{</span><span class="n">v</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s2">"#555555"</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mf">0.4</span> <span class="o">+</span> <span class="mf">5.6</span> <span class="o">*</span> <span class="n">v</span> <span class="o">/</span> <span class="n">vmax</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ticks</span><span class="p">],</span>
+            <span class="p">[</span><span class="n">fmt</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ticks</span><span class="p">],</span>
+            <span class="n">loc</span><span class="o">=</span><span class="s2">"upper right"</span><span class="p">,</span>
+            <span class="n">fontsize</span><span class="o">=</span><span class="mf">6.5</span><span class="p">,</span>
+            <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">shown</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">links</span><span class="p">[</span><span class="s2">"detected"</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">links</span><span class="p">)</span> <span class="k">else</span> <span class="mf">0.0</span>
+    <span class="n">how</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">"placed in the unit holding most of it"</span>
+        <span class="k">if</span> <span class="n">assign</span> <span class="o">==</span> <span class="s2">"dominant"</span>
+        <span class="k">else</span> <span class="s2">"spread over the units it covers"</span>
+    <span class="p">)</span>
+    <span class="n">n_rois</span> <span class="o">=</span> <span class="n">coverage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"n_rois"</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">rois</span><span class="p">))</span>
+    <span class="n">n_placed</span> <span class="o">=</span> <span class="n">coverage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"n_placed"</span><span class="p">,</span> <span class="n">n_rois</span><span class="p">)</span>
+    <span class="n">n_out</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">coverage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"unplaced_no_support"</span><span class="p">,</span> <span class="p">[]))</span>
+    <span class="n">n_low</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">coverage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"unplaced_low_coverage"</span><span class="p">,</span> <span class="p">[]))</span>
+    <span class="n">atlas_label</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">"Brainnetome + SUIT"</span>
+        <span class="k">if</span> <span class="n">rois</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">provenance</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"cerebellum_atlas"</span><span class="p">)</span>
+        <span class="k">else</span> <span class="s2">"Brainnetome"</span>
+    <span class="p">)</span>
+    <span class="n">place</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">n_placed</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">n_rois</span><span class="si">}</span><span class="s2"> ROIs placed (</span><span class="si">{</span><span class="n">n_out</span><span class="si">}</span><span class="s2"> outside the atlas, "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">n_low</span><span class="si">}</span><span class="s2"> below min_coverage), each </span><span class="si">{</span><span class="n">how</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">atlas_label</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">level</span><span class="si">}</span><span class="s2">)"</span>
+    <span class="p">)</span>
+    <span class="n">n_det</span> <span class="o">=</span> <span class="n">coverage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"detected_total"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">unit</span> <span class="o">=</span> <span class="n">coverage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"inference_unit"</span><span class="p">,</span> <span class="s2">"edge"</span><span class="p">)</span>
+    <span class="n">unit_note</span> <span class="o">=</span> <span class="s2">""</span> <span class="k">if</span> <span class="n">unit</span> <span class="o">==</span> <span class="s2">"edge"</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">" (member edges of detected </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">s)"</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">place</span><span class="si">}{</span><span class="n">unit_note</span><span class="si">}</span><span class="s2">; no detected connections"</span>
+    <span class="k">if</span> <span class="n">n_det</span><span class="p">:</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">place</span><span class="si">}{</span><span class="n">unit_note</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">links</span><span class="p">)</span><span class="si">}</span><span class="s2"> chord</span><span class="si">{</span><span class="s1">'s'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="n">links</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">''</span><span class="si">}</span><span class="s2"> ≥ "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">min_weight</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> connection carry "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">shown</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">n_det</span><span class="si">}</span><span class="s2"> detected connections (</span><span class="si">{</span><span class="n">shown</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">n_det</span><span class="si">:</span><span class="s2">.0%</span><span class="si">}</span><span class="s2">)"</span>
+        <span class="p">)</span>
+        <span class="n">n_unplaced_end</span> <span class="o">=</span> <span class="n">n_det</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="n">coverage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"detected_placed"</span><span class="p">,</span> <span class="n">n_det</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">n_unplaced_end</span><span class="p">:</span>
+            <span class="n">text</span> <span class="o">+=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"; </span><span class="si">{</span><span class="n">n_unplaced_end</span><span class="si">}</span><span class="s2"> detected connection"</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'s'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">n_unplaced_end</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">''</span><span class="si">}</span><span class="s2"> touch"</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'es'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">n_unplaced_end</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">''</span><span class="si">}</span><span class="s2"> an unplaced ROI"</span>
+            <span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span>
+        <span class="mi">0</span><span class="p">,</span>
+        <span class="o">-</span><span class="n">lim</span> <span class="o">-</span> <span class="mf">0.03</span><span class="p">,</span>
+        <span class="n">text</span><span class="p">,</span>
+        <span class="n">ha</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+        <span class="n">va</span><span class="o">=</span><span class="s2">"center"</span><span class="p">,</span>
+        <span class="n">fontsize</span><span class="o">=</span><span class="mf">6.5</span><span class="p">,</span>
+        <span class="n">color</span><span class="o">=</span><span class="s2">"#555555"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">ax</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

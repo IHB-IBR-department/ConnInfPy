@@ -1,0 +1,486 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.preprocessing &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.preprocessing</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.preprocessing</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Three-state preprocessing facts carried with a dataset and its results.</span>
+
+<span class="sd">Every fact is either **unknown** (absent / ``None``) or known with an</span>
+<span class="sd">explicit *source* that separates what ConnInfPy itself did from what an</span>
+<span class="sd">input manifest or file name merely declares:</span>
+
+<span class="sd">* ``"computed_by_conninfpy"`` — the connectivity backend</span>
+<span class="sd">  (:func:`conninfpy.compute_connectivity`) estimated the matrices.</span>
+<span class="sd">* ``"loader_denoising_pipeline"`` — the loader's own denoising (e.g.</span>
+<span class="sd">  fMRIPrep confound regression incl. its global-signal option).</span>
+<span class="sd">* ``"input_file_name_token"`` — a declaration encoded in the input file</span>
+<span class="sd">  naming convention (e.g. ``..._GSR.npy``); not performed by this library.</span>
+<span class="sd">* ``"input_manifest_declared"`` — declared in the dataset manifest's</span>
+<span class="sd">  ``preprocessing.applied`` block about upstream processing.</span>
+<span class="sd">* ``"app_rank_correlation_pipeline"`` — the app ranked the series and the</span>
+<span class="sd">  backend correlated the ranks (Spearman).</span>
+
+<span class="sd">A missing key or a ``None`` fact means *unknown*, never "not applied":</span>
+<span class="sd">an explicit ``False`` (e.g. global-signal regression known to be off) is</span>
+<span class="sd">kept as ``{"value": False, "source": ...}`` and must not collapse to</span>
+<span class="sd">missing. Known facts are never inferred from the connectivity values</span>
+<span class="sd">themselves (GSR is not guessed from negative edges).</span>
+
+<span class="sd">Per-observation diagnostics live in the phenotype table, not here:</span>
+<span class="sd">``n_valid_tr`` counts retained frames and ``delta_s`` is a per-subject</span>
+<span class="sd">shrinkage intensity in [0, 1] — neither is a repetition time.</span>
+<span class="sd">``tr_seconds`` is only ever recorded from an explicit source; absent</span>
+<span class="sd">means unknown, not 1 or any other default.</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numbers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Real</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="n">PREPROCESSING_SCHEMA_VERSION</span> <span class="o">=</span> <span class="mi">1</span>
+
+<span class="n">SOURCE_COMPUTED</span> <span class="o">=</span> <span class="s2">"computed_by_conninfpy"</span>
+<span class="n">SOURCE_LOADER_DENOISING</span> <span class="o">=</span> <span class="s2">"loader_denoising_pipeline"</span>
+<span class="n">SOURCE_FILE_TOKEN</span> <span class="o">=</span> <span class="s2">"input_file_name_token"</span>
+<span class="n">SOURCE_MANIFEST</span> <span class="o">=</span> <span class="s2">"input_manifest_declared"</span>
+<span class="n">SOURCE_APP_RANKS</span> <span class="o">=</span> <span class="s2">"app_rank_correlation_pipeline"</span>
+
+<span class="c1">#: Connectivity estimators that can be stated as known facts.</span>
+<span class="n">KNOWN_CONNECTIVITY_METHODS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"pearson"</span><span class="p">,</span> <span class="s2">"partial"</span><span class="p">,</span> <span class="s2">"spearman"</span><span class="p">)</span>
+
+<span class="n">_FACT_KEYS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"gsr"</span><span class="p">,</span> <span class="s2">"connectivity_method"</span><span class="p">,</span> <span class="s2">"standardize"</span><span class="p">,</span> <span class="s2">"shrinkage"</span><span class="p">,</span> <span class="s2">"tr_seconds"</span><span class="p">)</span>
+<span class="c1">#: Supplementary per-constituent detail (e.g. per-site records combined by a</span>
+<span class="c1">#: multi-site loader). It never participates in the global facts: a fact the</span>
+<span class="c1">#: constituents disagree on stays globally unknown while ``per_site`` keeps</span>
+<span class="c1">#: each constituent's known value and source.</span>
+<span class="n">_PER_SITE_KEY</span> <span class="o">=</span> <span class="s2">"per_site"</span>
+<span class="n">_SHRINKAGE_NAMES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"ledoit_wolf"</span><span class="p">,</span> <span class="s2">"oas"</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="fact">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.fact">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fact</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">source</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Build one known fact: ``{"value": ..., "source": ...}``."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">source</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a preprocessing fact needs a nonempty source string"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="connectivity_method_from_kind">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.connectivity_method_from_kind">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">connectivity_method_from_kind</span><span class="p">(</span><span class="n">kind</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Map backend ``kind`` names onto fact values (``spearman`` passes through)."""</span>
+    <span class="n">kind</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">kind</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"correlation"</span><span class="p">,</span> <span class="s2">"pearson"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">"pearson"</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"partial_correlation"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"partial"</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"spearman"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"spearman"</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"unknown connectivity kind </span><span class="si">{</span><span class="n">kind</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="gsr_from_file_token">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.gsr_from_file_token">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">gsr_from_file_token</span><span class="p">(</span><span class="n">token</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Global-signal status declared by a file-name token, or ``None``.</span>
+
+<span class="sd">    ``"GSR"`` (case-insensitive, punctuation ignored) declares that</span>
+<span class="sd">    global-signal regression was applied upstream; ``"noGSR"`` / ``"no_GSR"``</span>
+<span class="sd">    / ``"no-GSR"`` declare that it was not. Any other token declares</span>
+<span class="sd">    nothing (``None`` = unknown).</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">token</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">normalized</span> <span class="o">=</span> <span class="s2">""</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ch</span> <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="n">token</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="k">if</span> <span class="n">ch</span><span class="o">.</span><span class="n">isalnum</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">normalized</span> <span class="o">==</span> <span class="s2">"GSR"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="n">normalized</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"NOGSR"</span><span class="p">,</span> <span class="s2">"WITHOUTGSR"</span><span class="p">,</span> <span class="s2">"NOGLOBALSIGNALREGRESSION"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="gsr_from_file_name">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.gsr_from_file_name">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">gsr_from_file_name</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Global-signal status declared by a file *name* (not its contents).</span>
+
+<span class="sd">    Scans the base name for the ``GSR`` / negated-``GSR`` tokens only; a</span>
+<span class="sd">    name without a supported token declares nothing. Negation survives</span>
+<span class="sd">    underscores, hyphens, dots and case (``no_GSR``, ``no-GSR``, ``noGSR``,</span>
+<span class="sd">    ``no.gsr``), and a negated token never reads as a plain ``GSR`` token;</span>
+<span class="sd">    a ``GSR`` embedded in a larger word (e.g. ``xgsr``) declares nothing.</span>
+<span class="sd">    """</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">tokens</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[A-Za-z0-9]+"</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">upper</span><span class="p">())</span>
+    <span class="c1"># Negation first: a standalone negated token, or the token pair NO + GSR</span>
+    <span class="c1"># (covers no_GSR / no-GSR / no.GSR across separators).</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">gsr_from_file_token</span><span class="p">(</span><span class="n">token</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">False</span> <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="n">tokens</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">tok</span> <span class="o">==</span> <span class="s2">"NO"</span> <span class="ow">and</span> <span class="n">nxt</span> <span class="o">==</span> <span class="s2">"GSR"</span> <span class="k">for</span> <span class="n">tok</span><span class="p">,</span> <span class="n">nxt</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tokens</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">if</span> <span class="s2">"GSR"</span> <span class="ow">in</span> <span class="n">tokens</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="empty_record">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.empty_record">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">empty_record</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A record with every fact unknown."""</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"schema_version"</span><span class="p">:</span> <span class="n">PREPROCESSING_SCHEMA_VERSION</span><span class="p">}</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_fact</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">set</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">!=</span> <span class="p">{</span><span class="s2">"value"</span><span class="p">,</span> <span class="s2">"source"</span><span class="p">}:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"preprocessing fact </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2"> must be </span><span class="si">{</span><span class="s1">'value'</span><span class="p">,</span><span class="w"> </span><span class="s1">'source'</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="s2">"source"</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">source</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"preprocessing fact </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2"> needs a nonempty source string"</span><span class="p">)</span>
+    <span class="n">v</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="s2">"value"</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">"gsr"</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"gsr value must be a boolean"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">"connectivity_method"</span> <span class="ow">and</span> <span class="n">v</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">KNOWN_CONNECTIVITY_METHODS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"connectivity_method value must be one of </span><span class="si">{</span><span class="n">KNOWN_CONNECTIVITY_METHODS</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">"standardize"</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"standardize value must be a boolean"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">"shrinkage"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="n">v</span> <span class="ow">in</span> <span class="n">_SHRINKAGE_NAMES</span> <span class="ow">or</span>
+                                  <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">Real</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span>
+                                   <span class="ow">and</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"shrinkage value must be None, 'ledoit_wolf', 'oas', or a float in [0, 1]"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">"tr_seconds"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">Real</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"inf"</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"tr_seconds value must be a positive finite number"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normalize_record</span><span class="p">(</span><span class="n">record</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">allow_per_site</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">empty_record</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the preprocessing record must be a mapping or None"</span><span class="p">)</span>
+    <span class="n">version</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"schema_version"</span><span class="p">,</span> <span class="n">PREPROCESSING_SCHEMA_VERSION</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">version</span> <span class="o">!=</span> <span class="n">PREPROCESSING_SCHEMA_VERSION</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"unsupported preprocessing record schema_version </span><span class="si">{</span><span class="n">version</span><span class="si">!r}</span><span class="s2">; "</span>
+            <span class="sa">f</span><span class="s2">"supported: </span><span class="si">{</span><span class="n">PREPROCESSING_SCHEMA_VERSION</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="n">allowed</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">_FACT_KEYS</span><span class="p">)</span> <span class="o">|</span> <span class="p">{</span><span class="n">_PER_SITE_KEY</span><span class="p">}</span> <span class="k">if</span> <span class="n">allow_per_site</span> <span class="k">else</span> <span class="nb">set</span><span class="p">(</span><span class="n">_FACT_KEYS</span><span class="p">)</span>
+    <span class="n">unknown</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">record</span><span class="p">)</span> <span class="o">-</span> <span class="n">allowed</span> <span class="o">-</span> <span class="p">{</span><span class="s2">"schema_version"</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"unknown preprocessing fact(s): </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"schema_version"</span><span class="p">:</span> <span class="n">PREPROCESSING_SCHEMA_VERSION</span><span class="p">}</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_FACT_KEYS</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">_validate_fact</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="n">out</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="s2">"value"</span><span class="p">]),</span> <span class="s2">"source"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="s2">"source"</span><span class="p">])}</span>
+    <span class="n">per_site</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_PER_SITE_KEY</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">per_site</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">allow_per_site</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"per_site records cannot be nested"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">per_site</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"per_site must be a mapping of site name to record"</span><span class="p">)</span>
+        <span class="n">sites</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">site_record</span> <span class="ow">in</span> <span class="n">per_site</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">site</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">site</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"per_site keys must be nonempty site names"</span><span class="p">)</span>
+            <span class="n">sites</span><span class="p">[</span><span class="n">site</span><span class="p">]</span> <span class="o">=</span> <span class="n">_normalize_record</span><span class="p">(</span><span class="n">site_record</span><span class="p">,</span> <span class="n">allow_per_site</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">out</span><span class="p">[</span><span class="n">_PER_SITE_KEY</span><span class="p">]</span> <span class="o">=</span> <span class="n">sites</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<div class="viewcode-block" id="normalize_preprocessing_record">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.normalize_preprocessing_record">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">normalize_preprocessing_record</span><span class="p">(</span><span class="n">record</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Validate (or accept ``None`` for) a preprocessing record; return a copy.</span>
+
+<span class="sd">    Unknown keys are rejected so typos cannot silently hide facts; every</span>
+<span class="sd">    known fact must carry a value and a source. An explicit ``schema_version``</span>
+<span class="sd">    other than the supported one is rejected rather than silently rewritten</span>
+<span class="sd">    (a future schema may mean something different); an absent version reads</span>
+<span class="sd">    as the current one, as loaders building records programmatically do.</span>
+<span class="sd">    The optional ``per_site`` mapping carries per-constituent records (e.g.</span>
+<span class="sd">    per-site facts of a combined multi-site dataset) alongside the global</span>
+<span class="sd">    facts; site records may not nest ``per_site`` again.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">_normalize_record</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">allow_per_site</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="merge_preprocessing_records">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.merge_preprocessing_records">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">merge_preprocessing_records</span><span class="p">(</span><span class="o">*</span><span class="n">records</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Merge records; earlier arguments win (library-computed beats declared).</span>
+
+<span class="sd">    Only facts missing from the higher-precedence record are filled in, so</span>
+<span class="sd">    an explicit ``False`` from a performed pipeline is never overwritten by</span>
+<span class="sd">    a manifest declaration.</span>
+<span class="sd">    """</span>
+    <span class="n">merged</span> <span class="o">=</span> <span class="n">empty_record</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">normalized</span> <span class="o">=</span> <span class="n">normalize_preprocessing_record</span><span class="p">(</span><span class="n">record</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">normalized</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">"schema_version"</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">merged</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">merged</span></div>
+
+
+
+<div class="viewcode-block" id="aggregate_preprocessing_records">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.aggregate_preprocessing_records">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">aggregate_preprocessing_records</span><span class="p">(</span><span class="n">records</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">names</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Aggregate per-constituent records (e.g. per-site) into one record.</span>
+
+<span class="sd">    A fact is asserted globally only when **every** constituent states it</span>
+<span class="sd">    with the same value: differing values, or a mix of known and unknown,</span>
+<span class="sd">    leave the global fact unknown — never an invented common True/False.</span>
+<span class="sd">    The aggregated source is the constituents' shared source, or a</span>
+<span class="sd">    ``mixed_sources(...)`` description when the agreeing facts arrived via</span>
+<span class="sd">    different sources. Per-constituent records stay available to the caller</span>
+<span class="sd">    (e.g. as ``provenance['preprocessing_per_site']``) so heterogeneity is</span>
+<span class="sd">    inspectable; ``names`` only labels the constituents.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">records</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="n">pairs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">records</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">records_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">records</span><span class="p">)</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">names</span><span class="p">)</span> <span class="k">if</span> <span class="n">names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">records_list</span><span class="p">))]</span>
+        <span class="n">pairs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">records_list</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pairs</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">empty_record</span><span class="p">()</span>
+    <span class="n">normalized</span> <span class="o">=</span> <span class="p">[(</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">normalize_preprocessing_record</span><span class="p">(</span><span class="n">record</span><span class="p">))</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">]</span>
+    <span class="n">aggregated</span> <span class="o">=</span> <span class="n">empty_record</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_FACT_KEYS</span><span class="p">:</span>
+        <span class="n">knowing</span> <span class="o">=</span> <span class="p">[(</span><span class="n">name</span><span class="p">,</span> <span class="n">record</span><span class="p">[</span><span class="n">key</span><span class="p">])</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">normalized</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">record</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">knowing</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">knowing</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">normalized</span><span class="p">):</span>
+            <span class="k">continue</span>  <span class="c1"># unknown somewhere (or everywhere) → globally unknown</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">({</span><span class="nb">repr</span><span class="p">(</span><span class="n">value</span><span class="p">[</span><span class="s2">"value"</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">knowing</span><span class="p">})</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">continue</span>  <span class="c1"># conflicting statements → globally unknown</span>
+        <span class="n">sources</span> <span class="o">=</span> <span class="p">{</span><span class="n">value</span><span class="p">[</span><span class="s2">"source"</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">knowing</span><span class="p">}</span>
+        <span class="n">source</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">sources</span><span class="p">))</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sources</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> \
+            <span class="s2">"mixed_sources("</span> <span class="o">+</span> <span class="s2">"+"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">sources</span><span class="p">))</span> <span class="o">+</span> <span class="s2">")"</span>
+        <span class="n">aggregated</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"value"</span><span class="p">:</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">knowing</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">][</span><span class="s2">"value"</span><span class="p">]),</span> <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">}</span>
+    <span class="k">return</span> <span class="n">aggregated</span></div>
+
+
+
+<div class="viewcode-block" id="attach_preprocessing">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.attach_preprocessing">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">attach_preprocessing</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">facts</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Attach/extend ``dataset.provenance['preprocessing']`` in place.</span>
+
+<span class="sd">    Each keyword is one fact value paired with its source either directly</span>
+<span class="sd">    as a ``('value', 'source')`` tuple or via ``fact(value, source)``;</span>
+<span class="sd">    ``None`` facts are ignored. Facts already recorded on the dataset win</span>
+<span class="sd">    (they were set by the component that actually did the work).</span>
+<span class="sd">    """</span>
+    <span class="n">record</span> <span class="o">=</span> <span class="n">merge_preprocessing_records</span><span class="p">(</span>
+        <span class="n">dataset</span><span class="o">.</span><span class="n">provenance</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"preprocessing"</span><span class="p">),</span>
+        <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="p">(</span><span class="n">fact</span><span class="p">(</span><span class="o">*</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="k">else</span> <span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">facts</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+    <span class="p">)</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">provenance</span><span class="p">[</span><span class="s2">"preprocessing"</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span>
+    <span class="k">return</span> <span class="n">record</span></div>
+
+
+
+<div class="viewcode-block" id="set_preprocessing_facts">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.set_preprocessing_facts">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">set_preprocessing_facts</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">facts</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Overwrite facts recorded on a dataset (e.g. Spearman rank correlation).</span>
+
+<span class="sd">    Same calling convention as :func:`attach_preprocessing`, but the given</span>
+<span class="sd">    facts replace whatever was recorded before, because the caller states</span>
+<span class="sd">    what the data actually are after its own processing step.</span>
+<span class="sd">    """</span>
+    <span class="n">existing</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">provenance</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"preprocessing"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">empty_record</span><span class="p">()</span>
+    <span class="n">updates</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="p">(</span><span class="n">fact</span><span class="p">(</span><span class="o">*</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="k">else</span> <span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">facts</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">record</span> <span class="o">=</span> <span class="n">normalize_preprocessing_record</span><span class="p">({</span><span class="o">**</span><span class="n">existing</span><span class="p">,</span> <span class="o">**</span><span class="n">updates</span><span class="p">})</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">provenance</span><span class="p">[</span><span class="s2">"preprocessing"</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span>
+    <span class="k">return</span> <span class="n">record</span></div>
+
+
+
+<div class="viewcode-block" id="record_from_manifest_applied">
+<a class="viewcode-back" href="../../conninfpy.preprocessing.html#conninfpy.preprocessing.record_from_manifest_applied">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">record_from_manifest_applied</span><span class="p">(</span><span class="n">applied</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Facts declared by a manifest ``preprocessing.applied`` block.</span>
+
+<span class="sd">    Recognised keys (everything else in the block is left alone, it stays</span>
+<span class="sd">    available in the manifest itself): ``use_GSR``/``gsr`` (bool),</span>
+<span class="sd">    ``correlation``/``connectivity_method`` (pearson/partial/spearman),</span>
+<span class="sd">    ``standardize`` (bool), ``shrinkage`` (null/'ledoit_wolf'/'oas'/float),</span>
+<span class="sd">    ``tr_seconds`` (positive number). Only declarations the block actually</span>
+<span class="sd">    makes become facts; nothing is defaulted.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">applied</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">empty_record</span><span class="p">()</span>
+    <span class="n">record</span> <span class="o">=</span> <span class="n">empty_record</span><span class="p">()</span>
+    <span class="n">gsr</span> <span class="o">=</span> <span class="n">applied</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"use_GSR"</span><span class="p">,</span> <span class="n">applied</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"gsr"</span><span class="p">))</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">gsr</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="n">record</span><span class="p">[</span><span class="s2">"gsr"</span><span class="p">]</span> <span class="o">=</span> <span class="n">fact</span><span class="p">(</span><span class="n">gsr</span><span class="p">,</span> <span class="n">SOURCE_MANIFEST</span><span class="p">)</span>
+    <span class="n">method</span> <span class="o">=</span> <span class="n">applied</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"correlation"</span><span class="p">,</span> <span class="n">applied</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"connectivity_method"</span><span class="p">))</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">method</span> <span class="ow">in</span> <span class="n">KNOWN_CONNECTIVITY_METHODS</span><span class="p">:</span>
+        <span class="n">record</span><span class="p">[</span><span class="s2">"connectivity_method"</span><span class="p">]</span> <span class="o">=</span> <span class="n">fact</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">SOURCE_MANIFEST</span><span class="p">)</span>
+    <span class="n">standardize</span> <span class="o">=</span> <span class="n">applied</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"standardize"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">standardize</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="n">record</span><span class="p">[</span><span class="s2">"standardize"</span><span class="p">]</span> <span class="o">=</span> <span class="n">fact</span><span class="p">(</span><span class="n">standardize</span><span class="p">,</span> <span class="n">SOURCE_MANIFEST</span><span class="p">)</span>
+    <span class="n">shrinkage</span> <span class="o">=</span> <span class="n">applied</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"shrinkage"</span><span class="p">,</span> <span class="n">_OMITTED</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">shrinkage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">_OMITTED</span><span class="p">:</span>
+        <span class="n">record</span><span class="p">[</span><span class="s2">"shrinkage"</span><span class="p">]</span> <span class="o">=</span> <span class="n">fact</span><span class="p">(</span><span class="n">_coerce_shrinkage</span><span class="p">(</span><span class="n">shrinkage</span><span class="p">),</span> <span class="n">SOURCE_MANIFEST</span><span class="p">)</span>
+    <span class="n">tr</span> <span class="o">=</span> <span class="n">applied</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"tr_seconds"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="n">Real</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="nb">float</span><span class="p">(</span><span class="n">tr</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"inf"</span><span class="p">):</span>
+        <span class="n">record</span><span class="p">[</span><span class="s2">"tr_seconds"</span><span class="p">]</span> <span class="o">=</span> <span class="n">fact</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">tr</span><span class="p">),</span> <span class="n">SOURCE_MANIFEST</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">record</span></div>
+
+
+
+<span class="n">_OMITTED</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_coerce_shrinkage</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">_SHRINKAGE_NAMES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">value</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Real</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">and</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"invalid declared shrinkage </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"PREPROCESSING_SCHEMA_VERSION"</span><span class="p">,</span>
+    <span class="s2">"SOURCE_COMPUTED"</span><span class="p">,</span>
+    <span class="s2">"SOURCE_LOADER_DENOISING"</span><span class="p">,</span>
+    <span class="s2">"SOURCE_FILE_TOKEN"</span><span class="p">,</span>
+    <span class="s2">"SOURCE_MANIFEST"</span><span class="p">,</span>
+    <span class="s2">"SOURCE_APP_RANKS"</span><span class="p">,</span>
+    <span class="s2">"KNOWN_CONNECTIVITY_METHODS"</span><span class="p">,</span>
+    <span class="s2">"fact"</span><span class="p">,</span>
+    <span class="s2">"connectivity_method_from_kind"</span><span class="p">,</span>
+    <span class="s2">"gsr_from_file_token"</span><span class="p">,</span>
+    <span class="s2">"gsr_from_file_name"</span><span class="p">,</span>
+    <span class="s2">"empty_record"</span><span class="p">,</span>
+    <span class="s2">"normalize_preprocessing_record"</span><span class="p">,</span>
+    <span class="s2">"merge_preprocessing_records"</span><span class="p">,</span>
+    <span class="s2">"aggregate_preprocessing_records"</span><span class="p">,</span>
+    <span class="s2">"attach_preprocessing"</span><span class="p">,</span>
+    <span class="s2">"set_preprocessing_facts"</span><span class="p">,</span>
+    <span class="s2">"record_from_manifest_applied"</span><span class="p">,</span>
+<span class="p">]</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

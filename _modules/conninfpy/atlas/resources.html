@@ -1,0 +1,547 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy.atlas.resources &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2943afd"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../conninfpy.html">conninfpy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">conninfpy.atlas.resources</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for conninfpy.atlas.resources</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Bundled MIT atlas snapshots, on-demand third-party atlas cache, and external originals.</span>
+
+<span class="sd">Materialized package paths remain alive for lazy image reads until process exit.</span>
+<span class="sd">Third-party Brainnetome and SUIT atlases are not bundled in the MIT package; they</span>
+<span class="sd">are resolved from ``CONNINFPY_ATLAS_DIR`` (default ``~/.cache/conninfpy/atlases``)</span>
+<span class="sd">and verified against SHA-256 manifests. Optional originals are never located</span>
+<span class="sd">relative to the caller's working directory.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">atexit</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.error</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.request</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExitStack</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">lru_cache</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">importlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">resources</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="n">_RESOURCE_CONTEXTS</span> <span class="o">=</span> <span class="n">ExitStack</span><span class="p">()</span>
+<span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">_RESOURCE_CONTEXTS</span><span class="o">.</span><span class="n">close</span><span class="p">)</span>
+
+
+<span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">bundled_path</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Resolve an immutable package asset with a process-long lifetime."""</span>
+    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span>
+        <span class="n">_RESOURCE_CONTEXTS</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span>
+            <span class="n">resources</span><span class="o">.</span><span class="n">as_file</span><span class="p">(</span><span class="n">resources</span><span class="o">.</span><span class="n">files</span><span class="p">(</span><span class="s2">"conninfpy.atlas_data"</span><span class="p">)</span> <span class="o">/</span> <span class="n">filename</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="atlas_cache_dir">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.atlas_cache_dir">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">atlas_cache_dir</span><span class="p">(</span><span class="n">atlas_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Directory for on-demand third-party Brainnetome/SUIT atlases; does not create it.</span>
+
+<span class="sd">    Precedence: explicit ``atlas_dir``, ``CONNINFPY_ATLAS_DIR``, then</span>
+<span class="sd">    ``~/.cache/conninfpy/atlases``.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">atlas_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">atlas_dir</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CONNINFPY_ATLAS_DIR"</span><span class="p">):</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"CONNINFPY_ATLAS_DIR"</span><span class="p">])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="s2">".cache"</span> <span class="o">/</span> <span class="s2">"conninfpy"</span> <span class="o">/</span> <span class="s2">"atlases"</span>
+    <span class="k">return</span> <span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_atlas_manifest_entries</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Expected SHA-256 and provenance metadata for all on-demand atlas files."""</span>
+    <span class="n">entries</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="n">bna_manifest</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">bundled_path</span><span class="p">(</span><span class="s2">"brainnetome_external.json"</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">fname</span><span class="p">,</span> <span class="n">meta</span> <span class="ow">in</span> <span class="n">bna_manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"atlas_files"</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">entries</span><span class="p">[</span><span class="n">fname</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"sha256"</span><span class="p">:</span> <span class="n">meta</span><span class="p">[</span><span class="s2">"sha256"</span><span class="p">],</span>
+            <span class="s2">"suite"</span><span class="p">:</span> <span class="s2">"Brainnetome BNA-246"</span><span class="p">,</span>
+            <span class="s2">"source_url"</span><span class="p">:</span> <span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">bna_manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"source_url"</span><span class="p">,</span> <span class="s2">"https://atlas.brainnetome.org/download.html"</span><span class="p">),</span>
+            <span class="s2">"license"</span><span class="p">:</span> <span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"license"</span><span class="p">,</span> <span class="s2">"Brainnetome non-commercial research use, attribution, and share-alike (NOTICE_BRAINNETOME.txt)"</span><span class="p">),</span>
+        <span class="p">}</span>
+
+    <span class="n">suit_manifest</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">bundled_path</span><span class="p">(</span><span class="s2">"cerebellar_atlases_provenance.json"</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">))</span>
+    <span class="n">suit_url</span> <span class="o">=</span> <span class="n">suit_manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"atlas_set"</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"repository"</span><span class="p">,</span> <span class="s2">"https://github.com/DiedrichsenLab/cerebellar_atlases"</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">fname</span><span class="p">,</span> <span class="n">meta</span> <span class="ow">in</span> <span class="n">suit_manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"atlas_set"</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"files"</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">entries</span><span class="p">[</span><span class="n">fname</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"sha256"</span><span class="p">:</span> <span class="n">meta</span><span class="p">[</span><span class="s2">"packaged_sha256"</span><span class="p">],</span>
+            <span class="s2">"suite"</span><span class="p">:</span> <span class="s2">"DiedrichsenLab SUIT v1.2"</span><span class="p">,</span>
+            <span class="s2">"source_url"</span><span class="p">:</span> <span class="n">meta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"upstream_url"</span><span class="p">,</span> <span class="n">suit_url</span><span class="p">),</span>
+            <span class="s2">"license"</span><span class="p">:</span> <span class="s2">"Creative Commons Attribution 4.0 International (CC BY 4.0)"</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">entries</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_verify_atlas_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">expected_sha256</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">suite</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+    <span class="n">stat</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span>
+    <span class="n">digest</span> <span class="o">=</span> <span class="n">_original_sha256</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">stat</span><span class="o">.</span><span class="n">st_size</span><span class="p">,</span> <span class="n">stat</span><span class="o">.</span><span class="n">st_mtime_ns</span><span class="p">,</span> <span class="n">stat</span><span class="o">.</span><span class="n">st_ctime_ns</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">digest</span> <span class="o">!=</span> <span class="n">expected_sha256</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: SHA256 </span><span class="si">{</span><span class="n">digest</span><span class="si">}</span><span class="s2"> does not match the expected </span><span class="si">{</span><span class="n">suite</span><span class="si">}</span><span class="s2"> checksum "</span>
+            <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">expected_sha256</span><span class="si">}</span><span class="s2">). Re-run `conninfpy download-atlases`."</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">path</span>
+
+
+<div class="viewcode-block" id="atlas_resource_path">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.atlas_resource_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">atlas_resource_path</span><span class="p">(</span>
+    <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">atlas_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">verify</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Locate and SHA-256-verify an on-demand Brainnetome or SUIT atlas file.</span>
+
+<span class="sd">    Raises ``FileNotFoundError`` with download instructions and upstream terms</span>
+<span class="sd">    when the file is absent from ``atlas_cache_dir(atlas_dir)``; never downloads</span>
+<span class="sd">    implicitly.</span>
+<span class="sd">    """</span>
+    <span class="n">entries</span> <span class="o">=</span> <span class="n">_atlas_manifest_entries</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">filename</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">entries</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Unknown on-demand atlas resource: </span><span class="si">{</span><span class="n">filename</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">meta</span> <span class="o">=</span> <span class="n">entries</span><span class="p">[</span><span class="n">filename</span><span class="p">]</span>
+    <span class="n">cache_root</span> <span class="o">=</span> <span class="n">atlas_cache_dir</span><span class="p">(</span><span class="n">atlas_dir</span><span class="p">)</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">cache_root</span> <span class="o">/</span> <span class="n">filename</span>
+    <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">_verify_atlas_file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">meta</span><span class="p">[</span><span class="s2">"sha256"</span><span class="p">],</span> <span class="n">meta</span><span class="p">[</span><span class="s2">"suite"</span><span class="p">])</span> <span class="k">if</span> <span class="n">verify</span> <span class="k">else</span> <span class="n">path</span>
+
+    <span class="c1"># Support explicit test mocks/overrides of conninfpy.atlas_data when no cache dir is forced.</span>
+    <span class="k">if</span> <span class="n">atlas_dir</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">bundled</span> <span class="o">=</span> <span class="n">bundled_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">bundled</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+                <span class="k">return</span> <span class="n">_verify_atlas_file</span><span class="p">(</span><span class="n">bundled</span><span class="p">,</span> <span class="n">meta</span><span class="p">[</span><span class="s2">"sha256"</span><span class="p">],</span> <span class="n">meta</span><span class="p">[</span><span class="s2">"suite"</span><span class="p">])</span> <span class="k">if</span> <span class="n">verify</span> <span class="k">else</span> <span class="n">bundled</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">FileNotFoundError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">,</span> <span class="ne">OSError</span><span class="p">):</span>
+            <span class="k">pass</span>
+
+    <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"Missing </span><span class="si">{</span><span class="n">meta</span><span class="p">[</span><span class="s1">'suite'</span><span class="p">]</span><span class="si">}</span><span class="s2"> atlas file </span><span class="si">{</span><span class="n">filename</span><span class="si">!r}</span><span class="s2"> (looked in </span><span class="si">{</span><span class="n">cache_root</span><span class="si">}</span><span class="s2">). "</span>
+        <span class="sa">f</span><span class="s2">"Third-party atlas files are not bundled in the MIT package. "</span>
+        <span class="sa">f</span><span class="s2">"Run `conninfpy download-atlases` to populate the local cache, or set "</span>
+        <span class="sa">f</span><span class="s2">"CONNINFPY_ATLAS_DIR to a directory containing the verified files. "</span>
+        <span class="sa">f</span><span class="s2">"Upstream source: </span><span class="si">{</span><span class="n">meta</span><span class="p">[</span><span class="s1">'source_url'</span><span class="p">]</span><span class="si">}</span><span class="s2"> | Terms: </span><span class="si">{</span><span class="n">meta</span><span class="p">[</span><span class="s1">'license'</span><span class="p">]</span><span class="si">}</span><span class="s2">."</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="atlas_resource_available">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.atlas_resource_available">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">atlas_resource_available</span><span class="p">(</span>
+    <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">atlas_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return True if an on-demand atlas file exists in the local cache and passes SHA-256."""</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">atlas_resource_path</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">atlas_dir</span><span class="o">=</span><span class="n">atlas_dir</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">FileNotFoundError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">read_bna_hierarchy</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"roi_id"</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Read a fresh hierarchy table in the requested key order."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">atlas_resource_path</span><span class="p">(</span><span class="s2">"bna246_hierarchy.csv"</span><span class="p">))</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+
+
+<span class="n">_BUILTIN_ALIASES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"bna_246_2mm"</span><span class="p">:</span> <span class="s2">"BN_Atlas_246_2mm.nii.gz"</span><span class="p">,</span>
+    <span class="s2">"bna_246_1mm"</span><span class="p">:</span> <span class="s2">"BN_Atlas_246_1mm.nii.gz"</span><span class="p">,</span>
+    <span class="s2">"bna246.csv"</span><span class="p">:</span> <span class="s2">"bna246.csv"</span><span class="p">,</span>
+    <span class="s2">"schaefer100"</span><span class="p">:</span> <span class="s2">"schaefer100_yeo7.csv"</span><span class="p">,</span>
+    <span class="s2">"schaefer200"</span><span class="p">:</span> <span class="s2">"schaefer200_yeo7.csv"</span><span class="p">,</span>
+    <span class="s2">"schaefer400"</span><span class="p">:</span> <span class="s2">"schaefer400_yeo7.csv"</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">builtin_atlas_path</span><span class="p">(</span><span class="n">token</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Resolve a manifest's builtin token through bundled MIT assets or the atlas cache."""</span>
+    <span class="n">filename</span> <span class="o">=</span> <span class="n">_BUILTIN_ALIASES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">token</span><span class="p">,</span> <span class="n">token</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">filename</span> <span class="ow">in</span> <span class="n">_atlas_manifest_entries</span><span class="p">():</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">atlas_resource_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">candidate</span> <span class="o">=</span> <span class="n">bundled_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">candidate</span> <span class="k">if</span> <span class="n">candidate</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+<span class="n">_BNA_BD_URL</span> <span class="o">=</span> <span class="s2">"https://atlas.brainnetome.org/js/bnatlasviewer/BDf_FDR05.json"</span>
+<span class="n">_BNA_PC_URL</span> <span class="o">=</span> <span class="s2">"https://atlas.brainnetome.org/js/bnatlasviewer/PCf_FDR05.json"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sha256</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="n">h</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">()</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s2">"rb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="nb">iter</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">20</span><span class="p">),</span> <span class="sa">b</span><span class="s2">""</span><span class="p">):</span>
+            <span class="n">h</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">h</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_default_cache</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+    <span class="n">base</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CONNINFPY_CACHE"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="s2">".cache"</span> <span class="o">/</span> <span class="s2">"conninfpy"</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">base</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"bna246"</span>
+
+
+<div class="viewcode-block" id="brainnetome_data_dir">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.brainnetome_data_dir">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">brainnetome_data_dir</span><span class="p">(</span><span class="n">data_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Directory for optional Brainnetome originals; does not create it.</span>
+
+<span class="sd">    Precedence: explicit ``data_dir``, legacy ``CONNINFPY_BNA_DIR``, then</span>
+<span class="sd">    ``CONNINFPY_DATA/brainnetome`` (default ``~/conninfpy_data/brainnetome``).</span>
+<span class="sd">    An explicit directory is authoritative, even if it does not exist.</span>
+<span class="sd">    Derived caches use ``CONNINFPY_CACHE`` separately.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">data_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">data_dir</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CONNINFPY_BNA_DIR"</span><span class="p">):</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"CONNINFPY_BNA_DIR"</span><span class="p">])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CONNINFPY_DATA"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="s2">"conninfpy_data"</span><span class="p">)))</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">base</span> <span class="o">/</span> <span class="s2">"brainnetome"</span>
+    <span class="k">return</span> <span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_find_data_dir</span><span class="p">(</span><span class="n">data_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Compatibility helper for optional references without local originals."""</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">brainnetome_data_dir</span><span class="p">(</span><span class="n">data_dir</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">path</span> <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_dir</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+<span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_original_sha256</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">mtime_ns</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">ctime_ns</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Reuse integrity checks while the original's filesystem identity is stable."""</span>
+    <span class="k">return</span> <span class="n">_sha256</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+
+
+<div class="viewcode-block" id="brainnetome_resource_path">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.brainnetome_resource_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">brainnetome_resource_path</span><span class="p">(</span>
+    <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">data_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">required</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Locate and verify a versioned optional original from the source manifest.</span>
+
+<span class="sd">    Missing optional files return ``None``. ``required=True`` gives manual</span>
+<span class="sd">    acquisition instructions. A different/corrupt source raises ``ValueError``;</span>
+<span class="sd">    no implicit download or fallback to another directory occurs.</span>
+<span class="sd">    """</span>
+    <span class="n">manifest</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">bundled_path</span><span class="p">(</span><span class="s2">"brainnetome_external.json"</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">filename</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">manifest</span><span class="p">[</span><span class="s2">"resources"</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Unknown Brainnetome original: </span><span class="si">{</span><span class="n">filename</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">brainnetome_data_dir</span><span class="p">(</span><span class="n">data_dir</span><span class="p">)</span> <span class="o">/</span> <span class="n">filename</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">required</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Missing Brainnetome original: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">. Obtain </span><span class="si">{</span><span class="n">Path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"from </span><span class="si">{</span><span class="n">manifest</span><span class="p">[</span><span class="s1">'source_url'</span><span class="p">]</span><span class="si">}</span><span class="s2"> under the provider's terms and place "</span>
+                <span class="s2">"it here, or set data_dir, CONNINFPY_BNA_DIR or CONNINFPY_DATA."</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">verify_brainnetome_resource</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">filename</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">verify_brainnetome_resource</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Verify an explicitly located original against its manifest resource ID.</span>
+
+<span class="sd">    This also supports rebuilding from source tables in an arbitrary directory.</span>
+<span class="sd">    ``filename`` is the manifest key, such as ``sources/BNA_subregions.xlsx``.</span>
+<span class="sd">    """</span>
+    <span class="n">manifest</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">bundled_path</span><span class="p">(</span><span class="s2">"brainnetome_external.json"</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">filename</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">manifest</span><span class="p">[</span><span class="s2">"resources"</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Unknown Brainnetome original: </span><span class="si">{</span><span class="n">filename</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+    <span class="n">stat</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span>
+    <span class="n">digest</span> <span class="o">=</span> <span class="n">_original_sha256</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">stat</span><span class="o">.</span><span class="n">st_size</span><span class="p">,</span> <span class="n">stat</span><span class="o">.</span><span class="n">st_mtime_ns</span><span class="p">,</span> <span class="n">stat</span><span class="o">.</span><span class="n">st_ctime_ns</span><span class="p">)</span>
+    <span class="n">expected</span> <span class="o">=</span> <span class="n">manifest</span><span class="p">[</span><span class="s2">"resources"</span><span class="p">][</span><span class="n">filename</span><span class="p">][</span><span class="s2">"sha256"</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">digest</span> <span class="o">!=</span> <span class="n">expected</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">: SHA256 </span><span class="si">{</span><span class="n">digest</span><span class="si">}</span><span class="s2"> does not match the versioned Brainnetome "</span>
+            <span class="sa">f</span><span class="s2">"original (</span><span class="si">{</span><span class="n">expected</span><span class="si">}</span><span class="s2">). Check the source/version before using it."</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">path</span>
+
+
+<div class="viewcode-block" id="get_bna_246_nifti_path">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.get_bna_246_nifti_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_bna_246_nifti_path</span><span class="p">(</span><span class="n">resolution_mm</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Get the file system path of the cached Brainnetome 246 NIfTI atlas image."""</span>
+    <span class="k">if</span> <span class="n">resolution_mm</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"resolution_mm must be 1 or 2; got </span><span class="si">{</span><span class="n">resolution_mm</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"BN_Atlas_246_</span><span class="si">{</span><span class="n">resolution_mm</span><span class="si">}</span><span class="s2">mm.nii.gz"</span>
+    <span class="k">return</span> <span class="n">atlas_resource_path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="bna_profile_paths">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.bna_profile_paths">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">bna_profile_paths</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">Path</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Paths of the cached BrainMap profiles of BNA-246 (BDf_FDR05.json, PCf_FDR05.json)."""</span>
+    <span class="k">return</span> <span class="n">atlas_resource_path</span><span class="p">(</span><span class="s2">"BDf_FDR05.json"</span><span class="p">),</span> <span class="n">atlas_resource_path</span><span class="p">(</span><span class="s2">"PCf_FDR05.json"</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="fetch_bna_behavioral_decoding">
+<a class="viewcode-back" href="../../../conninfpy.atlas.html#conninfpy.atlas.fetch_bna_behavioral_decoding">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fetch_bna_behavioral_decoding</span><span class="p">(</span>
+    <span class="n">cache_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">force_download</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">as_dataframe</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]],</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]],</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Brainnetome Atlas (BNA-246) BrainMap behavioral decoding data.</span>
+
+<span class="sd">    The forward-inference Behavioral Domain (BD) and Paradigm Class (PC)</span>
+<span class="sd">    association scores (thresholded at FDR &lt; 0.05) published with the</span>
+<span class="sd">    Brainnetome Atlas (`atlas.brainnetome.org`) are read from the local</span>
+<span class="sd">    on-demand atlas cache (``CONNINFPY_ATLAS_DIR`` or</span>
+<span class="sd">    ``~/.cache/conninfpy/atlases``, under the Brainnetome terms in</span>
+<span class="sd">    ``NOTICE_BRAINNETOME.txt``) without network access by default.</span>
+<span class="sd">    With ``cache_dir`` or ``force_download=True`` they are downloaded from the</span>
+<span class="sd">    official repository instead and cached.</span>
+
+<span class="sd">    Data attribution &amp; licensing</span>
+<span class="sd">    ----------------------------</span>
+<span class="sd">    The Behavioral Domain and Paradigm Class taxonomy and coordinate data are</span>
+<span class="sd">    derived from the BrainMap database (Laird et al., 2005, 2011)</span>
+<span class="sd">    and computed for the Brainnetome Atlas by Fan et al. (2016). When publishing</span>
+<span class="sd">    analyses that use these decodings, please cite:</span>
+
+<span class="sd">    1. Fan L, Li H, Zhuo J, et al. (2016). The Human Brainnetome Atlas: A New Brain</span>
+<span class="sd">       Atlas Based on Connectional Architecture. Cerebral Cortex, 26(8):3508–3526.</span>
+<span class="sd">    2. Laird AR, Lancaster JL, Fox PT (2005). BrainMap: The social evolution of a human</span>
+<span class="sd">       brain mapping database. Neuroinformatics, 3(1):65–78.</span>
+<span class="sd">    3. Laird AR, Eickhoff SB, Fox PM, et al. (2011). The BrainMap strategy for</span>
+<span class="sd">       standardization, sharing, and meta-analysis of neuroimaging data. BMC Research</span>
+<span class="sd">       Notes, 4:349.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cache_dir : str or Path, optional</span>
+<span class="sd">        Download into (and read from) this directory instead of using the</span>
+<span class="sd">        on-demand atlas cache.</span>
+<span class="sd">    force_download : bool, default=False</span>
+<span class="sd">        Download a fresh copy even when cached files exist (into</span>
+<span class="sd">        ``cache_dir``, default ``atlas_cache_dir()``).</span>
+<span class="sd">    as_dataframe : bool, default=False</span>
+<span class="sd">        If True, returns a consolidated ``pandas.DataFrame`` merged with</span>
+<span class="sd">        BNA-246 parcel names and ROI IDs.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple of (dict, dict) or pandas.DataFrame</span>
+<span class="sd">        If ``as_dataframe=False``, returns ``(behavioral_domains, paradigm_classes)``</span>
+<span class="sd">        where each is a dict mapping string ROI ID (``"1"`` to ``"246"``) to</span>
+<span class="sd">        ``{term: score}``.</span>
+<span class="sd">        If ``as_dataframe=True``, returns a DataFrame indexed by ``roi_id`` (1..246).</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">cache_dir</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force_download</span><span class="p">:</span>
+        <span class="n">bd_file</span><span class="p">,</span> <span class="n">pc_file</span> <span class="o">=</span> <span class="n">bna_profile_paths</span><span class="p">()</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">bd_file</span><span class="p">,</span> <span class="s2">"r"</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">bd_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">pc_file</span><span class="p">,</span> <span class="s2">"r"</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">pc_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_bna_decoding_output</span><span class="p">(</span><span class="n">bd_data</span><span class="p">,</span> <span class="n">pc_data</span><span class="p">,</span> <span class="n">as_dataframe</span><span class="p">)</span>
+
+    <span class="n">cache_path</span> <span class="o">=</span> <span class="n">atlas_cache_dir</span><span class="p">()</span> <span class="k">if</span> <span class="n">cache_dir</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="n">cache_dir</span><span class="p">)</span>
+
+    <span class="n">cache_path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">bd_file</span> <span class="o">=</span> <span class="n">cache_path</span> <span class="o">/</span> <span class="s2">"BDf_FDR05.json"</span>
+    <span class="n">pc_file</span> <span class="o">=</span> <span class="n">cache_path</span> <span class="o">/</span> <span class="s2">"PCf_FDR05.json"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_download_if_needed</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">force_download</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">target</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">or</span> <span class="n">target</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">req</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">Request</span><span class="p">(</span>
+                <span class="n">url</span><span class="p">,</span>
+                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">"User-Agent"</span><span class="p">:</span> <span class="s2">"conninfpy/2.0"</span><span class="p">},</span>
+            <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">with</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">urlopen</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span> <span class="k">as</span> <span class="n">resp</span><span class="p">:</span>
+                    <span class="n">content</span> <span class="o">=</span> <span class="n">resp</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+                <span class="n">tmp_target</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">with_suffix</span><span class="p">(</span><span class="s2">".tmp"</span><span class="p">)</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">tmp_target</span><span class="p">,</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+                <span class="n">tmp_target</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">target</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">target</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"Failed to refresh </span><span class="si">{</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">. "</span>
+                        <span class="s2">"Using existing cached copy."</span><span class="p">,</span>
+                        <span class="ne">UserWarning</span><span class="p">,</span>
+                        <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"Failed to download Brainnetome decoding data from </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span>
+                    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+    <span class="n">_download_if_needed</span><span class="p">(</span><span class="n">_BNA_BD_URL</span><span class="p">,</span> <span class="n">bd_file</span><span class="p">)</span>
+    <span class="n">_download_if_needed</span><span class="p">(</span><span class="n">_BNA_PC_URL</span><span class="p">,</span> <span class="n">pc_file</span><span class="p">)</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">bd_file</span><span class="p">,</span> <span class="s2">"r"</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">bd_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">pc_file</span><span class="p">,</span> <span class="s2">"r"</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pc_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_bna_decoding_output</span><span class="p">(</span><span class="n">bd_data</span><span class="p">,</span> <span class="n">pc_data</span><span class="p">,</span> <span class="n">as_dataframe</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_bna_decoding_output</span><span class="p">(</span><span class="n">bd_data</span><span class="p">,</span> <span class="n">pc_data</span><span class="p">,</span> <span class="n">as_dataframe</span><span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">as_dataframe</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">bd_data</span><span class="p">,</span> <span class="n">pc_data</span>
+
+    <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">conninfpy.atlas.metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">AtlasInfo</span>
+
+    <span class="n">atlas</span> <span class="o">=</span> <span class="n">AtlasInfo</span><span class="o">.</span><span class="n">bna_246</span><span class="p">()</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">roi_id</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">atlas</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">s_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">roi_id</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">atlas</span><span class="o">.</span><span class="n">labels</span><span class="p">[</span><span class="n">roi_id</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">network</span> <span class="o">=</span> <span class="n">atlas</span><span class="o">.</span><span class="n">networks</span><span class="p">[</span><span class="n">roi_id</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">roi_bd</span> <span class="o">=</span> <span class="n">bd_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">s_id</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">roi_pc</span> <span class="o">=</span> <span class="n">pc_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">s_id</span><span class="p">,</span> <span class="p">{})</span>
+
+        <span class="n">top_bd</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">roi_bd</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">roi_bd</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">top_pc</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">roi_pc</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">roi_pc</span> <span class="k">else</span> <span class="kc">None</span>
+
+        <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">"roi_id"</span><span class="p">:</span> <span class="n">roi_id</span><span class="p">,</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+                <span class="s2">"network"</span><span class="p">:</span> <span class="n">network</span><span class="p">,</span>
+                <span class="s2">"behavioral_domains"</span><span class="p">:</span> <span class="n">roi_bd</span><span class="p">,</span>
+                <span class="s2">"paradigm_classes"</span><span class="p">:</span> <span class="n">roi_pc</span><span class="p">,</span>
+                <span class="s2">"top_behavioral_domain"</span><span class="p">:</span> <span class="n">top_bd</span><span class="p">,</span>
+                <span class="s2">"top_paradigm_class"</span><span class="p">:</span> <span class="n">top_pc</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">"roi_id"</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

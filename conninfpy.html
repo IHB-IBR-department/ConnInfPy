@@ -1,0 +1,405 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>conninfpy &mdash; ConnInfPy 2.0.0rc1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2943afd"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="conninfpy.analysis" href="conninfpy.analysis.html" />
+    <link rel="prev" title="Recommended Workflows" href="workflows.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ConnInfPy
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Package organization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">How Inference Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Recommended Workflows</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">conninfpy</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.analysis.html">conninfpy.analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.results.html">conninfpy.results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.atlas.html">conninfpy.atlas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.interpret.html">conninfpy.interpret</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.plot.html">conninfpy.plot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.stats.html">conninfpy.stats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.influence.html">conninfpy.influence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.enhance.html">conninfpy.enhance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.harmonize.html">conninfpy.harmonize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.sim.html">conninfpy.sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.defaults.html">conninfpy.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conninfpy.preprocessing.html">conninfpy.preprocessing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#shared-array-helpers">Shared array helpers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy._shared.arrays.fisher_r_to_z"><code class="docutils literal notranslate"><span class="pre">fisher_r_to_z()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy._shared.arrays.fisher_z_to_r"><code class="docutils literal notranslate"><span class="pre">fisher_z_to_r()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy._shared.arrays.get_components"><code class="docutils literal notranslate"><span class="pre">get_components()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy._shared.arrays.binarize"><code class="docutils literal notranslate"><span class="pre">binarize()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#conninfpy._shared.arrays.create_prior_weights"><code class="docutils literal notranslate"><span class="pre">create_prior_weights()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ConnInfPy</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">conninfpy</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/conninfpy.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="conninfpy">
+<h1>conninfpy<a class="headerlink" href="#conninfpy" title="Link to this heading"></a></h1>
+<p>Start with <code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.analyze()</span></code>; reach advanced functions through
+their module.</p>
+<p>Main entry point and result types:</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.analysis.html">conninfpy.analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.results.html">conninfpy.results</a></li>
+</ul>
+</div>
+<p>Atlases, anatomical interpretation and figures:</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.atlas.html">conninfpy.atlas</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.interpret.html">conninfpy.interpret</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.plot.html">conninfpy.plot</a></li>
+</ul>
+</div>
+<p>Advanced inference (custom designs, F-contrasts, null distributions):</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.stats.html">conninfpy.stats</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.influence.html">conninfpy.influence</a></li>
+</ul>
+</div>
+<p>Network enhancement:</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.enhance.html">conninfpy.enhance</a></li>
+</ul>
+</div>
+<p>Multi-site harmonization:</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.harmonize.html">conninfpy.harmonize</a></li>
+</ul>
+</div>
+<p>Synthetic data and benchmark scenarios:</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.sim.html">conninfpy.sim</a></li>
+</ul>
+</div>
+<p>Utilities and constants:</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.defaults.html">conninfpy.defaults</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conninfpy.preprocessing.html">conninfpy.preprocessing</a></li>
+</ul>
+</div>
+<section id="shared-array-helpers">
+<h2>Shared array helpers<a class="headerlink" href="#shared-array-helpers" title="Link to this heading"></a></h2>
+<p><a class="reference internal" href="#conninfpy._shared.arrays.fisher_r_to_z" title="conninfpy._shared.arrays.fisher_r_to_z"><code class="xref py py-func docutils literal notranslate"><span class="pre">fisher_r_to_z()</span></code></a> (also exported as
+<code class="xref py py-func docutils literal notranslate"><span class="pre">conninfpy.fisher_r_to_z()</span></code>) and the connected-component labelling used by
+the enhancement operators.</p>
+<p id="module-conninfpy._shared.arrays">Statistical utilities for ConnInfPy.</p>
+<p>Includes:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#conninfpy._shared.arrays.fisher_r_to_z" title="conninfpy._shared.arrays.fisher_r_to_z"><code class="xref py py-func docutils literal notranslate"><span class="pre">fisher_r_to_z()</span></code></a> / <a class="reference internal" href="#conninfpy._shared.arrays.fisher_z_to_r" title="conninfpy._shared.arrays.fisher_z_to_r"><code class="xref py py-func docutils literal notranslate"><span class="pre">fisher_z_to_r()</span></code></a> — Fisher transformations.</p></li>
+<li><p><a class="reference internal" href="#conninfpy._shared.arrays.get_components" title="conninfpy._shared.arrays.get_components"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_components()</span></code></a> — connected components (BCT-style).</p></li>
+<li><p><a class="reference internal" href="#conninfpy._shared.arrays.binarize" title="conninfpy._shared.arrays.binarize"><code class="xref py py-func docutils literal notranslate"><span class="pre">binarize()</span></code></a> — threshold-and-binarize a connectivity matrix.</p></li>
+<li><p><a class="reference internal" href="#conninfpy._shared.arrays.create_prior_weights" title="conninfpy._shared.arrays.create_prior_weights"><code class="xref py py-func docutils literal notranslate"><span class="pre">create_prior_weights()</span></code></a> — block-density priors used by NI-TFNBS.</p></li>
+</ul>
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy._shared.arrays.fisher_r_to_z">
+<span class="sig-prename descclassname"><span class="pre">conninfpy._shared.arrays.</span></span><span class="sig-name descname"><span class="pre">fisher_r_to_z</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">r</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">handle_bounds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">clip_r</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_report</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.15)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="k"><span class="pre">False</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/_shared/arrays.html#fisher_r_to_z"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy._shared.arrays.fisher_r_to_z" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py">
+<span class="sig-prename descclassname"><span class="pre">conninfpy._shared.arrays.</span></span><span class="sig-name descname"><span class="pre">fisher_r_to_z</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">r</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">handle_bounds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">clip_r</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_report</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.15)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="k"><span class="pre">True</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><span class="pre">dict</span></a><span class="p"><span class="pre">]</span></span></span></span></dt>
+<dd><p>Apply Fisher r-to-z transformation to correlation coefficients, handling boundary cases.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>r</strong> (<em>np.ndarray</em>) – Array of correlation coefficients with values in <code class="docutils literal notranslate"><span class="pre">[-1,</span> <span class="pre">1]</span></code>.
+Can be any shape (scalar, 1D, 2D, …).</p></li>
+<li><p><strong>handle_bounds</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – Clip-z policy: if True (default), clip z to <code class="docutils literal notranslate"><span class="pre">[-max_z,</span> <span class="pre">max_z]</span></code>
+(this also makes <code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">±1</span></code> finite). If False, keep the exact
+transform, with infinities at <code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">±1</span></code> and a warning.</p></li>
+<li><p><strong>max_z</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Clipping bound of the clip-z policy (default: 5, i.e.
+<code class="docutils literal notranslate"><span class="pre">|r|</span> <span class="pre">&gt;</span> <span class="pre">tanh(5)</span> <span class="pre">≈</span> <span class="pre">0.99991</span></code>). Every value beyond it is clipped, so
+the transform stays monotone in <code class="docutils literal notranslate"><span class="pre">r</span></code>.</p></li>
+<li><p><strong>clip_r</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – Clip-r policy: clip correlations to <code class="docutils literal notranslate"><span class="pre">[-clip_r,</span> <span class="pre">clip_r]</span></code> <em>before</em>
+<code class="docutils literal notranslate"><span class="pre">arctanh</span></code> instead of clipping z afterwards (<code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">&lt;</span> <span class="pre">clip_r</span> <span class="pre">&lt;</span> <span class="pre">1</span></code>).
+This is the historical in-app “Apply Fisher-z now” behaviour
+(<code class="docutils literal notranslate"><span class="pre">clip_r=0.9999</span></code>, z bounded by <code class="docutils literal notranslate"><span class="pre">atanh(0.9999)</span> <span class="pre">≈</span> <span class="pre">4.9517</span></code>, no
+warning). Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">handle_bounds=False</span></code>; out-of-
+range input still raises.</p></li>
+<li><p><strong>return_report</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – Also return a report dict with the number of clipped values,
+separating the structural diagonal (<code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">1</span></code> by construction) from
+observed off-diagonal values, with explicit count units (matrix
+cells vs unique undirected edges vs observations). Under the
+unbounded policy nothing is clipped: the clipped counts are zero
+and values left at ±infinity are reported separately
+(<code class="docutils literal notranslate"><span class="pre">left_at_infinity</span></code>). Default False returns only the transformed
+array.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>z</strong> – Array of z-scores with the same shape as <code class="docutils literal notranslate"><span class="pre">r</span></code> (plus the report
+dict when <code class="docutils literal notranslate"><span class="pre">return_report=True</span></code>).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If any value in <code class="docutils literal notranslate"><span class="pre">r</span></code> is outside <code class="docutils literal notranslate"><span class="pre">[-1,</span> <span class="pre">1]</span></code>, or <code class="docutils literal notranslate"><span class="pre">clip_r</span></code> is not
+    a number in (0, 1), or both <code class="docutils literal notranslate"><span class="pre">clip_r</span></code> and
+    <code class="docutils literal notranslate"><span class="pre">handle_bounds=False</span></code> are given.</p>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<dl class="simple">
+<dt>UserWarning</dt><dd><p>Under the clip-z policy: if <code class="docutils literal notranslate"><span class="pre">r</span></code> contains <code class="docutils literal notranslate"><span class="pre">±1</span></code> or values beyond
+<code class="docutils literal notranslate"><span class="pre">tanh(max_z)</span></code>. With <code class="docutils literal notranslate"><span class="pre">handle_bounds=False</span></code>: if <code class="docutils literal notranslate"><span class="pre">r</span></code> contains
+<code class="docutils literal notranslate"><span class="pre">±1</span></code> (infinities are kept). The clip-r policy stays silent, as it
+has always been; use <code class="docutils literal notranslate"><span class="pre">return_report</span></code> for its counts.</p>
+</dd>
+</dl>
+</div>
+<p class="rubric">Notes</p>
+<p>The transformation is <span class="math notranslate nohighlight">\(z = \operatorname{arctanh}(r)\)</span>. For
+<span class="math notranslate nohighlight">\(r = \pm 1\)</span>, <span class="math notranslate nohighlight">\(z\)</span> approaches <span class="math notranslate nohighlight">\(\pm\infty\)</span>. When
+<code class="docutils literal notranslate"><span class="pre">handle_bounds=True</span></code>, z is clipped at <code class="docutils literal notranslate"><span class="pre">±max_z</span></code>. (Earlier versions
+replaced only values within <code class="docutils literal notranslate"><span class="pre">np.isclose</span></code> of ±1, so r = 0.99998 gave
+z = 5.76 while the larger r = 0.99999 gave 5.) Missing values (NaN)
+stay NaN.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">r_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">fisher_r_to_z</span><span class="p">(</span><span class="n">r_vals</span><span class="p">,</span> <span class="n">handle_bounds</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">max_z</span><span class="o">=</span><span class="mf">4.0</span><span class="p">)</span>
+<span class="go">array([ 4., -4.])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy._shared.arrays.fisher_z_to_r">
+<span class="sig-prename descclassname"><span class="pre">conninfpy._shared.arrays.</span></span><span class="sig-name descname"><span class="pre">fisher_z_to_r</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/_shared/arrays.html#fisher_z_to_r"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy._shared.arrays.fisher_z_to_r" title="Link to this definition"></a></dt>
+<dd><p>Convert Fisher z-scores back to correlation coefficients.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>z</strong> (<em>np.ndarray</em>) – Fisher z-scores, any shape.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Correlation coefficients in (-1, 1), same shape as <code class="docutils literal notranslate"><span class="pre">z</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">z_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">fisher_z_to_r</span><span class="p">(</span><span class="n">z_vals</span><span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="go">array([ 0.   ,  0.762, -0.762,  0.964])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy._shared.arrays.get_components">
+<span class="sig-prename descclassname"><span class="pre">conninfpy._shared.arrays.</span></span><span class="sig-name descname"><span class="pre">get_components</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">no_depend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/_shared/arrays.html#get_components"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy._shared.arrays.get_components" title="Link to this definition"></a></dt>
+<dd><p>Connected components of an undirected binary graph.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>A</strong> (<em>np.ndarray</em><em> of </em><em>shape</em><em> (</em><em>N</em><em>, </em><em>N</em><em>)</em>) – Binary undirected adjacency matrix.</p></li>
+<li><p><strong>no_depend</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – Does nothing; kept for backwards compatibility.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>comps</strong> (<em>np.ndarray of shape (N,)</em>) – Component index (1-based) assigned to each node.</p></li>
+<li><p><strong>comp_sizes</strong> (<em>np.ndarray of shape (M,)</em>) – Number of nodes in each component.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">A</span></code> is not symmetric.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Isolated nodes form components of size 1. Component numbering is not
+guaranteed to match the BCT Matlab implementation, although the
+component topology is. Thanks to Nick Cullen for the original
+implementation.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">comps</span><span class="p">,</span> <span class="n">sizes</span> <span class="o">=</span> <span class="n">get_components</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">comps</span>
+<span class="go">array([1, 2, 3])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sizes</span>
+<span class="go">array([1, 1, 1])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy._shared.arrays.binarize">
+<span class="sig-prename descclassname"><span class="pre">conninfpy._shared.arrays.</span></span><span class="sig-name descname"><span class="pre">binarize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">W</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/conninfpy/_shared/arrays.html#binarize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy._shared.arrays.binarize" title="Link to this definition"></a></dt>
+<dd><p>Binarize a weighted connectivity matrix: nonzero → 1, zero → 0.</p>
+<p>NaN counts as absent data and becomes 0 — missing values must not
+turn into present edges. With <code class="docutils literal notranslate"><span class="pre">copy=False</span></code> the input array is
+modified in place.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>W</strong> (<em>np.ndarray</em><em> of </em><em>shape</em><em> (</em><em>N</em><em>, </em><em>N</em><em>)</em>) – Weighted connectivity matrix.</p></li>
+<li><p><strong>copy</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – If True (default), return a new array; otherwise modify <code class="docutils literal notranslate"><span class="pre">W</span></code>
+in place.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Binary adjacency matrix (0/1, same dtype behavior as input copy).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray of shape (N, N)</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">W</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+<span class="gp">... </span>    <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="p">[</span><span class="mf">1.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]</span>
+<span class="gp">... </span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">binarize</span><span class="p">(</span><span class="n">W</span><span class="p">)</span>
+<span class="go">array([[0., 1., 0.],</span>
+<span class="go">       [1., 0., 1.],</span>
+<span class="go">       [0., 0., 0.]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">binarize</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">]))</span>
+<span class="go">array([0., 0., 1.])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="conninfpy._shared.arrays.create_prior_weights">
+<span class="sig-prename descclassname"><span class="pre">conninfpy._shared.arrays.</span></span><span class="sig-name descname"><span class="pre">create_prior_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">int64</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_network_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boost_factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">NDArray</span><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/conninfpy/_shared/arrays.html#create_prior_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#conninfpy._shared.arrays.create_prior_weights" title="Link to this definition"></a></dt>
+<dd><p>Create an (N, N) symmetric weight matrix based on node network labels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>node_labels</strong> (<em>np.ndarray</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>]</em>) – 1D array of integer network IDs for each node (length N).</p></li>
+<li><p><strong>target_network_id</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><em>None</em><em>, </em><em>optional</em>) – If provided, only edges where both nodes belong to this network are
+boosted. If None (default), all intra-network edges (nodes sharing
+the same label) are boosted.</p></li>
+<li><p><strong>boost_factor</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – Multiplicative weight for priority edges (default 2.0).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>weights</strong> – Symmetric (N, N) weight matrix with background value 1.0 and
+<cite>boost_factor</cite> for priority intra-network edges. The diagonal is
+left at 1.0.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray[<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)">float</a>]</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">create_prior_weights</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">boost_factor</span><span class="o">=</span><span class="mf">3.0</span><span class="p">)</span>
+<span class="go">array([[1., 3., 1., 1.],</span>
+<span class="go">       [3., 1., 1., 1.],</span>
+<span class="go">       [1., 1., 1., 3.],</span>
+<span class="go">       [1., 1., 3., 1.]])</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="workflows.html" class="btn btn-neutral float-left" title="Recommended Workflows" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="conninfpy.analysis.html" class="btn btn-neutral float-right" title="conninfpy.analysis" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, IHB RAS.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
