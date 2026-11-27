@@ -84,7 +84,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          python -c 'import glob, os, re; from packaging.utils import parse_wheel_filename; from packaging.version import Version; tag = os.environ["RELEASE_TAG"]; assert re.fullmatch(r"v[0-9]+(?:\.[0-9]+)*(?:-rc[0-9]+)?", tag), f"Unsupported release tag: {tag}"; wheel_version = parse_wheel_filename(glob.glob("dist/*.whl")[0])[1]; assert Version(tag[1:]) == wheel_version, f"Tag {tag} does not match wheel {wheel_version}"'
+          python -c 'import glob, os, re; from packaging.utils import parse_wheel_filename; from packaging.version import Version; tag = os.environ["RELEASE_TAG"]; assert re.fullmatch(r"v[0-9]+(?:\.[0-9]+)*(?:-rc[0-9]+)?", tag), f"Unsupported release tag: {tag}"; wheel_version = parse_wheel_filename(os.path.basename(glob.glob("dist/*.whl")[0]))[1]; assert Version(tag[1:]) == wheel_version, f"Tag {tag} does not match wheel {wheel_version}"'
 
       # Hand the exact same artefacts to the downstream jobs — we publish
       # what we built and checked, never a rebuild (rebuilding could pick
