@@ -647,10 +647,10 @@ def list_manifest_files() -> list[str]:
     rel_yamls = []
     for y in yamls:
         try:
-            rel_path = str(y.relative_to(PROJECT_ROOT))
+            rel_path = y.relative_to(PROJECT_ROOT).as_posix()
             rel_yamls.append(rel_path)
         except Exception:
-            rel_yamls.append(str(y))
+            rel_yamls.append(y.as_posix())
     return sorted(rel_yamls)
 
 

@@ -24,7 +24,7 @@ def test_examples_compile_and_study_code_never_imports_runners():
     for path in (ROOT / "examples").rglob("*.py"):
         if any(part in path.parts for part in ("results", "__pycache__")):
             continue
-        tree = ast.parse(path.read_text(), filename=str(path))
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
                 assert not any(part.startswith("run_") for part in node.module.split(".")), path

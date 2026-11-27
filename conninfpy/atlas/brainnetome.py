@@ -469,12 +469,12 @@ def _build_membership_cache(path: Path, img: Any, cache: Path):
             cols.append(np.full(ijk[0].size, k, dtype=np.int32))
             vals.append(v[ijk])
         del mm
-    vals = np.concatenate(vals)
+    val_arr = np.concatenate(vals)
     scale = (
-        100.0 if vals.max() > 1.0 + 1e-6 else 1.0
+        100.0 if val_arr.max() > 1.0 + 1e-6 else 1.0
     )  # the official file stores percent
     mat = sparse.csr_matrix(
-        (vals / scale, (np.concatenate(rows), np.concatenate(cols))),
+        (val_arr / scale, (np.concatenate(rows), np.concatenate(cols))),
         shape=(int(np.prod(shape)), img.shape[3]),
         dtype=np.float32,
     )

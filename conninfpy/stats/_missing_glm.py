@@ -94,6 +94,7 @@ def _stats(Yp: npt.NDArray[np.float64], pat: _Pattern, contrast, stat_type: str)
         with np.errstate(divide="ignore", invalid="ignore"):
             F = quad / (C.shape[0] * sigma2)
         return np.where((sigma2 > floor) & np.isfinite(F), np.maximum(F, 0.0), 0.0)
+    assert pat.cXc is not None  # set for every non-F-stat pattern below
     t = _degenerate.t_ratio(contrast @ beta, pat.cXc * sigma2, pat.cXc * floor)
     return np.where(np.isfinite(t), t, 0.0)
 
@@ -295,7 +296,8 @@ def available_case_glm(
     keys = [packed[:, j].tobytes() for j in range(n_edges)]
     groups: Dict[bytes, List[int]] = {}
     for j in np.flatnonzero(covered):
-        groups.setdefault(keys[j], []).append(j)
+        idx_j = int(j)
+        groups.setdefault(keys[idx_j], []).append(idx_j)
 
     patterns: List[_Pattern] = []
     tested = np.zeros(n_edges, dtype=bool)

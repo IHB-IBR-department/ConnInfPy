@@ -1260,7 +1260,19 @@ def _numba_cache_line(numba_installed: bool) -> str:
     )
 
 
+def _configure_utf8_stdio() -> None:
+    """Ensure stdout/stderr use UTF-8 on Windows so Unicode symbols never fail."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    _configure_utf8_stdio()
     parser = argparse.ArgumentParser(
         prog="conninfpy",
         description="Permutation-based inference on brain connectivity networks.",

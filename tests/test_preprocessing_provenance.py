@@ -607,7 +607,7 @@ class TestDegeneracyFloor:
     def test_floor_constant_is_documented_and_unchanged(self):
         from conninfpy.stats import _degenerate
         assert _degenerate.RTOL == 1e-10
-        usage = (REPO / "docs" / "source" / "usage.rst").read_text()
+        usage = (REPO / "docs" / "source" / "usage.rst").read_text(encoding="utf-8")
         assert "scale-relative degeneracy floor" in usage
         assert "1e-10" in usage
 

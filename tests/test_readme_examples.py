@@ -28,13 +28,14 @@ def _example(marker: str) -> str:
 
 def _run_as_script(code: str, timeout: int = 300) -> str:
     """Run code the way a reader would: as a script, from the repo root."""
-    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".py", delete=False) as f:
         f.write(code)
         path = f.name
     try:
         proc = subprocess.run(
             [sys.executable, path], cwd=REPO, capture_output=True, text=True,
-            timeout=timeout, env={**os.environ, "PYTHONWARNINGS": "ignore"},
+            encoding="utf-8", errors="replace", timeout=timeout,
+            env={**os.environ, "PYTHONWARNINGS": "ignore", "PYTHONUTF8": "1"},
         )
     finally:
         os.unlink(path)

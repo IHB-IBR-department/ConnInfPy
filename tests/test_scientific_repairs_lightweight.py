@@ -282,7 +282,7 @@ def test_tail_invalid_values_fallback_and_numerical_zero_is_positive():
 def test_app_primary_and_companion_dispatch_scale_and_tail(kind, expected):
     # Load the actual worker without importing/rendering the Streamlit UI.
     source = Path(__file__).resolve().parents[1] / "conninfpy/app/components/design_inference.py"
-    tree = ast.parse(source.read_text())
+    tree = ast.parse(source.read_text(encoding="utf-8"))
     names = {"_run_inference_background", "_method_plan_parameters"}
     module = ast.Module(body=[n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names],
                         type_ignores=[])

@@ -64,7 +64,8 @@ def _empirical_p(
     # nulls strictly below the observed statistic, via one sorted copy.
     sorted_null = np.sort(null_dist)
     count[...] = null_dist.size - np.searchsorted(sorted_null, observed, side="left")
-    return (count + 1.0) / (len(null_dist) + 1.0), count
+    p_vals = np.asarray((count + 1.0) / (len(null_dist) + 1.0), dtype=np.float64)
+    return p_vals, count
 
 
 def _tail_payload(

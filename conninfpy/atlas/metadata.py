@@ -831,10 +831,10 @@ def _assign_one(coords: Any, reference: Any, *, max_distance: Optional[float]) -
             labelled = np.argwhere(np.isin(data, ref.label_ids))
             world = labelled @ affine[:3, :3].T + affine[:3, 3]
             d, j = cKDTree(world).query(coords[todo])
-            for i, di, ji in zip(todo, d, j, strict=True):
+            for ti, di, ji in zip(todo, d, j, strict=True):
                 if di <= max_distance:
-                    idx[i] = pos[int(data[tuple(labelled[ji])])]
-                    dist[i], method[i] = di, "nearest voxel"
+                    idx[ti] = pos[int(data[tuple(labelled[ji])])]
+                    dist[ti], method[ti] = di, "nearest voxel"
     elif ref.coords is not None and max_distance is not None:
         warnings.warn(
             "the reference atlas has no label image; each coordinate is assigned "

@@ -279,7 +279,9 @@ def plot_connectogram(
         a = np.deg2rad(_side_angle(s, h))
         return np.array([r_in * np.cos(a), r_in * np.sin(a)])
 
-    segs, cols, lws = [], [], []
+    segs: list[Any] = []
+    cols: list[Any] = []
+    lws: list[float] = []
     vmax = float(links["value"].max()) if len(links) else 1.0
     for row in links.itertuples(index=False):
         na, nb = _network_key(row.network_a), _network_key(row.network_b)

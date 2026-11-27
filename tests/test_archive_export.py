@@ -377,7 +377,8 @@ def _run_cli(config_path, out_name="out"):
     proc = subprocess.run(
         [sys.executable, "-m", "conninfpy", "run", str(config_path), "--out",
          str(config_path.parent / out_name)],
-        capture_output=True, text=True, timeout=600, env=env, cwd=str(REPO))
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=600, env=env, cwd=str(REPO))
     assert proc.returncode == 0, proc.stdout + proc.stderr
     return proc
 
@@ -778,7 +779,8 @@ class TestOwnerReplayContract:
         proc = subprocess.run(
             [sys.executable, "-m", "conninfpy", "run", str(extract / "analysis.yaml"),
              "--out", str(elsewhere / "out")],
-            capture_output=True, text=True, timeout=600, env=env, cwd=str(tmp_path))
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=600, env=env, cwd=str(tmp_path))
         assert proc.returncode == 0, proc.stdout + proc.stderr
         with np.load(elsewhere / "out" / "pvals.npz") as zr:
             assert np.array_equal(zr["positive"], np.load(io.BytesIO(zf.read("arrays/p_positive.npy"))))

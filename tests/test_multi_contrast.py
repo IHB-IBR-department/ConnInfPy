@@ -78,6 +78,10 @@ class TestMultiContrast(unittest.TestCase):
         # everything else), the reduced model differs from the default
         # (where age, sex, motion are all of interest).
         Y, X, contrasts = _make_inputs()
+        # Plant a strong sex effect so removing sex into the joint nuisance
+        # model changes the permuted residual distribution unmistakably.
+        Y[:, 0, 1] += 2.0 * X[:, 2]
+        Y[:, 1, 0] = Y[:, 0, 1]
         nuisance_only_age = np.array([0.0, 1.0, 0.0, 0.0])
         result_default = compute_p_val_glm_multi(
             Y, X, contrasts,

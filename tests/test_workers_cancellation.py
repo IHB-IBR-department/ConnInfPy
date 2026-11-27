@@ -13,6 +13,7 @@ from __future__ import annotations
 import glob
 import os
 import pickle
+import sys
 import tempfile
 import threading
 import time
@@ -55,6 +56,22 @@ def _task_files():
 
 
 def _alive(pid):
+    if sys.platform == "win32":
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not handle:
+            return False
+        try:
+            exit_code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return False
+            return exit_code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

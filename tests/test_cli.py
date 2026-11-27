@@ -251,7 +251,8 @@ class TestCommand(unittest.TestCase):
                 [sys.executable, "-m", "conninfpy", "run",
                  "examples/abide/configs/abide_mini_age.yaml", "--out", tmp,
                  "--n-permutations", "50"],
-                cwd=REPO, capture_output=True, text=True, timeout=600,
+                cwd=REPO, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=600,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
             # 204 in the file; one subject has a region without signal and is

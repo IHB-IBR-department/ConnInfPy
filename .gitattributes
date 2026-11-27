@@ -1,0 +1,3 @@
+# Preserve LF line endings across platforms so SHA-256 checks on checked-out
+# text fixtures (e.g. examples/simulations/sc_prior/data/) match everywhere.
+* text=auto eol=lf

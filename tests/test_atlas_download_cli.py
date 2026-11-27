@@ -142,6 +142,7 @@ def _synthetic_sources(tmp_path: Path) -> dict:
 
 
 def test_build_bna246_csv_reproducible_and_correct(tmp_path):
+    pytest.importorskip("openpyxl")
     src = _synthetic_sources(tmp_path)
     b1 = dl.build_bna246_csv(src["nifti"], src["lut"], src["xlsx"])
     b2 = dl.build_bna246_csv(src["nifti"], src["lut"], src["xlsx"])
@@ -167,6 +168,7 @@ def test_build_bna246_csv_reproducible_and_correct(tmp_path):
 
 
 def test_build_bna_hierarchy_csv_reproducible_and_cross_checked(tmp_path):
+    pytest.importorskip("openpyxl")
     src = _synthetic_sources(tmp_path)
     bna = dl.build_bna246_csv(src["nifti"], src["lut"], src["xlsx"])
     bna_csv = tmp_path / "bna246.csv"

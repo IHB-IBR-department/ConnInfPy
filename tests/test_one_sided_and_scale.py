@@ -92,7 +92,7 @@ def test_r_to_z_false_analyses_correlations_as_given():
 def _app_worker():
     """The Streamlit worker, loaded without importing the UI."""
     source = Path(__file__).resolve().parents[1] / "conninfpy/app/components/design_inference.py"
-    tree = ast.parse(source.read_text())
+    tree = ast.parse(source.read_text(encoding="utf-8"))
     names = {"_run_inference_background", "_method_plan_parameters"}
     module = ast.Module(body=[n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names],
                         type_ignores=[])

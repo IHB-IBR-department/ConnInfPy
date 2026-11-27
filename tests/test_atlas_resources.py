@@ -249,7 +249,7 @@ def test_valid_original_is_returned(original):
 def test_changed_original_is_rejected_after_cached_validation(original):
     folder, path = original
     resources.brainnetome_resource_path(path.name, data_dir=folder)
-    path.write_bytes(b"damaged-original!!")
+    path.write_bytes(b"damaged-original-content!!")
     with pytest.raises(ValueError, match="SHA256"):
         resources.brainnetome_resource_path(path.name, data_dir=folder)
 
