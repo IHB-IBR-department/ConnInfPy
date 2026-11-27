@@ -7,17 +7,19 @@ string. It is consumed by the export and plotting helpers
 ``summary_figure``) so significant edges can be reported with ROI names
 and network context rather than bare indices.
 
-Two bundled atlases ship with v2.0:
+Two built-in atlas families are supported in v2.0:
 
-* :meth:`AtlasInfo.schaefer_100_yeo7`,
+* **Bundled:** :meth:`AtlasInfo.schaefer_100_yeo7`,
   :meth:`AtlasInfo.schaefer_200_yeo7`,
   :meth:`AtlasInfo.schaefer_400_yeo7` — Schaefer 2018 cortical
   parcellations at three resolutions with Yeo 7-network labels and
-  MNI152 centroid coordinates.
-* :meth:`AtlasInfo.bna_246` — Brainnetome Atlas (Fan et al. 2016) 246
-  cortical + subcortical regions, with the Brainnetome Yeo-7 crosswalk by
-  default (Yeo-17 or anatomical lobes can also be selected), and MNI152-1mm
-  centroids derived from ``BN_Atlas_246_1mm.nii.gz``.
+  MNI152 centroid coordinates (shipped with the package).
+* **On-demand (downloaded separately):** :meth:`AtlasInfo.bna_246` —
+  Brainnetome Atlas (Fan et al. 2016) 246 cortical + subcortical regions,
+  with the Brainnetome Yeo-7 crosswalk by default (Yeo-17 or anatomical
+  lobes can also be selected), and MNI152-1mm centroids derived from
+  ``BN_Atlas_246_1mm.nii.gz``. Run ``conninfpy download-atlases`` to
+  populate the local cache before calling :meth:`AtlasInfo.bna_246`.
 
 Custom CSVs can be loaded via :meth:`AtlasInfo.from_csv`, any integer
 label image via :meth:`AtlasInfo.from_nifti`, and nilearn's deterministic

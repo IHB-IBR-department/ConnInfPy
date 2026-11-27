@@ -700,7 +700,8 @@ Replaying application runs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The application's *Download Full Analysis Archive* export writes a ZIP with
-a reloadable ``bundle.pkl`` (trusted-only pickle), the corrected-evidence and
+a reloadable ``result_bundle.zip`` (pickle-free ZIP containing JSON metadata
+and numeric NPY arrays), the corrected-evidence and
 coefficient arrays, the edge / network / node / component / block tables,
 figures, a deterministic ``methods.md`` and an ``analysis.yaml`` for this
 command together with an explicit replay status
@@ -792,14 +793,14 @@ four explicit sections plus optional subject data:
   to ``unknown``) instead of being skipped silently.
 - Saving a workspace from the sidebar (*Save workspace (.zip)*) always produces
   a pickle-free archive, including when a full finished result is present: it
-  carries the ``workspace/`` layer and the standard analysis files, but never a
-  ``bundle.pkl``. Root ``manifest.json`` states that honestly
-  (``bundle_available: false``, ``trusted_only: []``, a ``bundle.pkl omitted``
-  note, and ``methods.md`` says the export is pickle-free by design). The
-  trusted snapshot stays opt-in through the results-page *Download Full
-  Analysis Archive (ZIP)* button, whose ``bundle.pkl`` and warning are
-  unchanged.
-- Inspection and restoration never import ``pickle`` or read ``bundle.pkl``, and
+  carries the ``workspace/`` layer and the standard analysis files, omitting
+  the separate ``result_bundle.zip`` member. Root ``manifest.json`` states that
+  explicitly (``bundle_available: false``, ``trusted_only: []``, and
+  ``methods.md`` notes that the export is pickle-free by design). The
+  reloadable ``result_bundle.zip`` (safe ZIP/JSON/NPY, no Python pickle) is
+  included when exporting through the results-page *Download Full Analysis
+  Archive (ZIP)* button.
+- Inspection and restoration never import ``pickle`` or read pickled files, and
   reject corrupt checksums, malformed sections, or unsupported schema versions
   without mutating the active session. An archive is parsed, validated and
   summarized exactly once, and only then applied, so a rejected archive cannot

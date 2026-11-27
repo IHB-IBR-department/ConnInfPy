@@ -127,7 +127,14 @@ def _table1(path: Path):
     """Fan et al. (2016) Table 1 (BNA_subregions.xlsx) as one row per ROI id."""
     import pandas as pd
 
-    raw = pd.read_excel(path, header=None).iloc[1:]
+    try:
+        raw = pd.read_excel(path, header=None).iloc[1:]
+    except ImportError as exc:
+        raise ImportError(
+            "Reading BNA_subregions.xlsx requires 'openpyxl'. "
+            "Install it with `pip install openpyxl` and re-run "
+            "`conninfpy download-atlases`."
+        ) from exc
     raw[0] = raw[0].ffill()
     raw[1] = raw[1].ffill()
     rows = []

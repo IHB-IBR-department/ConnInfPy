@@ -1315,10 +1315,10 @@ def build_workspace_archive(
     ``manifest.json``.
 
     This is the default workspace save path (sidebar *Save workspace*, Cloud
-    save): it NEVER writes a ``bundle.pkl`` pickle member. The explicit
-    ``NETSTAT-24`` *Download Full Analysis Archive* button keeps calling
-    ``build_analysis_archive`` directly (``include_bundle=True``), so an
-    operator can still request the trusted bundle deliberately.
+    save): it omits the separate ``result_bundle.zip`` member (and never writes
+    Python pickle files). The explicit ``NETSTAT-24`` *Download Full Analysis
+    Archive* button keeps calling ``build_analysis_archive`` directly
+    (``include_bundle=True``) to include the pickle-free ``result_bundle.zip``.
     """
     from conninfpy.app.utils.archive_export import (
         ARCHIVE_KIND,

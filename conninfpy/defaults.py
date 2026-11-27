@@ -97,17 +97,26 @@ def warn_low_nbs_threshold(method, threshold):
         )
 
 
-def warn_bh_permutation_resolution(m, n_permutations):
-    """Warn when permutation resolution cannot support sparse BH rejections."""
+def format_bh_permutation_resolution_warning(m: int, n_permutations: int) -> str | None:
+    """Return warning text when permutation resolution cannot support sparse BH rejections."""
     import math
-    import warnings
 
     rank = m / (0.05 * (n_permutations + 1.0))
     if rank > 1.0:
-        warnings.warn(
+        return (
             f"bh_fdr_perm resolution: m={m} edges, B={n_permutations}, "
             f"p_min={1 / (n_permutations + 1.0):.6g}; minimum rejection "
             f"rank k_min={math.ceil(rank)} at q=0.05. For single-edge "
             f"sensitivity use n_permutations >= {math.ceil(m / 0.05)} "
-            "or consider parametric bh_fdr.", UserWarning, stacklevel=3
+            "or consider parametric bh_fdr."
         )
+    return None
+
+
+def warn_bh_permutation_resolution(m, n_permutations):
+    """Warn when permutation resolution cannot support sparse BH rejections."""
+    msg = format_bh_permutation_resolution_warning(m, n_permutations)
+    if msg is not None:
+        import warnings
+
+        warnings.warn(msg, UserWarning, stacklevel=3)

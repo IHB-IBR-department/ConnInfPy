@@ -29,7 +29,7 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence, TextIO, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -1464,33 +1464,25 @@ def _run_single_inference(
         )
         return result, design_diag
     group1, group2 = state.group1, state.group2
-    bh_resolution_flags: List[str] = []
-    with warnings.catch_warnings():
-        # Thread the bh_fdr_perm permutation-resolution warning (emitted by
-        # compute_p_val / the available-case path) into AnalyzeResult.flags
-        # without swallowing it: force 'always' for that message only and
-        # forward every warning to the original handler.
-        warnings.filterwarnings(
-            "always", message=r"bh_fdr_perm resolution.*", category=UserWarning
-        )
-        _orig_showwarning = warnings.showwarning
+    result = compute_p_val(
+        group1, group2, test_type=state.test_type,
+        var_equal=state.var_equal,
+        **_inference_kwargs(state),
+        **state.method_kwargs,
+    )
+    if state.method == "bh_fdr_perm":
+        from conninfpy.defaults import format_bh_permutation_resolution_warning
 
-        def _capture_bh_resolution(
-            message: Union[Warning, str], category: type[Warning], filename: str,
-            lineno: int, file: Optional[TextIO] = None, line: Optional[str] = None,
-        ) -> None:
-            if str(message).startswith("bh_fdr_perm resolution"):
-                bh_resolution_flags.append(str(message))
-            _orig_showwarning(message, category, filename, lineno, file, line)
-
-        warnings.showwarning = _capture_bh_resolution
-        result = compute_p_val(
-            group1, group2, test_type=state.test_type,
-            var_equal=state.var_equal,
-            **_inference_kwargs(state),
-            **state.method_kwargs,
-        )
-    state.flags.extend(bh_resolution_flags)
+        mr = getattr(result, "missing_report", None)
+        if isinstance(mr, dict) and "n_edges_tested" in mr:
+            m_tested = int(mr["n_edges_tested"])
+        else:
+            n_roi = int(group1.shape[-1]) if group1 is not None else 0
+            m_tested = n_roi * (n_roi - 1) // 2
+        if m_tested > 0:
+            bh_msg = format_bh_permutation_resolution_warning(m_tested, state.n_permutations)
+            if bh_msg is not None:
+                state.flags.append(bh_msg)
     if state.test_type == "two-sample":
         assert group1 is not None and group2 is not None
         n1, n2 = group1.shape[0], group2.shape[0]
