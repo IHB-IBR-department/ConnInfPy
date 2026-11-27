@@ -1,4 +1,8 @@
-"""NETSTAT-21 tests: shared defaults across UI, worker dispatch, and docs."""
+"""NETSTAT-21 tests: shared defaults across UI, worker dispatch, and docs.
+
+Also hosts the NETSTAT-86 fast public-API default regression (signature
+inspection plus the tail-policy resolver — no simulation, no UI).
+"""
 
 import ast
 import inspect
@@ -280,3 +284,79 @@ def test_readme_and_start_thres_docstring_accuracy():
     assert defaults.DEFAULT_START_THRESHOLD == 1.65
     defaults_src = (REPO / "conninfpy" / "defaults.py").read_text(encoding="utf-8")
     assert "asymptotic normal" in defaults_src
+
+
+# ---------------------------------------------------------------------------
+# NETSTAT-86: fast public-API default regression (no simulation, no UI).
+# ---------------------------------------------------------------------------
+
+
+def test_public_api_signature_defaults():
+    import conninfpy
+
+    p = inspect.signature(conninfpy.compute_p_val).parameters
+    assert p["two_tailed"].default is True
+    assert p["n_permutations"].default == defaults.DEFAULT_N_PERMUTATIONS == 1000
+    assert p["threshold"].default == defaults.DEFAULT_NBS_THRESHOLD == 3.0
+    assert p["nbs_stat"].default == defaults.DEFAULT_NBS_STAT == "extent"
+    assert p["e"].default == defaults.DEFAULT_EXTENT_EXPONENT == 0.4
+    assert p["h"].default == defaults.DEFAULT_HEIGHT_EXPONENT == 3.0
+    assert p["n"].default is None
+    assert p["acceleration"].default is defaults.DEFAULT_ACCELERATION is None
+
+    g = inspect.signature(conninfpy.compute_p_val_glm).parameters
+    assert g["two_tailed"].default is True
+    assert g["n_permutations"].default == defaults.DEFAULT_N_PERMUTATIONS
+    assert g["threshold"].default == defaults.DEFAULT_NBS_THRESHOLD
+    assert g["nbs_stat"].default == defaults.DEFAULT_NBS_STAT
+    assert g["e"].default == defaults.DEFAULT_EXTENT_EXPONENT
+    assert g["h"].default == defaults.DEFAULT_HEIGHT_EXPONENT
+    assert g["n"].default is None
+    assert g["acceleration"].default is None
+
+    a = inspect.signature(conninfpy.analyze).parameters
+    # analyze defers the tail decision: two_tailed=None resolves to two-sided
+    # unless tested_tail prespecifies a direction (functional check below).
+    assert a["two_tailed"].default is None
+    assert a["tested_tail"].default is None
+    assert a["n_permutations"].default == defaults.DEFAULT_N_PERMUTATIONS
+    assert a["e"].default == defaults.DEFAULT_EXTENT_EXPONENT
+    assert a["h"].default == defaults.DEFAULT_HEIGHT_EXPONENT
+    assert a["n"].default is None
+    assert a["acceleration"].default is None
+
+    # BCT-compatible NBS wrapper: two-sided max-statistic null is built in
+    # (no two_tailed parameter); threshold/stat_type/n_permutations defaults
+    # must stay aligned with the shared constants.
+    b = inspect.signature(conninfpy.nbs_bct).parameters
+    assert b["threshold"].default == defaults.DEFAULT_NBS_THRESHOLD == 3.0
+    assert b["stat_type"].default == defaults.DEFAULT_NBS_STAT == "extent"
+    assert b["n_permutations"].default == defaults.DEFAULT_N_PERMUTATIONS
+
+
+def test_analyze_tail_policy_none_means_two_sided():
+    from conninfpy._analysis_stages import _resolve_tail_policy
+
+    state = SimpleNamespace(tested_tail=None, two_tailed=None, method_kwargs={}, flags=[])
+    _resolve_tail_policy(state)
+    assert state.effective_two_tailed is True
+
+    state = SimpleNamespace(tested_tail=None, two_tailed=False, method_kwargs={}, flags=[])
+    _resolve_tail_policy(state)
+    assert state.effective_two_tailed is False
+
+    state = SimpleNamespace(
+        tested_tail="positive", two_tailed=None, method_kwargs={}, flags=[]
+    )
+    _resolve_tail_policy(state)
+    assert state.effective_two_tailed is False
+
+
+def test_docs_conf_version_matches_package():
+    import runpy
+
+    import conninfpy
+
+    conf = runpy.run_path(str(REPO / "docs" / "source" / "conf.py"))
+    assert conf["release"] == conninfpy.__version__
+    assert conf["version"] == ".".join(conninfpy.__version__.split(".")[:2])

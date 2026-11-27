@@ -3,13 +3,28 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+# -- Path setup --------------------------------------------------------------
+# Make the checkout importable (also for autodoc) regardless of the working
+# directory Sphinx is invoked from.
+import os
+import sys
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, _REPO_ROOT)
+sys.path.insert(0, os.path.join(_REPO_ROOT, 'conninfpy'))
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+
+# Single source of truth for the version: conninfpy/_version.py, the same
+# module setuptools reads for the distribution version (pyproject.toml).
+from conninfpy._version import __version__
 
 project = 'ConnInfPy'
 copyright = '2026, IHB RAS'
 author = 'N.P. Bechtereva Institute of the Human Brain, Russian Academy of Sciences - IHB RAS'
-release = '2.0'
+release = __version__
+version = '.'.join(release.split('.')[:2])
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -59,8 +74,3 @@ try:
 except ImportError:
     html_theme = 'alabaster'
 html_static_path = ['_static']
-
-import os
-import sys
-sys.path.insert(0, os.path.abspath('../../'))
-sys.path.insert(0, os.path.abspath('../../conninfpy'))

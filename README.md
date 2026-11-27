@@ -50,6 +50,13 @@ Requires **Python 3.12–3.14** (`>=3.12,<3.15`). If your system uses Python
 3.10/3.11 (e.g. Ubuntu 22.04 LTS or an older conda base), create a Python
 3.13 environment using either recipe below.
 
+**Supported platforms:** Linux (x86_64, aarch64), Windows (x86_64), and
+**macOS on Apple Silicon (`arm64`) only**. Intel Macs (`x86_64`) are not
+supported: `numba>=0.63` / `llvmlite>=0.46` publish no macOS `x86_64` wheels
+on PyPI, so an install there would fall back to building `llvmlite` from
+source. On an Intel Mac, run ConnInfPy in a Linux container/VM or on other
+hardware instead.
+
 > **Shared / read-only HPC environments.** If `site-packages` is read-only on a cluster, set a writable Numba cache directory before running ConnInfPy: `export NUMBA_CACHE_DIR=/tmp/numba_cache` (or a writable scratch directory).
 
 ### `uv`

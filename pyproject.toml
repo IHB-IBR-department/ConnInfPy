@@ -23,7 +23,12 @@ keywords = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "Operating System :: OS Independent",
+    # The package itself is pure Python, but the numba/llvmlite dependency
+    # ships binary wheels only for these platforms, and its macOS wheels are
+    # Apple Silicon (arm64) only — see the numba note under dependencies.
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS :: MacOS X",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -33,11 +38,11 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
 # Supported Pythons: 3.12, 3.13, 3.14 — exactly what the classifiers
-# advertise and what CI (tests.yml / publish.yml) tests. The upper bound
-# tracks numba wheel availability: numba 0.67 supports up to 3.14, and an
-# uncapped ">=3.12" would let a future 3.15 resolve a numba with no wheels
-# for it (source-build failure) or no numba at all. Lift the cap in a new
-# release once numba ships wheels for the next Python.
+# advertise and what CI (tests.yml / publish.yml) tests on Linux, Windows
+# and macOS (arm64). The upper bound tracks the tested matrix rather than
+# numba wheel availability (numba already ships 3.15 wheels): an uncapped
+# ">=3.12" would advertise an untested interpreter. Lift the cap in a new
+# release once CI covers the next Python.
 requires-python = ">=3.12,<3.15"
 dependencies = [
     "numpy",
@@ -46,7 +51,10 @@ dependencies = [
     "pandas",
     "matplotlib",
     # 0.63 is the first release supporting Python 3.14; numba selects its
-    # compatible llvmlite dependency. CI exercises the supported platforms.
+    # compatible llvmlite dependency. macOS support is Apple Silicon (arm64)
+    # only: numba >= 0.63 / llvmlite >= 0.46 publish no macOS x86_64 wheels
+    # on PyPI (checked for 0.63.0/0.46.0 and 0.68.0/0.50.0), so Intel Macs
+    # would fall back to an llvmlite source build and are not supported.
     "numba>=0.63",
     # conninfpy.sim (generate_fc_matrices, generate_multisite_glm_dataset)
     # and the ML-transfer examples; also pulled in by nilearn for the app.
