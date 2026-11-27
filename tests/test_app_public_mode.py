@@ -202,3 +202,69 @@ def test_public_mode_suppresses_st_exception_on_load_error(monkeypatch):
     assert len(app.error) >= 1
     assert str(helpers.PROJECT_ROOT) not in app.error[0].value
     assert not app.exception
+
+
+def test_bundled_atlas_sidebar_with_empty_cache(monkeypatch, tmp_path):
+    """NETSTAT-84: an empty atlas cache must not offer (or crash on) BNA-246."""
+    monkeypatch.setenv('CONNINFPY_ATLAS_DIR', str(tmp_path / 'empty_atlases'))
+    monkeypatch.setenv('CONNINFPY_PUBLIC_MODE', '1')
+    app = AppTest.from_file(str(APP), default_timeout=120).run()
+    assert not app.exception
+    sb = next(x for x in app.selectbox if x.label == 'Reference Parcellation')
+    assert 'BNA-246' not in sb.options
+    assert sb.options == ['Schaefer-100 Yeo-7', 'Schaefer-200 Yeo-7', 'Schaefer-400 Yeo-7']
+    sb.set_value('Schaefer-200 Yeo-7').run()
+    assert not app.exception
+    # A stale 'BNA-246' selection retained from an older session is sanitized
+    # before the selectbox is declared (no crash, no invalid widget value).
+    stale = AppTest.from_file(str(APP), default_timeout=120)
+    stale.session_state['atlas_choice'] = 'BNA-246'
+    stale.run()
+    assert not stale.exception
+    sb = next(x for x in stale.selectbox if x.label == 'Reference Parcellation')
+    assert sb.value in sb.options
+
+
+def test_bna_selection_without_cache_shows_download_hint(monkeypatch, tmp_path):
+    """NETSTAT-84: even if BNA-246 is offered, a missing file is a friendly error."""
+    from conninfpy.atlas import resources as atlas_resources
+    monkeypatch.setenv('CONNINFPY_ATLAS_DIR', str(tmp_path / 'empty_atlases'))
+    monkeypatch.setenv('CONNINFPY_PUBLIC_MODE', '1')
+    monkeypatch.setattr(atlas_resources, 'atlas_resource_available', lambda *a, **kw: True)
+    app = AppTest.from_file(str(APP), default_timeout=120).run()
+    assert not app.exception
+    sb = next(x for x in app.selectbox if x.label == 'Reference Parcellation')
+    assert 'BNA-246' in sb.options
+    sb.set_value('BNA-246').run()
+    assert not app.exception
+    assert any('conninfpy download-atlases' in e.value for e in app.sidebar.error)
+
+
+def test_public_mode_failure_never_renders_traceback(monkeypatch):
+    """NETSTAT-84: CONNINFPY_PUBLIC_MODE=1 hides task.error tracebacks/paths."""
+
+    def script():
+        # AppTest.from_function re-executes the source in a fresh namespace,
+        # so everything the script needs must be defined inside it.
+        from types import SimpleNamespace
+        from conninfpy.app.components import design_inference
+        task = SimpleNamespace(
+            error='boom\nTraceback (most recent call last):\n  File "/server/secret/path.py", line 1, in run\nValueError: boom',
+        )
+        design_inference._render_failed_inference(task)
+
+    monkeypatch.setenv('CONNINFPY_PUBLIC_MODE', '1')
+    app = AppTest.from_function(script, default_timeout=60).run()
+    assert not app.exception
+    assert not any(x.label == 'Error Traceback' for x in app.text_area)
+    rendered = ' '.join(str(getattr(el, 'value', '')) for el in
+                        [*app.error, *app.warning, *app.info, *app.text_area, *app.markdown])
+    assert '/server/secret' not in rendered
+    assert 'Traceback' not in rendered
+    assert len(app.error) >= 1  # the failure itself is still announced
+
+    monkeypatch.setenv('CONNINFPY_PUBLIC_MODE', '0')
+    app = AppTest.from_function(script, default_timeout=60).run()
+    assert not app.exception
+    tb = next(x for x in app.text_area if x.label == 'Error Traceback')
+    assert 'Traceback' in tb.value

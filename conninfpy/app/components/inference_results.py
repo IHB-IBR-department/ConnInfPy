@@ -1435,7 +1435,7 @@ def _render_single_run_view(res_wrapper, edges_df, method_name, base_atlas, effe
 def _render_archive_export(base_atlas, effect_mask):
     """One download button: the full self-contained analysis archive (ZIP).
 
-    Pure export of the finished primary run: the trusted bundle, evidence
+    Pure export of the finished primary run: the safe result bundle, evidence
     arrays, tables, figures, deterministic methods and an honest CLI replay
     configuration. No preprocessing, inference, ComBat, community detection
     or simulation is (re)run; current display widgets are never written back
@@ -1490,7 +1490,7 @@ def _render_archive_export(base_atlas, effect_mask):
             "Self-contained archive of the finished run: result bundle, evidence "
             "arrays, tables, figures, deterministic methods.md and a CLI replay "
             "analysis.yaml with its replay status. Contains no subject data; "
-            "bundle.pkl is a trusted-only pickle."
+            "result_bundle.zip is a safe ZIP/JSON/NPY ResultBundle (no Python pickle)."
         ),
         key="archive_export_download",
         type="primary",

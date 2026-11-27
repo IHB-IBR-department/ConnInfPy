@@ -951,7 +951,7 @@ def _pickle_members(names) -> list:
 
 
 def test_default_workspace_save_never_carries_a_pickle(tmp_path: Path):
-    """AC3(a): the default save path has no bundle.pkl and no pickle member at all."""
+    """AC3(a): the default save path has no result_bundle.zip and no pickle member at all."""
     state = _make_full_state(tmp_path)
     zip_bytes, manifest = build_workspace_archive(state, include_data=False, project_root=tmp_path)
 
@@ -975,7 +975,7 @@ def test_default_workspace_save_never_carries_a_pickle(tmp_path: Path):
         assert section in state_doc
 
     # ...but never a pickle member.
-    assert "bundle.pkl" not in names
+    assert "result_bundle.zip" not in names
     assert _pickle_members(names) == []
 
     # The manifest and methods state the omission honestly (not "lacks metadata").
@@ -984,7 +984,7 @@ def test_default_workspace_save_never_carries_a_pickle(tmp_path: Path):
     assert root_manifest["bundle_available"] is False
     assert root_manifest["trusted_only"] == []
     assert any("pickle-free" in note for note in manifest["notes"])
-    assert "No bundle.pkl is included" in methods
+    assert "No result_bundle.zip is included" in methods
     assert "pickle-free by design" in methods
     assert "lacks the captured analysis metadata" not in methods
 
@@ -1022,7 +1022,7 @@ def test_default_workspace_archive_roundtrips_without_pickle(tmp_path: Path, mon
 
 
 def test_full_analysis_archive_keeps_trusted_bundle(tmp_path: Path):
-    """AC3(c): the explicit NETSTAT-24 archive still carries bundle.pkl + warning."""
+    """AC3(c): the explicit NETSTAT-24 archive still carries result_bundle.zip (safe ZIP)."""
     state = _make_full_state(tmp_path)
     kwargs = dict(project_root=tmp_path, workspace_state=state)
     zip_bytes, manifest = build_analysis_archive(
@@ -1031,10 +1031,10 @@ def test_full_analysis_archive_keeps_trusted_bundle(tmp_path: Path):
     with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
         names = set(zf.namelist())
         methods = zf.read("methods.md").decode("utf-8")
-    assert "bundle.pkl" in names
+    assert "result_bundle.zip" in names
     assert manifest["bundle_available"] is True
-    assert manifest["trusted_only"] == ["bundle.pkl"]
-    assert "bundle.pkl is a Python pickle for trusted use only" in methods
+    assert manifest["trusted_only"] == []
+    assert "result_bundle.zip is a safe ResultBundle archive" in methods
     assert not any("pickle-free" in note for note in manifest["notes"])
 
     # The explicit opt-out is honest instead of implying missing metadata.

@@ -84,7 +84,7 @@ def _verify_atlas_file(path: Path, expected_sha256: str, suite: str) -> Path:
     if digest != expected_sha256:
         raise ValueError(
             f"{path}: SHA256 {digest} does not match the expected {suite} checksum "
-            f"({expected_sha256}). Re-run `python scripts/download_atlases.py`."
+            f"({expected_sha256}). Re-run `conninfpy download-atlases`."
         )
     return path
 
@@ -122,7 +122,7 @@ def atlas_resource_path(
     raise FileNotFoundError(
         f"Missing {meta['suite']} atlas file {filename!r} (looked in {cache_root}). "
         f"Third-party atlas files are not bundled in the MIT package. "
-        f"Run `python scripts/download_atlases.py` to populate the local cache, or set "
+        f"Run `conninfpy download-atlases` to populate the local cache, or set "
         f"CONNINFPY_ATLAS_DIR to a directory containing the verified files. "
         f"Upstream source: {meta['source_url']} | Terms: {meta['license']}."
     )

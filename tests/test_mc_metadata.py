@@ -723,7 +723,7 @@ def test_cli_bundle_exposes_per_edge_counts_and_labels_aggregates(tmp_path):
     summary = prov["results"]["result"]["monte_carlo"]
     # Run-level block, explicitly labelled, pointing at the per-edge sources.
     assert summary["level"] == "run" and summary["aggregate"] is True
-    assert "bundle.pkl" in summary["per_edge_source"]
+    assert "result_bundle.zip" in summary["per_edge_source"]
     assert "edges.csv" in summary["per_edge_source"]
     assert summary["p_relation"] == "(count + 1) / (B + 1) on counted cells"
     assert summary["permutation_space"] is None

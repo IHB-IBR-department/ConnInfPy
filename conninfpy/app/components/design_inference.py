@@ -1763,9 +1763,27 @@ def _run_inference_background(
     except Exception as e:
         if _stale():
             return  # never write an old failure into a newer generation
-        _write("error", f"{e}\n{traceback.format_exc()}")
+        if is_public_mode():
+            # Public deployments never capture tracebacks or server paths in
+            # session state (they could surface in exports or the UI).
+            _write("error", "Inference failed with an internal error; technical details are withheld in public mode.")
+        else:
+            _write("error", f"{e}\n{traceback.format_exc()}")
         _write("status", "failed")
         _write("progress_message", "❌ Failed")
+
+
+def _render_failed_inference(task) -> None:
+    """Failure notice for a finished-failed task; public mode shows no traceback."""
+    st.error("❌ Inference failed!")
+    if is_public_mode():
+        st.warning(
+            "The analysis could not be completed with the current data and design. "
+            "Adjust the design or re-load the data and try again; technical error "
+            "details are withheld in public mode."
+        )
+    else:
+        st.text_area("Error Traceback", value=task.error or "Unknown error", height=150, key=persistent_key('design:error_traceback', scope='design'))
 
 
 def render_design_inference_view(base_atlas, tabs_list):
@@ -3410,8 +3428,7 @@ def render_design_inference_view(base_atlas, tabs_list):
                         st.session_state.next_tab = tabs_list[2] # Redirect to Inference Results
                         st.rerun()
                 elif task.status == "failed":
-                    st.error("❌ Inference failed!")
-                    st.text_area("Error Traceback", value=task.error or "Unknown error", height=150, key=persistent_key('design:error_traceback', scope='design'))
+                    _render_failed_inference(task)
                     if st.button("Reset & Try Again", key="reset_failed_inf_task"):
                         task.status = "idle"
                         st.rerun()

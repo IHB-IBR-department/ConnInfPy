@@ -5,6 +5,7 @@ from pathlib import Path
 import streamlit as st
 
 from conninfpy.atlas import AtlasInfo
+from conninfpy.atlas.resources import atlas_resource_available
 from conninfpy.app.components.data_ingestion import render_data_ingestion_view
 from conninfpy.app.components.design_inference import render_design_inference_view
 from conninfpy.app.components.inference_results import render_inference_results_view
@@ -95,6 +96,18 @@ def get_atlas(name):
     return AtlasInfo.bna_246()
 
 
+def bundled_atlas_options():
+    """Bundled-atlas choices; BNA-246 only when its on-demand cache is present.
+
+    BNA-246 is third-party data (not shipped in the wheel); offering it with an
+    empty ``CONNINFPY_ATLAS_DIR`` would crash the sidebar on selection.
+    """
+    options = ["Schaefer-100 Yeo-7", "Schaefer-200 Yeo-7", "Schaefer-400 Yeo-7"]
+    if atlas_resource_available("bna246.csv") and atlas_resource_available("bna246_hierarchy.csv"):
+        options.append("BNA-246")
+    return options
+
+
 st.sidebar.markdown("### Workspace")
 if st.sidebar.button("Help & documentation", key="nav_docs_btn", width="stretch"):
     st.session_state.next_tab = DOCS_TAB
@@ -152,8 +165,8 @@ with st.sidebar.expander("Save & restore workspace", expanded=False):
             width="stretch",
             help=(
                 "Pickle-free workspace archive (results, atlas, annotation, evidence and UI "
-                "state, plus subject data when enabled). It never contains bundle.pkl; the "
-                "trusted bundle is only in the results-page Full Analysis Archive."
+                "state, plus subject data when enabled). It never contains result_bundle.zip; the "
+                "result bundle is only in the results-page Full Analysis Archive."
             ),
         )
     else:
@@ -191,14 +204,25 @@ base_atlas = None
 atlas_choice = atlas_mode
 palette = None
 if atlas_mode == "Bundled atlas":
-    atlas_choice = st.sidebar.selectbox("Reference Parcellation", ["Schaefer-100 Yeo-7", "Schaefer-200 Yeo-7", "Schaefer-400 Yeo-7", "BNA-246"], key=persistent_key("atlas_choice", scope="atlas"))
-    base_atlas = get_atlas(atlas_choice)
+    atlas_options = bundled_atlas_options()
+    atlas_choice = st.sidebar.selectbox("Reference Parcellation", atlas_options, key=persistent_key("atlas_choice", scope="atlas", options=atlas_options))
+    try:
+        base_atlas = get_atlas(atlas_choice)
+    except FileNotFoundError:
+        st.sidebar.error(
+            f"{atlas_choice} needs third-party atlas files that are not in the local cache. "
+            "Run `conninfpy download-atlases --accept-licenses` to populate it, or choose a "
+            "bundled Schaefer atlas."
+        )
+        base_atlas = None
+    if "BNA-246" not in atlas_options:
+        st.sidebar.caption("BNA-246 becomes available after `conninfpy download-atlases` populates the atlas cache.")
     palette = {
         "Schaefer-100 Yeo-7": str(Path(__file__).resolve().parent / "assets/yeo7_schaefer100_sidebar_palette.png"),
         "Schaefer-200 Yeo-7": str(Path(__file__).resolve().parent / "assets/yeo7_schaefer200_sidebar_palette.png"),
         "Schaefer-400 Yeo-7": str(Path(__file__).resolve().parent / "assets/yeo7_schaefer400_sidebar_palette.png"),
         "BNA-246": str(Path(__file__).resolve().parent / "assets/bna246_sidebar_palette.png"),
-    }[atlas_choice]
+    }.get(atlas_choice)
 elif atlas_mode == "Custom atlas":
     custom_format = st.sidebar.radio(
         "Custom atlas format",

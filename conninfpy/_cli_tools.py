@@ -1560,7 +1560,7 @@ def run_selftest(*, as_json: bool = False, reference: bool = False) -> tuple[int
             ok_atlas = ok_atlas and n_reg >= 280 and cb_n == 34 and ref.label_image is not None
             detail_parts.append(f"bna_suit_regions={n_reg}, cerebellum_regions={cb_n}")
         else:
-            detail_parts.append("optional BNA-246/SUIT cache not downloaded (run scripts/download_atlases.py)")
+            detail_parts.append("optional BNA-246/SUIT cache not downloaded (run conninfpy download-atlases)")
 
         checks["bundled_atlas"] = {
             "status": "PASS" if ok_atlas else "FAIL",

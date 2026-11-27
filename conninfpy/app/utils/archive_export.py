@@ -1,7 +1,8 @@
 """Self-contained analysis archive exported from a finished GUI run.
 
-One ZIP download stores the trusted post-analysis bundle (NETSTAT-3
-``ResultBundle``), the corrected evidence and coefficient arrays, the
+One ZIP download stores the safe post-analysis ``result_bundle.zip`` (NETSTAT-3
+``ResultBundle``: JSON metadata + NumPy arrays, no Python pickle), the corrected
+evidence and coefficient arrays, the
 edge / network / node / component / block tables, figures built by the
 shared ``result_views`` builders, a deterministic ``methods.md`` written
 only from captured facts, and — when the data source is honestly
@@ -51,14 +52,14 @@ ARCHIVE_KIND = "conninfpy-analysis-archive"
 # captured facts (the content itself carries the real run times).
 _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
-# Honest wording for an export that deliberately omits the trusted pickle
+# Honest wording for an export that deliberately omits the result bundle
 # (default workspace saves). It must never read as "this result lacked".
 _PICKLE_FREE_ARCHIVE_NOTE = (
-    "bundle.pkl omitted: this export is pickle-free by design (workspace save); "
-    "no trusted bundle was requested."
+    "result_bundle.zip omitted: this export is pickle-free by design (workspace save); "
+    "no result bundle was requested."
 )
 _PICKLE_FREE_METHODS_REASON = (
-    "No bundle.pkl is included: this export is pickle-free by design (workspace "
+    "No result_bundle.zip is included: this export is pickle-free by design (workspace "
     "save). Arrays, tables and the workspace/ layer remain a faithful record of "
     "the run, and workspace restore never needs a pickle."
 )
@@ -1202,11 +1203,11 @@ def build_methods_markdown(
     add("- The archive contains no subject-level observations, phenotype rows or time "
         "series; group summaries cannot be recomputed from it, by design.")
     if bundle_available:
-        add("- bundle.pkl is a Python pickle for trusted use only "
-            "(ResultBundle.load); do not load archives from untrusted sources.")
+        add("- result_bundle.zip is a safe ResultBundle archive (JSON metadata and "
+            "NumPy arrays, no Python pickle); reopen it with ResultBundle.load.")
     else:
         add("- " + (bundle_omitted_reason or (
-            "No bundle.pkl is included: this finished result lacks the captured "
+            "No result_bundle.zip is included: this finished result lacks the captured "
             "analysis metadata a trustworthy snapshot requires. Arrays and tables "
             "remain a faithful record of the run.")))
     add("")
@@ -1362,9 +1363,10 @@ def build_analysis_archive(
     project_root : Path, optional
         Root for resolving relative source paths (defaults to cwd).
     include_bundle : bool, default True
-        Whether to snapshot the trusted ``bundle.pkl`` pickle. ``True`` is the
+        Whether to snapshot the safe ``result_bundle.zip`` ResultBundle archive
+        (JSON metadata + NumPy arrays, no pickle). ``True`` is the
         full analysis archive (NETSTAT-24) behaviour. ``False`` builds a
-        pickle-free archive: no ``bundle.pkl`` member is produced and the
+        pickle-free archive: no ``result_bundle.zip`` member is produced and the
         manifest/methods state that omission honestly. Default workspace saves
         (``build_workspace_archive``) always pass ``False``.
     """
@@ -1406,7 +1408,7 @@ def build_analysis_archive(
     files["run_plan.json"] = _dumps_json(plan)
     files["dataset_info.json"] = _dumps_json(info)
 
-    # ---- trusted bundle (only when explicitly requested) ----
+    # ---- result bundle (only when explicitly requested) ----
     bundle = None
     bundle_note = None
     if include_bundle:
@@ -1416,7 +1418,7 @@ def build_analysis_archive(
             # A legacy result without captured analysis metadata cannot be
             # snapshotted; the archive records that honestly instead of failing
             # or reconstructing metadata from defaults.
-            bundle_note = ("bundle.pkl omitted: this finished result lacks captured "
+            bundle_note = ("result_bundle.zip omitted: this finished result lacks captured "
                            f"analysis metadata ({exc}).")
             notes.append(bundle_note)
         if bundle is not None:
@@ -1425,7 +1427,7 @@ def build_analysis_archive(
             with tempfile.TemporaryDirectory() as _tmp:
                 _bundle_path = Path(_tmp) / "bundle.zip"
                 bundle.save(_bundle_path)
-                files["bundle.pkl"] = _bundle_path.read_bytes()
+                files["result_bundle.zip"] = _bundle_path.read_bytes()
     else:
         # A pickle-free export states the omission instead of implying that the
         # finished result lacked the metadata a snapshot needs.
@@ -1488,7 +1490,7 @@ def build_analysis_archive(
         result, plan, info, scale_meta, replay, alpha=alpha, display_cell=display_cell,
         fisher_summary=fisher_summary, dataset_files=dfiles,
         effect_mask_available=effect_mask_available,
-        bundle_available="bundle.pkl" in files,
+        bundle_available="result_bundle.zip" in files,
         bundle_omitted_reason=_PICKLE_FREE_METHODS_REASON if not include_bundle else None,
         edge_mask_bundled=mask_bundled if isinstance(edge_mask_fact, Mapping) else None,
     )
@@ -1564,8 +1566,10 @@ def build_analysis_archive(
         },
         "replay": {k: replay.get(k) for k in ("status", "reasons", "prerequisites",
                                               "command", "sourced_from_result")},
-        "bundle_available": "bundle.pkl" in files,
-        "trusted_only": ["bundle.pkl"] if "bundle.pkl" in files else [],
+        "bundle_available": "result_bundle.zip" in files,
+        # The result bundle is a safe ZIP/JSON/NPY archive; no member ever
+        # requires trusted-only (pickle) loading.
+        "trusted_only": [],
         "notes": notes,
     }
     if workspace_state is not None:

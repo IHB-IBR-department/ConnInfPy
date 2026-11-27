@@ -4,12 +4,16 @@ Brainnetome Atlas data (on-demand cache, not bundled in wheel)
 The Brainnetome Atlas files and derived tables listed below are NOT bundled in
 ConnInfPy's MIT-licensed repository or Python wheel. They are downloaded /
 cached on demand into ~/.cache/conninfpy/atlases/ (or $CONNINFPY_ATLAS_DIR) via
-scripts/download_atlases.py, and remain subject to the Brainnetome Center
+`conninfpy download-atlases`, and remain subject to the Brainnetome Center
 terms below (NOT ConnInfPy's MIT licence):
 
   BN_Atlas_246_1mm.nii.gz, BN_Atlas_246_2mm.nii.gz   maximum-probability label images
-  bna246.csv                                        region names and voxel-mass centroids
-  bna246_hierarchy.csv                              hierarchy built from BNA_subregions.xlsx
+  bna246.csv                                        region names and voxel-mass centroids,
+                                                    reproducibly derived (conninfpy.atlas.download)
+                                                    from BN_Atlas_246_1mm.nii.gz,
+                                                    BN_Atlas_246_LUT.txt and BNA_subregions.xlsx
+  bna246_hierarchy.csv                              hierarchy reproducibly derived from
+                                                    bna246.csv, BNA_subregions.xlsx
                                                     (Fan et al. 2016, Table 1) and
                                                     subregion_func_network_Yeo_updated.csv
   BDf_FDR05.json, PCf_FDR05.json                    BrainMap behavioral-domain and

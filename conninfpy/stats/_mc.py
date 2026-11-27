@@ -521,7 +521,8 @@ def report_summary(report: Mapping[str, Any]) -> Dict[str, Any]:
         "level": "run",
         "aggregate": True,
         "per_edge_source": (
-            "edges.csv (per-edge p) and bundle.pkl "
+            "edges.csv (per-edge p) and the result bundle "
+            "(result_bundle.zip; legacy CLI filename bundle*.pkl) "
             "metadata['mc']['exceedance_counts'] (per-edge B and counts)"
         ),
         "p_relation": "(count + 1) / (B + 1) on counted cells",

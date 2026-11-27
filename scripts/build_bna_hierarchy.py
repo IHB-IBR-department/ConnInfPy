@@ -1,110 +1,29 @@
-"""Build ``conninfpy/atlas_data/bna246_hierarchy.csv`` from the official Brainnetome files.
+"""Thin wrapper around ``conninfpy.atlas.download.build_bna_hierarchy_csv``.
 
-Inputs (atlas.brainnetome.org/download.html):
-  BNA_subregions.xlsx                  Fan et al. (2016) Table 1: lobe, gyrus, subregion code,
-                                       left/right label IDs, cytoarchitectonic description
-  subregion_func_network_Yeo_updated.csv   BNA subregion -> Yeo 7 / 17 network (0 = not applicable)
-and the bundled ``conninfpy/atlas_data/bna246.csv`` (names, voxel-mass centroids).
+Build ``bna246_hierarchy.csv`` from the official Brainnetome files
+(atlas.brainnetome.org/download.html):
+  BNA_subregions.xlsx                       Fan et al. (2016) Table 1
+  subregion_func_network_Yeo_updated.csv    BNA subregion -> Yeo 7 / 17 network
+and the cached ``bna246.csv`` (names, voxel-mass centroids).
 
-Every name implied by the subregion table is checked against the bundled names
-before anything is written. The output is redistributed under the Brainnetome
-terms (see conninfpy/atlas_data/NOTICE_BRAINNETOME.txt).
+The derivation itself lives in the package (``conninfpy.atlas.download``) and
+is also run automatically by ``conninfpy download-atlases``. The output is
+redistributed under the Brainnetome terms (see
+conninfpy/atlas_data/NOTICE_BRAINNETOME.txt).
 
 Usage:
     python scripts/build_bna_hierarchy.py [--source-dir ~/conninfpy_data/brainnetome/sources]
 """
 from __future__ import annotations
 
-import argparse
-import re
 import sys
 from pathlib import Path
-
-import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
 
-from conninfpy.atlas.resources import (
-    atlas_cache_dir,
-    atlas_resource_path,
-    brainnetome_data_dir,
-    verify_brainnetome_resource,
-)
-
-OUT = atlas_cache_dir() / "bna246_hierarchy.csv"
-
-STRUCTURE = {"Amyg": "amygdala", "Hipp": "hippocampus", "BG": "basal_ganglia", "Tha": "thalamus"}
-YEO7 = {1: "Visual", 2: "Somatomotor", 3: "Dorsal Attention", 4: "Ventral Attention",
-        5: "Limbic", 6: "Frontoparietal", 7: "Default"}
-YEO17 = {1: "Visual peripheral", 2: "Visual central", 3: "Somato-motor A", 4: "Somato-motor B",
-         5: "Dorsal attention A", 6: "Dorsal attention B", 7: "Ventral attention", 8: "Salience",
-         9: "Limbic-1", 10: "Limbic-2", 11: "Control C", 12: "Control A", 13: "Control B",
-         14: "Default D (Auditory)", 15: "Default C", 16: "Default A", 17: "Default B"}
-
-
-def _table1(path: Path) -> pd.DataFrame:
-    raw = pd.read_excel(path, header=None).iloc[1:]
-    raw[0] = raw[0].ffill()
-    raw[1] = raw[1].ffill()
-    rows = []
-    for _, r in raw.iterrows():
-        lobe = str(r[0]).replace(" Lobe", "").replace(" lobe", "").strip()
-        lobe = "Subcortical" if lobe.lower().startswith("subcortical") else lobe
-        gyrus, gyrus_name = [s.strip() for s in str(r[1]).split(",", 1)]
-        code = re.sub(r"\s+", "", str(r[2]))                       # "LOcC _L(R)_4_2" -> "LOcC_L(R)_4_2"
-        description = re.sub(r"\s+", " ", str(r[5])).strip()
-        for hemi, rid in (("L", int(r[3])), ("R", int(r[4]))):
-            rows.append({
-                "roi_id": rid, "hemisphere": hemi,
-                "code": code.replace("L(R)", hemi), "description": description,
-                "gyrus": gyrus, "gyrus_name": gyrus_name, "lobe": lobe,
-                "structure": STRUCTURE.get(gyrus, "cortex"),
-            })
-    return pd.DataFrame(rows)
-
-
-def _yeo(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path, skiprows=1, usecols=[0, 1, 2, 3, 4])
-    df.columns = ["roi_id", "short", "region", "yeo7_id", "yeo17_id"]
-    df = df.dropna(subset=["roi_id"]).astype({"roi_id": int, "yeo7_id": int, "yeo17_id": int})
-    df["yeo7"] = df["yeo7_id"].map(YEO7).fillna("not applicable")
-    df["yeo17"] = df["yeo17_id"].map(YEO17).fillna("not applicable")
-    return df
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source_dir", nargs="?", type=Path, help="Legacy positional source directory")
-    parser.add_argument("--source-dir", dest="source_override", type=Path, help="Directory containing original hierarchy tables")
-    parser.add_argument("--output", type=Path, default=OUT)
-    args = parser.parse_args()
-    source = (args.source_override or args.source_dir or brainnetome_data_dir() / "sources").expanduser().resolve()
-    bundled = pd.read_csv(atlas_resource_path("bna246.csv"))
-    t1_path = verify_brainnetome_resource(source / "BNA_subregions.xlsx", "sources/BNA_subregions.xlsx")
-    yeo_path = verify_brainnetome_resource(source / "subregion_func_network_Yeo_updated.csv", "sources/subregion_func_network_Yeo_updated.csv")
-    t1 = _table1(t1_path)
-    yeo = _yeo(yeo_path)
-    out = bundled[["roi_id", "name", "x", "y", "z"]].merge(t1, on="roi_id", validate="1:1")
-    out = out.merge(yeo[["roi_id", "short", "region", "yeo7_id", "yeo7", "yeo17_id", "yeo17"]],
-                    on="roi_id", validate="1:1")
-
-    # Cross-checks: the IDs, hemispheres and names of the three sources agree
-    assert len(out) == 246 and sorted(out.roi_id) == list(range(1, 247))
-    assert (out.hemisphere == out.roi_id.map(lambda i: "L" if i % 2 else "R")).all()
-    assert (out.name.str[-2:] == "_" + out.hemisphere).all()
-    assert (out.name.str[:-2] == out.short).all(), out[out.name.str[:-2] != out.short]
-    assert (out.code == out.region).all(), out[out.code != out.region][["roi_id", "code", "region"]]
-    assert ((out.structure == "cortex") == (out.yeo7_id > 0)).all(), "Yeo networks exist for cortex only"
-    out["homolog_id"] = out.roi_id.map(lambda i: i + 1 if i % 2 else i - 1)
-
-    cols = ["roi_id", "name", "hemisphere", "homolog_id", "code", "description", "gyrus", "gyrus_name",
-            "lobe", "structure", "yeo7_id", "yeo7", "yeo17_id", "yeo17", "x", "y", "z"]
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    out[cols].to_csv(args.output, index=False)
-    print(f"wrote {args.output}: {len(out)} regions")
-
+from conninfpy.atlas.download import build_hierarchy_main
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(build_hierarchy_main())

@@ -138,7 +138,7 @@ def test_missing_atlas_resource_raises_with_download_instructions_and_no_network
     with pytest.raises(FileNotFoundError) as exc:
         resources.atlas_resource_path("BN_Atlas_246_1mm.nii.gz")
     msg = str(exc.value)
-    assert "download_atlases.py" in msg
+    assert "conninfpy download-atlases" in msg
     assert "CONNINFPY_ATLAS_DIR" in msg
     assert "pan.cstcloud.cn" in msg
 

@@ -129,7 +129,7 @@ class TestArchiveContent:
         names = set(zf.namelist())
         expected = {
             "manifest.json", "run_plan.json", "dataset_info.json", "methods.md",
-            "bundle.pkl", "arrays/index.json", "arrays/p_positive.npy",
+            "result_bundle.zip", "arrays/index.json", "arrays/p_positive.npy",
             "arrays/p_negative.npy", "arrays/stat_signed.npy", "arrays/beta.npy",
             "arrays/effect.npy", "tables/edges.csv", "tables/network_summary.csv",
             "tables/node_summary.csv", "figures/connectivity_maps.png",
@@ -149,7 +149,7 @@ class TestArchiveContent:
         m = _manifest_of(zf)
         assert m["schema_version"] == ARCHIVE_SCHEMA_VERSION
         assert m["kind"] == "conninfpy-analysis-archive"
-        assert m["trusted_only"] == ["bundle.pkl"]
+        assert m["trusted_only"] == []
         assert m["run"]["alpha"] == 0.05 and m["run"]["seed"] == 7
         assert m["dataset"]["synthetic"] is True
         assert set(m["files"]) == names - {"manifest.json"}
@@ -157,11 +157,11 @@ class TestArchiveContent:
             assert entry["bytes"] > 0 and len(entry["sha256"]) == 64
 
         # Post-analysis from the extracted bundle, without observations.
-        extract = zf.read("bundle.pkl")
+        extract = zf.read("result_bundle.zip")
         Path_ = Path(__file__).parent  # noqa: F841  (context only)
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
-            p = Path(tmp) / "bundle.pkl"
+            p = Path(tmp) / "result_bundle.zip"
             p.write_bytes(extract)
             bundle = ResultBundle.load(p)
             assert bundle.roi_ids == tuple(ATLAS.labels)
@@ -256,11 +256,11 @@ class TestArchiveContent:
                                  stat_positive=stat, stat_negative=np.zeros((N, N)))
         data, manifest = _archive(legacy)
         zf = _open(data)
-        assert "bundle.pkl" not in zf.namelist()
+        assert "result_bundle.zip" not in zf.namelist()
         assert manifest["trusted_only"] == []
-        assert any("bundle.pkl omitted" in n for n in manifest["notes"])
+        assert any("result_bundle.zip omitted" in n for n in manifest["notes"])
         methods = zf.read("methods.md").decode()
-        assert "No bundle.pkl is included" in methods
+        assert "No result_bundle.zip is included" in methods
         # Evidence arrays remain a faithful record of the finished run.
         saved = np.load(io.BytesIO(zf.read("arrays/stat_signed.npy")))
         assert saved[0, 1] == 4.0
@@ -532,7 +532,7 @@ class TestNativeUnitsAndGrids:
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "b.pkl"
-            p.write_bytes(zf.read("bundle.pkl"))
+            p.write_bytes(zf.read("result_bundle.zip"))
             bundle = ResultBundle.load(p)
             assert bundle.metadata["inference_unit"] == "component"
             native = bundle.native_units(tail="positive")
@@ -580,7 +580,7 @@ class TestNativeUnitsAndGrids:
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             pth = Path(tmp) / "b.pkl"
-            pth.write_bytes(zf.read("bundle.pkl"))
+            pth.write_bytes(zf.read("result_bundle.zip"))
             bundle = ResultBundle.load(pth)
             assert bundle.corrected_p["positive"].ndim == 3
 
@@ -970,4 +970,4 @@ def test_app_export_button_downloads_real_archive(monkeypatch, tmp_path):
     zf = _open(payload)
     m = _manifest_of(zf)
     assert m["schema_version"] == ARCHIVE_SCHEMA_VERSION
-    assert "methods.md" in zf.namelist() and "bundle.pkl" in zf.namelist()
+    assert "methods.md" in zf.namelist() and "result_bundle.zip" in zf.namelist()

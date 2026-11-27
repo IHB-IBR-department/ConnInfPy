@@ -1434,8 +1434,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     p_app = sub.add_parser("app", help="launch the interactive Streamlit workspace")
     p_app.add_argument("streamlit_args", nargs=argparse.REMAINDER, help="extra arguments forwarded to streamlit run")
+    sub.add_parser(
+        "download-atlases",
+        help="download/verify third-party BNA-246 and SUIT atlas caches (see --help)",
+        add_help=False,
+    )
 
     raw_argv = list(sys.argv[1:] if argv is None else argv)
+    if raw_argv[:1] == ["download-atlases"]:
+        from conninfpy.atlas.download import main as download_atlases_main
+
+        return download_atlases_main(raw_argv[1:])
     if raw_argv[:1] == ["app"] and raw_argv[1:] not in (["--help"], ["-h"]):
         from conninfpy._cli_tools import launch_app
 

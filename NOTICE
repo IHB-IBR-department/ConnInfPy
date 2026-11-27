@@ -2,14 +2,15 @@ Third-Party Notices and Dataset / Atlas Licences
 ==================================================
 
 The MIT licence in LICENSE applies to the ConnInfPy source code, documentation,
-and the bundled Schaefer 2018 parcellation tables (MIT, ThomasYeoLab/CBIG).
-Optional on-demand atlases and demonstration datasets remain subject to their
-respective licences and attribution terms:
+and the bundled Schaefer 2018 parcellation tables (MIT, ThomasYeoLab/CBIG; the
+original CBIG copyright and permission notice is reproduced in section 7
+below). Optional on-demand atlases and demonstration datasets remain subject
+to their respective licences and attribution terms:
 
 1. Brainnetome Atlas (BNA-246) & BrainMap profiles (on-demand cache, not bundled)
    Not bundled in the repository or Python wheel. Downloaded / cached on demand
    into ~/.cache/conninfpy/atlases/ (or $CONNINFPY_ATLAS_DIR) via
-   scripts/download_atlases.py.
+   `conninfpy download-atlases`.
    Non-commercial research use, attribution, and share-alike.
    See conninfpy/atlas_data/NOTICE_BRAINNETOME.txt.
    Citations:
@@ -23,7 +24,7 @@ respective licences and attribution terms:
 2. DiedrichsenLab SUIT cerebellar atlases v1.2 (on-demand cache, not bundled)
    Not bundled in the repository or Python wheel. Downloaded on demand into
    ~/.cache/conninfpy/atlases/ (or $CONNINFPY_ATLAS_DIR) via
-   scripts/download_atlases.py.
+   `conninfpy download-atlases`.
    Creative Commons Attribution 4.0 International (CC BY 4.0).
    See conninfpy/atlas_data/cerebellar_atlases_provenance.json.
    Citations:
@@ -74,3 +75,38 @@ respective licences and attribution terms:
    Citation:
      - Di Martino A, Yan CG, Li Q, et al. (2014). Molecular Psychiatry
        19(6):659-667. doi:10.1038/mp.2013.78
+
+7. Bundled Schaefer 2018 parcellation tables (MIT, ThomasYeoLab/CBIG)
+   conninfpy/atlas_data/schaefer100_yeo7.csv,
+   conninfpy/atlas_data/schaefer200_yeo7.csv,
+   conninfpy/atlas_data/schaefer400_yeo7.csv
+   Derived from the Schaefer et al. (2018) parcellations distributed by the
+   ThomasYeoLab/CBIG repository (https://github.com/ThomasYeoLab/CBIG) under
+   the MIT licence. Original copyright and permission notice:
+
+     Copyright (c) 2016 Computational Brain Imaging Group (CBIG)
+
+     Permission is hereby granted, free of charge, to any person obtaining a
+     copy of this software and associated documentation files (the
+     "Software"), to deal in the Software without restriction, including
+     without limitation the rights to use, copy, modify, merge, publish,
+     distribute, sublicense, and/or sell copies of the Software, and to
+     permit persons to whom the Software is furnished to do so, subject to
+     the following conditions:
+
+     The above copyright notice and this permission notice shall be included
+     in all copies or substantial portions of the Software.
+
+     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+     OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+     MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+     IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+     CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+   Citation:
+     - Schaefer A, Kong R, Gordon EM, et al. (2018). Local-global
+       parcellation of the human cerebral cortex from intrinsic functional
+       connectivity MRI. Cerebral Cortex 28(9):3095-3114.
+       doi:10.1093/cercor/bhx179

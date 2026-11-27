@@ -46,6 +46,8 @@
       "sha256": "df30be6b90931b22ff215a5e3365b520afce681b4aa06b1907bd888a718febdc",
       "size_bytes": 10377,
       "download_method": "derived",
+      "build_function": "conninfpy.atlas.download.build_bna246_csv",
+      "build_notes": "Reproducible byte layout: %.2f MNI centroids of the 1mm label image, LUT names, Table 1 lobe grouping, CRLF line endings.",
       "derived_from": [
         "BN_Atlas_246_1mm.nii.gz",
         "sources/BNA_subregions.xlsx",
@@ -64,6 +66,8 @@
         "sources/subregion_func_network_Yeo_updated.csv"
       ],
       "build_script": "scripts/build_bna_hierarchy.py",
+      "build_function": "conninfpy.atlas.download.build_bna_hierarchy_csv",
+      "build_notes": "Reproducible byte layout: LF line endings; cross-checked against bna246.csv names and the official Yeo table.",
       "source_page": "https://atlas.brainnetome.org/download.html",
       "license": "Brainnetome non-commercial research use, attribution, and share-alike"
     },
