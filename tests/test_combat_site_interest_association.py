@@ -18,7 +18,10 @@ Checks (each a few seconds):
 3. Through ``analyze()``: a balanced design (``corr_site_interest=0``) gives a
    low ``R`` and a confounded design (``corr_site_interest=0.8``) a high ``R``,
    for both ComBat strategies; the flag text and ``combat_diagnostics`` agree.
-4. ``site_dummies_glm`` (no ComBat) does not emit the flag.
+4. ``site_dummies_glm`` (no ComBat) also emits ``site_interest_association``
+   (noting collinearity between site indicators and the interest regressor,
+   without ComBat attenuation wording), while a single-site / no-site run
+   emits no flag.
 """
 from __future__ import annotations
 
@@ -174,10 +177,27 @@ class TestCombatSiteInterestFlag(unittest.TestCase):
         self.assertEqual(out["age"].combat_diagnostics["site_interest_R2_per_column"]["grp"], 1.0)
         self.assertIn("max over interest columns: 'grp'", " ".join(out["age"].flags))
 
-    def test_no_combat_no_flag(self):
+    def test_site_dummies_glm_emits_association_flag(self):
         out = _analyze(_dataset(0.8), None)  # site_dummies_glm: ComBat does not run
+        r_flag, r2_flag = _flag_r(out.flags)
+        self.assertGreater(r_flag, 0.6)
+        self.assertAlmostEqual(r_flag ** 2, r2_flag, delta=2e-3)
+        flag_text = " ".join(f for f in out.flags if f.startswith(FLAG_PREFIX))
+        self.assertNotIn("label-leak-free ComBat", flag_text)
+        self.assertIn("site_interest_corr", out.combat_diagnostics)
+        self.assertTrue(any(f.startswith(FLAG_PREFIX) for f in out.inference.flags))
+
+    def test_no_sites_no_flag(self):
+        data = _dataset(0.8)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            out = analyze(
+                data["Y"], interest=data["interest"], sites=None,
+                fisher_z=False, method="tstat", n_permutations=N_PERM,
+                acceleration=None, use_mp=False, harmonize=None, rng=0,
+            )
         self.assertFalse(any(f.startswith(FLAG_PREFIX) for f in out.flags))
-        self.assertNotIn("site_interest_corr", out.combat_diagnostics)
+        self.assertNotIn("site_interest_corr", out.combat_diagnostics or {})
 
 
 if __name__ == "__main__":

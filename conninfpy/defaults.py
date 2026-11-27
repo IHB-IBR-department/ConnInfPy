@@ -17,8 +17,9 @@ References
 ----------
 - Smith & Nichols (2009). Threshold-free cluster enhancement.
   NeuroImage 44(1):83-98.
-- Baggio et al. (2018). TFNBS: a threshold-free method for the analysis
-  of brain networks. Hum Brain Mapp 39(6):2289-2302.
+- Baggio et al. (2018). Statistical inference in brain graphs using
+  threshold-free network-based statistics. Hum Brain Mapp 39(6):2289-2302.
+  doi:10.1002/hbm.24007.
 - Vinokur, L., Smith, R. E., Dhollander, T., Vaughan, D., Jackson, G. D., &
   Connelly, A. (2023). Parameter Sensitivity of Network-Based Statistical
   Inference. Research Square (preprint), doi:10.21203/rs.3.rs-3081615/v1.

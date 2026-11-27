@@ -26,7 +26,7 @@ def bna(name: str) -> Path:
     """Brainnetome interpretation results folder of an analysis (by its dataset prefix)."""
     return BNA_DIRS["abide" if name.startswith("abide") else "openclose"]
 ML = ROOT / "examples/open_close/results/ml"
-DATA = ROOT / "datasets/open_close"
+DATA = ROOT / "datasets/demo/open_close"
 NAMES = ("abide_age", "abide_dx", "openclose_ihb", "openclose_china",
          "openclose_china_run0_n47", "openclose_china_run1")
 

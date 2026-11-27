@@ -193,7 +193,7 @@ Fisher transformation policies
 clipping policies:
 
 - **clip-z** (default, ``handle_bounds=True, max_z=5``): transform first, then
-  clip z at ±5 (|r| > tanh(5) ≈ 0.99991 and r = ±1); a warning names the
+  clip z at ±5 (``|r|`` > tanh(5) ≈ 0.99991 and r = ±1); a warning names the
   number of clipped values. This is what ``analyze(input='r')`` and the app's
   ingestion option apply.
 - **clip-r** (``clip_r=0.9999``): clip the correlations to ±0.9999 *before*

@@ -257,5 +257,55 @@ class TestReproducibility(unittest.TestCase):
         )
 
 
+class TestSiteDummiesGlmSiteInterestAssociation(unittest.TestCase):
+    """site_dummies_glm records the site-interest confounding diagnostic too.
+
+    No ComBat runs, but the site dummies in the GLM nuisance absorb
+    site-correlated variance, including any interest-correlated part, so the
+    same ``site_interest_association`` diagnostic must be computed and flagged.
+    """
+
+    def _run(self, corr_site_interest: float):
+        data = generate_multisite_glm_dataset(
+            n_subjects=N_SUBJECTS, N=N_ROIS, n_sites=N_SITES,
+            effect_size=0.0, site_shift_sigma=0.2,
+            corr_site_interest=corr_site_interest, seed=0,
+        )
+        confounds = np.random.default_rng(101).standard_normal((N_SUBJECTS, 1))
+        return _analyze(
+            data, sites=data["sites"], confounds=confounds,
+            harmonize=None, rng=0,
+        )
+
+    def test_confounded_design_records_association(self):
+        out = self._run(0.8)
+        diag = out.combat_diagnostics
+        self.assertEqual(diag.get("strategy"), "site_dummies_glm")
+        self.assertIn("site_interest_corr", diag)
+        self.assertGreater(diag["site_interest_corr"], 0.6)
+        self.assertAlmostEqual(
+            diag["site_interest_R2"], diag["site_interest_corr"] ** 2, places=6
+        )
+        self.assertEqual(diag["site_interest_column"], "interest")
+        joined = "\n".join(out.flags)
+        self.assertIn("site_interest_association: R=", joined)
+        # The mechanism text names the site-dummy GLM, not ComBat attenuation.
+        self.assertIn("site dummies in the GLM nuisance", joined)
+        self.assertNotIn("label-leak-free ComBat", joined)
+        # Threaded onto the inference result as for the ComBat arms.
+        self.assertTrue(any(
+            f.startswith("site_interest_association:") for f in out.inference.flags
+        ))
+
+    def test_balanced_design_still_records_low_association(self):
+        out = self._run(0.0)
+        diag = out.combat_diagnostics
+        self.assertIn("site_interest_corr", diag)
+        self.assertLess(diag["site_interest_corr"], 0.3)
+        self.assertTrue(any(
+            f.startswith("site_interest_association:") for f in out.flags
+        ))
+
+
 if __name__ == "__main__":
     unittest.main()

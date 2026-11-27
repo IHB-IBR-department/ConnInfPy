@@ -32,6 +32,8 @@ def test_defaults_and_citations():
     assert 'Threshold-Free Network-Oriented Statistics in Neuroscience (TFNOS). bioRxiv (preprint), doi:10.1101/2024.01.03.574016.' in citation
     assert 'H=3.0`` yielded empirical FDR < 10%' in citation
     assert 'H=7.0`` empirical FDR < 5%' in citation
+    assert 'Baggio et al. (2018). Statistical inference in brain graphs using threshold-free network-based statistics.' in citation
+    assert 'doi:10.1002/hbm.24007' in citation
 
 
 def test_nbs_warning_pairwise_and_glm():
@@ -70,6 +72,52 @@ def test_bh_resolution_uses_only_tested_edges_with_missing_data():
         compute_p_val(x, test_type='one-sample', method='bh_fdr_perm',
                       missing='available_case', min_coverage=0.8,
                       n_permutations=9, use_mp=False, rng=12)
+
+
+def test_nbs_bct_low_threshold_warning():
+    from conninfpy.enhance.nbs import nbs_bct
+    x = data()
+    with pytest.warns(UserWarning, match='component level'):
+        nbs_bct(x, threshold=2.0, test_type='one-sample',
+                n_permutations=2, use_mp=False, rng=12)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        nbs_bct(x, threshold=3.0, test_type='one-sample',
+                n_permutations=2, use_mp=False, rng=12)
+    assert not any('NBS threshold' in str(w.message) for w in caught)
+
+
+def test_analyze_bh_fdr_perm_resolution_flag():
+    x = data()  # three edges; B=9 -> minimum rejection rank k_min=6 at q=0.05
+    with pytest.warns(UserWarning, match='bh_fdr_perm resolution'):
+        out = analyze(group1=x, test_type='one-sample', input='z',
+                      method='bh_fdr_perm', n_permutations=9,
+                      acceleration=None, use_mp=False, rng=12)
+    matches = [f for f in out.flags if f.startswith('bh_fdr_perm resolution')]
+    assert len(matches) == 1
+    assert 'm=3 edges, B=9' in matches[0] and 'k_min=6' in matches[0]
+    # The same flag is threaded onto the inference result.
+    assert any(f.startswith('bh_fdr_perm resolution') for f in out.inference.flags)
+
+
+def test_analyze_bh_fdr_perm_resolution_flag_boundary_and_missing():
+    x = data()
+    # B=59 makes the minimum rank exactly one: no warning, no flag.
+    out = analyze(group1=x, test_type='one-sample', input='z',
+                  method='bh_fdr_perm', n_permutations=59,
+                  acceleration=None, use_mp=False, rng=12)
+    assert not any(f.startswith('bh_fdr_perm resolution') for f in out.flags)
+    # Available-case: the flag must use the number of tested edges (m=2).
+    x[:4, 0, 1] = np.nan
+    x[:4, 1, 0] = np.nan
+    with pytest.warns(UserWarning, match=r'm=2 edges, B=9.*k_min=4'):
+        out = analyze(group1=x, test_type='one-sample', input='z',
+                      method='bh_fdr_perm', missing='available_case',
+                      min_coverage=0.8, n_permutations=9,
+                      acceleration=None, use_mp=False, rng=12)
+    matches = [f for f in out.flags if f.startswith('bh_fdr_perm resolution')]
+    assert len(matches) == 1
+    assert 'm=2 edges' in matches[0]
 
 
 def test_analyze_defaults_and_nbs_warning():

@@ -22,7 +22,7 @@ bash paper/reproduce_figures.sh collect      # rebuild 2.0 figures from existing
 ```
 
 Inputs: ABIDE I CC200/Schaefer-100 data prepared in `examples/abide/results/cc200/`
-(via `examples/abide/prepare_cc200.py`), Open-Close data in `datasets/open_close/`,
+(via `examples/abide/prepare_cc200.py`), Open-Close data in `datasets/demo/open_close/`,
 and self-contained repository CSVs under `paper/data/` (`exact_grid_paired_comparison.csv`,
 `openclose_agreement_summary.csv`). Simulations and benchmarks require no external
 datasets.
@@ -113,8 +113,13 @@ The Beijing EOEC cohort has two eyes-closed runs per participant. The Fig S3
 repeat-run contrast (EC₁ − EC₀, 47 pairs) yields 556 positive and 416 negative
 edges in the 2.0 pipeline (972 edges;
 `paper/data/openclose_agreement_summary.csv`). This contrast does not serve as an
-empirical null: a valid FWER procedure flags at most a few edges in about 5 % of
-exchangeable null datasets, not hundreds. Its spatial agreement with the state
+empirical null. FWER control at level α bounds the probability of any false
+positive under the complete null, Pr(V ≥ 1) ≤ α: at most about 5 % of
+exchangeable null datasets yield even one significant edge. It does not bound
+the number of edges flagged in a single run — with dependent edges, one
+significant component can contain hundreds of edges — so the 972 edges here
+are not by themselves evidence of miscalibration, but the contrast cannot be
+used as a null reference. Its spatial agreement with the state
 contrast EC₀ − EO (1,919 / 1,344 edges) is close to zero or negative (edge
 Jaccard 0.004 / 0.001, Spearman −0.10 / −0.12, block-mass Pearson +0.02 / −0.11),
 so it does not reproduce the eyes-closed pattern. Session or vigilance drift

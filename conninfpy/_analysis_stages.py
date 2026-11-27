@@ -29,7 +29,7 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence, TextIO, Tuple, Union, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -1040,13 +1040,53 @@ def _prepare_inputs(state: _AnalysisState) -> None:
 # ---------------------------------------------------------------------------
 # 6. ComBat (runs for combat_only and combat_site_dummies_glm)
 # ---------------------------------------------------------------------------
+def _record_site_interest_association(state: _AnalysisState, diag: Dict[str, Any]) -> None:
+    """Record the site-interest confounding diagnostic in ``diag`` and ``state.flags``.
+
+    Shared by the ComBat arms (ComBat never sees ``interest``, so a site effect
+    correlated with the tested variable is partly removed as if it were site
+    noise) and by ``site_dummies_glm`` (the site dummies in the GLM nuisance
+    absorb site-correlated variance, including any interest-correlated part).
+    The diagnostic quantifies the confounding; it does not bound its effect.
+    """
+    association = _site_interest_association(state.sites, state.interest)
+    if association is None:
+        return
+    diag["site_interest_corr"] = association["R"]
+    diag["site_interest_R2"] = association["R2"]
+    diag["site_interest_column"] = association["column"]
+    if len(association["per_column_R2"]) > 1:
+        diag["site_interest_R2_per_column"] = dict(association["per_column_R2"])
+        column_note = f" (max over interest columns: '{association['column']}')"
+    else:
+        column_note = ""
+    if state.strategy == SITE_DUMMIES_GLM:
+        mechanism = (
+            "site dummies in the GLM nuisance absorb site-correlated variance, "
+            "including any interest-correlated part when site and interest "
+            "are confounded."
+        )
+    else:
+        mechanism = (
+            "higher site-interest confounding increases attenuation under "
+            "label-leak-free ComBat."
+        )
+    state.flags.append(
+        f"site_interest_association: R={association['R']:.3f} "
+        f"(R^2={association['R2']:.3f}) between site and interest{column_note}; "
+        + mechanism
+    )
+
+
 def _run_combat(state: _AnalysisState) -> None:
     """Harmonize with ``preserve = confounds`` and record the site-interest diagnostic.
 
     The tested variable is deliberately omitted from ComBat so the
     harmonization fit never sees the labels that the permutation will
-    reshuffle (Nygaard 2016 label-leak avoidance). Mild attenuation
-    when corr(site, interest) > 0; that's the accepted trade-off.
+    reshuffle (Nygaard 2016 label-leak avoidance). When site and interest
+    covary, part of the interest effect can be removed along with the site
+    effect; the ``site_interest_association`` diagnostic records how much
+    site and interest covary, without claiming a bound on the consequences.
     """
     if state.strategy not in (COMBAT_ONLY, COMBAT_SITE_DUMMIES_GLM):
         return
@@ -1082,27 +1122,8 @@ def _run_combat(state: _AnalysisState) -> None:
             f"ComBat could not harmonize {lost} value(s) (fewer than 2 subjects "
             "of their site have them); they are treated as missing."
         )
-    # Site-interest confounding diagnostic. ComBat never sees `interest`
-    # (label-leak avoidance), so a site effect that is correlated with the
-    # tested variable is partly removed as if it were site noise, which
-    # attenuates the interest effect. Quantify how much site and interest
-    # covary so the trade-off is visible in flags and combat_diagnostics.
-    association = _site_interest_association(state.sites, state.interest)
-    if association is not None:
-        combat_diag["site_interest_corr"] = association["R"]
-        combat_diag["site_interest_R2"] = association["R2"]
-        combat_diag["site_interest_column"] = association["column"]
-        if len(association["per_column_R2"]) > 1:
-            combat_diag["site_interest_R2_per_column"] = dict(association["per_column_R2"])
-            column_note = f" (max over interest columns: '{association['column']}')"
-        else:
-            column_note = ""
-        state.flags.append(
-            f"site_interest_association: R={association['R']:.3f} "
-            f"(R^2={association['R2']:.3f}) between site and interest{column_note}; "
-            "higher site-interest confounding increases attenuation under "
-            "label-leak-free ComBat."
-        )
+    # Site-interest confounding diagnostic, shared with site_dummies_glm.
+    _record_site_interest_association(state, combat_diag)
     state.combat_diag = combat_diag
 
 
@@ -1160,6 +1181,10 @@ def _add_site_dummies(state: _AnalysisState) -> None:
             "strategy": SITE_DUMMIES_GLM,
             "preserve_columns": None,
         }
+        # No ComBat ran, but the same confounding matters: the site dummies
+        # absorb site-correlated variance, including any interest-correlated
+        # part. Record the diagnostic exactly as for the ComBat arms.
+        _record_site_interest_association(state, state.combat_diag)
 
 
 # ---------------------------------------------------------------------------
@@ -1439,12 +1464,33 @@ def _run_single_inference(
         )
         return result, design_diag
     group1, group2 = state.group1, state.group2
-    result = compute_p_val(
-        group1, group2, test_type=state.test_type,
-        var_equal=state.var_equal,
-        **_inference_kwargs(state),
-        **state.method_kwargs,
-    )
+    bh_resolution_flags: List[str] = []
+    with warnings.catch_warnings():
+        # Thread the bh_fdr_perm permutation-resolution warning (emitted by
+        # compute_p_val / the available-case path) into AnalyzeResult.flags
+        # without swallowing it: force 'always' for that message only and
+        # forward every warning to the original handler.
+        warnings.filterwarnings(
+            "always", message=r"bh_fdr_perm resolution.*", category=UserWarning
+        )
+        _orig_showwarning = warnings.showwarning
+
+        def _capture_bh_resolution(
+            message: Union[Warning, str], category: type[Warning], filename: str,
+            lineno: int, file: Optional[TextIO] = None, line: Optional[str] = None,
+        ) -> None:
+            if str(message).startswith("bh_fdr_perm resolution"):
+                bh_resolution_flags.append(str(message))
+            _orig_showwarning(message, category, filename, lineno, file, line)
+
+        warnings.showwarning = _capture_bh_resolution
+        result = compute_p_val(
+            group1, group2, test_type=state.test_type,
+            var_equal=state.var_equal,
+            **_inference_kwargs(state),
+            **state.method_kwargs,
+        )
+    state.flags.extend(bh_resolution_flags)
     if state.test_type == "two-sample":
         assert group1 is not None and group2 is not None
         n1, n2 = group1.shape[0], group2.shape[0]

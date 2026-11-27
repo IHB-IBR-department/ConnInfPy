@@ -842,7 +842,7 @@ examples (``examples/abide/``, ``examples/open_close/``) for complete runs.
    plot_connectogram(out.inference, rois, tail='positive', level='gyrus', max_links=80)
 
 BrainNet Viewer export and headless rendering
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Results with 3D MNI coordinates can be exported to BrainNet Viewer ``.node``
 and ``.edge`` files together with a ``.scene.json`` scene manifest

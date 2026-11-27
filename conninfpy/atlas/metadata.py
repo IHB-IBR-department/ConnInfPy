@@ -7,7 +7,7 @@ string. It is consumed by the export and plotting helpers
 ``summary_figure``) so significant edges can be reported with ROI names
 and network context rather than bare indices.
 
-Two bundled atlases ship with v2.1:
+Two bundled atlases ship with v2.0:
 
 * :meth:`AtlasInfo.schaefer_100_yeo7`,
   :meth:`AtlasInfo.schaefer_200_yeo7`,

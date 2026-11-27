@@ -42,6 +42,7 @@ from conninfpy.defaults import (
     DEFAULT_N_PERMUTATIONS,
     DEFAULT_NBS_STAT,
     DEFAULT_NBS_THRESHOLD,
+    warn_low_nbs_threshold,
 )
 
 # =============================================================================
@@ -665,6 +666,10 @@ def nbs_bct(
     if random_state is not None and rng is None:
         warn_legacy_random_state("random_state")
     random_state = resolve_seed(rng, legacy_random_state=random_state)
+
+    # Same interpretation warning as the compute_p_val / compute_p_val_glm
+    # paths: component-level inference, low thresholds grow spillover.
+    warn_low_nbs_threshold("nbs", threshold)
 
     group1 = check_connectivity(group1, "group1")
     if group2 is not None:
